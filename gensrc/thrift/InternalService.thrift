@@ -233,13 +233,7 @@ struct TQueryOptions {
   109: optional i64 big_query_profile_second_threshold;
 
   110: optional TQueryQueueOptions query_queue_options;
-<<<<<<< HEAD
-=======
-
-  111: optional bool enable_file_metacache;
-
   112: optional bool enable_pipeline_level_shuffle;
->>>>>>> ebe9f77304 ([Enhancement] Support skew hint for window partition clause (#35486))
 }
 
 

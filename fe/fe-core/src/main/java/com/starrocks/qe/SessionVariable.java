@@ -1445,30 +1445,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
-<<<<<<< HEAD
-=======
-    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
-    private boolean enablePlanSerializeConcurrently = true;
-
-    @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
-    private String followerForwardMode = "";
-
-    public void setFollowerQueryForwardMode(String mode) {
-        this.followerForwardMode = mode;
-    }
-
-    public Optional<Boolean> isFollowerForwardToLeaderOpt() {
-        if (Strings.isNullOrEmpty(this.followerForwardMode) ||
-                followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
-            return Optional.empty();
-        }
-        return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
-    }
-
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enablePipelineLevelShuffle = true;
 
->>>>>>> ebe9f77304 ([Enhancement] Support skew hint for window partition clause (#35486))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
