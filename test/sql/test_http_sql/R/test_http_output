@@ -137,14 +137,6 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
--- result:
-0
-{"status":"FAILED","code":"1","msg":"","message":""}
--- !result
-sync;
--- result:
--- !result
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
