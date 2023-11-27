@@ -173,7 +173,7 @@ DELETE FROM <table_name>
 
 ### Limits and usage notes
 
-- Primary Key tables do not support deleting data from a specified partition, for example, `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>;`.
+- Primary Key tables do not support deleting data from a specified partition, for example, `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>`.
 - The following comparison operators are supported: `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, `NOT IN`.
 - The following logical operators are supported: `AND` and `OR`.
 - You cannot use the DELETE statement to run concurrent DELETE operations or to delete data at data loading. If you perform such operations, the atomicity, consistency, isolation, and durability (ACID) of transactions may not be ensured.

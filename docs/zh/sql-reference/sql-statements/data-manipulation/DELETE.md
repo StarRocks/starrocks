@@ -170,7 +170,7 @@ DELETE FROM <table_name>
 
 ### 注意事项
 
-- 主键类型表目前**还不支持**删除指定分区中的数据，例如 `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>;`。
+- 主键类型表目前**还不支持**删除指定分区中的数据，例如 `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>`。
 - 支持如下比较运算符：`=`、`>`、`<`、`>=`、`<=`、`!=`、`IN` 和 `NOT IN`。
 - 支持如下逻辑运算符：`AND` 和 `OR`。
 - 不支持并发删除或导入数据时删除，因为可能无法保证导入的事务性。
