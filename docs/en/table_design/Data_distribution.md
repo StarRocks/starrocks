@@ -39,7 +39,33 @@ To achieve more flexible data distribution, you can combine the preceding four p
 
 - **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets (either manually specified or automatically configured).
 
+<<<<<<< HEAD
   For example, the following statement creates a table `site_access`. The table is divided into tablets based on the `site_id` column and the number of buckets.
+=======
+StarRocks supports both separate and composite use of data distribution methods.
+
+> **NOTE**
+>
+> In addition to the general distribution methods, StarRocks also supports Random distribution to simplify bucketing configuration.
+
+Also, StarRocks distributes data by implementing the two-level partitioning + bucketing method.
+
+- The first level is partitioning: Data within a table can be partitioned. Supported partitioning methods are expression partitioning, range partitioning, and list partitioning. Or you can choose not to use partitioning (the entire table is regarded as one partition).
+- The second level is bucketing: Data in a partition needs to be further distributed into smaller buckets. Supported bucketing methods are hash and random bucketing.
+
+| **Distribution method**   | **Partitioning and bucketing method**                        | **Description**                                              |
+| ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Random distribution       | Random bucketing                                             | The entire table is considered a partition. The data in the table is randomly distributed into different buckets. This is the default data distribution method. |
+| Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. |
+| Range+Random distribution | <ol><li>Expression partitioning or range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
+| Range+Hash distribution   | <ol><li>Expression partitioning or range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. </li></ol> |
+| List+Random distribution  | <ol><li>Expression partitioning or list partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
+| List+Hash distribution    | <ol><li>Expression partitioning or List partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the value lists that the partitioning columns values belongs to.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function.</li></ol> |
+
+- **Random distribution**
+
+  If you do not configure partitioning and bucketing methods at table creation, random distribution is used by default. This distribution method currently can only be used to create a Duplicate Key table.
+>>>>>>> 3629fb5162 ([Doc] delete unneccessary comma and incorrect use of proper name (#35811))
 
   ```SQL
   CREATE TABLE site_access(
