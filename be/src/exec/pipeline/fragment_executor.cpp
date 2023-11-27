@@ -128,6 +128,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.enable_pipeline_level_shuffle) {
+        _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
+    }
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_enable_profile();
     }
@@ -745,11 +748,13 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     bool is_dest_merge = stream_sink.__isset.is_merge && stream_sink.is_merge;
 
     bool is_pipeline_level_shuffle = false;
-    int32_t dest_dop = -1;
-    if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        dest_dop = stream_sink.dest_dop;
+    int32_t dest_dop = 1;
+    bool enable_pipeline_level_shuffle = context->runtime_state()->query_ctx()->enable_pipeline_level_shuffle();
+    if (enable_pipeline_level_shuffle &&
+        (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+         sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED)) {
         is_pipeline_level_shuffle = true;
+        dest_dop = stream_sink.dest_dop;
         DCHECK_GT(dest_dop, 0);
     }
 
