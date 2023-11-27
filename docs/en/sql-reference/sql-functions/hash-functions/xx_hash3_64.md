@@ -43,4 +43,4 @@ MySQL > select xx_hash3_64("hello", "world");
 
 ## keyword
 
-XX_HASH3_64,HASH,,xxHash3
+XX_HASH3_64,HASH,xxHash3
