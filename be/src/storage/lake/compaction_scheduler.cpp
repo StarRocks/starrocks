@@ -46,7 +46,7 @@ CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, c
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
-    std::lock_guard l(_mtx);
+    std::unique_lock l(_mtx);
 
     if (!context->status.ok()) {
         // Add failed tablet for upgrade compatibility: older version FE relies on the failed tablet to determine
@@ -71,8 +71,11 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _request = nullptr;
         _response = nullptr;
 
-        _scheduler->remove_states(_contexts);
-        STLClearObject(&_contexts);
+        std::vector<std::unique_ptr<CompactionTaskContext>> tmp;
+        tmp.swap(_contexts);
+
+        l.unlock();
+        _scheduler->remove_states(tmp);
     }
 }
 
@@ -251,11 +254,12 @@ bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) cons
 }
 
 Status CompactionScheduler::abort(int64_t txn_id) {
-    std::lock_guard l(_contexts_lock);
+    std::unique_lock l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
          node = node->next()) {
         CompactionTaskContext* context = node->value();
         if (context->txn_id == txn_id) {
+            l.unlock();
             context->callback->update_status(Status::Aborted("aborted on demand"));
             return Status::OK();
         }
