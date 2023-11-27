@@ -546,7 +546,10 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
                                      Column* dst) {
     *records_read = 0;
     size_t records_to_skip = 0;
-    RETURN_IF_ERROR(_next_selected_page(records_to_read, content_type, &records_to_skip, dst));
+    auto&& st = _next_selected_page(records_to_read, content_type, &records_to_skip, dst);
+    if (!st.ok()) {
+        return st;
+    }
     if (records_to_skip == 0) {
         return Status::OK();
     }
@@ -569,7 +572,10 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
         size_t remain_values =
                 _num_values_skip_in_cur_page > 0 ? _reader->num_values() - _num_values_skip_in_cur_page : 0;
         if (remain_values == 0) {
-            RETURN_IF_ERROR(_reader->load_header());
+            auto&& st = _reader->load_header();
+            if (!st.ok()) {
+                return st;
+            }
             size_t num_values = _reader->num_values();
             if (num_values == 0) {
                 if (_reader->current_page_is_dict()) {
