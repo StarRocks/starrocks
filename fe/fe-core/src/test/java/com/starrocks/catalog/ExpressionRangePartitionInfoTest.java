@@ -559,6 +559,13 @@ public class ExpressionRangePartitionInfoTest {
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+
+        DataOutputBuffer buffer = new DataOutputBuffer(1024);
+        expressionRangePartitionInfo.write(buffer);
+        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        PartitionInfo deserialized = ExpressionRangePartitionInfo.read(input);
+        Assert.assertNotNull(deserialized);
+
         partitionColumns.get(0).setType(Type.VARCHAR);
         // serialize
         String json = GsonUtils.GSON.toJson(olapTable);
@@ -566,10 +573,10 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         Assert.assertNotNull(readTable);
 
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
+        buffer = new DataOutputBuffer(1024);
         expressionRangePartitionInfo.write(buffer);
-        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        PartitionInfo deserialized = ExpressionRangePartitionInfo.read(input);
+        input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        deserialized = ExpressionRangePartitionInfo.read(input);
         Assert.assertNotNull(deserialized);
     }
 
