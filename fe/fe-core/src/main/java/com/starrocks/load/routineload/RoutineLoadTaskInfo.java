@@ -119,10 +119,11 @@ public abstract class RoutineLoadTaskInfo {
         this.pauseIntervalS = pauseIntervalS;
     }
 
-    public RoutineLoadTaskInfo(UUID id, long jobId, long taskSchedulerIntervalMs,
-                               long timeToExecuteMs, long previousBeId, long taskTimeoutMs, long pauseIntervalS) {
-        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs, pauseIntervalS);
-        this.previousBeId = previousBeId;
+    public RoutineLoadTaskInfo(UUID id, long timeToExecuteMs, RoutineLoadTaskInfo oldTask) {
+        this(id, oldTask.getJobId(), oldTask.getTaskScheduleIntervalMs(), timeToExecuteMs, oldTask.getTimeoutMs(),
+                oldTask.pauseIntervalS);
+        this.previousBeId = oldTask.previousBeId;
+        this.lastSuccessTime = oldTask.lastSuccessTime;
     }
 
     public UUID getId() {
@@ -256,8 +257,7 @@ public abstract class RoutineLoadTaskInfo {
 
             if (ChronoUnit.SECONDS.between(lastSuccessTime, LocalDateTime.now()) > interval) {
                 throw new UserException("Routine load task has failed consistently for more than " +
-                        "failure_pause_interval_second" +
-                        ", last err: " + txnStatusChangeReason +
+                        "failure_pause_interval_second: " + interval +
                         ", lastSuccessTime: " + lastSuccessTime +
                         ", task info: " + this);
             }

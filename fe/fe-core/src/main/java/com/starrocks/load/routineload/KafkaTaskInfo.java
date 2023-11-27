@@ -78,16 +78,8 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
-    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
-                         Map<Integer, Long> latestPartOffset, long pauseIntervalS) {
-        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset, kafkaTaskInfo.getTimeoutMs(), pauseIntervalS);
-    }
-
-    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
-                         long tastTimeoutMs, long pauseIntervalS) {
-        super(UUID.randomUUID(), kafkaTaskInfo.getJobId(),
-                kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs, kafkaTaskInfo.getBeId(), tastTimeoutMs,
-                pauseIntervalS);
+    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset) {
+        super(UUID.randomUUID(), timeToExecuteMs, kafkaTaskInfo);
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
@@ -229,6 +221,8 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     public String toString() {
-        return "task_id: " + getId() + "partition offset: " + partitionIdToOffset;
+        Gson gson = new Gson();
+        String offsets = gson.toJson(partitionIdToOffset);
+        return "task_id: " + getId() + ", partition offset: " + offsets;
     }
 }
