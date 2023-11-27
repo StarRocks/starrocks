@@ -12,7 +12,7 @@ Syntax using the curl command:
 
 ```shell
 curl -X POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<database_name>/sql' \
-   -u '<username>:<password>'  -d '{"query": "<sql_query>;", "sessionVariables":{"var_name":<var_value>}}' \
+   -u '<username>:<password>'  -d '{"query": "<sql_query>;", "sessionVariables":{"<var_name>":<var_value>}}' \
    --header "Content-Type: application/json"
 ```
 
@@ -20,7 +20,7 @@ curl -X POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/datab
 
 ### Request line
 
-```sql
+```shell
 POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<database_name>/sql'
 ```
 
@@ -33,28 +33,28 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 
 - Query data across databases in a specified catalog. If a table is used in the SQL query, you must prefix the table name with its database name.
 
-   ```SQL
+   ```shell
    POST /api/v1/catalogs/<catalog_name>/sql
    ```
 
 - Query data from a specified catalog and database.
 
-   ```SQL
+   ```shell
    POST /api/v1/catalogs/<catalog_name>/databases/<database_name>/sql
    ```
 
 ### Authentication method
 
-```SQL
+```shell
 Authorization: Basic <credentials>
 ```
 
-Basic authentication is used, that is, enter the username and password for `credentials` (`-u '<username>:<password>'`). If no password is set for the username, you can pass in only the username and leave the password empty. For the root account with no password, you can enter `-u 'root:'`.
+Basic authentication is used, that is, enter the username and password for `credentials` (`-u '<username>:<password>'`). If no password is set for the username, you can pass in only `<username>:` and leave the password empty. For example, if the root account is used, you can enter `-u 'root:'`.
 
 ### Request body
 
-```SQL
--d '{"query": "<sql_query>;", "sessionVariables":{"var_name":<var_value>}}'
+```shell
+-d '{"query": "<sql_query>;", "sessionVariables":{"<var_name>":<var_value>}}'
 ```
 
 | Field                    | Description                                                  |
@@ -64,7 +64,7 @@ Basic authentication is used, that is, enter the username and password for `cred
 
 ### Request header
 
-```SQL
+```shell
 --header "Content-Type: application/json"
 ```
 
@@ -113,7 +113,7 @@ Each row in the response message is a JSON object. JSON objects separated by `\n
 
 | Object       | Description                                                  |
 | ------------ | :----------------------------------------------------------- |
-| `connectionId` | Connection ID. You can cancel a query this is pending for a long time by calling KILL `<connectionId>`. |
+| `connectionId` | Connection ID. You can cancel a query that is pending for a long time by calling KILL `<connectionId>`. |
 | `meta`        | Represents a column. The key is `meta` and the value is a JSON array, where each object in the array represents a column. |
 | `data`         | The data row, where the key is `data` and the value is a JSON  array which contains a row of data. |
 | `statistics`   | Statistical information of the query.                                       |
@@ -121,7 +121,7 @@ Each row in the response message is a JSON object. JSON objects separated by `\n
 - For a SHOW statement, `meta`, `data`, and `statistics` are returned.
 - For the EXPLAIN statement, an `explain` object is returned to show detailed execution plan of the query.
 
-Example:
+The following example uses `\n` as the separator. StarRocks transmits data using HTTP chunked mode. Each time the FE obtains a data chunk, it streams the data chunk to the client. The client can parse data by row, which eliminates the need for data caching and the need to wait for the entire data, reducing memory consumption for the client.
 
 ```json
 {"connectionId": 7}\n
@@ -170,13 +170,13 @@ Result:
 
 To cancel a query that run an unexpected long time, you can close the connection. StarRocks will cancel this query when it detects the connection is closed.
 
-You can also call KILL `connectionId` to cancel this query:
+You can also call KILL `connectionId` to cancel this query. For example:
 
 ```shell
 curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "kill 17;"}' --header "Content-Type: application/json"
 ```
 
-You can obtain the `connectionId` from the response body or by calling SHOW PROCESSLIST:
+You can obtain the `connectionId` from the response body or by calling SHOW PROCESSLIST. For example:
 
 ```shell
 curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "show processlist;"}' --header "Content-Type: application/json"

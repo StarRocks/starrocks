@@ -12,7 +12,7 @@ StarRocks 3.2.0 版本提供了 HTTP SQL API，方便用户通过 HTTP 协议使
 
 ```shell
 curl -X POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<database_name>/sql' \
-   -u '<username>:<password>'  -d '{"query": "<sql_query>;", "sessionVariables":{"var_name":<var_value>}}' \
+   -u '<username>:<password>'  -d '{"query": "<sql_query>;", "sessionVariables":{"<var_name>":<var_value>}}' \
    --header "Content-Type: application/json"
 ```
 
@@ -20,7 +20,7 @@ curl -X POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/datab
 
 ### Request line
 
-```sql
+```shell
 POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<database_name>/sql'
 ```
 
@@ -33,13 +33,13 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 
 - 指定 catalog, 跨 database 查询。SQL 语句中出现的表前面需要加上 database 名。
 
-   ```SQL
+   ```shell
    POST /api/v1/catalogs/<catalog_name>/sql
    ```
 
 - 指定 catalog 和 database 查询。
 
-   ```SQL
+   ```shell
    POST /api/v1/catalogs/<catalog_name>/databases/<database_name>/sql
    ```
 
@@ -49,12 +49,12 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 Authorization: Basic <credentials>
 ```
 
-使用 Basic authentication 进行认证，即 `credentials` 里填写用户名和密码 (`-u '<username>:<password>'`)。注意如果账号没有设置密码，只需传入 `<username>:`，密码留空。比如如果 root 账号没有设置密码，则写作 `-u 'root:'`。
+使用 Basic authentication 进行认证，即 `credentials` 里填写用户名和密码 (`-u '<username>:<password>'`)。注意如果账号没有设置密码，只需传入 `<username>:`，密码留空。举例，如果 root 账号没有设置密码，则写作 `-u 'root:'`。
 
 ### Request body
 
-```SQL
--d '{"query": "<sql_query>;", "sessionVariables":{"var_name":<var_value>}}'
+```shell
+-d '{"query": "<sql_query>;", "sessionVariables":{"<var_name>":<var_value>}}'
 ```
 
 | Field                    | Description                                                  |
@@ -64,7 +64,7 @@ Authorization: Basic <credentials>
 
 ### Request header
 
-```SQL
+```shell
 --header "Content-Type: application/json"
 ```
 
@@ -170,13 +170,13 @@ curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/te
 
 想要取消一个耗时过长的查询时，可以直接断开连接。当检测到连接已断开，StarRocks 会自动取消该查询。
 
-此外，也可以通过发送 KILL `connectionId` 的方式取消该查询。
+此外，也可以通过发送 KILL `connectionId` 的方式取消该查询。举例：
 
 ```shell
 curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "kill 17;"}' --header "Content-Type: application/json"
 ```
 
-`connectionId` 除了在 Response body 中会返回，也可以通过 SHOW PROCESSLIST 命令获得：
+`connectionId` 除了在 Response body 中会返回，也可以通过 SHOW PROCESSLIST 命令获得。举例：
 
 ```shell
 curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "show processlist;"}' --header "Content-Type: application/json"
