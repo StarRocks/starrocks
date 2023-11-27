@@ -463,7 +463,7 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- 手动设置分桶数量为 8
 
 - **建表时，如果使用哈希分桶，则必须指定分桶键**。
 - 组成分桶键的列仅支持整型、DECIMAL、DATE/DATETIME、CHAR/VARCHAR/STRING 数据类型。
-- 分桶键指定后不支持修改。
+- 自 3.2 起，建表后支持通过 ALTER TABLE 修改分桶键。
 
 如下示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于 `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。
 
@@ -625,9 +625,31 @@ DISTRIBUTED BY HASH(site_id,city_code);
     SET ("dynamic_partition.buckets"="xxx");
     ```
 
-> **注意**
->
-> 不支持修改已创建分区的分桶数量。
+## 建表后优化数据分布
+
+随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
+
+- **分区中数据量增多，增加分桶数量**
+
+  当按天分区的分区数据量相比原来变大很多，原本的分桶数量不再合适时，可以加大分桶数量，以让每个 Tablet 的大小一般控制在 1GB ~ 10GB 。
+
+- **通过调整分桶键，来避免数据倾斜**
+
+  当发现原有分桶键会导致数据倾斜（比如原来的分桶键只有 `k1` 一列），可以设置更合适的列、或者加入更多一些列到分桶键中。如下：
+
+    ```SQL
+    ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+    -- 如果是3.1及以上版本，并且使用的是明细模型表，则建议直接改成 RANDOM 方式、并采用系统默认分桶设置
+    ALTER TABLE t DISTRIBUTED BY RANDOM;
+    ```
+
+- 当业务的查询模式有较大变化，经常需要用到另外几个列作为条件列时，可以调整排序键。如下：
+
+    ```SQL
+    ALTER TABLE t ORDER BY k2, k1;
+    ```
+
+更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 。
 
 ## 最佳实践
 
