@@ -2112,6 +2112,14 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
+     *  StarRocks-manager pull queries every 1 second
+     *  metrics calculate query latency every 15 second
+     *  do not set cacheTime lower than these time
+     */
+    @ConfField(mutable = true)
+    public static long query_detail_cache_time_nanosecond = 30000000000L;
+
+    /**
      * Min lag of routine load job to show in metrics
      * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics
      */
