@@ -207,7 +207,7 @@ PLAN FRAGMENT 0
  OUTPUT EXPRS:2: c_name | 1: c_custkey | 9: o_orderkey | 10: o_orderdate | 13: o_totalprice | 54: sum
   PARTITION: UNPARTITIONED
 
-  RESULT SINK
+  RESULT SINK: MYSQL_PROTOCAL
 
   17:MERGING-EXCHANGE
      limit: 100

@@ -177,7 +177,7 @@ PLAN FRAGMENT 0
  OUTPUT EXPRS:1: c_custkey | 2: c_name | 40: sum | 6: c_acctbal | 36: n_name | 3: c_address | 5: c_phone | 8: c_comment
   PARTITION: UNPARTITIONED
 
-  RESULT SINK
+  RESULT SINK: MYSQL_PROTOCAL
 
   17:MERGING-EXCHANGE
      limit: 20
