@@ -183,7 +183,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         slotRef.setType(partitionColumn.getType());
                         slotRef.setNullable(partitionColumn.isAllowNull());
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        try {
+                            PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        } catch (SemanticException ex) {
+                            LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+                        }
                     }
                 }
             }
