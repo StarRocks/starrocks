@@ -336,4 +336,57 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         System.out.println(getFragmentPlan(sql));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testInformationFunction() throws Exception {
+        String sql = "select connection_id() from tall";
+        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+
+        sql = "select catalog() from tall";
+        assertPlanContains(sql, "<slot 12> : CATALOG()");
+
+        sql = "select database() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select schema() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select user() from tall";
+        assertPlanContains(sql, "<slot 12> : USER()");
+
+        sql = "select CURRENT_USER from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+
+        sql = "select CURRENT_ROLE from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
+    }
+
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
+>>>>>>> 2491f81dbe ([Enhancement] Support transform isnull function in trino parse (#35828))
 }
