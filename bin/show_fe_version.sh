@@ -32,7 +32,6 @@ fi
 JAVA=$JAVA_HOME/bin/java
 
 JAVA_VERSION=$(jdk_version)
-final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
     echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
     exit -1
