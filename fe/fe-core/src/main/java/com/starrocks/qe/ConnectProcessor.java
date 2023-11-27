@@ -291,7 +291,7 @@ public class ConnectProcessor {
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
 
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     protected void addRunningQueryDetail(StatementBase parsedStmt) {
@@ -321,7 +321,7 @@ public class ConnectProcessor {
                 ctx.getCurrentWarehouseName());
         ctx.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
 
     // process COM_QUERY statement,

@@ -60,7 +60,7 @@ public class LogUtil {
         queryDetail.setRemoteIP(ctx.getRemoteIP());
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     public static List<String> getCurrentStackTraceToList() {
