@@ -29,7 +29,7 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 |  fe_ip                   | FE node IP address.                                                  |
 |  fe_http_port            | FE HTTP port.                                           |
 |  catalog_name            | The catalog name. Currently, this API supports querying only internal tables, which means `<catalog_name>` can only be set to `default_catalog`. |
-|  database_name           | The database name. If no database name is specified and a table is used in the SQL query, you must prefix the table name with its database name, for example, `database_name.table_name`. |
+|  database_name           | The database name. If no database name is specified in the request line and a table name is used in the SQL query, you must prefix the table name with its database name, for example, `database_name.table_name`. |
 
 - Query data across databases in a specified catalog. If a table is used in the SQL query, you must prefix the table name with its database name.
 

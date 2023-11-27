@@ -29,7 +29,7 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 |  fe_ip                   | FE 节点 IP。                                                  |
 |  fe_http_port            | FE 节点 HTTP Port。                                           |
 |  catalog_name            | 数据目录名称，当前仅支持 StarRocks 内表查询，即 `<catalog_name>` 仅支持为 `default_catalog`。|
-|  database_name           | 数据库名称。如果未指定数据库名称，那么在 SQL query 语句中出现的表前面需要加上 database 名，比如 `database_name.table_name`。 |
+|  database_name           | 数据库名称。如果未指定数据库名称，那么在 SQL query 语句中出现的表名前面需要加上 database 名，比如 `database_name.table_name`。 |
 
 - 指定 catalog, 跨 database 查询。SQL 语句中出现的表前面需要加上 database 名。
 
