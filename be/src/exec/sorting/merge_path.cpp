@@ -473,6 +473,20 @@ void detail::MergeNode::_setup_input() {
 
     const size_t streaming_batch_size = _merger->streaming_batch_size();
     auto get_min = [](size_t n1, size_t n2, size_t n3) { return std::min(std::min(n1, n2), n3); };
+    auto all_ge = [this](const InputSegment& large, const InputSegment& small) -> bool {
+        if (large.len == 0 || small.len == 0) {
+            return false;
+        }
+
+        // Smallest row in large
+        const auto [large_run_idx, large_run_offset] = large.runs.get_run_idx(large.start).value();
+        // Largest row in small
+        const auto [small_run_idx, small_run_offset] = small.runs.get_run_idx(small.start + small.len - 1).value();
+
+        return large.runs.get_run(large_run_idx)
+                       .compare_row(_merger->sort_descs(), small.runs.get_run(small_run_idx), large_run_offset,
+                                    small_run_offset) >= 0;
+    };
 
     if (parent_input_full()) {
         _merge_length = 0;
@@ -480,7 +494,15 @@ void detail::MergeNode::_setup_input() {
         _merge_length = std::min(_left_buffer.len + _right_buffer.len, streaming_batch_size);
     } else if (_left->eos()) {
         if (_left_buffer.len > 0) {
-            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            // Generally, we can only move forward by the length of std::min(_left_buffer.len, _right_buffer.len).
+            // And it may slow down the merge process to great extent if the length of _left_buffer is very small.
+            // But if all rows in _left_buffer are greater than all rows in _right_buffer, we can simply move forward
+            // by the length of _right_buffer, which can speed up the merge process significantly.
+            if (all_ge(_left_buffer, _right_buffer)) {
+                _merge_length = std::min(_right_buffer.len, streaming_batch_size);
+            } else {
+                _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            }
         } else {
             if (_right_buffer.len < streaming_batch_size) {
                 // Just wait for more data
@@ -491,7 +513,15 @@ void detail::MergeNode::_setup_input() {
         }
     } else if (_right->eos()) {
         if (_right_buffer.len > 0) {
-            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            // Generally, we can only move forward by the length of std::min(_left_buffer.len, _right_buffer.len).
+            // And it may slow down the merge process to great extent if the length of _right_buffer is very small.
+            // But if all rows in _right_buffer are greater than all rows in _left_buffer, we can simply move forward
+            // by the length of _left_buffer, which can speed up the merge process significantly.
+            if (all_ge(_right_buffer, _left_buffer)) {
+                _merge_length = std::min(_left_buffer.len, streaming_batch_size);
+            } else {
+                _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
+            }
         } else {
             if (_left_buffer.len < streaming_batch_size) {
                 // Just wait for more data
