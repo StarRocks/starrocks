@@ -16,6 +16,8 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.google.common.collect.BiMap;
@@ -62,6 +64,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
@@ -86,27 +89,35 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
-    private IcebergTable srIcebergTable; // table definition in starRocks
+    private final IcebergTable srIcebergTable; // table definition in starRocks
 
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
-    private List<TScanRangeLocations> result = new ArrayList<>();
+    private final List<TScanRangeLocations> result = new ArrayList<>();
 
     // Scalar operators to filter iceberg metadata during plan files
     private ScalarOperator predicate = null;
 
-    private Set<String> equalityDeleteColumns = new HashSet<>();
+    private final Set<String> equalityDeleteColumns = new HashSet<>();
 
     private long totalBytes = 0;
-
-    private boolean isFinalized = false;
     private CloudConfiguration cloudConfiguration = null;
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeqToLocations = ArrayListMultimap.create();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
-        srIcebergTable = (IcebergTable) desc.getTable();
+        this.srIcebergTable = (IcebergTable) desc.getTable();
         setupCloudCredential();
     }
+
+    public IcebergTable getIcebergTable() {
+        return srIcebergTable;
+    }
+
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeqToLocations;
+    }
+
 
     private void setupCloudCredential() {
         String catalogName = srIcebergTable.getCatalogName();
@@ -129,6 +140,18 @@ public class IcebergScanNode extends ScanNode {
             Preconditions.checkState(cloudConfiguration != null,
                     String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         }
+    }
+
+    /**
+     * If there are multiple bucket columns such as <c1, 50>, <c2, 60>, <c3, 10>.
+     * we use the following formula as bucket size.
+     * bucket_size = 50 * 60 * 10 + 60 * 10 + 10
+     */
+    public int getTransformedBucketSize() {
+        List<Integer> bucketNums = srIcebergTable.getBucketProperties().stream()
+                .map(IcebergTable.BucketProperty::getBucketNum)
+                .collect(Collectors.toList());
+        return bucketNums.stream().reduce((x, y) -> x * y + y).orElse(0);
     }
 
     @Override
@@ -242,11 +265,11 @@ public class IcebergScanNode extends ScanNode {
                 continue;
             }
 
-            StructLike partition = task.file().partition();
+            PartitionData partitionData = (PartitionData) task.file().partition();
             long partitionId = 0;
-            if (!partitionKeyToId.containsKey(partition)) {
+            if (!partitionKeyToId.containsKey(partitionData)) {
                 partitionId = srIcebergTable.nextPartitionId();
-                partitionKeyToId.put(partition, partitionId);
+                partitionKeyToId.put(partitionData, partitionId);
                 BiMap<Integer, PartitionField> indexToField = getIdentityPartitions(task.spec());
                 if (!indexToField.isEmpty()) {
                     List<Integer> partitionSlotIds = task.spec().fields().stream()
@@ -259,7 +282,7 @@ public class IcebergScanNode extends ScanNode {
                             .filter(x -> desc.getColumnSlot(x.name()) != null)
                             .map(x -> indexToField.inverse().get(x))
                             .collect(Collectors.toList());
-                    PartitionKey partitionKey = getPartitionKey(partition, task.spec(), indexes, indexToField);
+                    PartitionKey partitionKey = getPartitionKey(partitionData, task.spec(), indexes, indexToField);
 
                     DescriptorTable.ReferencedPartitionInfo partitionInfo =
                             new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey);
@@ -269,7 +292,32 @@ public class IcebergScanNode extends ScanNode {
                 }
             }
 
-            partitionId = partitionKeyToId.get(partition);
+            partitionId = partitionKeyToId.get(partitionData);
+
+            int transformedBucketId = 0;
+            if (srIcebergTable.hasBucketProperties()) {
+                ImmutableList.Builder<Integer> bucketIds = ImmutableList.builder();
+                for (int i = 0; i < partitionData.size(); i++) {
+                    Types.NestedField nestedField;
+                    try {
+                        nestedField = partitionData.getPartitionType().fields().get(i);
+                    } catch (Exception e) {
+                        LOG.error("Can not find partition field");
+                        continue;
+                    }
+                    if (nestedField == null) {
+                        LOG.error("Can not find partition field");
+                        continue;
+                    }
+
+                    int fieldId = nestedField.fieldId();
+                    if (srIcebergTable.isBucketColumn(fieldId)) {
+                        int bucketId = (int) partitionData.get(i);
+                        bucketIds.add(bucketId);
+                    }
+                }
+                transformedBucketId = srIcebergTable.getTransformedBucketId(bucketIds.build());
+            }
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -316,6 +364,10 @@ public class IcebergScanNode extends ScanNode {
 
             TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
+
+            if (srIcebergTable.hasBucketProperties()) {
+                bucketSeqToLocations.put(transformedBucketId, scanRangeLocations);
+            }
 
             result.add(scanRangeLocations);
         }

@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.IcebergDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -79,6 +81,67 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
     @Override
     public Void visitOperator(Operator node, ExpressionContext context) {
         return null;
+    }
+
+    public boolean canColocateJoinForIcebergTable(HashDistributionSpec leftLocalDistributionSpec,
+                                                  HashDistributionSpec rightLocalDistributionSpec,
+                                                  List<DistributionCol> leftShuffleColumns,
+                                                  List<DistributionCol> rightShuffleColumns) {
+        if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
+            return false;
+        }
+
+        IcebergDistributionDesc leftLocalDistributionDesc = (IcebergDistributionDesc) leftLocalDistributionSpec.
+                getHashDistributionDesc();
+        IcebergDistributionDesc rightLocalDistributionDesc = (IcebergDistributionDesc) rightLocalDistributionSpec.
+                getHashDistributionDesc();
+
+        List<IcebergTable.BucketProperty> leftBucketProperties = leftLocalDistributionDesc.getBucketProperties();
+        List<IcebergTable.BucketProperty> rightBucketProperties = rightLocalDistributionDesc.getBucketProperties();
+
+        if (leftBucketProperties.size() != rightBucketProperties.size()) {
+            return false;
+        }
+
+        if (leftShuffleColumns.size() != rightShuffleColumns.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < leftBucketProperties.size(); i++) {
+            int leftColumnId = leftLocalDistributionDesc.getDistributionCols().get(i).getColId();
+            int leftIdx = 0;
+            for (; leftIdx < leftShuffleColumns.size(); ++leftIdx) {
+                if (leftShuffleColumns.get(leftIdx).getColId() == leftColumnId) {
+                    break;
+                }
+            }
+            if (leftIdx == leftShuffleColumns.size()) {
+                return false;
+            }
+
+            int rightColumnId = rightLocalDistributionDesc.getDistributionCols().get(i).getColId();
+            int rightIdx = 0;
+            for (; rightIdx < rightShuffleColumns.size(); ++ rightIdx) {
+                if (rightShuffleColumns.get(rightIdx).getColId() == rightColumnId) {
+                    break;
+                }
+            }
+            if (rightIdx == rightShuffleColumns.size()) {
+                return false;
+            }
+
+            if (leftIdx != rightIdx) {
+                return false;
+            }
+
+            IcebergTable.BucketProperty leftBucketProperty = leftBucketProperties.get(i);
+            IcebergTable.BucketProperty rightBucketProperty = rightBucketProperties.get(i);
+            if (leftBucketProperty.getBucketNum() != rightBucketProperty.getBucketNum()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public boolean canColocateJoin(HashDistributionSpec leftLocalDistributionSpec,
@@ -389,6 +452,30 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
                             rightChild, rightChildOutputProperty);
                 }
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isIcebergLocal()) {
+                // iceberg colocate join
+                if (!canColocateJoinForIcebergTable(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
+                        rightShuffleColumns)) {
+                    enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+                    enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+                }
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isShuffle()) {
+                // iceberg bucket join
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isIcebergLocal()) {
+                // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
+                enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
+                        rightChild, rightChildOutputProperty);
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isIcebergLocal()) {
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isLocal()) {
+                enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
+                        rightChild, rightChildOutputProperty);
                 return visitOperator(node, context);
             } else {
                 //noinspection ConstantConditions

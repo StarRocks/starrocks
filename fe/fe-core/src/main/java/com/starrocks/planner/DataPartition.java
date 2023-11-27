@@ -65,14 +65,17 @@ public class DataPartition {
 
     // for hash partition: exprs used to compute hash value
     private ImmutableList<Expr> partitionExprs;
+    private List<Integer> bucketModulus;
 
     public DataPartition(TPartitionType type, List<Expr> exprs) {
         if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM) {
             Preconditions.checkNotNull(exprs);
             Preconditions.checkState(!exprs.isEmpty());
             Preconditions.checkState(
-                    type == TPartitionType.HASH_PARTITIONED || type == TPartitionType.RANGE_PARTITIONED
-                            || type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED);
+                    type == TPartitionType.HASH_PARTITIONED || type == TPartitionType.RANGE_PARTITIONED ||
+                            type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED ||
+                            type == TPartitionType.ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED
+            );
             this.type = type;
             this.partitionExprs = ImmutableList.copyOf(exprs);
         } else {
@@ -102,7 +105,8 @@ public class DataPartition {
     }
 
     public boolean isBucketShuffle() {
-        return type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED;
+        return type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED ||
+                type == TPartitionType.ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED;
     }
 
     public TPartitionType getType() {
@@ -113,11 +117,23 @@ public class DataPartition {
         return partitionExprs;
     }
 
+    public List<Integer> getBucketModulus() {
+        return bucketModulus;
+    }
+
+    public void setBucketModulus(List<Integer> bucketModulus) {
+        this.bucketModulus = bucketModulus;
+    }
+
     public TDataPartition toThrift() {
         TDataPartition result = new TDataPartition(type);
         if (partitionExprs != null) {
             result.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
+        if (bucketModulus != null) {
+            result.setIceberg_bucket_modulus(bucketModulus);
+        }
+
         return result;
     }
 

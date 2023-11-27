@@ -17,8 +17,10 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -161,9 +163,24 @@ public class ExecutionFragment {
         return colocatedAssignment;
     }
 
-    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(OlapScanNode scanNode) {
+    public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(ScanNode scanNode) {
         if (colocatedAssignment == null) {
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            int bucketNum;
+            Table.TableType type;
+            if (scanNode instanceof OlapScanNode) {
+                type = Table.TableType.OLAP;
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                bucketNum = olapScanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
+                if (olapScanNode.getSelectedPartitionIds().size() <= 1) {
+                    for (Long pid : olapScanNode.getSelectedPartitionIds()) {
+                        bucketNum = olapScanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
+                    }
+                }
+            } else {
+                type = Table.TableType.ICEBERG;
+                bucketNum = ((IcebergScanNode) scanNode).getTransformedBucketSize();
+            }
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, type);
         }
         return colocatedAssignment;
     }

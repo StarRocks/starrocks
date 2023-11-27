@@ -385,6 +385,15 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
     }
 }
 
+void NullableColumn::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to, int32_t* bucket_nums,
+                                         int32_t step) const {
+    // null value of bucket column is invalid. we could ignore it now.
+    if (!_has_null) {
+        _data_column->murmur_hash3_x86_32(hash, from, to, bucket_nums, step);
+        return;
+    }
+}
+
 int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     if (!_has_null) {
         return _data_column->xor_checksum(from, to);

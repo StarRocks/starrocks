@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -24,10 +25,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private final DistributionSpec distributionSpec;
 
     public PhysicalIcebergScanOperator(LogicalIcebergScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, scanOperator);
         this.predicates = scanOperator.getScanOperatorPredicates();
+        this.distributionSpec = scanOperator.getDistributionSpec();
     }
 
     @Override
@@ -58,5 +61,10 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
         predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
+    }
+
+    @Override
+    public DistributionSpec getDistributionSpec() {
+        return distributionSpec;
     }
 }

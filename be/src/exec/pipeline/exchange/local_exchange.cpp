@@ -84,13 +84,17 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
         for (const ColumnPtr& column : _partitions_columns) {
             column->fnv_hash(&_hash_values[0], 0, num_rows);
         }
-    } else {
+    } else if (_part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         // The data distribution was calculated using CRC32_HASH,
         // and bucket shuffle need to use the same hash function when sending data
         _hash_values.assign(num_rows, 0);
         for (const ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
         }
+    } else {
+        // for iceberg bucket hash join.
+        // TODO(stephen): Support passing iceberg bucket modules to insert local shuffle when driver unbound to bucket seq.
+        return Status::InternalError("unreachable path");
     }
 
     _shuffle_channel_id.resize(num_rows);

@@ -78,6 +78,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.IcebergDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -529,14 +530,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
-            String catalogName = ((IcebergTable) node.getTable()).getCatalogName();
+            String catalogName = node.getTable().getCatalogName();
             if (isResourceMappingCatalog(catalogName)) {
                 String dbName = node.getName().getDb();
                 GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(
                         catalogName, dbName, node.getTable(), Lists.newArrayList(), true);
             }
+            DistributionSpec distributionSpec = getIcebergTableDistributionSpec(node, columnMetaToColRefMap);
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
+            scanOperator.setDistributionSpec(distributionSpec);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {
             scanOperator = new LogicalHudiScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
@@ -798,6 +801,20 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder rootBuilder = plan.getRootBuilder();
         rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
         return plan;
+    }
+
+    private DistributionSpec getIcebergTableDistributionSpec(TableRelation node,
+                                                             Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+        IcebergTable icebergTable = (IcebergTable) node.getTable();
+        if (icebergTable.hasBucketProperties()) {
+            List<IcebergTable.BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+            List<Integer> hashDistributeColumns = bucketProperties.stream().map(IcebergTable.BucketProperty::getColumn).
+                    map(column -> columnMetaToColRefMap.get(column).getId()).collect(Collectors.toList());
+            return DistributionSpec.createHashDistributionSpec(new IcebergDistributionDesc(hashDistributeColumns,
+                    HashDistributionDesc.SourceType.ICEBERG_LOCAL, bucketProperties));
+        } else {
+            return DistributionSpec.createAnyDistributionSpec();
+        }
     }
 
     /**

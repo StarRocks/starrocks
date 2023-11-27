@@ -96,6 +96,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             builder.predicates = scanOperator.predicates.clone();
+            builder.distributionSpec = scanOperator.distributionSpec;
             return this;
         }
     }

@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListUtil;
@@ -156,8 +157,10 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         Collectors.mapping(Map.Entry::getKey, Collectors.toList())
                 ));
 
+        // TODO(stephen): Support iceberg multi-bucket columns un-assignPerDriverSeq
         boolean assignPerDriverSeq = usePipeline && workerIdToBucketSeqs.values().stream()
-                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop));
+                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop)) ||
+                execFragment.getColocatedAssignment().getTableType() == Table.TableType.ICEBERG;
 
         if (!assignPerDriverSeq) {
             // these optimize depend on assignPerDriverSeq.

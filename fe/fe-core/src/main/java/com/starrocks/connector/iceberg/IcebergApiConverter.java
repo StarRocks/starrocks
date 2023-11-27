@@ -24,6 +24,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.thrift.TIcebergColumnStats;
@@ -37,6 +38,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.transforms.PartitionSpecVisitor;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -48,7 +50,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
@@ -288,5 +292,61 @@ public class IcebergApiConverter {
         }
 
         return tableProperties.build();
+    }
+
+    public static List<Pair<Integer, Integer>> getBucketSourceIdWithBucketNum(PartitionSpec spec) {
+        return PartitionSpecVisitor.visit(spec, new BucketPartitionSpecVisitor()).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private static class BucketPartitionSpecVisitor implements PartitionSpecVisitor<Pair<Integer, Integer>> {
+        @Override
+        public Pair<Integer, Integer> identity(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> bucket(
+                int fieldId, String sourceName, int sourceId, int numBuckets) {
+            return new Pair<>(sourceId, numBuckets);
+        }
+
+        @Override
+        public Pair<Integer, Integer> truncate(
+                int fieldId, String sourceName, int sourceId, int width) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> year(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> month(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> day(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> hour(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> alwaysNull(int fieldId, String sourceName, int sourceId) {
+            return null;
+        }
+
+        @Override
+        public Pair<Integer, Integer> unknown(
+                int fieldId, String sourceName, int sourceId, String transform) {
+            return null;
+        }
     }
 }
