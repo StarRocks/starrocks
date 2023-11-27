@@ -333,5 +333,75 @@ public class AstToSQLBuilder {
                         expr.getColumnName(), expr.getColumnName());
             }
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public String visitInsertStatement(InsertStmt insert, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("INSERT ");
+            if (insert.isOverwrite()) {
+                sb.append("OVERWRITE ");
+            } else {
+                sb.append("INTO ");
+            }
+
+            // target
+            sb.append(insert.getTableName().toSql()).append(" ");
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
+
+            // label
+            if (StringUtils.isNotEmpty(insert.getLabel())) {
+                sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
+            }
+
+            // target column
+            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
+            }
+
+            // source
+            if (insert.getQueryStatement() != null) {
+                sb.append(visit(insert.getQueryStatement()));
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitArrayExpr(ArrayExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append('[');
+            sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
+            sb.append(']');
+            return sb.toString();
+        }
+
+        @Override
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append("{");
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+>>>>>>> 8c6e23b0ac ([BugFix] fix build insert sql with partial columns (#35788))
     }
 }
