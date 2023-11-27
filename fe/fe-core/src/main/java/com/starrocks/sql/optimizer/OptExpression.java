@@ -70,6 +70,13 @@ public class OptExpression {
         return expr;
     }
 
+    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = Lists.newArrayList(input);
+        expr.setShortCircuit(isShortCircuit);
+        return expr;
+    }
+
     public static OptExpression create(Operator op, List<OptExpression> inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = inputs;

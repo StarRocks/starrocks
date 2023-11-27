@@ -309,7 +309,7 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
-        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        tree = OptExpression.createForShortCircuit(new LogicalTreeAnchorOperator(), tree, tree.getShortCircuit());
         // for short circuit
         Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
         if (result.isPresent()) {
@@ -456,8 +456,6 @@ public class Optimizer {
 
     private Optional<OptExpression> ruleRewriteForShortCircuit(OptExpression tree, TaskContext rootTaskContext) {
         Boolean isShortCircuit = tree.getShortCircuit();
-        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
-        tree.setShortCircuit(isShortCircuit);
 
         if (isShortCircuit) {
             ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
