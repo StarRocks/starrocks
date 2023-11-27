@@ -72,11 +72,7 @@ In your local file system, create a CSV file named `example1.csv`. The file cons
 4,Julia,25
 ```
 
-<<<<<<< HEAD
-2. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
-=======
 ##### Create a database and a table
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 
 Create a database and switch to it:
 
@@ -119,8 +115,6 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
 ```
 
-<<<<<<< HEAD
-=======
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
@@ -128,7 +122,6 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 :::
 
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 `example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
 After the load is complete, you can query `table1` to verify that the load is successful:
@@ -197,8 +190,6 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table2/_stream_load
 ```
 
-<<<<<<< HEAD
-=======
 :::note
 
 - If you use an account for which no password is set, you need to input only `<username>:`.
@@ -206,7 +197,6 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::
 
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
 ![JSON - Column Mapping](../assets/4.2-2.png)
