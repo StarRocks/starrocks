@@ -22,7 +22,7 @@ curdir=`cd "$curdir"; pwd`
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 export PID_DIR=`cd "$curdir"; pwd`
 export LOG_DIR=${STARROCKS_HOME}/log
-source common.sh
+source $STARROCKS_HOME/bin/common.sh
 
 # java
 if [ "$JAVA_HOME" = "" ]; then
