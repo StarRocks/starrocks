@@ -43,7 +43,7 @@ class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest()
             : _tablet_id(next_id()),
-              _location_provider(new lake::FixedLocationProvider(kRootLocation)),
+              _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
               _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
@@ -55,7 +55,6 @@ public:
     ~LakeServiceTest() override {
         CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
-        delete _location_provider;
     }
 
     void create_tablet() {
@@ -127,9 +126,9 @@ protected:
 
     constexpr static const char* const kRootLocation = "./lake_service_test";
     int64_t _tablet_id;
-    lake::LocationProvider* _location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
     lake::TabletManager* _tablet_mgr;
-    lake::LocationProvider* _backup_location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
     LakeServiceImpl _lake_service;
 };
 

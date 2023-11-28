@@ -58,17 +58,17 @@ public:
         CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
         CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
 
-        s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
-        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get());
+        s_location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
+        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider);
         s_tablet_manager =
-                std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 1638400000);
+                std::make_unique<lake::TabletManager>(s_location_provider, s_update_manager.get(), 1638400000);
     }
 
     static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
-    inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
+    inline static std::shared_ptr<lake::LocationProvider> s_location_provider;
     inline static std::unique_ptr<TabletManager> s_tablet_manager;
     inline static std::unique_ptr<UpdateManager> s_update_manager;
 };
