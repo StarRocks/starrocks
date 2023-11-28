@@ -96,6 +96,10 @@ Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& p
             int64_t delay = calculate_retry_delay(attempted_retries);
             LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
             std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        } else if (!st.ok()){
+            auto st2 = fs->delete_file(paths[0]);
+            LOG(WARNING) << "Switched to single delete with error " << st2;
+            return st;
         } else {
             return st;
         }
