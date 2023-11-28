@@ -487,21 +487,31 @@ public class Optimizer {
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
+        boolean pushDistinctFlag = false;
+        boolean pushAggFlag = false;
         if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
             // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
             //  fused one rule to tackle with all scenarios of agg push-down.
-            tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+            PushDownDistinctAggregateRule rule = new PushDownDistinctAggregateRule(rootTaskContext);
+            tree = rule.rewrite(tree, rootTaskContext);
+            pushDistinctFlag = rule.getRewriter().hasRewrite();
         }
 
-        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
-            return tree;
+        if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
+            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+            rule.getRewriter().collectRewriteContext(tree);
+            if (rule.getRewriter().isNeedRewrite()) {
+                pushAggFlag = true;
+                tree = rule.rewrite(tree, rootTaskContext);
+            }
         }
 
-        tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
+        if (pushDistinctFlag || pushAggFlag) {
+            deriveLogicalProperty(tree);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        }
 
-        rootTaskContext.setRequiredColumns(requiredColumns.clone());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         return tree;
     }
 

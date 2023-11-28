@@ -4,6 +4,42 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.5
+
+发布日期：2023 年 11 月 28 日
+
+### 功能优化
+
+- [`INFORMATION_SCHEMA.COLUMNS`](../reference/information_schema/columns.md) 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- 支持查询 [Hive](../data_source/catalog/hive_catalog.md) 中使用 LZO 算法压缩的 Parquet、ORC、和 CSV 格式的文件。[#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
+- 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果提交的 Broker Load 作业包含过滤条件，在数据导入过程中，某些情况下会出现 BE Crash。[#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- SHOW GRANTS 时报 `unknown error`。[#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- 如果使用表达式作为自动分区列，导入数据时可能会报错 "Error: The row create partition failed since Runtime error: failed to analyse partition value"。[#33513](https://github.com/StarRocks/starrocks/pull/33513)
+- 查询时报错 "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction"。[#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- 存算一体模式下，单独查询 Iceberg 或者 Hive 外表容易出现 BE crash。[#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- 存算一体模式下，导入数据时同时自动创建多个分区，偶尔会出现数据写错分区的情况。[#34731](https://github.com/StarRocks/starrocks/pull/34731)
+- 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- 查询时报错 "Exception: java.lang.IllegalStateException: null"。[#33535](https://github.com/StarRocks/starrocks/pull/33535)
+- 执行 `show proc '/current_queries';` 时，如果某个查询刚开始执行， 可能会引起 BE Crash。[#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。[#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- 打开 `enable_load_profile` 后，Stream Load 会很容易失败。[#34544](https://github.com/StarRocks/starrocks/pull/34544)
+- 使用列模式进行主键模型表部分列更新后，会有 Tablet 出现副本之间数据不一致。[#34555](https://github.com/StarRocks/starrocks/pull/34555)
+- 使用 ALTER TABLE 增加 `partition_live_number` 属性没有生效。[#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- FE 启动失败，报错 "failed to load journal type 118"。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- 副本操作重放失败可能会引起 FE Crash。[#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
 ## 3.1.4
 
 发布日期：2023 年 11 月 2 日
@@ -105,9 +141,9 @@ displayed_sidebar: "Chinese"
 
 ### 行为变更
 
-如果是新部署的 3.1 版本集群，执行 SET CATALOG 操作必须要有目标 Catalog 的 USAGE 权限。您可以使用 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 命令进行授权操作。
+从此版本开始，执行 SET CATALOG 操作必须要有目标 Catalog 的 USAGE 权限。您可以使用 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 命令进行授权操作。
 
-如果是从低版本升级上来的集群，已经做好了升级逻辑，不需要重新赋权。[#29389](https://github.com/StarRocks/starrocks/pull/29389)
+如果是从低版本升级上来的集群，已经做好了已有用户的升级逻辑，不需要重新赋权。[#29389](https://github.com/StarRocks/starrocks/pull/29389)。如果是新增授权，则需要注意赋予目标 Catalog 的 USAGE 权限。
 
 ## 3.1.1
 

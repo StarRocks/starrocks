@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -26,11 +27,13 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -51,6 +54,7 @@ public class OptimizerContext {
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
+    private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -167,6 +171,14 @@ public class OptimizerContext {
 
     public long optimizerElapsedMs() {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
+    }
+
+    public boolean ruleExhausted(RuleType ruleType) {
+        Stopwatch watch = ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
+        long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+        long timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
+                sessionVariable.getOptimizerExecuteTimeout());
+        return elapsed > timeLimit;
     }
 
     /**

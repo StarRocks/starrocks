@@ -17,8 +17,8 @@ SHOW [FULL] PROCESSLIST
 ## Parameter
 
 | Parameter | Required | Description                                                                                                                      |
-| --------- | -------- |----------------------------------------------------------------------------------------------------------------------------------|
-| FULL      | No       | If you specify this parameter, the complete statement will be displayed. Otherwise, only display the first 100 characters of the statement |
+| --------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| FULL      | No       | If you specify this parameter, the complete SQL statement will be displayed. Otherwise, only the first 100 characters of the statement are displayed. |
 
 ## Return
 
