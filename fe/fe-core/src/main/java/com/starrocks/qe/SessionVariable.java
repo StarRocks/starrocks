@@ -270,6 +270,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
+    public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -456,6 +457,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
+
+    public static final String MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT =
+            "materialized_view_join_same_table_permutation_limit";
 
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
@@ -988,6 +992,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
     private String queryDebugOptions = "";
 
+    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
+    private long optimizerMaterializedViewTimeLimitMillis = 1000;
+
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
 
@@ -1294,6 +1301,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    @VarAttr(name = MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int materializedViewJoinSameTablePermutationLimit = 5;
 
     @VarAttr(name = MATERIALIZED_VIEW_REWRITE_MODE)
     private String materializedViewRewriteMode = MaterializedViewRewriteMode.MODE_DEFAULT;
@@ -2076,6 +2086,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryDebugOptions = queryDebugOptions;
     }
 
+    public long getOptimizerMaterializedViewTimeLimitMillis() {
+        return optimizerMaterializedViewTimeLimitMillis;
+    }
+
+    public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
+        this.optimizerMaterializedViewTimeLimitMillis = millis;
+    }
+
     public boolean getEnableGroupbyUseOutputAlias() {
         return enableGroupbyUseOutputAlias;
     }
@@ -2545,6 +2563,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
         this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public int getMaterializedViewJoinSameTablePermutationLimit() {
+        return materializedViewJoinSameTablePermutationLimit;
     }
 
     public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
