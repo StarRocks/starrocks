@@ -98,6 +98,10 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM DROP COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
   ```
 
+> **NOTE**
+>
+> You cannot decommission a CN node using the `ALTER SYSTEM DECOMMISSION` command.
+
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
 | cn_host                | Yes          | The host name or IP address of the CN instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
