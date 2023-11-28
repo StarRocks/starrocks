@@ -282,7 +282,7 @@ public class AnalyzeMgr implements Writable {
         Table table;
         try {
             table = MetaUtils.getTable(catalogName, dbName, tableName);
-        } catch (SemanticException e) {
+        } catch (Exception e) {
             return;
         }
 

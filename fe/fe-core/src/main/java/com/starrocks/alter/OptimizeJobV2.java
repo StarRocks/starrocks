@@ -14,11 +14,13 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -221,7 +223,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
         List<Long> partitionLastVersion = Lists.newArrayList();
+        List<String> tableCoumnNames = Lists.newArrayList();
+
         Database db = getAndReadLockDatabase(dbId);
+
         try {
             dbName = db.getFullName();
             OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -239,6 +244,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
                         }
             );
+            tableCoumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
+                    .map(Column::getName).collect(Collectors.toList());
         } finally {
             db.readUnlock();
         }
@@ -248,7 +255,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select * from " + tableName + " partition (" + partitionName + ")";
+                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableCoumnNames)
+                    + " from " + tableName + " partition (" + partitionName + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
             rewriteTask.setPartitionName(partitionName);
