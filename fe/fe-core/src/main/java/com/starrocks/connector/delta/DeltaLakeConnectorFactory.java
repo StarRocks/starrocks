@@ -13,6 +13,7 @@
 // limitations under the License.
 
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/delta/DeltaLakeConnectorFactory.java
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.Connector;
@@ -29,5 +30,21 @@ public class DeltaLakeConnectorFactory implements ConnectorFactory  {
     @Override
     public String name() {
         return "deltalake";
+=======
+public class PushDownDistinctAggregateRule implements TreeRewriteRule {
+
+    public final PushDownDistinctAggregateRewriter rewriter;
+
+    public PushDownDistinctAggregateRule(TaskContext context) {
+        rewriter = new PushDownDistinctAggregateRewriter(context);
+    }
+
+    public PushDownDistinctAggregateRewriter getRewriter() {
+        return rewriter;
+    }
+    @Override
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        return rewriter.rewrite(root);
+>>>>>>> 348be2d38e ([BugFix] remain pruned predicate cols in olapScan (#35912)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/PushDownDistinctAggregateRule.java
     }
 }

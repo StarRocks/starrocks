@@ -23,11 +23,23 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+>>>>>>> 348be2d38e ([BugFix] remain pruned predicate cols in olapScan (#35912))
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+>>>>>>> 348be2d38e ([BugFix] remain pruned predicate cols in olapScan (#35912))
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -69,6 +81,45 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             return context;
         }
 
+<<<<<<< HEAD
+=======
+        private void checkOptWithoutChild(OptExpression optExpression) {
+            RowOutputInfo rowOutputInfo = optExpression.getRowOutputInfo();
+            Operator operator = optExpression.getOp();
+            if (operator instanceof LogicalScanOperator || operator instanceof PhysicalScanOperator
+                    || operator instanceof LogicalValuesOperator || operator instanceof PhysicalValuesOperator) {
+                ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
+                ColumnRefSet usedCols = new ColumnRefSet();
+                for (ColumnOutputInfo col : rowOutputInfo.getColumnOutputInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.except(col.getColumnRef().getUsedColumns());
+                }
+
+                if (operator.getPredicate() != null) {
+                    usedCols.union(operator.getPredicate().getUsedColumns());
+                }
+
+                if (operator instanceof LogicalOlapScanOperator) {
+                    LogicalOlapScanOperator olapScanOperator = operator.cast();
+                    fillPrunedPredicateCols(usedCols, olapScanOperator.getPrunedPartitionPredicates());
+                }
+
+                if (operator instanceof PhysicalOlapScanOperator) {
+                    PhysicalOlapScanOperator olapScanOperator = operator.cast();
+                    fillPrunedPredicateCols(usedCols, olapScanOperator.getPrunedPartitionPredicates());
+                }
+
+                checkInputCols(inputCols, usedCols, optExpression);
+            }
+        }
+
+>>>>>>> 348be2d38e ([BugFix] remain pruned predicate cols in olapScan (#35912))
         private void checkOptExprWithOneChild(OptExpression optExpression) {
             visit(optExpression.inputAt(0), null);
             // LogicalCteConsumer's input col actually is from LogicalCteProducer not from its input
@@ -162,6 +213,16 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
                         System.lineSeparator(), optExpression.explain(), PREFIX, requiredSize, inputSize);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+            }
+        }
+
+        private void fillPrunedPredicateCols(ColumnRefSet usedCols, List<ScalarOperator> prunedPredicates) {
+            if (CollectionUtils.isEmpty(prunedPredicates)) {
+                return;
+            }
+
+            for (ScalarOperator predicate : prunedPredicates) {
+                usedCols.union(predicate.getUsedColumns());
             }
         }
     }
