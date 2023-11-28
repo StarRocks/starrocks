@@ -37,3 +37,12 @@ Query OK, 0 rows affected (0.00 sec)
 mysql> SET GLOBAL exec_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
+
+示例三：同时设置多个全局变量。需要在所有变量名前添加 `GLOBAL` 关键字。
+
+```Plain
+mysql> SET 
+       GLOBAL exec_mem_limit = 2147483648,
+       GLOBAL time_zone = "Asia/Shanghai";
+Query OK, 0 rows affected (0.00 sec)
+```
