@@ -62,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -1538,16 +1539,74 @@ public class MaterializedViewRewriter {
         return Utils.compoundAnd(candidates);
     }
 
-    private OptExpression tryUnionRewrite(RewriteContext rewriteContext,
-                                          OptExpression mvOptExpr) {
-        final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+    private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
+                                                            ColumnRewriter columnRewriter) {
         final PredicateSplit mvCompensationToQuery = getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryBasedViewEquivalenceClasses(),
                 rewriteContext.getQueryEquivalenceClasses(),
                 rewriteContext.getMvPredicateSplit(),
                 rewriteContext.getQueryPredicateSplit(),
                 false);
+        if (mvCompensationToQuery != null) {
+            return mvCompensationToQuery;
+        }
+
+        // try to pull up query's predicates to make possible for rewrite from mv to query.
+        PredicateSplit mvPredicateSplit = rewriteContext.getMvPredicateSplit();
+        PredicateSplit queryPredicateSplit = rewriteContext.getQueryPredicateSplit();
+        Set<ColumnRefOperator> mvPredicateUsedColRefs = Utils.compoundAnd(mvPredicateSplit.getPredicates())
+                .getColumnRefs().stream().collect(Collectors.toSet());
+
+        // filter out query's predicates that its column refs are not contained in mv's predicate:
+        // when column ref is not contained in mv's predicates, query's predicate cannot be rewritten.
+        List<ScalarOperator> queryRangePredicates = Utils.extractConjuncts(queryPredicateSplit.getRangePredicates());
+        Map<Boolean, List<ScalarOperator>> queryRangePredicateSplits =
+                queryRangePredicates.stream().collect(Collectors.partitioningBy(pred ->
+                        pred.getColumnRefs().stream().anyMatch(col -> mvPredicateUsedColRefs.contains(col))));
+        List<ScalarOperator> queryOtherRangePredicates = Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates());
+        Map<Boolean, List<ScalarOperator>> queryOtherPredicateSplits =
+                queryOtherRangePredicates.stream().collect(Collectors.partitioningBy(pred ->
+                        pred.getColumnRefs().stream().anyMatch(col -> mvPredicateUsedColRefs.contains(col))));
+
+        // To avoid deadlock rewrite, no rewrite when query extra predicate is not changed
+        if (queryRangePredicateSplits.get(true).isEmpty() && queryOtherPredicateSplits.get(true).isEmpty()) {
+            return null;
+        }
+        final ScalarOperator queryExtraPredicate = Utils.compoundAnd(Utils.compoundAnd(queryRangePredicateSplits.get(false)),
+                Utils.compoundAnd(queryOtherPredicateSplits.get(false)));
+        if (queryExtraPredicate == null) {
+            return null;
+        }
+
+        // TODO: How to determine query's predicates can be pulled up or not?
+        // query's output should contain all the extra predicates otherwise it cannot be pulled then.
+        ColumnRefSet queryOutputColumnSet = rewriteContext.getQueryExpression().getOutputColumns();
+        if (!queryOutputColumnSet.containsAll(queryExtraPredicate.getUsedColumns())) {
+            return null;
+        }
+
+        // update query predicate after pull up
+        final PredicateSplit newQuerySplit = PredicateSplit.of(queryPredicateSplit.getEqualPredicates(),
+                Utils.compoundAnd(queryRangePredicateSplits.get(true)),
+                Utils.compoundAnd(queryOtherPredicateSplits.get(true)));
+        rewriteContext.setQueryPredicateSplit(newQuerySplit);
+        // update union rewrite extra predicate by pull up predicates
+        rewriteContext.setUnionRewriteQueryExtraPredicate(queryExtraPredicate);
+        return getCompensationPredicates(columnRewriter,
+                rewriteContext.getQueryBasedViewEquivalenceClasses(),
+                rewriteContext.getQueryEquivalenceClasses(),
+                rewriteContext.getMvPredicateSplit(),
+                rewriteContext.getQueryPredicateSplit(),
+                false);
+    }
+
+    private OptExpression tryUnionRewrite(RewriteContext rewriteContext,
+                                          OptExpression mvOptExpr) {
+        final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        final PredicateSplit mvCompensationToQuery = getUnionRewriteQueryCompensation(rewriteContext,
+                columnRewriter);
         if (mvCompensationToQuery == null) {
+            // filter all predicates that
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot get compensation from view to query");
             return null;
         }
@@ -1976,6 +2035,13 @@ public class MaterializedViewRewriter {
                 .isUnionAll(true)
                 .build();
         OptExpression result = OptExpression.create(unionOperator, newQueryInput, viewInput);
+
+        if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
+            LogicalFilterOperator filter =
+                    new LogicalFilterOperator(rewriteContext.getUnionRewriteQueryExtraPredicate());
+            result = OptExpression.create(filter, result);
+        }
+
         deriveLogicalProperty(result);
         return result;
     }

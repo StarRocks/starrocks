@@ -67,6 +67,10 @@ public class PredicateSplit {
         return Lists.newArrayList(equalPredicates, rangePredicates, residualPredicates);
     }
 
+    public List<ScalarOperator> getNonEqualPredicates() {
+        return Lists.newArrayList(rangePredicates, residualPredicates);
+    }
+
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
     public static PredicateSplit splitPredicate(ScalarOperator predicate) {
         if (predicate == null) {

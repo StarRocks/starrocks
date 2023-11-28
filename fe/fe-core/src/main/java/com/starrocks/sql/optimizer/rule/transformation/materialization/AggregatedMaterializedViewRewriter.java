@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -408,7 +409,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
+    protected OptExpression createUnion(OptExpression queryInput,
+                                        OptExpression viewInput,
+                                        RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
                 MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
         // keys of queryColumnRefMap and mvColumnRefMap are the same
@@ -476,8 +479,17 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             logMVRewrite(mvRewriteContext, "Rewrite aggregate with union failed: rewrite aggregate for union failed");
             return null;
         }
-        return createNewAggregate(rewriteContext, queryAgg, newAggregations, aggregateMapping,
+        OptExpression result = createNewAggregate(rewriteContext, queryAgg, newAggregations, aggregateMapping,
                 unionExpr, newProjection);
+
+        if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
+            LogicalFilterOperator filter =
+                    new LogicalFilterOperator(rewriteContext.getUnionRewriteQueryExtraPredicate());
+            result = OptExpression.create(filter, result);
+        }
+        deriveLogicalProperty(result);
+
+        return result;
     }
 
     private OptExpression createNewAggregate(
