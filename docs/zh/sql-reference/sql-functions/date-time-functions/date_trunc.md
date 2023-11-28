@@ -24,6 +24,8 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
   
   `fmt` 的取值必须为下表中列举的时间单位。如果取值不正确，则返回报错。
 
+  如果 `datetime` 为 DATE 类型，`fmt` 只支持 `year`，`quarter`，`month`，`week`，`day`，如果设置为其他粒度，会返回报错，参见示例五。
+
 | fmt 取值 | 含义                                   |
 | -------- | -------------------------------------- |
 | second   | 截断到秒。                             |
@@ -38,8 +40,6 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 ## 返回值说明
 
 返回 DATETIME 类型的值。
-
-如果 `datetime` 为 DATE 类型，`fmt` 设定为 `hour`，`minute`， 或 `second` 时，返回的时间部分默认为 `00:00:00`，参见示例五。
 
 ## 示例
 
@@ -87,13 +87,10 @@ select date_trunc("year", "2020-11-04 11:12:13");
 +-------------------------------------------+
 ```
 
-示例五：DATE 类型下，`fmt` 设置为 `hour`时，时间部分返回 `00:00:00`。
+示例五：DATE 类型下，`fmt` 设置为 `hour`时，返回报错。
 
-```undefined
-select date_trunc("hour", "2020-11-04");
-+----------------------------------+
-| date_trunc('hour', '2020-11-04') |
-+----------------------------------+
-| 2020-11-04 00:00:00              |
-+----------------------------------+
+```plain
+select date_trunc("hour", cast("2020-11-04" as date));
+
+ERROR 1064 (HY000): Getting analyzing error from line 1, column 26 to line 1, column 51. Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.
 ```

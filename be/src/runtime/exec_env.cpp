@@ -377,7 +377,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _cache_mgr = new query_cache::CacheManager(capacity);
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
-    RETURN_IF_ERROR(_spill_dir_mgr->init());
+    RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
     return Status::OK();
 }
