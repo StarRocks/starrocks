@@ -3034,6 +3034,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l2_vec.clear();
     }
     if (index_meta.l2_versions_size() > 0) {
+        DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
             auto l2_block_path = strings::Substitute(
                     "$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
@@ -3179,7 +3180,12 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
     if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
+    }    
+    if (index_meta.l2_versions_size() != index_meta.l2_version_merged_size()) {
+        // Make sure l2 version equal to l2 version merged flag
+        return true;
     }
+
     return false;
 }
 
@@ -3248,6 +3254,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
                 if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
                         std::string l2_file_name = strings::Substitute(
@@ -4847,6 +4854,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
@@ -4889,6 +4897,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute(
