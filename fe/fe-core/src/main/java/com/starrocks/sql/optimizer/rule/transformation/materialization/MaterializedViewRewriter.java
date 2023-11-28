@@ -1644,7 +1644,7 @@ public class MaterializedViewRewriter {
         for (ScalarOperator predicate : predicatesToEnforce) {
             predicate.getColumnRefs(columns);
         }
-        // check every columns to enforce should be in the Scan Operator
+        // check each column to enforce should be in the Scan Operator
         for (ColumnRefOperator column : columns) {
             if (queryRefFactory.getRelationId(column.getId()) == -1) {
                 return null;
@@ -1652,7 +1652,7 @@ public class MaterializedViewRewriter {
         }
         ColumnEnforcer columnEnforcer = new ColumnEnforcer(query, columns);
         OptExpression newQuery = columnEnforcer.enforce();
-        mvRewriteContext.setEnforcedColumns(columnEnforcer.getEnforcedColumns());
+        mvRewriteContext.setEnforcedNonExistedColumns(columnEnforcer.getEnforcedNonExistedColumns());
 
         final List<LogicalScanOperator> queryScanOps = MvUtils.getScanOperator(newQuery);
         final List<ColumnRefOperator> queryScanOutputColRefs = queryScanOps.stream()
@@ -1721,10 +1721,10 @@ public class MaterializedViewRewriter {
                 return null;
             }
 
-            deriveLogicalProperty(queryExpression);
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
-            if (mvRewriteContext.getEnforcedColumns() != null && !mvRewriteContext.getEnforcedColumns().isEmpty()) {
+            if (mvRewriteContext.getEnforcedNonExistedColumns() != null &&
+                    !mvRewriteContext.getEnforcedNonExistedColumns().isEmpty()) {
                 newQueryExpr = pruneEnforcedColumns(newQueryExpr);
                 deriveLogicalProperty(newQueryExpr);
             }
@@ -1749,7 +1749,7 @@ public class MaterializedViewRewriter {
         if (queryExpr.getOp().getProjection() != null) {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = queryExpr.getOp().getProjection().getColumnRefMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
-                if (mvRewriteContext.getEnforcedColumns().contains(entry.getKey())) {
+                if (mvRewriteContext.getEnforcedNonExistedColumns().contains(entry.getKey())) {
                     continue;
                 }
                 newColumnRefMap.put(entry.getKey(), entry.getValue());
@@ -1758,7 +1758,8 @@ public class MaterializedViewRewriter {
             List<ColumnRefOperator> outputColumns =
                     queryExpr.getOutputColumns().getColumnRefOperators(materializationContext.getQueryRefFactory());
             outputColumns = outputColumns.stream()
-                    .filter(column -> !mvRewriteContext.getEnforcedColumns().contains(column)).collect(Collectors.toList());
+                    .filter(column -> !mvRewriteContext.getEnforcedNonExistedColumns().contains(column))
+                    .collect(Collectors.toList());
             outputColumns.stream().forEach(column -> newColumnRefMap.put(column, column));
         }
         Projection newProjection = new Projection(newColumnRefMap);
@@ -1780,7 +1781,7 @@ public class MaterializedViewRewriter {
                 builder.setPredicate(MvUtils.canonizePredicateForRewrite(
                         Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
                 Operator newQueryOp = builder.build();
-                return deriveOptExpression(OptExpression.create(newQueryOp, optExpression.getInputs()));
+                return OptExpression.create(newQueryOp, optExpression.getInputs());
             } else {
                 return optExpression;
             }
@@ -1791,10 +1792,12 @@ public class MaterializedViewRewriter {
         for (OptExpression child : newJoin.getInputs()) {
             children.add(pushdownPredicatesForJoin(child, null));
         }
-        return deriveOptExpression(OptExpression.create(newJoin.getOp(), children));
+        return OptExpression.create(newJoin.getOp(), children);
     }
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
+        // To ensure join's property is deduced which is needed in `predicate-push-down`, derive its logical property.
+        deriveLogicalProperty(joinOptExpression);
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
                 false, true, materializationContext.getQueryRefFactory(), true);

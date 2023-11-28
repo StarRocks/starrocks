@@ -15,12 +15,17 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
+=======
+import com.google.common.base.Strings;
+>>>>>>> f056825ef8 ([BugFix] Fix union all rewrite for str2date partitioned mv (#35095))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -29,6 +34,7 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -49,6 +55,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+
+    // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
+    private  String traceLogModule = "";
+
+    public void setTracLogModule(String module) {
+        this.traceLogModule = module;
+    }
+
+    public void resetTraceLogModule() {
+        this.traceLogModule = "";
+    }
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -219,6 +236,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private String rewritePlan;
         private Exception exception;
         private String properties;
+        private String traceLog;
 
         public MVRewriteChecker(String query) {
             this.query = query;
@@ -254,11 +272,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                Pair<ExecPlan, String> planAndTrace =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+                this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                this.traceLog = planAndTrace.second;
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
+                if (Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(traceLog);
+                }
                 if (mv != null && !mv.isEmpty()) {
                     try {
                         starRocksAssert.dropMaterializedView("mv0");
@@ -268,6 +292,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
             }
             return this;
+        }
+
+        public String getTraceLog() {
+            return this.traceLog;
         }
 
         Exception getException() {
