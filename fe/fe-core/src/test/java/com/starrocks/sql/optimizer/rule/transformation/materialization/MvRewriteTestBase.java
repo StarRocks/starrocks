@@ -82,7 +82,11 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+=======
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
+>>>>>>> df3e6a048b ([Enhancement] improve multi-join rewrite (#35528))
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);

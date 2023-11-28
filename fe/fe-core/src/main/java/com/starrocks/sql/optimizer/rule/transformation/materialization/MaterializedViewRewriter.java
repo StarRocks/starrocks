@@ -40,12 +40,22 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.StringUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+>>>>>>> df3e6a048b ([Enhancement] improve multi-join rewrite (#35528))
 import com.starrocks.sql.common.PermutationGenerator;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -2294,7 +2304,20 @@ public class MaterializedViewRewriter {
         }
     }
 
-    public static List<List<Integer>> getPermutationsOfTableIds(List<Integer> tableIds, int n) {
+    // TODO: optimize the search algorithm to prune search space
+    private List<List<Integer>> getPermutationsOfTableIds(List<Integer> tableIds, int n) {
+        ConnectContext context = ConnectContext.get();
+        if (context != null) {
+            int limit = context.getSessionVariable().getMaterializedViewJoinSameTablePermutationLimit();
+            if (tableIds.size() > limit || n > limit) {
+                String message = String.format("MV or query use the same table too many times(mvTables=%d, " +
+                                "queryTables=%d), the optimizer cannot rewrite this query within the limited time. " +
+                                "You can enlarge the variable %s to break this limitation, current limit is %d",
+                        tableIds.size(), n, SessionVariable.MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, limit);
+                OptimizerTraceUtil.logMVRewrite(mvRewriteContext, message);
+                throw new StarRocksPlannerException(message, ErrorType.RULE_EXHAUSTED);
+            }
+        }
         List<Integer> t = new ArrayList<>();
         List<List<Integer>> ret = new ArrayList<>();
         getPermutationsOfTableIds(tableIds, n, t, ret);

@@ -206,6 +206,7 @@ public class OptimizerTraceUtil {
         }
     }
 
+<<<<<<< HEAD
 
     private static void log(ConnectContext ctx, String message) {
         Preconditions.checkState(ctx.getSessionVariable().isEnableOptimizerTraceLog());
@@ -214,6 +215,14 @@ public class OptimizerTraceUtil {
 
     public static void logApplyRule(SessionVariable sessionVariable,
                                     OptimizerTraceInfo traceInfo, Rule rule,
+=======
+    public static void logRuleExhausted(OptimizerContext ctx, Rule rule) {
+        Tracers.log(Tracers.Module.OPTIMIZER,
+                args -> String.format("[TRACE QUERY %s] RULE %s exhausted \n", ctx.getQueryId(), rule));
+    }
+
+    public static void logApplyRule(OptimizerContext ctx, Rule rule,
+>>>>>>> df3e6a048b ([Enhancement] improve multi-join rewrite (#35528))
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             StringBuilder sb = new StringBuilder();

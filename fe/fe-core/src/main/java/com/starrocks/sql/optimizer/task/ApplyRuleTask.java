@@ -18,6 +18,8 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -65,8 +67,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public void execute() {
-        if (groupExpression.hasRuleExplored(rule) ||
-                groupExpression.isUnused()) {
+        if (groupExpression.hasRuleExplored(rule) || groupExpression.isUnused()) {
             return;
         }
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
@@ -82,7 +83,25 @@ public class ApplyRuleTask extends OptimizerTask {
                 continue;
             }
             extractExpressions.add(extractExpr);
+<<<<<<< HEAD
             List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+=======
+            List<OptExpression> targetExpressions;
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
+                targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            } catch (StarRocksPlannerException e) {
+                if (e.getType() == ErrorType.RULE_EXHAUSTED) {
+                    break;
+                } else {
+                    throw e;
+                }
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
+            }
+
+>>>>>>> df3e6a048b ([Enhancement] improve multi-join rewrite (#35528))
             newExpressions.addAll(targetExpressions);
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
