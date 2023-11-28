@@ -17,7 +17,9 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.proc.JvmMonitorProcDir;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import org.junit.Assert;
@@ -81,6 +83,7 @@ public class MetricsTest {
     public void testPrometheusJvmStats() {
         PrometheusMetricVisitor prometheusMetricVisitor = new PrometheusMetricVisitor("sr_fe_jvm_stat_test");
         JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        System.out.println(jvmStatCollector.toString());
         JvmStats jvmStats = jvmStatCollector.stats();
         prometheusMetricVisitor.visitJvm(jvmStats);
         String output = prometheusMetricVisitor.build();
@@ -95,6 +98,35 @@ public class MetricsTest {
         );
         for (String metricName : metricNames) {
             Assert.assertTrue(output.contains(metricName));
+        }
+    }
+
+    private boolean jvmProcDirResultRowsContains(List<List<String>> rows, String metricName) {
+        for (List<String> row : rows) {
+            if (row.contains(metricName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Test
+    public void testProcDirJvmStats() throws AnalysisException {
+        JvmMonitorProcDir jvmMonitorProcDir = new JvmMonitorProcDir();
+        List<List<String>> rows = jvmMonitorProcDir.fetchResult().getRows();
+        System.out.println(rows);
+        List<String> metricNames = Arrays.asList(
+                "gc old collection count",
+                "gc old collection time",
+                "gc young collection time",
+                "gc young collection time",
+                "mem pool old committed",
+                "mem pool old used"
+        );
+        for (String metricName : metricNames) {
+            System.out.println(metricName);
+            Assert.assertTrue(jvmProcDirResultRowsContains(rows, metricName));
         }
     }
 }
