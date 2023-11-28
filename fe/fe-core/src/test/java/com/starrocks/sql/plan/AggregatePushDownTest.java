@@ -170,4 +170,17 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:EXCHANGE");
     }
+
+    @Test
+    public void testPruneColsAfterPushdownAgg() throws Exception {
+        String sql = "select L_PARTKEY from lineitem_partition where L_SHIPDATE >= '1992-01-01' and L_SHIPDATE < '1993-01-01'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/7");
+    }
 }
