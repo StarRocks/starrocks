@@ -59,6 +59,9 @@ public abstract class OptimizerTask {
             if (optimizerConfig.isRuleDisable(rule.type())) {
                 continue;
             }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                continue;
+            }
             validRules.add(rule);
         }
     }

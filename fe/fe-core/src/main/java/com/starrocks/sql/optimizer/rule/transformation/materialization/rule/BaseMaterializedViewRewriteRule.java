@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
@@ -72,6 +73,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
+    }
+
+    @Override
+    public boolean exhausted(OptimizerContext context) {
+        if (context.ruleExhausted(type())) {
+            Tracers.log(Tracers.Module.MV, args -> String.format("[MV TRACE] RULE %s exhausted\n", this));
+            return true;
+        }
+        return false;
     }
 
     @Override
