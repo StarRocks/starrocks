@@ -32,10 +32,21 @@ public class LogicalLimitOperator extends LogicalOperator {
         this.phase = phase;
     }
 
+<<<<<<< HEAD
+=======
+    private LogicalLimitOperator() {
+        super(OperatorType.LOGICAL_LIMIT);
+    }
+
+    // use init LogicalLimitOperator only when the split and merge limit rule can be applied
+    // in the further step
+>>>>>>> ff5b93df13 ([BugFix] split limit directly in some rules  (#35875))
     public static LogicalLimitOperator init(long limit) {
         return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.INIT);
     }
 
+    // use init LogicalLimitOperator only when the split and merge limit rule can be applied
+    // in the further step
     public static LogicalLimitOperator init(long limit, long offset) {
         return new LogicalLimitOperator(limit, offset, Phase.INIT);
     }

@@ -63,6 +63,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
+<<<<<<< HEAD
         Preconditions.checkState(!l1.hasOffset());
 
         // l2 range
@@ -80,10 +81,43 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         Operator result;
         if (l1.getLimit() <= l2.getLimit()) {
             result = LogicalLimitOperator.local(limit, l2.getOffset());
+=======
+        LogicalLimitOperator result;
+        if (l1.hasOffset() || l2.hasOffset()) {
+            // l2 range
+            long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
+            long l2Max = l2Min + l2.getLimit();
+
+            // l1 range
+            long l1Min = l1.hasOffset() ? l2Min + l1.getOffset() : l2Min;
+            long l1Max = l1Min + l1.getLimit();
+
+            long offset = Math.max(l2Min, l1Min);
+            long limit = Math.min(l2Max, l1Max) - offset;
+
+            if (limit <= 0) {
+                limit = 0;
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            if (offset <= 0) {
+                offset = Operator.DEFAULT_OFFSET;
+            }
+
+            result = LogicalLimitOperator.init(limit, offset);
+
+>>>>>>> ff5b93df13 ([BugFix] split limit directly in some rules  (#35875))
         } else {
             result = LogicalLimitOperator.init(limit, l2.getOffset());
         }
+        List<OptExpression> inputs = input.getInputs().get(0).getInputs();
 
-        return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));
+        if (result.isInit()) {
+            LogicalLimitOperator global = LogicalLimitOperator.global(result.getLimit(), result.getOffset());
+            LogicalLimitOperator local = LogicalLimitOperator.local(result.getLimit() + result.getOffset());
+            return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, inputs)));
+        } else {
+            return Lists.newArrayList(OptExpression.create(result, inputs));
+        }
     }
 }
