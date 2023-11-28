@@ -223,21 +223,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
         List<Long> partitionLastVersion = Lists.newArrayList();
-<<<<<<< HEAD
-        Database db = getAndReadLockDatabase(dbId);
-=======
         List<String> tableCoumnNames = Lists.newArrayList();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new AlterCancelException("database id: " + dbId + " does not exist");
-        }
-        Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
-            throw new AlterCancelException("insert overwrite commit failed because locking db: " + dbId + " failed");
-        }
+        Database db = getAndReadLockDatabase(dbId);
 
->>>>>>> c8d7d81425 ([BugFix] Fix optimize table for generated columns (#35896))
         try {
             dbName = db.getFullName();
             OlapTable targetTable = checkAndGetTable(db, tableId);
