@@ -83,8 +83,7 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
         }
     }
 
-    // query's mem_limit never exceeds its parent's limit if it exists
-    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
+    return mem_limit;
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
@@ -93,8 +92,13 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
         mem_tracker_counter->set(query_mem_limit);
+<<<<<<< HEAD
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
         if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+=======
+        if (wg != nullptr && big_query_mem_limit > 0 &&
+            (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
+>>>>>>> c2d5d1d643 ([BugFix] Correct error message for query mem_limit exceeding parent (#35826))
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);

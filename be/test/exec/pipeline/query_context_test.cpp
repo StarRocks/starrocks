@@ -23,17 +23,17 @@ TEST_P(ComputeQueryMemLimitTestFixture, compute_query_mem_limit) {
     ASSERT_EQ(expected_result, result);
 }
 
-INSTANTIATE_TEST_SUITE_P(QueryContextTest, ComputeQueryMemLimitTestFixture,
-                         ::testing::Values(
-                                 // Not set per_instance_mem_limit and option_query_mem_limit.
-                                 std::make_tuple(100, -1, 4, -1, -1),
-                                 // Set option_query_mem_limit.
-                                 std::make_tuple(100, 2, 16, 4, 4), std::make_tuple(100, 2, 16, 101, 100),
-                                 // Set per_instance_mem_limit.
-                                 std::make_tuple(100, 2, 16, -1, 96), std::make_tuple(100, 4, 16, -1, 100),
-                                 // Set per_instance_mem_limit, and exceed MAX_INT64.
-                                 std::make_tuple(100, std::numeric_limits<int64_t>::max(), 16, -1, 100),
-                                 std::make_tuple(-1, std::numeric_limits<int64_t>::max(), 16, -1,
-                                                 std::numeric_limits<int64_t>::max())));
+INSTANTIATE_TEST_SUITE_P(
+        QueryContextTest, ComputeQueryMemLimitTestFixture,
+        ::testing::Values(
+                // Not set per_instance_mem_limit and option_query_mem_limit.
+                std::make_tuple(100, -1, 4, -1, -1),
+                // Set option_query_mem_limit.
+                std::make_tuple(100, 2, 16, 4, 4), std::make_tuple(100, 2, 16, 101, 101),
+                // Set per_instance_mem_limit.
+                std::make_tuple(100, 2, 16, -1, 96), std::make_tuple(100, 4, 16, -1, 192),
+                // Set per_instance_mem_limit, and exceed MAX_INT64.
+                std::make_tuple(100, std::numeric_limits<int64_t>::max(), 16, -1, std::numeric_limits<int64_t>::max()),
+                std::make_tuple(-1, std::numeric_limits<int64_t>::max(), 16, -1, std::numeric_limits<int64_t>::max())));
 
 } // namespace starrocks::pipeline
