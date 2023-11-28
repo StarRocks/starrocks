@@ -59,7 +59,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -167,7 +166,7 @@ public class OlapTableTest {
     }
 
     @Test
-    public void testMVPartitionDurationTimeUintMismatchSucceeded() throws AnalysisException {
+    public void testMVPartitionDurationTimeUintMismatch1() throws AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
         List<Column> partitionColumns = new LinkedList<Column>();
         partitionColumns.add(k1);
@@ -190,10 +189,19 @@ public class OlapTableTest {
 
         Partition partition = new Partition(1, "p1", null, null);
         Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+
+        new MockUp<Range<PartitionKey>>() {
+            @Mock
+            boolean isConnected(Range<PartitionKey> range) throws Exception {
+                throw new Exception("Error");
+            }
+        };
+
+        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
     @Test
-    public void testMVPartitionDurationTimeUintMismatchFailed() throws AnalysisException {
+    public void testMVPartitionDurationTimeUintMismatch2() throws AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
         List<Column> partitionColumns = new LinkedList<Column>();
         partitionColumns.add(k1);
@@ -217,14 +225,6 @@ public class OlapTableTest {
         olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
 
         Partition partition = new Partition(1, "p1", null, null);
-        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
-
-        new MockUp<LocalDateTime>() {
-            @Mock
-            LocalDateTime minus(PeriodDuration cacheDuration) throws Exception {
-                throw new Exception("Error");
-            }
-        };
         Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
     }
 
