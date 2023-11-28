@@ -42,7 +42,6 @@ PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
-    check_operator_close_states("deleting pipeline drivers");
 }
 
 void PipelineDriver::check_operator_close_states(std::string func_name) {
