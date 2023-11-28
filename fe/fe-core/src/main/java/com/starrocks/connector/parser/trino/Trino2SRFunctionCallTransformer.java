@@ -133,6 +133,9 @@ public class Trino2SRFunctionCallTransformer {
         // filter(array, lambda) -> array_filter(array, lambda)
         registerFunctionTransformer("filter", 2, "array_filter",
                 ImmutableList.of(Expr.class, Expr.class));
+        // contains_sequence -> array_contains_seq
+        registerFunctionTransformer("contains_sequence", 2, "array_contains_seq",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerDateFunctionTransformer() {
