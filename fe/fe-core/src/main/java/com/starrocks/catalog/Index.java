@@ -198,7 +198,6 @@ public class Index implements Writable {
             sb.append(" USING ").append(indexType.getDisplayName());
         }
         if (properties != null) {
-            sb.append(" PROPERTIES ");
             sb.append(getPropertiesString());
         }
         if (comment != null) {

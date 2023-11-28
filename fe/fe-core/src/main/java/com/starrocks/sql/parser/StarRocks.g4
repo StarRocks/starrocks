@@ -406,7 +406,7 @@ generatedColumnDesc
     ;
 
 indexDesc
-    : INDEX indexName=identifier identifierList indexType? properties? comment?
+    : INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 engineDesc
@@ -492,7 +492,7 @@ alterTableStatement
 
 createIndexStatement
     : CREATE INDEX indexName=identifier
-        ON qualifiedName identifierList indexType? properties?
+        ON qualifiedName identifierList (indexType propertyList?)?
         comment?
     ;
 
@@ -928,7 +928,7 @@ cleanTabletSchedQClause
 // ---------Alter table clause---------
 
 createIndexClause
-    : ADD INDEX indexName=identifier identifierList indexType? properties? comment?
+    : ADD INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 dropIndexClause

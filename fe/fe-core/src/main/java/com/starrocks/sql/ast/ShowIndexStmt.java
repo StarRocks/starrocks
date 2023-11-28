@@ -37,7 +37,6 @@ public class ShowIndexStmt extends ShowStmt {
                     .addColumn(new Column("Null", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Index_type", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Comment", ScalarType.createVarchar(80)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .build();
     private final String dbName;
     private final TableName tableName;

@@ -1326,8 +1326,8 @@ public class ShowExecutor {
                 for (Index index : indexes) {
                     rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "",
                             index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
-                            "", index.getIndexType().name(), index.getComment(),
-                            index.getPropertiesString()));
+                            "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
+                            index.getComment()));
                 }
             } else {
                 // other type view, mysql, hive, es

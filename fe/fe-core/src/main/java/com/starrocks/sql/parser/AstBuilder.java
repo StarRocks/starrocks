@@ -815,7 +815,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             final IndexDef indexDef =
                     new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            getIndexType(context.indexType()), comment, getProperties(context.properties()), createPos(context));
+                            getIndexType(context.indexType()), comment, getPropertyList(context.propertyList()),
+                            createPos(context));
             indexDefList.add(indexDef);
         }
         return indexDefList;
@@ -1313,7 +1314,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
                 getIndexType(context.indexType()),
-                comment, getProperties(context.properties()), idxPos);
+                comment, getPropertyList(context.propertyList()), idxPos);
 
         CreateIndexClause createIndexClause = new CreateIndexClause(indexDef, idxPos);
 
@@ -3526,7 +3527,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
                 getIndexType(context.indexType()),
-                comment, getProperties(context.properties()),
+                comment, getPropertyList(context.propertyList()),
                 createPos(start, stop));
 
         return new CreateIndexClause(indexDef, createPos(context));
