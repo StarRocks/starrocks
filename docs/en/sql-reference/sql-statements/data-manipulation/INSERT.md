@@ -12,17 +12,6 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](./SUBMIT_TASK.md)
 
 ## Syntax
 
-<<<<<<< HEAD
-```Bash
-INSERT { INTO | OVERWRITE } [db_name.]<table_name>
-[ PARTITION (<partition_name> [, ...) ]
-[ TEMPORARY_PARTITION (<temporary_partition_name>[, ...) ]
-[ WITH LABEL <label>]
-[ (<column_name>[, ...]) ]
-{ VALUES ( { <expression> | DEFAULT }[, ...] )
-  | <query> }
-```
-=======
 - **Data loading**:
 
   ```sql
@@ -41,7 +30,6 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
   [ WITH LABEL <label> ]
   { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
   ```
->>>>>>> 13d8b507b2 ([Doc] Revise INSERT and FILES for unloading (#35900))
 
 ## Parameters
 
