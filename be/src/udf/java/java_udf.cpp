@@ -188,7 +188,7 @@ JVMClass& JVMFunctionHelper::function_state_clazz() {
     if (auto e = _env->ExceptionOccurred()) {                 \
         LOCAL_REF_GUARD(e);                                   \
         _env->ExceptionClear();                               \
-        LOG(WARNING) << "Exception happend when call " #name; \
+        LOG(WARNING) << "Exception happened when call " #name; \
         return "";                                            \
     }
 
