@@ -12,15 +12,24 @@ displayed_sidebar: "Chinese"
 
 ## 语法
 
-```SQL
-INSERT { INTO | OVERWRITE } [db_name.]<table_name>
-[ PARTITION (<partition_name> [, ...) ]
-[ TEMPORARY PARTITION (<temporary_partition_name>[, ...) ]
-[ WITH LABEL <label>]
-[ (<column_name>[, ...]) ]
-{ VALUES ( { <expression> | DEFAULT }[, ...] )
-  | <query> }
-```
+- **导入**:
+
+  ```sql
+  INSERT { INTO | OVERWRITE } [db_name.]<table_name>
+  [ PARTITION (<partition_name> [, ...] ) ]
+  [ TEMPORARY PARTITION (<temporary_partition_name> [, ...] ) ]
+  [ WITH LABEL <label>]
+  [ (<column_name>[, ...]) ]
+  { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
+  ```
+
+- **导出**:
+
+  ```sql
+  INSERT INTO FILES()
+  [ WITH LABEL <label> ]
+  { VALUES ( { <expression> | DEFAULT } [, ...] ) | <query> }
+  ```
 
 ## 参数说明
 
@@ -36,6 +45,7 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 | expression  | 表达式，用以为对应列赋值。                                   |
 | DEFAULT     | 为对应列赋予默认值。                                         |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+| FILES()       | 表函数 [FILES()](../../sql-functions/table-functions/files.md)。您可以通过该函数将数据导出至远端存储。更多信息，请参考 [使用 INSERT INTO FILES() 导出数据](../../../unloading/unload_using_insert_into_files.md). |
 
 ## 注意事项
 
