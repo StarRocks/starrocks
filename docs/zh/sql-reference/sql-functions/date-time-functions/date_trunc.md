@@ -89,18 +89,8 @@ select date_trunc("year", "2020-11-04 11:12:13");
 
 示例五：DATE 类型下，`fmt` 设置为 `hour`时，返回报错。
 
-<<<<<<< HEAD
-```undefined
-select date_trunc("hour", "2020-11-04");
-+----------------------------------+
-| date_trunc('hour', '2020-11-04') |
-+----------------------------------+
-| 2020-11-04 00:00:00              |
-+----------------------------------+
-=======
 ```plain
 select date_trunc("hour", cast("2020-11-04" as date));
 
 ERROR 1064 (HY000): Getting analyzing error from line 1, column 26 to line 1, column 51. Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.
->>>>>>> 78b376a235 ([Doc] update date_trunc according to community pr (#35870))
 ```
