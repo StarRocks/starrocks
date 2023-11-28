@@ -547,7 +547,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
       > **说明**
       >
-      > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
+      > 在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
 
       建表示例：
 
@@ -559,7 +559,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
           city_code VARCHAR(100),
           user_name VARCHAR(32) DEFAULT '')
       DUPLICATE KEY (event_day,site_id,pv)
-      ;--无需手动设置分区中分桶数量，并且随机分桶，无需设置分桶键
+      PROPERTIES("bucket_size"="1073741824")
+      ;--指定单个分桶大小，无需设置分桶数量，并且随机分桶，无需设置分桶键
       ```
 
     建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
