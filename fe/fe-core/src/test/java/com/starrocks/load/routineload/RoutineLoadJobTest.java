@@ -186,7 +186,10 @@ public class RoutineLoadJobTest {
             KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
 
+            routineLoadJob.setPartitionOffset(0, 12345);
+
             List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(19));
             //The displayed value is the actual value - 1
             Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
             Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
