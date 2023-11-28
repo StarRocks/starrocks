@@ -6,11 +6,7 @@ displayed_sidebar: "English"
 
 Deletes data rows from a table based on the specified conditions. The table can be a partitioned or non-partitioned table.
 
-<<<<<<< HEAD
-For Duplicate Key, Aggregate Key, and Unique Key tables, you can delete data from specified partitions. However, the Primary Key table does not allow you to do so. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery.
-=======
-For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delete data from specified partitions. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. From v3.0, StarRocks enriches the `DELETE...WHERE` semantics with multi-table joins and common table expressions (CTEs). If you need to join Primary Key tables with other tables in the database, you can reference these other tables in the USING clause or CTE.
->>>>>>> d389f0b9e3 ([Doc] update date_trunc according to community pr (#35870))
+For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delete data from specified partitions. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. 
 
 ## Usage notes
 
