@@ -37,8 +37,6 @@ Example 2: Set the `exec_mem_limit` to `2147483648` globally.
 mysql> SET GLOBAL exec_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
-<<<<<<< HEAD
-=======
 
 Example 3: Set multiple global variables. The `GLOBAL` keyword needs to be preposed for each variable.
 
@@ -48,4 +46,3 @@ mysql> SET
        GLOBAL time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```
->>>>>>> 8718b9d308 ([Doc] Add example for setting multiple variables (#35940))
