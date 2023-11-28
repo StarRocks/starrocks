@@ -206,12 +206,26 @@ public class OptExpression {
 
     private String explain(String headlinePrefix, String detailPrefix) {
         StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
         sb.append(headlinePrefix).
                 append(op.accept(new OptimizerTraceUtil.OperatorTracePrinter(), null)).append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
             sb.append(input.explain(childHeadlinePrefix, childDetailPrefix));
+=======
+        sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
+        limitLine -= 1;
+        if (limitLine <= 0 || inputs.isEmpty()) {
+            return sb.toString();
+        }
+
+        sb.append('\n');
+        String childHeadlinePrefix = detailPrefix + "->  ";
+        String childDetailPrefix = detailPrefix + "    ";
+        for (OptExpression input : inputs) {
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine)).append("\n");
+>>>>>>> f056825ef8 ([BugFix] Fix union all rewrite for str2date partitioned mv (#35095))
         }
         return sb.toString();
     }

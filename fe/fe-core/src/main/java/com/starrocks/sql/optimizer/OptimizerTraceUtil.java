@@ -214,14 +214,24 @@ public class OptimizerTraceUtil {
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", traceInfo.getQueryId(), rule));
             sb.append("Original Expression:\n").append(oldExpression.explain());
             sb.append("New Expression:\n");
+=======
+            sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
+            sb.append("Original Expression:\n").append(oldExpression.debugString());
+            sb.append("\nNew Expression:");
+>>>>>>> f056825ef8 ([BugFix] Fix union all rewrite for str2date partitioned mv (#35095))
             if (newExpressions.isEmpty()) {
                 sb.append("Empty\n");
             } else {
                 for (int i = 0; i < newExpressions.size(); i++) {
+<<<<<<< HEAD
                     sb.append(i).append(":\n").append(newExpressions.get(i).explain());
+=======
+                    sb.append(i).append(":").append(newExpressions.get(i).debugString());
+>>>>>>> f056825ef8 ([BugFix] Fix union all rewrite for str2date partitioned mv (#35095))
                 }
             }
             LOG.info(sb.toString());
