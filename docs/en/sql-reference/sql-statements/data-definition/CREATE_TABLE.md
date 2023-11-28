@@ -41,6 +41,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**: Column name.
 
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/Configuration.md#allow_system_reserved_names) to `TRUE`.
+
 **col_type**: Column type. Specific column information, such as types and ranges:
 
 - TINYINT (1 byte): Ranges from -2^7 + 1 to 2^7 - 1.
@@ -636,6 +638,14 @@ PROPERTIES (
 
   - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
   - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
+
+#### Set fast schema evolution
+
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` (default) or `FALSE`. Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation. This parameter is supported since v3.2.0.
+  > **NOTE**
+  >
+  > - StarRocks shared-data clusters do not support this parameter.
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`fast_schema_evolution`](../../../administration/Configuration.md#fast_schema_evolution).
 
 ## Examples
 

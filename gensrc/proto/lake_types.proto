@@ -54,6 +54,8 @@ message RowsetMetadataPB {
     optional int64 num_rows = 4;
     optional int64 data_size = 5;
     optional DeletePredicatePB delete_predicate = 6;
+    // approximate, BE upgrade from old version can't get exact number of dels
+    optional int64 num_dels = 7;
 }
 
 

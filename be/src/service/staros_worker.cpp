@@ -329,6 +329,8 @@ Status to_status(const absl::Status& absl_status) {
         return Status::InvalidArgument(fmt::format("starlet err {}", absl_status.message()));
     case absl::StatusCode::kNotFound:
         return Status::NotFound(fmt::format("starlet err {}", absl_status.message()));
+    case absl::StatusCode::kResourceExhausted:
+        return Status::ResourceBusy(fmt::format("starlet err {}", absl_status.message()));
     default:
         return Status::InternalError(fmt::format("starlet err {}", absl_status.message()));
     }

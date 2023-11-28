@@ -326,6 +326,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         }
     }
 
+    if (!request->has_skip_cleanup() || request->skip_cleanup()) {
+        return;
+    }
+
     auto thread_pool = abort_txn_thread_pool(_env);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
@@ -481,21 +485,30 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-
+    int64_t timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForGetTabletStat;
+    int64_t due_time = butil::gettimeofday_ms() + timeout_ms;
     auto thread_pool = get_tablet_stats_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
     bthread::Mutex response_mtx;
     for (const auto& tablet_info : request->tablet_infos()) {
         auto task = [&, tablet_info]() {
             DeferOp defer([&] { latch.count_down(); });
+
             int64_t tablet_id = tablet_info.tablet_id();
+            int64_t version = tablet_info.version();
+            int64_t now = butil::gettimeofday_ms();
+            if (now >= due_time) {
+                LOG(WARNING) << "Cancelled tablet stat collection task due to timeout exceeded. tablet_id: "
+                             << tablet_id << ", version: " << version;
+                return;
+            }
+
             auto tablet = _tablet_mgr->get_tablet(tablet_id);
             if (!tablet.ok()) {
                 LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
                 return;
             }
 
-            int64_t version = tablet_info.version();
             auto tablet_metadata = tablet->get_metadata(version);
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
@@ -519,6 +532,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             tablet_stat->set_num_rows(num_rows);
             tablet_stat->set_data_size(data_size);
         };
+        TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool->submit_func(std::move(task)); !st.ok()) {
             LOG(WARNING) << "Fail to get tablet stats task: " << st;
             latch.count_down();

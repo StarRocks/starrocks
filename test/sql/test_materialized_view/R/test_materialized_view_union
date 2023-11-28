@@ -55,16 +55,24 @@ select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
 -- result:
 -- !result
-select sleep(15);
+function: wait_async_materialized_view_finish("mv1")
 -- result:
-1
+None
 -- !result
-select * from mv1;
+select * from mv1 order by k1, v1;
 -- result:
 202301	1	1
 202305	1	2
 -- !result
--- name: test_materialized_view_auto_refresh_partitions_limit
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
 CREATE TABLE `t1` (
   `k1` int(11) NULL COMMENT "",
   `v1` int(11) NULL COMMENT "",
@@ -98,6 +106,9 @@ PROPERTIES (
 );
 -- result:
 -- !result
+insert into t1 values (202301,1,1),(202305,1,2);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW `mv1`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
@@ -112,14 +123,20 @@ union
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-insert into t1 values (202301,1,1),(202305,1,2);
+function: wait_async_materialized_view_finish("mv1")
 -- result:
+None
 -- !result
-select sleep(15);
--- result:
-1
--- !result
-select * from mv1;
+select * from mv1 order by k1, v1;
 -- result:
 202305	1	2
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop materialized view mv1;
+-- result:
 -- !result

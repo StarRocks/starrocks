@@ -211,6 +211,11 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("str_to_map", 1, new FunctionCallExpr("str_to_map",
                 ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
                         new PlaceholderExpr(1, Expr.class), new StringLiteral(","))), new StringLiteral(":"))));
+
+        // replace(string, search) -> replace(string, search, '')
+        registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                        new StringLiteral(""))));
     }
 
     private static void registerRegexpFunctionTransformer() {

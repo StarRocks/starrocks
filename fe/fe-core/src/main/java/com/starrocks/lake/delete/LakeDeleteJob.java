@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.delete;
 
 import com.google.common.base.Preconditions;
@@ -97,7 +96,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         // create delete predicate
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = getDeleteConditions();
         DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
 
         // send delete data request to BE

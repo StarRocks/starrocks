@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
@@ -34,7 +35,10 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -45,6 +49,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -71,11 +78,13 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.catalog.Type.DATE;
@@ -298,6 +307,87 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
             Assert.assertTrue(e.getMessage().contains("Database iceberg_db not empty"));
+        }
+    }
+
+    @Test
+    public void testDropTable() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        List<TableIdentifier> mockTables = new ArrayList<>();
+        mockTables.add(TableIdentifier.of("table1"));
+        mockTables.add(TableIdentifier.of("table2"));
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return 1;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(new ArrayBlockingQueue<>(100));
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddAnalyzeJob(AnalyzeJob job) {
+                return;
+            }
+
+            @Mock
+            public void logRemoveAnalyzeJob(AnalyzeJob job) {
+                return;
+            }
+        };
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
+                "iceberg_db", "table1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN));
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            Table getTable(String dbName, String tblName) {
+                return new IcebergTable(1, "table1", "iceberg_catalog",
+                        "iceberg_catalog", "iceberg_db",
+                        "table1", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+            }
+        };
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.dropTable("iceberg_db", "table1", true);
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropTable(new DropTableStmt(false, new TableName("iceberg_catalog",
+                    "iceberg_db", "table1"), true));
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        new MockUp<IcebergMetadata>() {
+            // mock table not exist
+            @Mock
+            Table getTable(String dbName, String tblName) {
+                return null;
+
+            }
+        };
+        try {
+            metadata.dropTable(new DropTableStmt(false, new TableName("iceberg_catalog",
+                    "iceberg_db", "table1"), true));
+        } catch (Exception e) {
+            Assert.fail();
         }
     }
 

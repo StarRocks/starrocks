@@ -29,7 +29,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private long dbId;
     private long tableId;
     private final TableName tbl;
-    private final List<String> columnNames;
+    private List<String> columnNames;
     private final boolean isSample;
     private Map<String, String> properties;
 
@@ -75,6 +75,10 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public List<String> getColumnNames() {
         return columnNames;
+    }
+
+    public void setColumnNames(List<String> columnNames) {
+        this.columnNames = columnNames;
     }
 
     public boolean isSample() {
