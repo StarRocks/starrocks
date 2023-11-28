@@ -171,6 +171,34 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 | download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
 | max_download_speed_kbps | The upper limit of the download speed on a BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
 
+## Materialized view BACKUP and RESTORE
+
+During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md).
+
+From v3.2.0, StarRocks supports backing up and restoring [asynchronous materialized views](../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
+
+During BACKUP and RESTORE a database, StarRocks does as follows:
+
+- **BACKUP**
+
+1. Traverse the database to gather information on all tables and asynchronous materialized views.
+2. Adjust the order of tables in the BACKUP and RESTORE queue, ensuring that the base tables of materialized views are positioned before the materialized views:
+   - If the base table exists in the current database, StarRocks adds the table to the queue.
+   - If the base table does not exist in the current database, StarRocks prints a warning log and proceeds with the BACKUP operation without blocking the process.
+3. Execute the BACKUP task in the order of the queue.
+
+- **RESTORE**
+
+1. Restore the tables and materialized views in the order of the BACKUP and RESTORE queue.
+2. Re-build the dependency between materialized views and their base tables, and re-submit the refresh task schedule.
+
+Any error encountered throughout the RESTORE process will not block the process.
+
+After RESTORE, you can check the status of the materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md).
+
+- If the materialized view is active, it can be used directly.
+- If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
+
 ## Usage notes
 
 - Only users with the ADMIN privilege can back up or restore data.
@@ -183,6 +211,6 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 - You do not need to create the table to be restored in the new cluster before restoring it. The RESTORE job automatically creates it.
 - If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
 - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
-- During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md), which can still accelerate or rewrite your queries after data restoration. Currently, StarRocks does not support backing up views and [Asynchronous materialized views](../using_starrocks/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
-- Currently, StarRocks does not support backing up the configuration data related to user accounts, privileges, and resource groups.
+- Currently, StarRocks does not support backing up and restoring logical views.
+- Currently, StarRocks does not support backing up and restoring the configuration data related to user accounts, privileges, and resource groups.
 - Currently, StarRocks does not support backing up and restoring the Colocate Join relationship among tables.
