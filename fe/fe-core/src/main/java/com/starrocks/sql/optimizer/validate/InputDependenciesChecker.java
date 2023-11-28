@@ -214,7 +214,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         }
 
         private void fillPrunedPredicateCols(ColumnRefSet usedCols, List<ScalarOperator> prunedPredicates) {
-            if(CollectionUtils.isEmpty(prunedPredicates)) {
+            if (CollectionUtils.isEmpty(prunedPredicates)) {
                 return;
             }
 

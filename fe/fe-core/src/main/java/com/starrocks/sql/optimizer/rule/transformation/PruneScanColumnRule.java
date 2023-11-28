@@ -105,7 +105,7 @@ public class PruneScanColumnRule extends TransformationRule {
 
         for (ScalarOperator predicate : olapScanOperator.getPrunedPartitionPredicates()) {
             Utils.extractColumnRef(predicate).stream()
-                    .forEach( e -> newColumnRefMap.put(e, olapScanOperator.getColRefToColumnMetaMap().get(e)));
+                    .forEach(e -> newColumnRefMap.put(e, olapScanOperator.getColRefToColumnMetaMap().get(e)));
         }
     }
 }
