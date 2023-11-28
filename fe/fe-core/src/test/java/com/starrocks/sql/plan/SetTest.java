@@ -327,7 +327,7 @@ public class SetTest extends PlanTestBase {
         String sql = "select * from t0 union all select * from t0;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  5:EXCHANGE\n" +
                 "     limit: 2");
@@ -374,7 +374,7 @@ public class SetTest extends PlanTestBase {
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET\n"));
 
@@ -418,7 +418,7 @@ public class SetTest extends PlanTestBase {
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:Project\n" +
                 "  |  <slot 10> : 7: v7\n" +
@@ -449,7 +449,7 @@ public class SetTest extends PlanTestBase {
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET\n"));
 
@@ -460,7 +460,7 @@ public class SetTest extends PlanTestBase {
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET\n"));
     }

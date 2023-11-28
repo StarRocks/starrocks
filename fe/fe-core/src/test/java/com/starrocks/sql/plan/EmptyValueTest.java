@@ -37,13 +37,13 @@ public class EmptyValueTest extends PlanTestBase {
     public void testPartitionCrossJoin() throws Exception {
         String sql = "select * from lineitem_partition p join t1 join t2 join t3 where L_SHIPDATE = '2000-01-01' ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET");
 
         sql = "select * from lineitem_partition p join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET");
     }
@@ -53,13 +53,13 @@ public class EmptyValueTest extends PlanTestBase {
         String sql = "select L_PARTKEY, t0.v2 from lineitem_partition p " +
                 "left outer join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY, t0.v2 from lineitem_partition p " +
                 "right outer join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY, t0.v2 from t0 left outer join " +
@@ -75,37 +75,37 @@ public class EmptyValueTest extends PlanTestBase {
         sql = "select L_PARTKEY, t0.v2 from t0 right outer join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY from lineitem_partition p " +
                 "left semi join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select t0.v2 from t0 left semi join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY from t0 right semi join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY from lineitem_partition p " +
                 "left anti join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY from t0 right anti join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select t0.v2 from t0 left anti join " +
@@ -117,7 +117,7 @@ public class EmptyValueTest extends PlanTestBase {
         sql = "select L_PARTKEY, t0.v2 from lineitem_partition p " +
                 "full outer join t0 on p.L_ORDERKEY = t0.v2 where L_SHIPDATE = '2000-01-01' ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n  0:EMPTYSET");
 
         sql = "select L_PARTKEY, t0.v2 from t0 full outer join " +
@@ -220,7 +220,7 @@ public class EmptyValueTest extends PlanTestBase {
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
                 " where (x.L_SUPPKEY + 1) is NULL";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  RESULT SINK\n" +
+        assertContains(plan, "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:EMPTYSET");
 

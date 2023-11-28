@@ -127,7 +127,7 @@ public class SubqueryTest extends PlanTestBase {
         String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  5:EXCHANGE\n" +
                 "     limit: 10");
@@ -1491,7 +1491,7 @@ public class SubqueryTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:TOP-N\n" +
                 "  |  order by: <slot 1> 1: v1 ASC\n" +
@@ -1526,7 +1526,7 @@ public class SubqueryTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:TOP-N\n" +
                 "  |  order by: <slot 1> 1: v1 ASC\n" +

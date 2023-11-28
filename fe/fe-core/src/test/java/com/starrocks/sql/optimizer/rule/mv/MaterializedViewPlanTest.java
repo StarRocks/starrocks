@@ -87,7 +87,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 " 6: _binlog_seq_id | 7: _binlog_timestamp\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:EXCHANGE\n" +
                 "\n" +

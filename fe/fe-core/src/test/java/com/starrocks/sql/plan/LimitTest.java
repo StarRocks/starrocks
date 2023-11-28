@@ -35,7 +35,7 @@ public class LimitTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:EXCHANGE\n" +
                 "     limit: 1\n" +

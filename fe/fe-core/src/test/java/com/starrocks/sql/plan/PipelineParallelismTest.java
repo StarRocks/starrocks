@@ -89,7 +89,7 @@ public class PipelineParallelismTest extends PlanTestBase {
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
         PlanFragment fragment0 = plan.getFragments().get(0);
-        assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
+        assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK: MYSQL_PROTOCAL");
         Assert.assertEquals(1, fragment0.getParallelExecNum());
         Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
     }

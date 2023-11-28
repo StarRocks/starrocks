@@ -25,7 +25,7 @@ public class TableFunctionTest extends PlanTestBase {
                 " OUTPUT EXPRS:2: unnest\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -48,7 +48,7 @@ public class TableFunctionTest extends PlanTestBase {
                 " OUTPUT EXPRS:2: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -71,7 +71,7 @@ public class TableFunctionTest extends PlanTestBase {
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  7:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -121,7 +121,7 @@ public class TableFunctionTest extends PlanTestBase {
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -178,7 +178,7 @@ public class TableFunctionTest extends PlanTestBase {
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  7:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +

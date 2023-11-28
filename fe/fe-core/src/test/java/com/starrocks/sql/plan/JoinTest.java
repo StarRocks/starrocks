@@ -525,7 +525,7 @@ public class JoinTest extends PlanTestBase {
                 " OUTPUT EXPRS:10: expr\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  9:Project\n" +
                 "  |  <slot 10> : 0\n" +
@@ -2730,7 +2730,7 @@ public class JoinTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1\n" +
                 "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
                 "\n" +
-                "  RESULT SINK");
+                "  RESULT SINK: MYSQL_PROTOCAL");
 
         try {
             connectContext.getSessionVariable().setPreferComputeNode(true);
@@ -2739,7 +2739,7 @@ public class JoinTest extends PlanTestBase {
                     " OUTPUT EXPRS:1: v1\n" +
                     "  PARTITION: UNPARTITIONED\n" +
                     "\n" +
-                    "  RESULT SINK");
+                    "  RESULT SINK: MYSQL_PROTOCAL");
         } finally {
             connectContext.getSessionVariable().setPreferComputeNode(false);
         }

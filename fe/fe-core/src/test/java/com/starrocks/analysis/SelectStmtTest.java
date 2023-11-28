@@ -312,7 +312,7 @@ public class SelectStmtTest {
                 " OUTPUT EXPRS:3: expr | 4: count\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  5:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(4: count)\n" +
@@ -511,7 +511,7 @@ public class SelectStmtTest {
             Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
                     "  Output Exprs:1: c0 | 5: sum | 5: sum\n" +
                     "  Input Partition: RANDOM\n" +
-                    "  RESULT SINK\n" +
+                    "  RESULT SINK: MYSQL_PROTOCAL\n" +
                     "\n" +
                     "  2:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: sum[([4: expr, DECIMAL128(38,8), true]); " +
@@ -533,7 +533,7 @@ public class SelectStmtTest {
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, plan.contains("  Output Exprs:1: c0 | 4: sum | 4: sum\n" +
                     "  Input Partition: RANDOM\n" +
-                    "  RESULT SINK\n" +
+                    "  RESULT SINK: MYSQL_PROTOCAL\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: sum[(1 / 2.1200); args: DECIMAL128; result: DECIMAL128(38,6);" +
@@ -549,7 +549,7 @@ public class SelectStmtTest {
             Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
                     "  Output Exprs:1: c0 | 5: sum | 5: sum\n" +
                     "  Input Partition: RANDOM\n" +
-                    "  RESULT SINK\n" +
+                    "  RESULT SINK: MYSQL_PROTOCAL\n" +
                     "\n" +
                     "  2:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: sum[(cast([4: expr, DECIMAL128(38,19), true] as DECIMAL128(38,18))); " +

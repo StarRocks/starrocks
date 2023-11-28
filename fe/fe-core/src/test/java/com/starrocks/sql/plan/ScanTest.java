@@ -60,7 +60,7 @@ public class ScanTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:7: S_COMMENT\n"
                 + "  PARTITION: RANDOM\n"
                 + "\n"
-                + "  RESULT SINK\n"
+                + "  RESULT SINK: MYSQL_PROTOCAL\n"
                 + "\n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: supplier"));
@@ -77,7 +77,7 @@ public class ScanTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:9: sum\n"
                 + "  PARTITION: UNPARTITIONED\n"
                 + "\n"
-                + "  RESULT SINK\n"
+                + "  RESULT SINK: MYSQL_PROTOCAL\n"
                 + "\n"
                 + "  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: sum(9: sum)\n"
@@ -109,7 +109,7 @@ public class ScanTest extends PlanTestBase {
     public void testInformationSchema() throws Exception {
         String sql = "select column_name from information_schema.columns limit 1;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  RESULT SINK\n" +
+        assertContains(plan, "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
                 "     limit: 1\n");
@@ -135,7 +135,7 @@ public class ScanTest extends PlanTestBase {
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
                 + "\n"
-                + "  RESULT SINK\n"
+                + "  RESULT SINK: MYSQL_PROTOCAL\n"
                 + "\n"
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0\n"
@@ -164,7 +164,7 @@ public class ScanTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
@@ -184,7 +184,7 @@ public class ScanTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n"));
     }

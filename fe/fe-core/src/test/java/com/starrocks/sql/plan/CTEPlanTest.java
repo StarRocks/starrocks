@@ -172,7 +172,7 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
                 "select * from x1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+        Assert.assertTrue(plan.contains("  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -184,7 +184,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "x3 as (select * from x2) " +
                 "select * from x3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+        Assert.assertTrue(plan.contains("  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0"));
@@ -388,7 +388,7 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:AGGREGATE (update finalize)");
     }
@@ -407,7 +407,7 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
     }

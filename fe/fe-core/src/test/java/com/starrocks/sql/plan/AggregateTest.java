@@ -481,7 +481,7 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " OUTPUT EXPRS:13: bitmap_union_count\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)\n" +
@@ -781,7 +781,7 @@ public class AggregateTest extends PlanTestBase {
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
@@ -1085,7 +1085,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1 | 4: any_value\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: any_value(2: v2)\n" +
@@ -1107,7 +1107,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:5: any_value | 4: sum\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2), any_value(1: v1)\n" +
@@ -1129,7 +1129,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:4: max\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: max\n" +
@@ -1155,7 +1155,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:5: any_value | 4: max\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(2: v2), any_value(1: v1)\n" +
@@ -1178,7 +1178,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:4: any_value\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  5:Project\n" +
                 "  |  <slot 4> : 4: any_value\n" +
@@ -1221,7 +1221,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:4: any_value | 6: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  5:Project\n" +
                 "  |  <slot 4> : 4: any_value\n" +
@@ -1287,7 +1287,7 @@ public class AggregateTest extends PlanTestBase {
                 " OUTPUT EXPRS:1: v1 | 6: any_value | 5: sum\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
-                "  RESULT SINK\n" +
+                "  RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(4: if), any_value(2: v2)\n" +
@@ -2255,13 +2255,13 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         String sql = "select sum(v1) from t0";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)");
 
         sql = "select sum(v1 + v2) from t0 group by v3";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "RESULT SINK\n" +
+        assertContains(plan, "RESULT SINK: MYSQL_PROTOCAL\n" +
                 "\n" +
                 "  3:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
