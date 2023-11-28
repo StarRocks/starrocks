@@ -475,6 +475,7 @@ This instructs StarRocks to:
 - Assign the content of the second column of the CSV file to `tmp_CRASH_TIME`
 - `concat_ws()` concatenates `tmp_CRASH_DATE` and `tmp_CRASH_TIME` together with a space between them
 - `str_to_date()` creates a DATETIME from the concatenated string
+- store the resulting DATETIME in the column `CRASH_DATE`
 
 ## More information
 
