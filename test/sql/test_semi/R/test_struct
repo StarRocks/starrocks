@@ -295,3 +295,27 @@ select cast(named_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c
 -- result:
 {"a":1,"b":"2","c":3}
 -- !result
+select count(distinct if(v1>3, map1, null)) from sc2;
+-- result:
+5
+-- !result
+select count(distinct if(v1>3, null, st1)) from sc2;
+-- result:
+3
+-- !result
+select count(distinct if(v1>3, st2, null)) from sc2;
+-- result:
+5
+-- !result
+select count(distinct if(v1>2, row(v2, v3), row(v1, v2))) from t1;
+-- result:
+5
+-- !result
+select count(distinct if(v1>2, row(v2, v3), null)) from t1;
+-- result:
+3
+-- !result
+select count(distinct if(v1>2, null, row(v1, v2))) from t1;
+-- result:
+2
+-- !result

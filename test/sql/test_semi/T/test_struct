@@ -74,3 +74,10 @@ select named_struct('a', st1, 'b', st2)[1].sm2 from sc2;
 
 select cast(row(1,2,3) as STRUCT<a double, b string, c BIGINT>);
 select cast(named_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c BIGINT>);
+
+select count(distinct if(v1>3, map1, null)) from sc2;
+select count(distinct if(v1>3, null, st1)) from sc2;
+select count(distinct if(v1>3, st2, null)) from sc2;
+select count(distinct if(v1>2, row(v2, v3), row(v1, v2))) from t1;
+select count(distinct if(v1>2, row(v2, v3), null)) from t1;
+select count(distinct if(v1>2, null, row(v1, v2))) from t1;
