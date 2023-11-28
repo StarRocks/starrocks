@@ -18,9 +18,9 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-class BlackHoleTableSink : public DataSink {
+class BlackHoleTableSink final : public DataSink {
 public:
-    BlackHoleTableSink(ObjectPool* pool) : _pool(pool){};
+    explicit BlackHoleTableSink(ObjectPool* pool) : _pool(pool){};
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(DataSink::prepare(state));
