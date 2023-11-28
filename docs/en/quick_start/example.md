@@ -33,7 +33,6 @@ The SQL clients will be discussed after starting StarRocks as StarRocks needs to
 
 curl is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
-
 ## Launch StarRocks
 
 ```bash
@@ -476,13 +475,9 @@ This instructs StarRocks to:
 - Assign the content of the second column of the CSV file to `tmp_CRASH_TIME`
 - `concat_ws()` concatenates `tmp_CRASH_DATE` and `tmp_CRASH_TIME` together with a space between them
 - `str_to_date()` creates a DATETIME from the concatenated string
+
 ## More information
 
-Link to NYC Open Data
+The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 
-Link to NOAA
-
-Details for stream load
-
-NOTE: Make sure to rewrite the loading/StreamLoad doc
-
+The [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) is provided by NOAA with this [disclaimer](https://www.noaa.gov/disclaimer) and this [privacy policy](https://www.noaa.gov/protecting-your-privacy).
