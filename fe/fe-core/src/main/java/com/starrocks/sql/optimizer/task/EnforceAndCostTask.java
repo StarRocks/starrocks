@@ -128,8 +128,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 return;
             } else {
                 // When the group expression is derived from mv-rewrite rules and force rewrite is on,
-                // invalid all existed group expression by set max cost.
-                groupExpression.getGroup().invalidNonMVGroupExpressions(context);
+                // invalid all existed group expressions by set max cost.
+                groupExpression.getGroup().forceChooseMVExpression(context);
             }
         }
 

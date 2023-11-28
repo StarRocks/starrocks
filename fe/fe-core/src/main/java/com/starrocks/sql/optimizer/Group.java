@@ -390,7 +390,11 @@ public class Group {
                 physicalExpressions.stream().anyMatch(x -> x.hasAppliedMVRules());
     }
 
-    public void invalidNonMVGroupExpressions(TaskContext taskContext) {
+    /**
+     * When the group expression is derived from mv-rewrite rules and force rewrite is on,
+     * force set all existed group expressions by set max cost.
+     */
+    public void forceChooseMVExpression(TaskContext taskContext) {
         boolean hasInvalid = false;
         for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : lowestCostExpressions
                 .entrySet()) {
