@@ -114,7 +114,9 @@ public class SysFeLocks {
             lockItem.setGranted(true);
 
             // lock start
-            long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream().map(lock::getSharedLockTime)
+            long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream()
+                    .map(lock::getSharedLockTime)
+                    .filter(x -> x > 0)
                     .min(Comparator.naturalOrder()).orElse(0L);
             lockItem.setLock_start_time(lockStart);
 
