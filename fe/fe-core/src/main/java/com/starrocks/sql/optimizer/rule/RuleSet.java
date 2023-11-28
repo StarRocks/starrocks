@@ -404,18 +404,17 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.SHORT_CIRCUIT_SET, ImmutableList.of(
-                PushDownPredicateScanRule.OLAP_SCAN,
-                PruneScanColumnRule.OLAP_SCAN,
-                new PruneProjectRule(),
-                new PushDownPredicateProjectRule(),
-                new CastToEmptyRule(),
                 new PruneTrueFilterRule(),
+                new PushDownPredicateProjectRule(),
+                PushDownPredicateScanRule.OLAP_SCAN,
+                new CastToEmptyRule(),
+                PruneScanColumnRule.OLAP_SCAN,
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
-                new MergeProjectWithChildRule(),
-                new PruneTrueFilterRule(),
+                new PruneProjectRule(),
                 new PartitionPruneRule(),
-                new DistributionPruneRule()));
+                new DistributionPruneRule(),
+                new MergeProjectWithChildRule()));
     }
 
     public RuleSet() {

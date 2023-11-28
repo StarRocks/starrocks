@@ -458,9 +458,7 @@ public class Optimizer {
         Boolean isShortCircuit = tree.getShortCircuit();
 
         if (isShortCircuit) {
-            ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
             deriveLogicalProperty(tree);
-            pruneTables(tree, rootTaskContext, requiredColumns);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
             OptExpression result = tree.getInputs().get(0);
             result.setShortCircuit(true);
