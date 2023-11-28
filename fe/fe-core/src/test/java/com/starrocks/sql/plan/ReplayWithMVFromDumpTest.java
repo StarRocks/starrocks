@@ -38,7 +38,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
-        connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -95,7 +94,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
         String pr = Tracers.printLogs();
-        System.out.println(pr);
         Tracers.close();
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
@@ -184,5 +182,21 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("tbl_mock_021"));
+    }
+
+    @Test
+    public void testMock_MV_CostBug() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "ALL");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_with_cost_bug1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
+        String pr = Tracers.printLogs();
+        System.out.println(pr);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        FeConstants.isReplayFromQueryDump = false;
     }
 }

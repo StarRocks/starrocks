@@ -81,14 +81,14 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
-            sb.append("Original Expression:\n").append(oldExpression.debugString(3));
+            sb.append("Original Expression:\n").append(oldExpression.debugString());
             sb.append("\nNew Expression:");
             if (newExpressions.isEmpty()) {
                 sb.append("Empty");
             } else {
                 sb.append("\n");
                 for (int i = 0; i < newExpressions.size(); i++) {
-                    sb.append(i).append(":").append(newExpressions.get(i).debugString(3));
+                    sb.append(i).append(":").append(newExpressions.get(i).debugString());
                 }
             }
             return sb.toString();
