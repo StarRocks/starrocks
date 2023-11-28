@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from HDFS
 
-import loadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
