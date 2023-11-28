@@ -14,11 +14,13 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -221,7 +223,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
         List<Long> partitionLastVersion = Lists.newArrayList();
+<<<<<<< HEAD
         Database db = getAndReadLockDatabase(dbId);
+=======
+        List<String> tableCoumnNames = Lists.newArrayList();
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new AlterCancelException("database id: " + dbId + " does not exist");
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+            throw new AlterCancelException("insert overwrite commit failed because locking db: " + dbId + " failed");
+        }
+
+>>>>>>> c8d7d81425 ([BugFix] Fix optimize table for generated columns (#35896))
         try {
             dbName = db.getFullName();
             OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -239,6 +255,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
                         }
             );
+            tableCoumnNames = targetTable.getBaseSchema().stream().filter(column -> !column.isGeneratedColumn())
+                    .map(Column::getName).collect(Collectors.toList());
         } finally {
             db.readUnlock();
         }
@@ -248,7 +266,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + tableName + " TEMPORARY PARTITION ("
-                    + tmpPartitionName + ") select * from " + tableName + " partition (" + partitionName + ")";
+                    + tmpPartitionName + ") select " + Joiner.on(", ").join(tableCoumnNames)
+                    + " from " + tableName + " partition (" + partitionName + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
             rewriteTask.setPartitionName(partitionName);
