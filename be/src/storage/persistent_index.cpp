@@ -4897,7 +4897,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
-    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
+    DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute(
