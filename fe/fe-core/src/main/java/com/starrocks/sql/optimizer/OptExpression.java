@@ -57,7 +57,7 @@ public class OptExpression {
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
 
-    Boolean isShortCircuit = false;
+    private Boolean isShortCircuit = false;
 
     public OptExpression(Operator op) {
         this.op = op;

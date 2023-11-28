@@ -2838,6 +2838,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return auditExecuteStmt;
     }
 
+    public void setEnableShortCircuit(boolean enableShortCircuit) {
+        this.enableShortCircuit = enableShortCircuit;
+    }
+
     public boolean isEnableShortCircuit() {
         return enableShortCircuit;
     }
