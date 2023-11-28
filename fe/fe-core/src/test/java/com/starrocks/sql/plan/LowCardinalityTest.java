@@ -1840,13 +1840,13 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testInformationFunc() throws Exception {
-        String sql = "select if(current_role = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
+        String sql = "select if(CURRENT_USER = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:SORT\n" +
                 "  |  order by: <slot 9> 9: if ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
+                "  |  <slot 9> : if(CURRENT_USER() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
     }
 }
