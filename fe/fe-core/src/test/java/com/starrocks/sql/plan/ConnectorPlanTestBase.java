@@ -84,7 +84,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
-//        mockPaimonCatalogImpl(metadataMgr, warehouse);
+        mockPaimonCatalogImpl(metadataMgr, warehouse);
         mockIcebergCatalogImpl(metadataMgr);
         mockDeltaLakeCatalog(metadataMgr);
     }
