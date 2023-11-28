@@ -24,6 +24,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import static com.starrocks.hudi.reader.HudiScannerUtils.TIMESTAMP_UNIT_MAPPING;
 
 public class HudiColumnValue implements ColumnValue {
+    private static final Logger LOG = LogManager.getLogger(HudiColumnValue.class);
     private final Object fieldData;
     private final ObjectInspector fieldInspector;
 

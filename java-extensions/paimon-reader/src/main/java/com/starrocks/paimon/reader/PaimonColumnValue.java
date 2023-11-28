@@ -16,6 +16,8 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.Decimal;
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
@@ -34,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
+    private static final Logger LOG = LogManager.getLogger(PaimonColumnValue.class);
     private final Object fieldData;
     private final DataType dataType;
     public PaimonColumnValue(Object fieldData, DataType dataType) {
