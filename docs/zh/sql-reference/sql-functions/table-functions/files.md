@@ -205,7 +205,7 @@ unload_data_param::=
 
 | **参数**          | **必填** | **说明**                                                          |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`brotli`：使用 Brotli 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`: Use the LZ4 compression algorithm.`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`brotli`：使用 Brotli 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
 | max_file_size    | 否           | 当数据导出为多个文件时，每个数据文件的最大大小。默认值：`1GB`。单位：B、KB、MB、GB、TB 和 PB。 |
 | partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果达到 `max_file_size`，则数据存储在多个文件中。</li></ul>                  |
