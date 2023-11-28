@@ -547,7 +547,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
       > **说明**
       >
-      > 在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
+      > 在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小。
 
       建表示例：
 
