@@ -492,7 +492,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  95:Project\n" +
                 "  |  output columns:\n" +
-                "  |  548 <-> 1\n" +
+                "  |  549 <-> 1\n" +
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
