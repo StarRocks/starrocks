@@ -734,7 +734,7 @@ public class LimitTest extends PlanTestBase {
                 "LIMIT \n" +
                 "  61202;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:MERGING-EXCHANGE\n" +
+        assertContains(plan, "7:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
         assertContains(plan, "4:TOP-N\n" +
@@ -767,7 +767,7 @@ public class LimitTest extends PlanTestBase {
                 "  |  order by: <slot 9> 9: expr ASC, <slot 4> 4: S_NATIONKEY ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 21");
-        assertContains(plan, "3:MERGING-EXCHANGE\n" +
+        assertContains(plan, "5:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
     }
@@ -873,5 +873,22 @@ public class LimitTest extends PlanTestBase {
         String sql = "select count(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:EMPTYSET");
+    }
+
+    @Test
+    public void testMergeLimitInCte() throws Exception {
+        String sql = "with with_t_0 as (select v1 from t0 where EXISTS (select v4 from t1)) \n" +
+                "select distinct 1 from with_t_0, (select v7, v8 from t2) subt right SEMI join t0 on subt.v8 = v2 \n" +
+                "union all \n" +
+                "select distinct 2 from with_t_0, (select v10, v11 from t3) subt right SEMI join t0 on subt.v11 = v3;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "7:UNION\n" +
+                "  |  \n" +
+                "  |----33:EXCHANGE\n" +
+                "  |       limit: 1\n" +
+                "  |    \n" +
+                "  20:EXCHANGE\n" +
+                "     limit: 1");
     }
 }

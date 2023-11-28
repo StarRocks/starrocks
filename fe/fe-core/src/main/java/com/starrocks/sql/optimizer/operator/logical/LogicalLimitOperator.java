@@ -51,10 +51,14 @@ public class LogicalLimitOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_LIMIT);
     }
 
+    // use init LogicalLimitOperator only when the split and merge limit rule can be applied
+    // in the further step
     public static LogicalLimitOperator init(long limit) {
         return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.INIT);
     }
 
+    // use init LogicalLimitOperator only when the split and merge limit rule can be applied
+    // in the further step
     public static LogicalLimitOperator init(long limit, long offset) {
         return new LogicalLimitOperator(limit, offset, Phase.INIT);
     }
