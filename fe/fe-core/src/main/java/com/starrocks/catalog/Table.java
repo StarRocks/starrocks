@@ -360,6 +360,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.TABLE_FUNCTION;
     }
 
+    public boolean isBlackHoleTable() {
+        return type == TableType.BLACKHOLE;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();

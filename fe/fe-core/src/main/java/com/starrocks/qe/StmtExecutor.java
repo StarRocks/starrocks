@@ -1857,7 +1857,7 @@ public class StmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable()) {
+                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
             transactionId = transactionMgr.beginTransaction(

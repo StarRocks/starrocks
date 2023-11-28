@@ -15,13 +15,14 @@
 #pragma once
 
 #include "exec/data_sink.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class BlackHoleTableSink : public DataSink {
 public:
-    BlackHoleTableSink(ObjectPool* pool) : _pool(pool) {};
+    BlackHoleTableSink(ObjectPool* pool) : _pool(pool){};
 
-    Status prepare(starrocks::RuntimeState *state) override {
+    Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(DataSink::prepare(state));
         std::stringstream title;
         title << "BlackHoleTableSink (frag_id=" << state->fragment_instance_id() << ")";
@@ -29,15 +30,12 @@ public:
         return Status::OK();
     }
 
-    Status open(starrocks::RuntimeState *state) override {
-        return Status::OK();
-    }
+    Status open(RuntimeState* state) override { return Status::OK(); }
 
     RuntimeProfile* profile() override { return _profile; }
 
 private:
     ObjectPool* _pool;
     RuntimeProfile* _profile = nullptr;
-
 };
-} // starrocks
+} // namespace starrocks

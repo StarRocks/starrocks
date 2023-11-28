@@ -293,22 +293,20 @@ public class InsertStmt extends DmlStmt {
         return tableFunctionProperties;
     }
 
-    public Table makeBlackHoleTable() {
-        // fetch schema from query
+    private List<Column> collectSelectedFieldsFromQueryStatement() {
         QueryRelation query = getQueryStatement().getQueryRelation();
         List<Field> allFields = query.getRelationFields().getAllFields();
-        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
+        return allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
                 field.getType(), field.isNullable())).collect(Collectors.toList());
-        return new BlackHoleTable(columns);
+    }
+
+    public Table makeBlackHoleTable() {
+        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
     }
 
     public Table makeTableFunctionTable() {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
-        // fetch schema from query
-        QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Field> allFields = query.getRelationFields().getAllFields();
-        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
-                field.getType(), field.isNullable())).collect(Collectors.toList());
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();

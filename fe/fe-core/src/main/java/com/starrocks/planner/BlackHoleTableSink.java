@@ -22,7 +22,7 @@ public class BlackHoleTableSink extends DataSink {
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
-        return prefix + "BLACK HOLE TABLE SINK\n";
+        return prefix + "BLACKHOLE TABLE SINK\n";
     }
 
     @Override
