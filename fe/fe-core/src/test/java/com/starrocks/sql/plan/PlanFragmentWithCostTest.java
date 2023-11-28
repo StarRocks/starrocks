@@ -2300,6 +2300,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
 
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
         String sql = "SELECT t1a from test_all_type where t1a in ('a', 'b', 'c');";
         String plan = getCostExplain(sql);
         assertContains(plan, "cardinality: 10000");
