@@ -3180,7 +3180,7 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
     if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
-    }    
+    }
     if (index_meta.l2_versions_size() != index_meta.l2_version_merged_size()) {
         // Make sure l2 version equal to l2 version merged flag
         return true;
