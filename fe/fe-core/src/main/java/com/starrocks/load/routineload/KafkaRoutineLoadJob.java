@@ -123,6 +123,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Pair<Integer, Long>> customeKafkaPartitionOffsets = null;
     boolean useDefaultGroupId = true;
 
+    private Map<Integer, Long> latestPartitionOffsets = Maps.newHashMap();
+
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
@@ -157,6 +159,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     public Map<String, String> getConvertedCustomProperties() {
         return convertedCustomProperties;
+    }
+
+    @Override
+    protected String getSourceProgressString() {
+        // To be compatible with progress format, we convert the Map<Integer, Long> to Map<String, String>
+        Map<String, String> partitionOffsets = Maps.newHashMap();
+        for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
+            partitionOffsets.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+
+        Gson gson = new Gson();
+        return gson.toJson(partitionOffsets);
+    }
+
+    public void setPartitionOffset(int partition, long offset) {
+        latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }
 
     @Override
