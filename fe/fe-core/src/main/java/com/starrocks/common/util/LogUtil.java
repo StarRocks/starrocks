@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
-
     public static List<String> getCurrentStackTraceToList() {
         return Arrays.stream(Thread.currentThread().getStackTrace())
                 .map(StackTraceElement::toString)
