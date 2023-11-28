@@ -4,6 +4,42 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.5
+
+Release date: November 28, 2023
+
+### Improvements
+
+- The [`COLUMNS`](../reference/information_schema/columns.md) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive](../data_source/catalog/hive_catalog.md). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
+- Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- An unknown error is reported when SHOW GRANTS is executed. [#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- When data is loaded into a table that uses expression-based automatic partitioning, the error "Error: The row create partition failed since Runtime error: failed to analyse partition value" may be thrown. [#33513](https://github.com/StarRocks/starrocks/pull/33513)
+- The error "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction" is returned for queries. [#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- In a StarRocks shared-nothing cluster, queries against Iceberg or Hive tables may cause BEs to crash. [#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- In a StarRocks shared-nothing cluster, if multiple partitions are automatically created during data loading, the data loaded may occasionally be written to unmatched partitions. [#34731](https://github.com/StarRocks/starrocks/pull/34731)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The error "Exception: java.lang.IllegalStateException: null" is returned for queries. [#33535](https://github.com/StarRocks/starrocks/pull/33535)
+- When `show proc '/current_queries';` is being executed and meanwhile a query begins to be executed, BEs may crash. [#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- FEs crash due to the abnormal data loaded and cannot restart. [#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- Setting the session variable `enable_load_profile` to `true` makes Stream Load jobs prone to fail. [#34544](https://github.com/StarRocks/starrocks/pull/34544)
+- Performing partial updates in column mode onto a Primary Key table causes some tablets of the table to show data inconsistencies between their replicas. [#34555](https://github.com/StarRocks/starrocks/pull/34555)
+- The `partition_live_number` property added by using the ALTER TABLE statement does not take effect. [#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- FEs fail to start and report the error "failed to load journal type 118". [#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
 ## 3.1.4
 
 Release date: November 2, 2023
