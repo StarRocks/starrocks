@@ -65,18 +65,9 @@ public abstract class TxnCommitAttachment implements Writable {
 
     public static TxnCommitAttachment fromThrift(TTxnCommitAttachment txnCommitAttachment) {
         if (txnCommitAttachment != null) {
-            long timestamp = 0;
-            if (txnCommitAttachment.isSetTimestampMs()) {
-                timestamp = txnCommitAttachment.getTimestampMs();
-            }
-            
             switch (txnCommitAttachment.getLoadType()) {
                 case ROUTINE_LOAD:
-                    if (timestamp != 0) {
-                        return new RLTaskTxnCommitAttachment(txnCommitAttachment.getRlTaskTxnCommitAttachment(), timestamp);
-                    } else {
-                        return new RLTaskTxnCommitAttachment(txnCommitAttachment.getRlTaskTxnCommitAttachment());
-                    }
+                    return new RLTaskTxnCommitAttachment(txnCommitAttachment.getRlTaskTxnCommitAttachment());
                 case MINI_LOAD:
                     return new MiniLoadTxnCommitAttachment(txnCommitAttachment.getMlTxnCommitAttachment());
                 case MANUAL_LOAD:

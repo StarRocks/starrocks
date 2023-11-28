@@ -619,6 +619,9 @@ public class RoutineLoadMgr implements Writable {
     }
 
     public void setRoutineLoadJobOtherMsg(String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (!(txnCommitAttachment instanceof RLTaskTxnCommitAttachment)) {
+            return;
+        }
         RLTaskTxnCommitAttachment rLTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) txnCommitAttachment;
         long jobId = rLTaskTxnCommitAttachment.getJobId();
         if (jobId == 0) {
@@ -629,7 +632,7 @@ public class RoutineLoadMgr implements Writable {
             String otherMsg = String.format("The %s task have complained: %s at %s",
                     DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()),
                     reason,
-                    new Date(rLTaskTxnCommitAttachment.getTimestampMs()));
+                    new Date(rLTaskTxnCommitAttachment.getCreationTimestampMs()));
             routineLoadJob.setOtherMsg(otherMsg);
         }
     }

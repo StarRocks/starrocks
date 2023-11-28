@@ -32,8 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "runtime/stream_load/stream_load_executor.h"
+
 #include <chrono>
+
 #include <fmt/format.h>
+
 #include <string_view>
 
 #include "agent/master_info.h"
@@ -46,7 +50,6 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_executor.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
@@ -374,8 +377,6 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
 
     // set attachment if has
     TTxnCommitAttachment attachment;
-    using namespace std::chrono;
-    attachment.__set_timestampMs(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
     if (collect_load_stat(ctx, &attachment)) {
         request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
@@ -444,6 +445,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        using namespace std::chrono;
+        rl_attach.__set_creationTimestampMs(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;
