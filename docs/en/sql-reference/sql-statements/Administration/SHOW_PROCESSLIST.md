@@ -14,6 +14,8 @@ Lists the operations currently being performed by threads executing within the s
 SHOW [FULL] PROCESSLIST
 ```
 
+## Parameter
+
 | Parameter | Required | Description                                                                                                                      |
 | --------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | FULL      | No       | If you specify this parameter, the complete SQL statement will be displayed. Otherwise, only the first 100 characters of the statement are displayed. |
