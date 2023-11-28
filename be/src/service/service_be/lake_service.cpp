@@ -432,6 +432,46 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
 }
 
+void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controller,
+                                     const ::starrocks::lake::DeleteTxnLogRequest* request,
+                                     ::starrocks::lake::DeleteTxnLogResponse* response,
+                                     ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+
+    if (request->txn_ids_size() == 0) {
+        cntl->SetFailed("missing txn_ids");
+        return;
+    }
+
+    auto thread_pool = vacuum_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("vacuum thread pool is null when delete txn log");
+        return;
+    }
+
+    auto latch = BThreadCountDownLatch(1);
+    auto st = thread_pool->submit_func([&]() {
+        DeferOp defer([&] { latch.count_down(); });
+        lake::delete_txn_log(_tablet_mgr, *request, response);
+    });
+
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit vacuum task: " << st;
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
+    } else {
+        Status::OK().to_protobuf(response->mutable_status());
+    }
+
+    latch.wait();
+}
+
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                                  const ::starrocks::lake::DropTableRequest* request,
                                  ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
