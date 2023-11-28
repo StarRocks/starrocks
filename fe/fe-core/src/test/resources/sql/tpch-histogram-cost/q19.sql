@@ -38,7 +38,7 @@ where
 PLAN FRAGMENT 0(F03)
 Output Exprs:29: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 7:AGGREGATE (update finalize)
 |  aggregate: sum[([28: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]

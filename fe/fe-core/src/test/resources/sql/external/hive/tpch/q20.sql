@@ -40,7 +40,7 @@ order by
 PLAN FRAGMENT 0(F14)
 Output Exprs:2: s_name | 3: s_address
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 26:MERGING-EXCHANGE
 distribution type: GATHER

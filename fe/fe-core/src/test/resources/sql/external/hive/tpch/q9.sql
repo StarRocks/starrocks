@@ -35,7 +35,7 @@ order by
 PLAN FRAGMENT 0(F16)
 Output Exprs:48: n_name | 51: year | 53: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 28:MERGING-EXCHANGE
 distribution type: GATHER

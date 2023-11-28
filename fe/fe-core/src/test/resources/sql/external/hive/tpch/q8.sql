@@ -40,7 +40,7 @@ order by
 PLAN FRAGMENT 0(F22)
 Output Exprs:61: year | 66: expr
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 39:MERGING-EXCHANGE
 distribution type: GATHER

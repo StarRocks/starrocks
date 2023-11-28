@@ -24,7 +24,7 @@ order by
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: l_returnflag | 10: l_linestatus | 19: sum | 20: sum | 21: sum | 22: sum | 23: avg | 24: avg | 25: avg | 26: count
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 6:MERGING-EXCHANGE
 distribution type: GATHER

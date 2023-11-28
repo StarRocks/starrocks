@@ -42,7 +42,7 @@ order by
 PLAN FRAGMENT 0(F12)
 Output Exprs:46: N_NAME | 51: N_NAME | 55: year | 57: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 24:MERGING-EXCHANGE
 distribution type: GATHER

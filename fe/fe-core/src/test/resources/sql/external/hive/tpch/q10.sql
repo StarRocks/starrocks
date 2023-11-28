@@ -34,7 +34,7 @@ order by
 PLAN FRAGMENT 0(F10)
 Output Exprs:1: c_custkey | 2: c_name | 39: sum | 6: c_acctbal | 35: n_name | 3: c_address | 5: c_phone | 8: c_comment
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 20:MERGING-EXCHANGE
 distribution type: GATHER

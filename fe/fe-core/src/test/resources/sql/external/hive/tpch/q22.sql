@@ -40,7 +40,7 @@ order by
 PLAN FRAGMENT 0(F09)
 Output Exprs:29: substring | 30: count | 31: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 19:MERGING-EXCHANGE
 distribution type: GATHER

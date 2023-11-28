@@ -33,7 +33,7 @@ order by
 PLAN FRAGMENT 0(F08)
 Output Exprs:9: p_brand | 10: p_type | 11: p_size | 23: count
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 16:MERGING-EXCHANGE
 distribution type: GATHER

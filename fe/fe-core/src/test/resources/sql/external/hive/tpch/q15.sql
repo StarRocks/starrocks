@@ -40,7 +40,7 @@ order by
 PLAN FRAGMENT 0(F08)
 Output Exprs:1: s_suppkey | 2: s_name | 3: s_address | 5: s_phone | 25: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 24:MERGING-EXCHANGE
 distribution type: GATHER

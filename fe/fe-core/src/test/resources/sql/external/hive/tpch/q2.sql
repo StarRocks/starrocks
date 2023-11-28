@@ -46,7 +46,7 @@ order by
 PLAN FRAGMENT 0(F12)
 Output Exprs:15: s_acctbal | 11: s_name | 23: n_name | 1: p_partkey | 3: p_mfgr | 12: s_address | 14: s_phone | 16: s_comment
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 26:MERGING-EXCHANGE
 distribution type: GATHER

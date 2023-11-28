@@ -24,7 +24,7 @@ order by
 PLAN FRAGMENT 0(F06)
 Output Exprs:6: o_orderpriority | 27: count
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 12:MERGING-EXCHANGE
 distribution type: GATHER

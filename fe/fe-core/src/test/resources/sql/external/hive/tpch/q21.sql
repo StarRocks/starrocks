@@ -42,7 +42,7 @@ order by
 PLAN FRAGMENT 0(F16)
 Output Exprs:2: s_name | 71: count
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 31:MERGING-EXCHANGE
 distribution type: GATHER

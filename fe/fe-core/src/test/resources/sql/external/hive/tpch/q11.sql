@@ -30,7 +30,7 @@ order by
 PLAN FRAGMENT 0(F13)
 Output Exprs:1: ps_partkey | 18: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 32:MERGING-EXCHANGE
 distribution type: GATHER

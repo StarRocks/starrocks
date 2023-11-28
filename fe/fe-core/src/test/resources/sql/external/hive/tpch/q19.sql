@@ -38,7 +38,7 @@ where
 PLAN FRAGMENT 0(F05)
 Output Exprs:27: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 9:AGGREGATE (merge finalize)
 |  aggregate: sum[([27: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]

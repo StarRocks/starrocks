@@ -35,7 +35,7 @@ order by
 PLAN FRAGMENT 0(F10)
 Output Exprs:2: c_name | 1: c_custkey | 9: o_orderkey | 13: o_orderdate | 12: o_totalprice | 52: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 20:MERGING-EXCHANGE
 distribution type: GATHER

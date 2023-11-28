@@ -23,7 +23,7 @@ order by
 PLAN FRAGMENT 0(F06)
 Output Exprs:18: count | 19: count
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 13:MERGING-EXCHANGE
 distribution type: GATHER

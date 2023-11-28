@@ -20,7 +20,7 @@ where
 PLAN FRAGMENT 0(F04)
 Output Exprs:46: expr
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 14:Project
 |  output columns:

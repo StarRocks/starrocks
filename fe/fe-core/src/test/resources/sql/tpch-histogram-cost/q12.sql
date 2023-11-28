@@ -31,7 +31,7 @@ order by
 PLAN FRAGMENT 0(F04)
 Output Exprs:25: L_SHIPMODE | 30: sum | 31: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 10:MERGING-EXCHANGE
 distribution type: GATHER

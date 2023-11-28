@@ -12,7 +12,7 @@ where
 PLAN FRAGMENT 0(F01)
 Output Exprs:19: sum
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 4:AGGREGATE (merge finalize)
 |  aggregate: sum[([19: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]

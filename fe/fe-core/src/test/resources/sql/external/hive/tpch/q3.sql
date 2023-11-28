@@ -25,7 +25,7 @@ order by
 PLAN FRAGMENT 0(F07)
 Output Exprs:18: l_orderkey | 35: sum | 13: o_orderdate | 16: o_shippriority
 Input Partition: UNPARTITIONED
-RESULT SINK
+RESULT SINK: MYSQL_PROTOCAL
 
 14:MERGING-EXCHANGE
 distribution type: GATHER
