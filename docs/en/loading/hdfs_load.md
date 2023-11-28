@@ -5,6 +5,7 @@ displayed_sidebar: "English"
 # Load data from HDFS
 
 import loadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the following options for loading data from HDFS:

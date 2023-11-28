@@ -5,6 +5,7 @@ displayed_sidebar: "Chinese"
 # 从 HDFS 导入
 
 import loadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 HDFS 导入数据：
