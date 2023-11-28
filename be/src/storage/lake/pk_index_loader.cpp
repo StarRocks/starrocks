@@ -14,30 +14,32 @@
 
 #include "storage/lake/pk_index_loader.h"
 
+#include <fmt/format.h>
+
+#include "common/constexpr.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/lake_primary_index.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_options.h"
 #include "util/defer_op.h"
 
 namespace starrocks::lake {
 
-class LoadPkIndexSubtask : public Runnable {
+class PkSegmentScanTask {
 public:
-    LoadPkIndexSubtask(Tablet* tablet, uint32_t rowset_id, uint32_t seg_id, std::string seg_name, const Schema& schema,
-                       int64_t version, const MetaFileBuilder* builder, LakePrimaryIndex* index)
+    PkSegmentScanTask(Tablet* tablet, uint32_t rowset_id, uint32_t seg_id, const std::string& seg_name,
+                      const Schema& schema, int64_t version, const MetaFileBuilder* builder)
             : _tablet(tablet),
               _rowset_id(rowset_id),
               _seg_id(seg_id),
               _seg_name(std::move(seg_name)),
               _schema(std::move(schema)),
               _version(version),
-              _builder(builder),
-              _index(index) {}
+              _builder(builder) {}
 
-    void run() override {
+    void run() {
         auto st = Status::OK();
         DeferOp defer([&]() {
             if (st.is_end_of_file()) {
@@ -70,39 +72,19 @@ public:
             st = seg_itr.status();
             return;
         }
-        vector<uint32_t> rowids;
-        rowids.reserve(4096);
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(_schema, 4096);
-        auto chunk = chunk_shared_ptr.get();
-        std::unique_ptr<Column> pk_column;
-        if (_schema.num_key_fields() > 1) {
-            // more than one key column
-            if (!PrimaryKeyEncoder::create_column(_schema, &pk_column).ok()) {
-                CHECK(false) << "create column for primary key encoder failed";
-            }
-        }
         while (true) {
-            chunk->reset();
-            rowids.clear();
-            st = (*seg_itr)->get_next(chunk, &rowids);
+            auto chunk_info = std::make_shared<ChunkInfo>();
+            chunk_info->rowids.reserve(DEFAULT_CHUNK_SIZE);
+            chunk_info->chunk = ChunkHelper::new_chunk(_schema, DEFAULT_CHUNK_SIZE);
+            chunk_info->rssid = _rowset_id + _seg_id;
+            auto chunk = chunk_info->chunk.get();
+            st = (*seg_itr)->get_next(chunk, &chunk_info->rowids);
             if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return;
-            } else {
-                Column* pkc = nullptr;
-                if (pk_column) {
-                    pk_column->reset_column();
-                    PrimaryKeyEncoder::encode(_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-                    pkc = pk_column.get();
-                } else {
-                    pkc = chunk->columns()[0].get();
-                }
-                st = _index->insert(_rowset_id + _seg_id, rowids, *pkc);
-                if (!st.ok()) {
-                    return;
-                }
             }
+            ExecEnv::GetInstance()->lake_pk_index_loader()->add_chunk(_tablet->id(), chunk_info);
         }
         (*seg_itr)->close();
     }
@@ -111,70 +93,107 @@ private:
     Tablet* _tablet;
     uint32_t _rowset_id;
     uint32_t _seg_id;
-    std::string _seg_name;
+    const std::string _seg_name;
     const Schema _schema;
     int64_t _version;
     const MetaFileBuilder* _builder;
-    LakePrimaryIndex* _index;
 };
 
-Status PkIndexLoader::init() {
-    return ThreadPoolBuilder("lake_load_pk_index")
-            .set_max_threads(config::lake_pk_index_loader_thread)
-            .build(&_load_thread_pool);
-}
-
 PkIndexLoader::~PkIndexLoader() {
-    if (_load_thread_pool) {
-        _load_thread_pool->shutdown();
-    }
+    _contexts.clear();
 }
 
-std::future<Status> PkIndexLoader::load(Tablet* tablet, const std::vector<RowsetPtr>& rowsets, const Schema& schema,
-                                        int64_t version, const MetaFileBuilder* builder, LakePrimaryIndex* index) {
+Status PkIndexLoader::load(Tablet* tablet, const std::vector<RowsetPtr>& rowsets, const Schema& schema, int64_t version,
+                           const MetaFileBuilder* builder) {
     uint64_t subtask_num = 0;
-    auto p = std::make_unique<std::promise<Status>>();
-    std::future<Status> f = p->get_future();
-    std::vector<std::shared_ptr<Runnable>> subtasks;
+    std::vector<std::shared_ptr<PkSegmentScanTask>> scan_tasks;
     for (auto& rowset : rowsets) {
         auto& rowset_meta = rowset->metadata();
         for (uint32_t i = 0; i < rowset_meta.segments_size(); ++i) {
-            std::shared_ptr<Runnable> subtask(std::make_shared<LoadPkIndexSubtask>(
-                    tablet, rowset->id(), i, rowset_meta.segments(i), schema, version, builder, index));
-            subtasks.push_back(subtask);
+            auto scan_task = std::make_shared<PkSegmentScanTask>(tablet, rowset->id(), i, rowset_meta.segments(i),
+                                                                 schema, version, builder);
+            bool ret = ExecEnv::GetInstance()->connector_scan_executor()->submit(
+                    workgroup::ScanTask(workgroup::WorkGroupManager::instance()->get_default_workgroup().get(),
+                                        [scan_task]() { scan_task->run(); }));
+            if (!ret) {
+                auto error_msg = fmt::format("Fail to submit pk segment scan subtask, tablet: {}", tablet->id());
+                LOG(ERROR) << error_msg;
+                return Status::IOError(error_msg);
+            }
         }
         subtask_num += rowset_meta.segments_size();
     }
-    if (subtask_num == 0) {
-        p->set_value(Status::OK());
-        return f;
-    }
 
     std::lock_guard<std::mutex> lg(_mutex);
-    for (auto& subtask : subtasks) {
-        auto st = _load_thread_pool->submit(std::move(subtask));
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to submit pk index loading subtask, error: " << st.to_string();
-            subtask_num--;
-        }
+    auto context = std::make_shared<PkSegmentScanTaskContext>();
+    context->subtask_num = subtask_num;
+    _contexts.emplace(tablet->id(), context);
+    return Status::OK();
+}
+
+void PkIndexLoader::add_chunk(int64_t tablet_id, const std::shared_ptr<ChunkInfo>& chunk) {
+    std::lock_guard<std::mutex> lg(_mutex);
+    auto it = _contexts.find(tablet_id);
+    if (it == _contexts.end()) {
+        return;
+    } else {
+        auto context = it->second;
+        context->chunk_infos.push(chunk);
+        context->cv.notify_all();
     }
-    _subtask_nums.emplace(tablet->id(), subtask_num);
-    _promises.emplace(tablet->id(), std::move(p));
-    return f;
+}
+
+StatusOr<std::shared_ptr<ChunkInfo>> PkIndexLoader::get_chunk(int64_t tablet_id) {
+    std::unique_lock<std::mutex> lk(_mutex);
+    auto it = _contexts.find(tablet_id);
+    if (it == _contexts.end()) {
+        auto error_msg = fmt::format("Invalid tablet id {}", tablet_id);
+        return Status::NotFound(error_msg);
+    }
+
+    auto context = it->second;
+    if (context->subtask_num == 0 && context->chunk_infos.empty()) {
+        _contexts.erase(tablet_id);
+        return Status::EndOfFile("done");
+    }
+
+    if (!context->status.is_ok_or_eof()) {
+        Status st = context->status;
+        _contexts.erase(tablet_id);
+        return st;
+    }
+
+    if (!context->chunk_infos.empty()) {
+        return context->get_chunk_info();
+    }
+
+    context->cv.wait(lk, [&] {
+        return !context->chunk_infos.empty() || !context->status.is_ok_or_eof() || context->subtask_num == 0;
+    });
+
+    if (!context->status.is_ok_or_eof()) {
+        Status st = context->status;
+        _contexts.erase(tablet_id);
+        return st;
+    }
+    if (context->subtask_num == 0 && context->chunk_infos.empty()) {
+        _contexts.erase(tablet_id);
+        return Status::EndOfFile("done");
+    }
+    return context->get_chunk_info();
 }
 
 void PkIndexLoader::finish_subtask(int64_t tablet_id, const Status& status) {
     std::lock_guard<std::mutex> lg(_mutex);
-    auto it = _subtask_nums.find(tablet_id);
-    if (it == _subtask_nums.end()) {
+    auto it = _contexts.find(tablet_id);
+    if (it == _contexts.end()) {
         return;
     }
-    it->second--;
-    if (!status.ok() || it->second == 0) {
-        _promises[tablet_id]->set_value(status);
-        _subtask_nums.erase(tablet_id);
-        _promises.erase(tablet_id);
-        return;
+    auto context = it->second;
+    context->status = status;
+    context->subtask_num--;
+    if (!status.is_ok_or_eof() || context->subtask_num == 0) {
+        context->cv.notify_all();
     }
 }
 

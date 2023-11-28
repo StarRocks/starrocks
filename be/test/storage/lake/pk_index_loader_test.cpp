@@ -142,20 +142,23 @@ TEST_F(PkIndexLoaderTest, test_load) {
     ASSIGN_OR_ABORT(auto rowsets, tablet.get_rowsets(2));
     auto index = std::make_unique<LakePrimaryIndex>(pkey_schema);
     MetaFileBuilder builder(tablet, _tablet_metadata);
-    auto future = ExecEnv::GetInstance()->lake_pk_index_loader()->load(&tablet, rowsets, pkey_schema, 2, &builder,
-                                                                       index.get());
-    ASSERT_OK(future.get());
+    ASSERT_OK(ExecEnv::GetInstance()->lake_pk_index_loader()->load(&tablet, rowsets, pkey_schema, 2, &builder));
 
-    std::unique_ptr<Column> pk_column;
-    Chunk chunk1({c0}, std::make_shared<Schema>(pkey_schema));
-    PrimaryKeyEncoder::create_column(pkey_schema, &pk_column);
-    PrimaryKeyEncoder::encode(pkey_schema, chunk1, 0, chunk1.num_rows(), pk_column.get());
-    std::vector<uint64_t> rowids;
-    rowids.resize(k0.size());
-    ASSERT_OK(index->get(*(pk_column.get()), &rowids));
-    for (auto& rowid : rowids) {
-        ASSERT_TRUE(rowid != -1);
+    uint64_t num_rows = 0;
+    while (true) {
+        auto chunk_or_st = ExecEnv::GetInstance()->lake_pk_index_loader()->get_chunk(tablet.id());
+        auto st = chunk_or_st.status();
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                break;
+            }
+        }
+        ASSERT_OK(st);
+        auto chunk_info = *chunk_or_st;
+        auto chunk = std::move(chunk_info->chunk);
+        num_rows += chunk->num_rows();
     }
+    ASSERT_EQ(k0.size(), num_rows);
 }
 
 } // namespace starrocks::lake

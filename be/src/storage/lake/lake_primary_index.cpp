@@ -56,11 +56,6 @@ bool LakePrimaryIndex::is_load(int64_t base_version) {
     return _loaded && _data_version >= base_version;
 }
 
-Status LakePrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
-    std::lock_guard<std::mutex> lg(_mutex);
-    return PrimaryIndex::insert(rssid, rowids, pks);
-}
-
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                        const MetaFileBuilder* builder) {
     MonotonicStopWatch watch;
@@ -117,22 +112,41 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
     // 2. scan all rowsets and segments to build primary index
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     if (config::use_lake_pk_index_loader) {
-        auto future = ExecEnv::GetInstance()->lake_pk_index_loader()->load(tablet, *rowsets, pkey_schema, base_version,
-                                                                           builder, this);
-        auto st = future.get();
-        if (!st.ok()) {
-            return st;
+        RETURN_IF_ERROR(ExecEnv::GetInstance()->lake_pk_index_loader()->load(tablet, *rowsets, pkey_schema,
+                                                                             base_version, builder));
+        while (true) {
+            auto chunk_or_st = ExecEnv::GetInstance()->lake_pk_index_loader()->get_chunk(tablet->id());
+            auto st = chunk_or_st.status();
+            if (!st.is_ok_or_eof()) {
+                return st;
+            }
+            if (st.is_end_of_file()) {
+                break;
+            }
+            auto chunk_info = *chunk_or_st;
+            auto chunk = std::move(chunk_info->chunk);
+            auto rssid = chunk_info->rssid;
+            auto rowids = chunk_info->rowids;
+            Column* pkc = nullptr;
+            if (pk_column) {
+                pk_column->reset_column();
+                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                pkc = pk_column.get();
+            } else {
+                pkc = chunk->columns()[0].get();
+            }
+            RETURN_IF_ERROR(insert(rssid, rowids, *pkc));
         }
     } else {
+        vector<uint32_t> rowids;
+        rowids.reserve(4096);
+        auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+        auto chunk = chunk_shared_ptr.get();
         for (auto& rowset : *rowsets) {
             auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
             if (!res.ok()) {
