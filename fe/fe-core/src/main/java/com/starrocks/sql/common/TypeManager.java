@@ -104,18 +104,25 @@ public class TypeManager {
     }
 
     private static Type getCommonStructType(StructType t1, StructType t2) {
-        if (t1.getFields().size() != t2.getFields().size()) {
-            return Type.INVALID;
-        }
         ArrayList<StructField> fields = Lists.newArrayList();
-        for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+        int maxFieldSize = Math.max(t1.getFields().size(), t2.getFields().size());
+        for (int i = 0; i < maxFieldSize; ++i) {
+            Type fieldCommon = null;
+            if (i < t1.getFields().size() && i < t2.getFields().size()) {
+                fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+                // default t1's field name
+                fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            } else if (i < t1.getFields().size()) {
+                fieldCommon = t1.getField(i).getType();
+                fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            } else {
+                fieldCommon = t2.getField(i).getType();
+                fields.add(new StructField(t2.getField(i).getName(), fieldCommon));
+            }
+
             if (!fieldCommon.isValid()) {
                 return Type.INVALID;
             }
-
-            // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
         }
         return new StructType(fields);
     }
