@@ -49,6 +49,7 @@ GlobalDriverExecutor::~GlobalDriverExecutor() {
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
+    _blocked_driver_poller->shutdown();
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
