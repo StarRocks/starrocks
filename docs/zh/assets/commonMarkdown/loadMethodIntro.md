@@ -1,3 +1,4 @@
+
 - 使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
 - 使用 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
 - 使用 [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md) 进行持续的异步导入。
