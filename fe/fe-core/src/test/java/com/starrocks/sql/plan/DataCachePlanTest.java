@@ -172,4 +172,12 @@ public class DataCachePlanTest extends PlanTestBase {
         String sql = "explain blackhole as select * from hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03'";
         assertPlanContains(sql, "BLACKHOLE");
     }
+
+    @Test
+    public void test1() throws Exception {
+        String sql = "insert into blackhole() select * from hive0.datacache_db.multi_partition_table " +
+                "where l_shipdate>='1998-01-03'";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }

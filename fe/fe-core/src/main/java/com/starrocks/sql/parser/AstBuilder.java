@@ -1714,6 +1714,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return stmt;
         }
 
+        if (context.BLACKHOLE() != null) {
+            return new InsertStmt(queryStatement, createPos(context));
+        }
+
         // INSERT INTO FILES(...)
         Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));

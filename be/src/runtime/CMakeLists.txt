@@ -96,6 +96,7 @@ set(RUNTIME_FILES
     hive_table_sink.cpp
     table_function_table_sink.cpp
     black_hole_sink.cpp
+    blackhole_table_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

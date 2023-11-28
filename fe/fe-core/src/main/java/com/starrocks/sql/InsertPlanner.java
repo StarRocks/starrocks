@@ -26,6 +26,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
@@ -41,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -271,6 +273,8 @@ public class InsertPlanner {
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
+            } else if (targetTable instanceof BlackHoleTable) {
+                dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
