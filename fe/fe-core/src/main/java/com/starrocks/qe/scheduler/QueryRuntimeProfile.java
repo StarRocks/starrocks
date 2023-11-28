@@ -567,7 +567,4 @@ public class QueryRuntimeProfile {
         return defaultValue;
     }
 
-    public void setQueryProfile(RuntimeProfile queryProfile) {
-        this.queryProfile = queryProfile;
-    }
 }

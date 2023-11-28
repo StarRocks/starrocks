@@ -1450,7 +1450,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean auditExecuteStmt = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
-    private boolean enableShortCircuit = true;
+    private boolean enableShortCircuit = false;
 
     private int exprChildrenLimit = -1;
 

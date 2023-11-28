@@ -139,8 +139,4 @@ public class ResultSink extends DataSink {
         return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC ||
                 sinkType == TResultSinkType.VARIABLE;
     }
-
-    public void setBinaryRow(boolean isBinaryRow) {
-        this.isBinaryRow = isBinaryRow;
-    }
 }

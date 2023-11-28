@@ -36,7 +36,7 @@ import java.util.TreeMap;
 
 public class ShortCircuitPlanner {
 
-    public static final long MAX_RETURN_ROWS = 1024;
+    public static final long MAX_RETURN_ROWS = 2048;
 
     public static BaseLogicalPlanChecker createLogicalPlanChecker(OptExpression root, boolean allowFilter,
                                                                   boolean allowLimit, boolean allowProject,

@@ -1048,7 +1048,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
-        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
     }
 
     @AfterClass
