@@ -2115,6 +2115,12 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
 
+#### lake_service_max_concurrency
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
 | be_service_threads | 64 | N/A | |
