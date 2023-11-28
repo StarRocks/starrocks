@@ -203,6 +203,34 @@ PROPERTIES (
 | download_worker_count   | BE 节点下载任务的最大线程数，用于还原作业。默认值：`1`。增加此配置项的值可以增加下载任务并行度。|
 | max_download_speed_kbps | BE 节点下载速度上限。默认值：`50000`。单位：KB/s。通常还原作业的下载速度不会超过默认值。如果该速度上限限制了还原作业的性能，您可以根据带宽情况适当增加。|
 
+## 物化视图备份恢复
+
+在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。
+
+从 v3.2.0 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
+
+在备份和还原数据库期间，StarRocks 执行以下操作：
+
+- **BACKUP**
+
+1. 遍历数据库以收集所有表和异步物化视图的信息。
+2. 调整备份还原队列中表的顺序，确保物化视图的基表位于物化视图之前：
+   - 如果基表存在于当前数据库中，StarRocks 将表添加到队列中。
+   - 如果基表不存在于当前数据库中，StarRocks 打印警告日志并继续执行备份操作而不阻塞该过程。
+3. 按照队列的顺序执行备份任务。
+
+- **RESTORE**
+
+1. 按照备份还原队列的顺序还原表和物化视图。
+2. 重新构建物化视图与其基表之间的依赖关系，并重新提交刷新任务调度。
+
+在整个还原过程中遇到的任何错误都不会阻塞该过程。
+
+还原后，您可以使用[SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 检查物化视图的状态。
+
+- 如果物化视图处于 Active 状态，则可以直接使用。
+- 如果物化视图处于 Inactive 状态，可能是因为其基表尚未还原。在还原所有基表后，您可以使用[ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 重新激活物化视图。
+
 ## 注意事项
 
 - 仅限拥有 ADMIN 权限的用户执行备份与恢复功能。
@@ -215,6 +243,6 @@ PROPERTIES (
 - 您无需在恢复作业前在新集群中创建需要被恢复表。恢复作业将自动创建该表。
 - 如果被恢复表与已有表重名，StarRocks 会首先识别已有表的 Schema。如果 Schema 相同，StarRocks 会覆盖写入已有表。如果 Schema 不同，恢复作业失败。您可以通过 `AS` 关键字重新命名被恢复表，或者删除已有表后重新发起恢复作业。
 - 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 Schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
-- 在备份或恢复作业中，StarRocks 自动备份或恢复表的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。目前 StarRocks 暂不支持备份恢复视图和[异步物化视图](../using_starrocks/Materialized_view.md)。您只能手动备份异步物化视图所对应的实体表，且该实体表无法作为物化视图加速或改写查询。
+- 目前 StarRocks 暂不支持备份恢复逻辑视图。
 - 目前 StarRocks 暂不支持备份恢复用户、权限以及资源组配置相关数据。
 - StarRocks 不支持备份恢复表之间的 Colocate Join 关系。
