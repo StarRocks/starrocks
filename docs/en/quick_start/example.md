@@ -2,6 +2,8 @@
 displayed_sidebar: "English"
 sidebar_position: 1
 ---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Learn by doing
 
@@ -19,9 +21,17 @@ Both of these datasets are very large, and because this tutorial is intended to 
 
 ### Docker
 
-### Disk space
+- [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 or later)
+- 4GB RAM assigned to Docker
+- 10GB free diskspace assigned to Docker
 
-### cURL
+### SQL client
+
+The SQL clients will be discussed after starting StarRocks as StarRocks needs to be running to configure a client.
+
+### curl
+
+curl is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 
 ## Launch StarRocks
@@ -31,6 +41,42 @@ sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
     -itd starrocks/allin1-ubuntu
 ```
 
+## SQL Clients
+
+These three clients are tested with this tutorial, you only need one:
+
+- [DBeaver](https://dbeaver.io/download/) is available as a community version and a Pro version. 
+- [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
+- mysql CLI: The mysql client is packaged with MySQL Server. If you do use this client you might want to disable the MySQL server unless you plan to use that in addition to the client.
+
+#### Configuring the client
+
+<Tabs groupId="client">
+<TabItem value="DBeaver" label="DBeaver" default>
+
+- Install [DBeaver](https://dbeaver.io/download/), and add a connection:
+![Add a connection](../assets/quick-start/DBeaver-1.png)
+- Configure the port, IP, and username. Test the connection, and click Finish if the test succeeds:
+![Configure and test](../assets/quick-start/DBeaver-2.png)
+
+</TabItem>
+<TabItem value="MySQLWorkbench" label="MySQL Workbench">
+
+- Install the [MySQL Workbench](https://dev.mysql.com/downloads/workbench/), and add a connection.
+- Configure the port, IP, and username and then test the connection:
+![Connection settings](../assets/quick-start/Workbench-1.png)
+- You will see warnings from the Workbench as it is checking for a specific MySQL version. You can ignore the warnings and when prompted, you can configure Workbench to stop displaying the warnings:
+![Ignore warning](../assets/quick-start/Workbench-2.png)
+
+</TabItem>
+<TabItem value="mysqlCLI" label="mysql CLI">
+
+- macos: If you use Homebrew and do not need MySQL Server run `brew install mysql` to install the CLI.
+- Linux: Check your repository system for the `mysql` client. For example, `yum install mariadb`.
+- Microsoft Windows: Install the [MySQL Community Server](https://dev.mysql.com/downloads/mysql/) and run the provided client, or run `mysql` from WSL.
+
+</TabItem>
+</Tabs>
 ## Download the data
 
 Download these two datasets to your machine. You can download them to the host machine where you are running Docker, they do not need to be downloaded inside the container.
@@ -52,8 +98,6 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 You can use most SQL clients that work with MySQL. This tutorial is tested with the `mysql` client and with DBeaver as these are the two most commonly used clients among the StarRocks community.
 
 If you have the `mysql` client installed you can use that directly, if you need a client then install either `mysql` or DBeaver.
-
-NOTE: Add details on installing both clients here
 
 ```sql
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
@@ -117,15 +161,15 @@ CREATE TABLE IF NOT EXISTS weatherdata (
 ### Load the NYC Crash data for 2014 and 2015
 
 Generally you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
-using cURL and the built-in stream load mechanism. Stream load and cURL are popular when loading files from the local filesystem. 
+using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local filesystem. 
 
 :::tip
-Open a new shell as these cURL commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
+Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 :::
 
-Run the command and then read about the options.
+The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
 
 ```bash
 curl --location-trusted -u root             \
@@ -183,19 +227,6 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 </details>
 
 
-:::tip
-Notes on the above command:
-
-- `--location-trusted`
-- `-u root`
-- `-T filename`
-- `label:name-num`
-- `column_separator:,`
-- `skip_header:1`
-- `enclose:\"`
-- `max_filter_ratio:1`
-- `columns:`
-:::
 
 ### Load the weather data for 2014 and 2015
 
@@ -383,6 +414,67 @@ The results for freezing temperatures suprised me a little, I did not expect too
 
 Drive carefully!
 
+## Notes on the curl commands
+
+StarRocks Stream Load and curl take many arguments. Only the ones used in this tutorial are described here, the rest will be linked to in the more information section.
+
+#### `--location-trusted`
+
+This configures curl to pass credentials to any redirected URLs.
+
+#### `-u root`
+
+The username used to log in to StarRocks
+
+#### `-T filename`
+
+T is for transfer, the filename to transfer.
+
+#### `label:name-num`
+
+The label to associate with this Stream Load job. The label must be unique, so if you run the job multiple times you can add a number and keep incrementing that.
+
+#### `column_separator:,`
+
+If you load a file that uses a single `,` then set it as shown above, if you use a different delimiter then set that delimiter here. Common choices are `\t`, `,`, and `|`.
+
+#### `skip_header:1`
+
+Some CSV files have a single header row with all of the column names listed, and some add a second line with datatypes. Set skip_header to `1` or `2` if you have one or two header lines, and set it to `0` if you have none.
+
+#### `enclose:\"`
+
+It is common to enclose strings that contain embedded commas with double-quotes. The sample datasets used in this tutorial have geo locations that contain commas and so the enclose setting is set to `\"`. Remember to escape the `"` with a `\`.
+
+#### `max_filter_ratio:1`
+
+This allows some errors in the data. Ideally this would be set to `0` and the job would fail with any errors. It is set to `1` to allow all rows to fail during debugging.
+
+#### `columns:`
+
+The mapping of CSV file columns to StarRocks table columns. You will notice that there are many more columns in the CSV files than columns in the table. Any columns that are not included in the table are skipped.
+
+You will also notice that there is some transformation of data included in the `columns:` line for the crash dataset. It is very common to find dates and times in CSV files that do not conform to standards. This is the logic for converting the CSV data for the time and date of the crash to a DATETIME type:
+
+##### The columns line
+
+This is the beginning of one data record. The date is in `MM/DD/YYYY` format, and the time is `HH:MI`. Since DATETIME is generally `YYYY-MM-DD HH:MI:SS` we need to transform this data.
+
+```plaintext
+08/05/2014,9:10,BRONX,10469,40.8733019,-73.8536375,"(40.8733019, -73.8536375)",
+```
+
+This is the beginning of the `columns:` parameter:
+
+```bash
+-H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
+```
+
+This instructs StarRocks to:
+- Assign the content of the first column of the CSV file to `tmp_CRASH_DATE
+- Assign the content of the second column of the CSV file to `tmp_CRASH_TIME`
+- `concat_ws()` concatenates `tmp_CRASH_DATE` and `tmp_CRASH_TIME` together with a space between them
+- `str_to_date()` creates a DATETIME from the concatenated string
 ## More information
 
 Link to NYC Open Data
