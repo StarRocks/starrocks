@@ -311,7 +311,7 @@ public class TableFunctionTable extends Table {
             result = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DdlException("failed to get file schema: ", e);
+            throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
             throw new DdlException("failed to get file schema: " + e.getMessage());
         }
