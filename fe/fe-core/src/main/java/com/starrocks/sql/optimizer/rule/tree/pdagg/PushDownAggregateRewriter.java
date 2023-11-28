@@ -88,7 +88,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     public OptExpression rewrite(OptExpression root) {
-        if(!isNeedRewrite()) {
+        if (!isNeedRewrite()) {
             return root;
         }
         allPushDownGroupBys = new ColumnRefSet();

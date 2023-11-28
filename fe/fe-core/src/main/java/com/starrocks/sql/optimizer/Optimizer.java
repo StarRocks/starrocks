@@ -500,7 +500,7 @@ public class Optimizer {
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
             PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
             rule.getRewriter().collectRewriteContext(tree);
-            if(rule.getRewriter().isNeedRewrite()) {
+            if (rule.getRewriter().isNeedRewrite()) {
                 pushAggFlag = true;
                 tree = rule.rewrite(tree, rootTaskContext);
             }
