@@ -60,7 +60,7 @@ Currently, StarRocks supports:
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. Download `plugin-starrocks/target/ranger-starrocks-plugin- 3.0.0 -SNAPSHOT.jar` and `mysql-connector-j`, and place them in the `starrocks` folder.
+2. Download `plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar` and `mysql-connector-java-8.0.17.jar`, and place them in the `starrocks` folder.
 
    ```SQL
    cd {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
