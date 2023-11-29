@@ -23,6 +23,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.connector.iceberg.CachingIcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
@@ -45,6 +47,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
     private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
 
     private final ExecutorService refreshRemoteFileExecutor;
+    private final Map<String, IcebergCatalog> cachingIcebergCatalogs = new ConcurrentHashMap<>();
 
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
@@ -58,6 +61,16 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
     public void unRegisterCacheUpdateProcessor(String catalogName) {
         LOG.info("unregister to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
         cacheUpdateProcessors.remove(catalogName);
+    }
+
+    public void registerCachingIcebergCatalog(String catalogName, IcebergCatalog icebergCatalog) {
+        LOG.info("register to caching iceberg catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        cachingIcebergCatalogs.put(catalogName, icebergCatalog);
+    }
+
+    public void unRegisterCachingIcebergCatalog(String catalogName) {
+        LOG.info("unregister to caching iceberg catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        cachingIcebergCatalogs.remove(catalogName);
     }
 
     public ConnectorTableMetadataProcessor() {
@@ -76,6 +89,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
         if (Config.enable_background_refresh_connector_metadata) {
             refreshCatalogTable();
+            refreshIcebergCachingCatalog();
         }
     }
 
@@ -113,6 +127,20 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
             }
             LOG.info("refresh connector metadata {} finished", catalogName);
+        }
+    }
+
+    private void refreshIcebergCachingCatalog() {
+        List<String> catalogNames = Lists.newArrayList(cachingIcebergCatalogs.keySet());
+        for (String catalogName : catalogNames) {
+            CachingIcebergCatalog icebergCatalog = (CachingIcebergCatalog) cachingIcebergCatalogs.get(catalogName);
+            if (icebergCatalog == null) {
+                LOG.error("Failed to get cachingIcebergCatalog by catalog {}.", catalogName);
+                continue;
+            }
+            LOG.info("Start to refresh iceberg caching catalog {}", catalogName);
+            icebergCatalog.refreshCatalog();
+            LOG.info("Finish to refresh iceberg caching catalog {}", catalogName);
         }
     }
 

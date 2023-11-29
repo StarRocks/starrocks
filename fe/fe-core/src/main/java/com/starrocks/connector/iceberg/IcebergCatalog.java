@@ -83,4 +83,7 @@ public interface IcebergCatalog {
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
+
+    default void refreshTable(String dbName, String tableName) {
+    }
 }

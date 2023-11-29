@@ -107,6 +107,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -528,6 +529,17 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        if (isResourceMappingCatalog(catalogName)) {
+            refreshTableWithResource(table);
+        } else {
+            IcebergTable icebergTable = (IcebergTable) table;
+            String dbName = icebergTable.getRemoteDbName();
+            String tableName = icebergTable.getRemoteTableName();
+            icebergCatalog.refreshTable(dbName, tableName);
+        }
+    }
+
+    private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         try {
