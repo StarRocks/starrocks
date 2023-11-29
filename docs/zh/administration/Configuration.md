@@ -118,6 +118,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### background_refresh_metadata_time_secs_since_last_access_secs
 
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
+
+##### enable_statistics_collect_profile
+
 - 含义：Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。
 - 默认值：86400
 - 单位：秒
@@ -1619,6 +1625,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
+
+#### update_compaction_ratio_threshold
+
+- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 默认值：0.5
 
 #### max_garbage_sweep_interval
 
