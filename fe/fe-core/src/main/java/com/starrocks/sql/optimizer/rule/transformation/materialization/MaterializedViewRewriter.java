@@ -1572,13 +1572,30 @@ public class MaterializedViewRewriter {
         if (queryRangePredicateSplits.get(true).isEmpty() && queryOtherPredicateSplits.get(true).isEmpty()) {
             return null;
         }
-        final ScalarOperator queryExtraPredicate = Utils.compoundAnd(Utils.compoundAnd(queryRangePredicateSplits.get(false)),
-                Utils.compoundAnd(queryOtherPredicateSplits.get(false)));
-        if (queryExtraPredicate == null) {
+        List<ScalarOperator> queryExtraPredicates = Lists.newArrayList();
+        if (queryRangePredicateSplits.get(false) != null) {
+            queryExtraPredicates.addAll(queryRangePredicateSplits.get(false));
+        }
+        if (queryOtherPredicateSplits.get(false) != null) {
+            queryExtraPredicates.addAll(queryOtherPredicateSplits.get(false));
+        }
+        if (queryExtraPredicates.isEmpty()) {
             return null;
         }
 
-        // TODO: How to determine query's predicates can be pulled up or not?
+        // pull-up extra predicates should not contain any non-(inner/cross) join on-predicates
+        List<ScalarOperator> queryOnPredicates = MvUtils.getJoinOnPredicates(rewriteContext.getQueryExpression());
+        if (queryOnPredicates != null && !queryOnPredicates.isEmpty()) {
+            ColumnRefSet queryOnPredicateUsedColRefs = Utils.compoundAnd(queryOnPredicates).getUsedColumns();
+            queryExtraPredicates = queryExtraPredicates.stream()
+                    .filter(extra -> !queryOnPredicateUsedColRefs.isIntersect(extra.getUsedColumns()))
+                    .collect(Collectors.toList());
+            if (queryExtraPredicates.isEmpty()) {
+                return null;
+            }
+        }
+        final ScalarOperator queryExtraPredicate = Utils.compoundAnd(queryExtraPredicates);
+
         // query's output should contain all the extra predicates otherwise it cannot be pulled then.
         ColumnRefSet queryOutputColumnSet = rewriteContext.getQueryExpression().getOutputColumns();
         if (!queryOutputColumnSet.containsAll(queryExtraPredicate.getUsedColumns())) {
