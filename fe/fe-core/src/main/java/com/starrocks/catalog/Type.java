@@ -1512,6 +1512,12 @@ public abstract class Type implements Cloneable {
                     baseType = t1.isDecimalOfAnyVersion() ? t1 : t2;
                 }
             }
+
+            if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DOUBLE;
+            }
+
             return baseType;
         }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {

@@ -3038,6 +3038,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboDeriveJoinIsNullPredicate;
     }
 
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
