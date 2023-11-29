@@ -791,6 +791,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
+<<<<<<< HEAD
                 "PROPERTIES (\n" +
                 "\"type\"=\"jdbc\",\n" +
                 "\"user\"=\"test_user\",\n" +
@@ -799,6 +800,16 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"driver_class\"=\"test.driver.class\",\n" +
                 "\"jdbc_uri\"=\"test_uri\"\n" +
                 ");")
+=======
+                        "PROPERTIES (\n" +
+                        "\"type\"=\"jdbc\",\n" +
+                        "\"user\"=\"test_user\",\n" +
+                        "\"password\"=\"test_passwd\",\n" +
+                        "\"driver_url\"=\"test_driver_url\",\n" +
+                        "\"driver_class\"=\"test.driver.class\",\n" +
+                        "\"jdbc_uri\"=\"jdbc:mysql://127.0.0.1:3306\"\n" +
+                        ");")
+>>>>>>> 7fdb26fa03 ([Enhancement] support mysql key words in where caluse (#35917))
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
