@@ -26,16 +26,12 @@ import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
@@ -110,12 +106,18 @@ public class GINIndexTest extends PlanTestBase {
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
                 }}, KeysType.DUP_KEYS));
 
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                    put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
+                    put("xxx", "yyy");
+                }}, KeysType.DUP_KEYS));
+
         Assertions.assertDoesNotThrow(
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
                     put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
-                    put(IndexParamsKey.COMPOUND_FORMAT.name().toLowerCase(Locale.ROOT), "false");
                     put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
                     put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
                     put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");

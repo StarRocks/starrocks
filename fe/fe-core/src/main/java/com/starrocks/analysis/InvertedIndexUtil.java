@@ -18,12 +18,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
@@ -78,8 +80,15 @@ public class InvertedIndexUtil {
         if (properties.containsKey(impLibKey)) {
             String impValue = properties.get(impLibKey);
             if (!CLUCENE.name().equalsIgnoreCase(impValue)) {
-                throw new SemanticException("Only support clucene implement for now");
+                throw new SemanticException("Only support clucene implement for now. ");
             }
+        }
+
+        String noMatchParamKey = properties.keySet().stream()
+                .filter(key -> !InvertedIndexParams.SUPPORTED_PARAM_KEYS.contains(key.toLowerCase(Locale.ROOT)))
+                .collect(Collectors.joining(","));
+        if (StringUtils.isNotEmpty(noMatchParamKey)) {
+            throw new SemanticException(String.format("Do not support parameters %s for GIN. ", noMatchParamKey));
         }
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
