@@ -202,6 +202,11 @@ public class StatementPlanner {
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
                 Optimizer optimizer = new Optimizer();
+                // FIXME: refactor this into Optimizer.optimize() method.
+                // set query tables into OptimizeContext so can be added for mv rewrite
+                if (Config.skip_whole_phase_lock_mv_limit >= 0) {
+                    optimizer.setQueryTables(olapTables);
+                }
                 optimizedPlan = optimizer.optimize(
                         session,
                         root,
@@ -209,6 +214,7 @@ public class StatementPlanner {
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
             }
+
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
                 /*

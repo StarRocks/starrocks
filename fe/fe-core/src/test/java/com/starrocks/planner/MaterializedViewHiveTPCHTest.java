@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,7 +62,9 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
+        FeConstants.isCanonizePredicateAfterMVRewrite = true;
         runFileUnitTest("materialized-view/tpch-hive/q7");
+        FeConstants.isCanonizePredicateAfterMVRewrite = false;
     }
 
     @Test

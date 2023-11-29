@@ -39,6 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.StringUtils;
@@ -1274,8 +1275,14 @@ public class MaterializedViewRewriter {
                 }
                 final Operator.Builder newScanOpBuilder = OperatorBuilderFactory.build(mvScanOptExpression.getOp());
                 newScanOpBuilder.withOperator(mvScanOptExpression.getOp());
-                final ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
+
+                ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
+                // Canonize predicates to make uts more stable.
+                if (FeConstants.runningUnitTest && FeConstants.isCanonizePredicateAfterMVRewrite) {
+                    normalizedPredicate = MvUtils.canonizePredicateForRewrite(normalizedPredicate);
+                }
                 newScanOpBuilder.setPredicate(normalizedPredicate);
+
                 mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
                 mvScanOptExpression.setLogicalProperty(null);
                 deriveLogicalProperty(mvScanOptExpression);
