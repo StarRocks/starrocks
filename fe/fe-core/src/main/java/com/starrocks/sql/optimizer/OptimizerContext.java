@@ -50,6 +50,7 @@ public class OptimizerContext {
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+    private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
 
     @VisibleForTesting
@@ -167,6 +168,14 @@ public class OptimizerContext {
 
     public long optimizerElapsedMs() {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
+    }
+
+    public boolean isObtainedFromInternalStatistics() {
+        return isObtainedFromInternalStatistics;
+    }
+
+    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
+        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
     }
 
     /**
