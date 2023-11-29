@@ -197,6 +197,8 @@ public:
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                             BitmapValue* ret_bitmap) const;
 
+    std::vector<BitmapValue> split_bitmap(size_t batch_size);
+
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
 
