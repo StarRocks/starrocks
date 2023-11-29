@@ -15,7 +15,7 @@ displayed_sidebar: "Chinese"
 - [执行 schema change](#schema-change)
    - [增加或删除列，修改列顺序](#增加或删除列修改列顺序)
    - [修改排序键](#)
-   - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
+   -  优化表结构:[修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
    - [修改表的属性](#修改表的属性)
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
@@ -304,11 +304,12 @@ ORDER BY (column_name1, column_name2, ...)
 
 - 对于明细表、聚合表和更新表：
 
-    - index 中的所有列都要写出来。
-    - value 列在 key 列之后。
+  - index 中的所有列都要写出来。
+  - value 列在 key 列之后。
 
 - 对于主键表：
-  对于排序键，支持通过 ALTER TABLE ... ORDER BY ... 重新指定排序键。不支持删除排序键，不支持修改排序键中列的数据类型。 -——————？？？？
+  
+  对于排序键，支持通过 ALTER TABLE ... ORDER BY ... 重新指定排序键。
 
 **增加生成列**
 
@@ -417,47 +418,6 @@ ALTER TABLE details DISTRIBUTED BY RANDOM;
 ```SQL
 ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
 ```
-
-#### 修改主键表的排序键
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<table_name>
-[ order_desc ]
-
-order_desc ::=
-    ORDER BY <column_name> [, <column_name> ...]
-```
-
-示例：
-
-假设原表为主键表，排序键与主键耦合  `dt,order_id`。
-
-```SQL
-create table orders (
-    dt date NOT NULL,
-    order_id bigint NOT NULL,
-    user_id int NOT NULL,
-    merchant_id int NOT NULL,
-    good_id int NOT NULL,
-    good_name string NOT NULL,
-    price int NOT NULL,
-    cnt int NOT NULL,
-    revenue int NOT NULL,
-    state tinyint NOT NULL
-) PRIMARY KEY (dt, order_id)
-PARTITION BY date_trunc('day', dt)
-DISTRIBUTED BY HASH(order_id);
-```
-
-解耦排序键和主键，修改排序键为 `dt,revenue,state`。
-
-```SQL
-ALTER TABLE orders ORDER BY (dt,revenue,state);
-```
-
-注意您需要执行 [SHOW ALTER TABLE COLUMN]() 查看修改排序列任务的执行情况。
 
 #### 修改表的属性
 
