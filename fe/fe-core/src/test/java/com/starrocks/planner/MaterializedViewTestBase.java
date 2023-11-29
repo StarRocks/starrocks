@@ -74,6 +74,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);

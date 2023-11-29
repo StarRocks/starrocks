@@ -87,7 +87,7 @@ public class QueryRuntimeProfile {
      */
     private boolean profileAlreadyReported = false;
 
-    private final RuntimeProfile queryProfile;
+    private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
 
     /**
