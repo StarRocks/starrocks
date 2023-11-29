@@ -161,7 +161,7 @@ class ChooseCase(object):
 
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
-        with open(file, "r") as f:
+        with open(file, "r", encoding='utf8') as f:
             f_lines = f.readlines()
 
         file = os.path.abspath(file)[len(os.path.abspath(self.sr_lib_obj.root_path)):].lstrip("/")
