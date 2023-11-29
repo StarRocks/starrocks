@@ -347,10 +347,10 @@ You can find a function based on the following categories:
 
 ## Pattern matching functions
 
-- [like](../sql-functions/like_predicate-functions/like.md)
-- [regexp](../sql-functions/like_predicate-functions/regexp.md)
-- [regexp_extract](../sql-functions/like_predicate-functions/regexp_extract.md)
-- [regexp_replace](../sql-functions/like_predicate-functions/regexp_replace.md)
+- [like](./like-predicate-functions/like.md)
+- [regexp](./like-predicate-functions/regexp.md)
+- [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
 
