@@ -60,11 +60,11 @@ Currently, StarRocks supports:
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. Download `plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar` and [`mysql-connector-j`](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
+2. Download [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) and [`mysql-connector-j`](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
 
    ```SQL
    cd {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
-   wget xxxx
+   wget https://www.starrocks.io/download/community
    wget https://dev.mysql.com/downloads/connector/j/
    ```
 
@@ -116,8 +116,8 @@ Currently, StarRocks supports:
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
 6. On each FE machine of the StarRocks cluster, create [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
-   a. `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
-   b. `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
+   - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
+   - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
 
    If you need to modify other configurations, refer to official documentation of Apache Ranger. For example, you can modify `ranger.plugin.starrocks.policy.pollIntervalM` to change the interval for pulling policy changes.
 

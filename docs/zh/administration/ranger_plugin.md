@@ -60,11 +60,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. 下载 `plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar` 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
+2. 下载 [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
 
    ```SQL
    cd {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
-   wget xxxx
+   wget https://www.starrocks.io/download/community
    wget https://dev.mysql.com/downloads/connector/j/
    ```
 
@@ -116,8 +116,8 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 5. 点击 **Test connection** 测试连通性，连通成功后保存。
 6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
-   a. `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
-   b. `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
+   - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
+   - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
 
    如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalM` 来更改拉取权限变更的时间。
 
