@@ -110,18 +110,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ![service](../assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。
-<<<<<<< HEAD
 
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 `ranger-starrocks-security.xml`，并将内容拷贝，必须修改两处内容并保存：
-
-   a. `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
-   b. `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
-=======
 6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
->>>>>>> 28734b9524 ([Doc] Update ranger plugin, add sidebar for cloudcanal, fix function and configuration (#36054))
 
    如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalM` 来更改拉取权限变更的时间。
 
