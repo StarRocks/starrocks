@@ -11,6 +11,11 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### 兼容性变更
+
+#### 系统变量
+
 - 新增会话变量 `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；当取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
 - 新增会话变量 `cbo_eq_base_type` 用来指定 DECIMAL 类型和 STRING 类型的数据比较时强制类型，默认 `VARCHAR`，可选 `DECIMAL`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
 
