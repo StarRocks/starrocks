@@ -12,7 +12,11 @@ displayed_sidebar: "Chinese"
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [修改表注释](#修改表的注释31-版本起)
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
-- [执行 schema change 增加或删除列，修改列顺序和表属性](#schema-change)
+- [执行 schema change](#schema-change)
+   - [增加或删除列，修改列顺序]()
+   - [修改排序键]()
+   - [修改表属性]()
+   - [修改分桶方式和分桶数量]()
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
@@ -185,11 +189,13 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 ### Schema change
 
+#### 增加或删除列，修改列顺序
+
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
 base index 和 rollup index 都是物化索引。下方语句在编写时如果没有指定 `rollup_index_name`，默认操作基表。
 
-#### 向指定 index 的指定位置添加一列 (ADD COLUMN)
+**向指定 index 的指定位置添加一列 (ADD COLUMN)**
 
 语法：
 
@@ -203,13 +209,11 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 注意：
 
-```plain text
 1. 聚合模型如果增加 value 列，需要指定 agg_type。
 2. 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
-```
 
-#### 向指定 index 添加多列
+**向指定 index 添加多列**
 
 语法：
 
@@ -238,7 +242,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
-#### 从指定 index 中删除一列 (DROP COLUMN)
+**从指定 index 中删除一列 (DROP COLUMN)**
 
 语法：
 
@@ -253,7 +257,7 @@ DROP COLUMN column_name
 1. 不能删除分区列。
 2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除。
 
-#### 修改指定 index 的列类型以及列位置 (MODIFY COLUMN)
+**修改指定 index 的列类型以及列位置 (MODIFY COLUMN)**
 
 语法：
 
@@ -285,7 +289,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 6. 不支持从 NULL 转为 NOT NULL。
 
-#### 对指定 index 的列进行重新排序
+**对指定 index 的列进行重新排序**
 
 语法：
 
@@ -301,7 +305,7 @@ ORDER BY (column_name1, column_name2, ...)
 1. index 中的所有列都要写出来。
 2. value 列在 key 列之后。
 
-#### 增加生成列
+**增加生成列**
 
 语法：
 
@@ -333,6 +337,144 @@ SET ("key" = "value",...)
 ```
 
 注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
+
+#### 修改分桶方式和分桶数量
+
+修改所有分区的分桶方式或分桶数量，也支持修改指定分区的分桶数量。
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ partition_names ]
+[ distribution_desc ]
+
+distribution_desc ::=
+    DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+
+partition_names ::= 
+    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
+```
+
+示例：
+
+假设原表为明细表，分桶方式为 Hash 分桶，分桶数量为自动设置。
+
+```SQL
+CREATE TABLE IF NOT EXISTS details (
+    event_time DATETIME NOT NULL COMMENT "datetime of event",
+    event_type INT NOT NULL COMMENT "type of event",
+    user_id INT COMMENT "id of user",
+    device_code INT COMMENT "device code",
+    channel INT COMMENT ""
+)
+DUPLICATE KEY(event_time, event_type)
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id);
+
+-- 插入多天的数据
+-- 11 月 26 日的数据
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-26 08:00:00', 1, 101, 12345, 2),
+('2023-11-26 09:15:00', 2, 102, 54321, 3),
+('2023-11-26 10:30:00', 1, 103, 98765, 1);
+
+-- 11 月 27 日的数据
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-27 08:30:00', 1, 104, 11111, 2),
+('2023-11-27 09:45:00', 2, 105, 22222, 3),
+('2023-11-27 11:00:00', 1, 106, 33333, 1);
+
+-- 11 月 28 日的数据
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-28 08:00:00', 1, 107, 44444, 2),
+('2023-11-28 09:15:00', 2, 108, 55555, 3),
+('2023-11-28 10:30:00', 1, 109, 66666, 1);
+```
+
+修改所有分区的分桶列为 `user_id, event_time`。
+
+```SQL
+ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
+```
+
+> **注意**
+>
+> 修改分桶列只能针对整个表的所有分区，不能针对某个分区。
+
+修改所有分区的分桶数量为 10。
+
+```SQL
+ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+```
+
+> **注意**
+>
+> 虽然本示例没有修改分桶方式只修改分桶数量，但是在语句中仍然需要说明分桶方式 `HASH(user_id)`。
+
+修改指定分区的分桶数量为 15。
+
+```SQL
+ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
+```
+
+> 说明
+>
+> 分区名称可以执行 `SHOW PARTITIONS FROM <table_name>;` 进行查看。
+
+修改分桶方式为 Random 分桶并且分桶数量由 StarRocks 自动设置。
+
+```SQL
+ALTER TABLE details DISTRIBUTED BY RANDOM;
+```
+
+修改分桶方式为 Random 分桶并且指定分桶数量为 10。
+
+```SQL
+ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+```
+
+#### 修改主键表的排序键
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ order_desc ]
+
+order_desc ::=
+    ORDER BY <column_name> [, <column_name> ...]
+```
+
+示例：
+
+假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+
+```SQL
+create table orders (
+    dt date NOT NULL,
+    order_id bigint NOT NULL,
+    user_id int NOT NULL,
+    merchant_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+) PRIMARY KEY (dt, order_id)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(order_id);
+```
+
+解耦排序键和主键，修改排序键为 `dt,revenue,state`。
+
+```SQL
+ALTER TABLE orders ORDER BY (dt,revenue,state);
+```
+
+注意您需要执行 [SHOW ALTER TABLE COLUMN]() 查看修改排序列任务的执行情况。
 
 ### 操作 rollup 相关语法
 

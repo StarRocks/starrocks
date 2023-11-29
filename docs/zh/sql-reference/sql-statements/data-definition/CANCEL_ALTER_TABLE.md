@@ -6,10 +6,10 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-取消指定表的以下变更 (Alter) 操作：
+取消指定表的以下变更 (Alter) 任务：
 
-- 表结构：增加列，删除列，调整列顺序和修改列类型。
-- Rollup 索引: 创建 rollup 索引和删除 rollup 索引。
+- Schema Change：修改列和优化表结构。
+- Rollup 索引: 创建和删除 Rollup 索引。
 
 > **注意**
 >
@@ -17,13 +17,16 @@ displayed_sidebar: "Chinese"
 
 ## 语法
 
-- 取消表结构变更操作。
+- 取消 Schema Change 任务。
 
     ```SQL
+    -- 取消修改列的任务
     CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name
+    -- 取消优化表结构的任务
+    CANCEL ALTER TABLE OPTIMIZE FROM [db_name.]table_name
     ```
 
-- 取消 rollup 索引变更操作。
+- 取消 Rollup 索引变更任务。
 
     ```SQL
     CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name
@@ -38,14 +41,20 @@ displayed_sidebar: "Chinese"
 
 ## 示例
 
-示例一：取消数据库 `example_db` 中，`example_table` 的表结构变更操作。
+1. 取消数据库 `example_db` 中，`example_table` 的修改列任务。
 
-```SQL
-CANCEL ALTER TABLE COLUMN FROM example_db.example_table;
-```
+    ```SQL
+    CANCEL ALTER TABLE COLUMN FROM example_db.example_table;
+    ```
 
-示例二：取消当前数据库中，`example_table` 的 rollup 索引变更操作。
+2. 取消数据库 `example_db` 中，`example_table` 的优化表结构任务。
 
-```SQL
-CANCEL ALTER TABLE ROLLUP FROM example_table;
-```
+    ```SQL
+    CANCEL ALTER TABLE OPTIMIZE FROM example_db.example_table;
+    ```
+
+3. 取消当前数据库中，`example_table` 的 Rollup 索引变更操作。
+
+    ```SQL
+    CANCEL ALTER TABLE ROLLUP FROM example_table;
+    ```
