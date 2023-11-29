@@ -92,10 +92,14 @@ public:
     }
     static void orc_ts_to_native_ts(vectorized::TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset,
                                     int64_t seconds, int64_t nanoseconds) {
+        // Harding coding, we assume people is using timestamp type
+        // This bug fixed in sr >=3.0
+        cctz::time_zone new_tz = cctz::utc_time_zone();
+        int64_t new_tzoffset = 0;
         if (seconds >= 0) {
-            orc_ts_to_native_ts_after_unix_epoch(tv, seconds + tzoffset, nanoseconds);
+            orc_ts_to_native_ts_after_unix_epoch(tv, seconds + new_tzoffset, nanoseconds);
         } else {
-            orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+            orc_ts_to_native_ts_before_unix_epoch(tv, new_tz, seconds, nanoseconds);
         }
     }
 };

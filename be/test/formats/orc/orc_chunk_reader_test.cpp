@@ -904,9 +904,9 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
         -8444232248
     };
     const std::vector<std::string> exp_values = {
-        "2021-05-25 09:18:40",
-        "1970-01-01 08:00:00",
-        "1702-06-01 04:01:35",
+        "2021-05-25 01:18:40",
+        "1970-01-01 00:00:00",
+        "1702-05-31 19:55:52",
     };
     // clang-format on
     ObjectPool pool;
