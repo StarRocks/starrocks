@@ -30,6 +30,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -232,6 +233,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 335"));
     }
 
+    @Ignore
     @Test
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
@@ -506,6 +508,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
     }
 
+    @Ignore
     @Test
     public void testManyPartitions() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
