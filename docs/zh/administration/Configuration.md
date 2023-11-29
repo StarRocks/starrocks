@@ -1622,7 +1622,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
-#### 配置 BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
