@@ -280,6 +280,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
     }
 
+    // shut down abruptly
+    if (process_quick_exit_in_progress()) {
+        LOG(INFO) << "BE is shutting down，will exit quickly";
+        exit(0);
+    }
+
     http_server->join();
     http_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
