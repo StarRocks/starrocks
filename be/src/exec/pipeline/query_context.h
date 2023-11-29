@@ -216,7 +216,7 @@ private:
     seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
-    bool _enable_pipeline_level_shuffle = false;
+    bool _enable_pipeline_level_shuffle = true;
     std::shared_ptr<RuntimeProfile> _profile;
     bool _enable_profile = false;
     int64_t _big_query_profile_threshold_ns = 0;
