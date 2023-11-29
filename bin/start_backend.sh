@@ -161,7 +161,7 @@ if [ ${RUN_BE} -eq 1 ]; then
     if [ ${RUN_DAEMON} -eq 1 ]; then
         nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
     else
-        ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
+        exec ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
     fi
 fi
 
@@ -173,6 +173,3 @@ if [ ${RUN_CN} -eq 1 ]; then
         exec ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null
     fi
 fi
-
-
-
