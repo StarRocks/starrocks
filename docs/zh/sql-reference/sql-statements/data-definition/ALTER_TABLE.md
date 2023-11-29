@@ -13,10 +13,10 @@ displayed_sidebar: "Chinese"
 - [修改表注释](#修改表的注释31-版本起)
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
 - [执行 schema change](#schema-change)
-   - [增加或删除列，修改列顺序]()
-   - [修改排序键]()
-   - [修改表属性]()
-   - [修改分桶方式和分桶数量]()
+   - [增加或删除列，修改列顺序](#增加或删除列修改列顺序)
+   - [修改排序键](#)
+   - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
+   - [修改表的属性](#修改表的属性)
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
@@ -302,8 +302,13 @@ ORDER BY (column_name1, column_name2, ...)
 
 注意：
 
-1. index 中的所有列都要写出来。
-2. value 列在 key 列之后。
+- 对于明细表、聚合表和更新表：
+
+    - index 中的所有列都要写出来。
+    - value 列在 key 列之后。
+
+- 对于主键表：
+  对于排序键，支持通过 ALTER TABLE ... ORDER BY ... 重新指定排序键。不支持删除排序键，不支持修改排序键中列的数据类型。 -——————？？？？
 
 **增加生成列**
 
@@ -315,28 +320,6 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 ```
 
 增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
-
-#### 修改表的属性
-
-支持修改如下表属性：
-
-- `replication_num`
-- `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- Dynamic partitioning related properties
-- `enable_persistent_index`
-- `bloom_filter_columns`
-- `colocate_with`
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
-```
-
-注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
 
 #### 修改分桶方式和分桶数量
 
@@ -475,6 +458,28 @@ ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
 
 注意您需要执行 [SHOW ALTER TABLE COLUMN]() 查看修改排序列任务的执行情况。
+
+#### 修改表的属性
+
+支持修改如下表属性：
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
+注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
 
 ### 操作 rollup 相关语法
 
