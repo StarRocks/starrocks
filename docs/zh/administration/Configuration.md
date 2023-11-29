@@ -324,7 +324,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 以下是 BE 动态参数列表。
 
-<<<<<<< HEAD
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
 | report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
@@ -400,6 +399,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |alter_tablet_worker_count|3|N/A | 进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 |max_garbage_sweep_interval|3600|s|磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。|
 |min_garbage_sweep_interval|180|s|磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。|
+<<<<<<< HEAD
 =======
 #### report_task_interval_seconds
 
@@ -805,6 +805,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 默认值：180
 >>>>>>> c9c355c616 ([Doc] Update ranger plugin, add sidebar for cloudcanal, fix function and configuration (#36054))
 >>>>>>> 00fee6c805 ([Doc] Update ranger plugin, add sidebar for cloudcanal, fix function and configuration (#36054))
+=======
+>>>>>>> 4787f49d94 (Update Configuration.md)
 
 ### 配置 BE 静态参数
 
