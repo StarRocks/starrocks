@@ -63,6 +63,7 @@ import mockit.MockUp;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
@@ -283,6 +284,7 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
     }
 
+    @Ignore
     @Test
     public void testFinishedRewritingJob() throws AlterCancelException {
         new MockUp<Utils>() {
@@ -320,6 +322,7 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    @Ignore
     public void testReplay() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock

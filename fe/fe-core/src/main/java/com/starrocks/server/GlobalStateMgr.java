@@ -1613,8 +1613,8 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
-                        .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
                         .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
+                        .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
                         .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                         .build();
                 try {
@@ -2036,8 +2036,8 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
-                    warehouseMgr.save(dos);
                     securityPolicyManager.save(dos);
+                    warehouseMgr.save(dos);
                     failoverGroupMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
