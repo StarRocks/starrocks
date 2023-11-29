@@ -335,13 +335,13 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
-                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''\n" +
                 "  |  \n" +
                 "  |----19:EXCHANGE");
         assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''");
     }
 
     @Test
