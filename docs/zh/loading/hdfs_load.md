@@ -10,7 +10,7 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 HDFS 导入数据：
 
-<loadMethodIntro />
+<LoadMethodIntro />
 
 ## 准备工作
 
