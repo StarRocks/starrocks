@@ -43,7 +43,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.server.GlobalStateMgr;
-import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
