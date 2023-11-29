@@ -1661,7 +1661,7 @@ BE dynamic parameters are as follows.
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
-- **Description:** The maximum proportion of data that a compaction can merge for a primary key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
 
 ### Configure BE static parameters
 
