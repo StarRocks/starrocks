@@ -118,16 +118,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### background_refresh_metadata_time_secs_since_last_access_secs
 
-- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
-- 默认值：false
-- 引入版本：3.1.5
-
-##### enable_statistics_collect_profile
-
 - 含义：Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。
 - 默认值：86400
 - 单位：秒
 - 引入版本：2.5.5
+
+##### enable_statistics_collect_profile
+
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
 
 #### Query engine
 
