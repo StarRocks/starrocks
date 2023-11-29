@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-# regexp_extract
+# regexp_extract_all
 
 ## Description
 
-This function return all matching substrings in the target value which matches the regular expression pattern. It extracts the item in pos that matches the pattern. The pattern must completely match some parts of str so that the function can return parts needed to be matched in the pattern. If no matches are found, it will return an empty string.
+This function returns all matching substrings in the target value which matches the regular expression pattern. It extracts the item in pos that matches the pattern. The pattern must completely match some parts of str so that the function can return parts needed to be matched in the pattern. If no matches are found, it will return an empty string.
 
 ## Syntax
 
