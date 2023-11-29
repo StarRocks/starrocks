@@ -122,8 +122,6 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
         message.append("->");
         if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
             message.append(it.second);
-        } else {
-            message.append("encoded_binary");
         }
         message.append(", ");
 
