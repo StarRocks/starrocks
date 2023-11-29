@@ -927,7 +927,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView(mvName);
     }
-    
+
     @Test
     public void testStr2DateMVRefreshRewriteInnerJoinAggregatePartialRefreshUnion() throws Exception {
         String mvName = "test_mv1";
