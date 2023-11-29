@@ -39,4 +39,9 @@ public class BlackHoleTableSink extends DataSink {
     public DataPartition getOutputPartition() {
         return DataPartition.RANDOM;
     }
+
+    @Override
+    public boolean canUseRuntimeAdaptiveDop() {
+        return true;
+    }
 }

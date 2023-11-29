@@ -143,6 +143,7 @@ public class InsertStmt extends DmlStmt {
         this.blackHoleTableAsTargetTable = false;
     }
 
+    // Ctor for INSERT INTO blackhole() SELECT ...
     public InsertStmt(QueryStatement queryStatement, NodePosition pos) {
         super(pos);
         this.tblName = new TableName("black_hole_catalog", "black_hole_db", "black_hole_table");
