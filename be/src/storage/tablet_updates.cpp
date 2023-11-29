@@ -2742,11 +2742,21 @@ Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_si
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
 
+<<<<<<< HEAD
                 if (HasPrefixString(filename, "index.l")) {
                     *pindex_size += std::filesystem::file_size(entry);
                 } else if (HasSuffixString(filename, ".cols")) {
+=======
+                if (filename.starts_with("index.l")) {
+                    if (pindex_size != nullptr) {
+                        *pindex_size += std::filesystem::file_size(entry);
+                    }
+                } else if (filename.ends_with(".cols")) {
+>>>>>>> 956f397f36 ([Enhancement] show persistent index disk cost in be_tablets (#35615))
                     // TODO skip the expired cols file
-                    *col_size += std::filesystem::file_size(entry);
+                    if (col_size != nullptr) {
+                        *col_size += std::filesystem::file_size(entry);
+                    }
                 }
             }
         }
@@ -3878,6 +3888,16 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     if (index_entry != nullptr) {
         info.index_mem = index_entry->size();
         index_cache.release(index_entry);
+    }
+    int64_t pindex_size = 0;
+    auto st = _get_extra_file_size(&pindex_size, nullptr);
+    if (!st.ok()) {
+        // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
+        // So just print error log and keep going.
+        LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
+                   << ", error: " << st.get_error_msg();
+    } else {
+        info.index_disk_usage = pindex_size;
     }
 }
 
