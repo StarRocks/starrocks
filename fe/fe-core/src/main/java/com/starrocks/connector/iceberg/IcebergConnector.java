@@ -34,6 +34,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.Properties;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
@@ -98,7 +100,14 @@ public class IcebergConnector implements Connector {
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
-            this.icebergNativeCatalog = buildIcebergNativeCatalog();
+            IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
+            boolean enableMetadataCache = Boolean.parseBoolean(
+                    properties.getOrDefault("enable_iceberg_metadata_cache", "true"));
+            if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
+                long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
+                nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl);
+            }
+            this.icebergNativeCatalog = nativeCatalog;
         }
         return icebergNativeCatalog;
     }

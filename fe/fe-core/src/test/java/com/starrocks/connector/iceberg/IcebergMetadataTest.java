@@ -915,4 +915,23 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
         Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
     }
+
+    @Test
+    public void testListPartitionNames() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog);
+        List<String> partitionNames = metadata.listPartitionNames("db", "table");
+        Assert.assertEquals(partitionNames, Lists.newArrayList("k2=2", "k2=3"));
+    }
 }
