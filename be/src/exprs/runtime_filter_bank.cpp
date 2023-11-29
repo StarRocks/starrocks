@@ -420,6 +420,7 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
 void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
                                                             RuntimeBloomFilterEvalContext& eval_context) {
+    DCHECK(partial_chunk->num_rows() == 1);
     auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
@@ -477,7 +478,7 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
         } else {
             // otherwise traverse all partial RFs by enumerating any possible hash values
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
-            auto number_of_partitions = filter->compute_num_partitions(rf_desc->layout());
+            auto number_of_partitions = filter->num_hash_partitions();
             bool all_partial_rf_negative = true;
 
             for (int i = 0; i < number_of_partitions; i++) {
