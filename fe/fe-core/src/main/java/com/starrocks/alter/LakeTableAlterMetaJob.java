@@ -40,6 +40,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -261,7 +262,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000);
+                            finishedTimeMs / 1000, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                 }
             }
             return true;

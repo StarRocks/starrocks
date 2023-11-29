@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include <span>
 
 #include "gen_cpp/lake_service.pb.h"
 
@@ -60,6 +61,11 @@ public:
                              ::starrocks::lake::PublishLogVersionResponse* response,
                              ::google::protobuf::Closure* done) override;
 
+    void publish_log_version_batch(::google::protobuf::RpcController* controller,
+                                   const ::starrocks::lake::PublishLogVersionBatchRequest* request,
+                                   ::starrocks::lake::PublishLogVersionResponse* response,
+                                   ::google::protobuf::Closure* done) override;
+
     void lock_tablet_metadata(::google::protobuf::RpcController* controller,
                               const ::starrocks::lake::LockTabletMetadataRequest* request,
                               ::starrocks::lake::LockTabletMetadataResponse* response,
@@ -90,6 +96,11 @@ public:
 
     void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumFullRequest* request,
                      ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
+
+private:
+    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
+                                          const int64_t* log_versions, size_t txn_size,
+                                          ::starrocks::lake::PublishLogVersionResponse* response);
 
 private:
     ExecEnv* _env;

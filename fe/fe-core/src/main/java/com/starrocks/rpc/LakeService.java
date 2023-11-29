@@ -30,6 +30,7 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -71,6 +72,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = /*1m=*/60000)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch", onceTalkTimeout = /*1m=*/60000)
+    Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
     Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request);
