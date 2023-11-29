@@ -88,7 +88,7 @@ public class IndexDefTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("k1", "k1");
         def = new IndexDef("index1", Lists.newArrayList("k1", "k2"), IndexType.GIN, "", properties);
-        Assert.assertEquals("INDEX index1 ON table1 (`k1`,`k2`) USING GIN PROPERTIES(\"k1\"=\"k1\") COMMENT ''",
+        Assert.assertEquals("INDEX index1 ON table1 (`k1`,`k2`) USING GIN (\"k1\"=\"k1\") COMMENT ''",
                 def.toSql("table1"));
     }
 }

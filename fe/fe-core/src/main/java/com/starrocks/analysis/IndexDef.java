@@ -138,7 +138,7 @@ public class IndexDef implements ParseNode {
             sb.append(" USING ").append(indexType);
         }
         if (properties != null && properties.size() > 0) {
-            sb.append(" PROPERTIES(");
+            sb.append(" (");
             first = true;
             for (Map.Entry<String, String> e : properties.entrySet()) {
                 if (first) {
