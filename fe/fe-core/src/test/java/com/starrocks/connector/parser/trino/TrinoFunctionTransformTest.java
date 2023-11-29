@@ -355,4 +355,24 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
     }
 
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+    }
 }
