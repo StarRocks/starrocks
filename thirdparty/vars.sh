@@ -415,6 +415,15 @@ LLVM_NAME="llvm-project-16.0.6.src.tar.xz"
 LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
+<<<<<<< HEAD
+=======
+#clucene
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.28.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2023.11.28.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2023.11.28"
+CLUCENE_MD5SUM="d71f8156bbcbe78e5064ec5616072a5a"
+
+>>>>>>> 64c4b8ca94 ([BugFix] Update clucene deps to fix memory leak bug (#36028))
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
