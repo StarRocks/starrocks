@@ -95,7 +95,7 @@ public:
         // Harding coding, we assume people is using timestamp type
         // This bug fixed in sr >=3.0
         cctz::time_zone new_tz = cctz::utc_time_zone();
-        int64_t new_tzoffset=0;
+        int64_t new_tzoffset = 0;
         if (seconds >= 0) {
             orc_ts_to_native_ts_after_unix_epoch(tv, seconds + new_tzoffset, nanoseconds);
         } else {
