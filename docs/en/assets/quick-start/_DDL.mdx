@@ -1,0 +1,64 @@
+
+You can use most SQL clients that work with MySQL. This tutorial is tested with the `mysql` client and with DBeaver as these are the two most commonly used clients among the StarRocks community.
+
+If you have the `mysql` client installed you can use that directly, if you need a client then install either `mysql` or DBeaver.
+
+```sql
+mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+```
+
+### Create a database
+
+Type these two lines in at the `StarRocks > ` prompt and press enter after each:
+
+```sql
+CREATE DATABASE IF NOT EXISTS quickstart;
+
+USE quickstart;
+```
+
+### Create two tables
+
+#### Crashdata
+
+```sql
+CREATE TABLE IF NOT EXISTS crashdata (
+    CRASH_DATE DATETIME,
+    BOROUGH STRING,
+    ZIP_CODE STRING,
+    LATITUDE INT,
+    LONGITUDE INT,
+    LOCATION STRING,
+    ON_STREET_NAME STRING,
+    CROSS_STREET_NAME STRING,
+    OFF_STREET_NAME STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_1 STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_2 STRING,
+    COLLISION_ID INT,
+    VEHICLE_TYPE_CODE_1 STRING,
+    VEHICLE_TYPE_CODE_2 STRING
+);
+```
+
+#### Weatherdata
+
+```sql
+CREATE TABLE IF NOT EXISTS weatherdata (
+    DATE DATETIME,
+    NAME STRING,
+    HourlyDewPointTemperature STRING,
+    HourlyDryBulbTemperature STRING,
+    HourlyPrecipitation STRING,
+    HourlyPresentWeatherType STRING,
+    HourlyPressureChange STRING,
+    HourlyPressureTendency STRING,
+    HourlyRelativeHumidity STRING,
+    HourlySkyConditions STRING,
+    HourlyVisibility STRING,
+    HourlyWetBulbTemperature STRING,
+    HourlyWindDirection STRING,
+    HourlyWindGustSpeed STRING,
+    HourlyWindSpeed STRING
+);
+```
+
