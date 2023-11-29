@@ -405,7 +405,6 @@ public class OlapTable extends Table {
         this.maxColUniqueId = maxColUniqueId;
     }
 
-
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null

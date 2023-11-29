@@ -2206,7 +2206,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws UserException {
-        if (alterClause.getIndex() == null) {
+        Index newIndex = alterClause.getIndex();
+        if (newIndex == null) {
             return;
         }
 
@@ -2235,7 +2236,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        newIndexes.add(alterClause.getIndex());
+        newIndexes.add(newIndex);
     }
 
     private void processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)

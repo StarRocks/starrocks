@@ -24,6 +24,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexFactory;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
@@ -32,7 +33,6 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -106,8 +106,8 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexDef indexDef = clause.getIndexDef();
         indexDef.analyze();
-        clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
-                indexDef.getIndexType(), indexDef.getComment()));
+        clause.setIndex(IndexFactory.createIndexFromDef(indexDef));
+
         return null;
     }
 
