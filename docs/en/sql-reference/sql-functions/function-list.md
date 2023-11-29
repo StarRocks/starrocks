@@ -388,10 +388,10 @@ You can find a function based on the following categories:
 
 ## Pattern matching functions
 
-- [like](./like_predicate-functions/like.md)
-- [regexp](./like_predicate-functions/regexp.md)
-- [regexp_extract](./like_predicate-functions/regexp_extract.md)
-- [regexp_replace](./like_predicate-functions/regexp_replace.md)
+- [like](./like-predicate-functions/like.md)
+- [regexp](./like-predicate-functions/regexp.md)
+- [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
 
