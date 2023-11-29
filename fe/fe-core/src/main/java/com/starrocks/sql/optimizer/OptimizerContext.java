@@ -53,6 +53,7 @@ public class OptimizerContext {
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+    private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
@@ -179,6 +180,14 @@ public class OptimizerContext {
         long timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
                 sessionVariable.getOptimizerExecuteTimeout());
         return elapsed > timeLimit;
+    }
+
+    public boolean isObtainedFromInternalStatistics() {
+        return isObtainedFromInternalStatistics;
+    }
+
+    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
+        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
     }
 
     /**
