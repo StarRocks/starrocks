@@ -38,6 +38,7 @@ struct TabletBasicInfo {
     std::string data_dir;
     int64_t shard_id{0};
     int64_t schema_hash{0};
+    int64_t index_disk_usage{0};
 };
 
 class SchemaBeTabletsScanner : public SchemaScanner {
