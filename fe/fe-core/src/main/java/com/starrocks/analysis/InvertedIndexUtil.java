@@ -31,9 +31,28 @@ import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUC
 public class InvertedIndexUtil {
 
     public static String INVERTED_INDEX_PARSER_KEY = IndexParamsKey.PARSER.name().toLowerCase(Locale.ROOT);
+
+    /**
+     * Do not parse value, index and match with the whole value
+     */
     public static String INVERTED_INDEX_PARSER_NONE = "none";
+
+    /**
+     * Parse value with StandardAnalyzer, which provides grammar based tokenization (based on the Unicode Text Segmentation
+     * algorithm, as specified in https://unicode.org/reports/tr29/) and works well for most languages.
+     */
     public static String INVERTED_INDEX_PARSER_STANDARD = "standard";
+
+    /**
+     * Parse value with the SimpleAnalyzer, which breaks text into tokens at any non-letter character,
+     * such as numbers, spaces, hyphens and apostrophes, discards non-letter characters, and changes uppercase to lowercase.
+     */
     public static String INVERTED_INDEX_PARSER_ENGLISH = "english";
+
+    /**
+     * Parse value with the LanguageAnalyzer based on chinese, which splits text into tokens according to the co-responding
+     * chinese analyzer, default is CJKAnalyzer
+     */
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
     public static String getInvertedIndexParser(Map<String, String> properties) {
