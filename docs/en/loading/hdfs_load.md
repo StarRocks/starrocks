@@ -426,7 +426,7 @@ Pipe is ideal for continuous data loading and large-scale data loading:
 
 - **Continuous data loading helps reduce manpower.**
 
-  Pipe helps you write new or updated data files to a specific location and continuously load the new data from these files into StarRocks. After you create a Pipe job with `"AUTO_INGEST" = "TRUE"` is specified, it will constantly monitor changes in the data files stored under the specified path and automatically load new or updated data from the data files into the destination StarRocks table.
+  Pipe helps you write new or updated data files to a specific location and continuously load the new data from these files into StarRocks. After you create a Pipe job with `"AUTO_INGEST" = "TRUE"` specified, it will constantly monitor changes to the data files stored in the specified path and automatically load new or updated data from the data files into the destination StarRocks table.
 
 Additionally, Pipe performs file uniqueness checks to help prevent duplicate data loading. During the loading process, Pipe checks the uniqueness of each data file based on the file name and digest. If a file with a specific file name and digest has already been processed by a Pipe job, the Pipe job will skip all subsequent files with the same file name and digest. Note that HDFS uses `LastModifiedTime` as file digest.
 
