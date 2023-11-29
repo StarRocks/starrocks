@@ -4,6 +4,66 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+<<<<<<< HEAD
+=======
+## 2.5.14
+
+Release date: November 14, 2023
+
+### Improvements
+
+- The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### Compatibility changes
+
+#### System variables
+
+- Added a session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `cbo_eq_base_type`, which specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and DECIMAL is also a valid value. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The error `java.lang.IllegalStateException: null` is reported if the ON condition is nested with a subquery. [#30876](https://github.com/StarRocks/starrocks/pull/30876)
+- The result of COUNT(*) is inconsistent among replicas if COUNT(*) is run immediately after `INSERT INTO SELECT ... LIMIT` is successfully executed. [#24435](https://github.com/StarRocks/starrocks/pull/24435)
+- BE may crash for specific data types if the target data type specified in the cast() function is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32721](https://github.com/StarRocks/starrocks/issues/32721)
+- During an upgrade to 3.x, if some column types are also upgraded (for example, Decimal is upgraded to Decimal v3), BEs crash when Compaction is performed on tables with specific characteristics. [#31626](https://github.com/StarRocks/starrocks/pull/31626)
+- When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP and Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- Adding BITMAP columns to a Primary Key table fails with the following error: `Analyze columnDef error: No aggregate function specified for 'userid'`. [#31763](https://github.com/StarRocks/starrocks/pull/31763)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- Specifying a nullable Sort Key when creating a Primary Key table causes compaction to fail. [#29225](https://github.com/StarRocks/starrocks/pull/29225)
+- The error "StarRocks planner use long time 10000 ms in logical phase" occassionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
+
+## 2.5.13
+
+Release date: September 28, 2023
+
+### Improvements
+
+- Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
+- Rowsets corresponding to tablets that have been deleted are cleaned up, reducing the memory usage during BE startup. [#30625](https://github.com/StarRocks/starrocks/pull/30625)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error "Set cancelled by MemoryScratchSinkOperator" occurs when users read data from StarRocks using the Spark Connector or Flink Connector. [#30702](https://github.com/StarRocks/starrocks/pull/30702) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- An error "java.lang.IllegalStateException: null" occurs during queries with an ORDER BY clause that includes aggregate functions. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- FEs fail to restart when there are inactive materialized views. [#30015](https://github.com/StarRocks/starrocks/pull/30015)
+- Performing INSERT OVERWRITE operations on duplicate partitions corrupts the metadata, leading to FE restart failures. [#27545](https://github.com/StarRocks/starrocks/pull/27545)
+- An error "java.lang.NullPointerException: null" occurs when users modify columns that do not exist in a Primary Key table. [#30366](https://github.com/StarRocks/starrocks/pull/30366)
+- An error "get TableMeta failed from TNetworkAddress" occurs when users load data into a partitioned StarRocks external table. [#30124](https://github.com/StarRocks/starrocks/pull/30124)
+- In certain scenarios, an error occurs when users load data via CloudCanal. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+- An error "current running txns on db xxx is 200, larger than limit 200" occurs when users load data via the Flink Connector or perform DELETE and INSERT operations. [#18393](https://github.com/StarRocks/starrocks/pull/18393)
+- Asynchronous materialized views which use HAVING clauses that include aggregate functions cannot rewrite queries properly. [#29976](https://github.com/StarRocks/starrocks/pull/29976)
+
+>>>>>>> ec84d27e5c ([Doc] Update 2.5.14 rn (#36093))
 ## 2.5.12
 
 Release date: September 4, 2023
