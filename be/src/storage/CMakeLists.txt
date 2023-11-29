@@ -207,4 +207,5 @@ add_library(Storage STATIC
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
     lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp)
+    lake/persistent_index_memtable.cpp
+    inverted/clucene/match_operator.cpp)
