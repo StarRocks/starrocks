@@ -400,7 +400,7 @@ generatedColumnDesc
     ;
 
 indexDesc
-    : INDEX indexName=identifier identifierList indexType? comment?
+    : INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 engineDesc
@@ -494,7 +494,7 @@ alterTableStatement
 
 createIndexStatement
     : CREATE INDEX indexName=identifier
-        ON qualifiedName identifierList indexType?
+        ON qualifiedName identifierList (indexType propertyList?)?
         comment?
     ;
 
@@ -503,7 +503,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING BITMAP
+    : USING (BITMAP | GIN)
     ;
 
 showTableStatement
@@ -930,7 +930,7 @@ cleanTabletSchedQClause
 // ---------Alter table clause---------
 
 createIndexClause
-    : ADD INDEX indexName=identifier identifierList indexType? comment?
+    : ADD INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 dropIndexClause

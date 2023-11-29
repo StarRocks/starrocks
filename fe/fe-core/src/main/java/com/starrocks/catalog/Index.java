@@ -38,6 +38,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
@@ -46,7 +47,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -62,19 +65,29 @@ public class Index implements Writable {
     private IndexDef.IndexType indexType;
     @SerializedName(value = "comment")
     private String comment;
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment) {
+        this(indexName, columns, indexType, comment, Collections.emptyMap());
+    }
+
+    public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
+            Map<String, String> properties) {
         this.indexName = indexName;
         this.columns = columns;
         this.indexType = indexType;
         this.comment = comment;
+        this.properties = properties;
     }
+
 
     public Index() {
         this.indexName = null;
         this.columns = null;
         this.indexType = null;
         this.comment = null;
+        this.properties = null;
     }
 
     public String getIndexName() {
@@ -109,6 +122,14 @@ public class Index implements Writable {
         this.comment = comment;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -121,7 +142,7 @@ public class Index implements Writable {
 
     @Override
     public int hashCode() {
-        return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode());
+        return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode() + properties.hashCode());
     }
 
     @Override
@@ -140,13 +161,23 @@ public class Index implements Writable {
 
     }
 
+    @Override
     public Index clone() {
-        return new Index(indexName, new ArrayList<>(columns), indexType, comment);
+        return new Index(indexName, new ArrayList<>(columns), indexType, comment, properties);
     }
 
     @Override
     public String toString() {
         return toSql();
+    }
+
+    public String getPropertiesString() {
+        if (properties == null || properties.isEmpty()) {
+            return "";
+        }
+
+        return String.format("(%s)",
+                new PrintableMap<>(properties, "=", true, false, ","));
     }
 
     public String toSql() {
@@ -164,7 +195,10 @@ public class Index implements Writable {
         }
         sb.append(")");
         if (indexType != null) {
-            sb.append(" USING ").append(indexType.toString());
+            sb.append(" USING ").append(indexType.getDisplayName());
+        }
+        if (properties != null) {
+            sb.append(getPropertiesString());
         }
         if (comment != null) {
             sb.append(" COMMENT '" + comment + "'");

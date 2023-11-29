@@ -58,6 +58,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -398,7 +399,8 @@ public class ExternalOlapTable extends OlapTable {
             List<Index> indexList = new ArrayList<>();
             for (TIndexInfo indexInfo : meta.getIndex_infos()) {
                 Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
-                        IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
+                        IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment(),
+                        Collections.emptyMap());
                 indexList.add(index);
             }
             indexes = new TableIndexes(indexList);
