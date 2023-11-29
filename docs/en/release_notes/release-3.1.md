@@ -8,11 +8,20 @@ displayed_sidebar: "English"
 
 Release date: November 28, 2023
 
+### New features
+
+- The CN nodes of a StarRocks shared-data cluster now support data export. [#34018](https://github.com/StarRocks/starrocks/pull/34018)
+
 ### Improvements
 
 - The [`COLUMNS`](../reference/information_schema/columns.md) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive](../data_source/catalog/hive_catalog.md). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
 - Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- Supports automatic refresh of materialized views when Swap, Drop, or Schema Change operations are performed on the tables and views (including the other tables and materialized views associated with these views) on which these materialized views are created. [#32829](https://github.com/StarRocks/starrocks/pull/32829)
+- Optimized the performance of some Bitmap-related operations, including:
+  - Optimized nested loop joins. [#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
 ### Bug Fixes
 
@@ -39,6 +48,20 @@ Fixed the following issues:
 - FEs fail to start and report the error "failed to load journal type 118". [#34590](https://github.com/StarRocks/starrocks/pull/34590)
 - Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
 - Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
+### Compatibility Changes
+
+#### Parameters
+
+- Added an FE configuration item [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- The FE configuration item [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- Added a BE configuration item [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
+
+#### System Variables
+
+- Added a session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `cbo_eq_base_type`, which specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and `DECIMAL` is also a valid value. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `big_query_profile_second_threshold`. When the session variable [`enable_profile`](../reference/System_variable.md#enable_profile) is set to `false` and the amount of time taken by a query exceeds the threshold specified by the `big_query_profile_second_threshold` variable, a profile is generated for that query. [#33825](https://github.com/StarRocks/starrocks/pull/33825)
 
 ## 3.1.4
 
@@ -122,6 +145,11 @@ Fixed the following issues:
 - After users upgrade their StarRocks cluster to v3.1.2, the storage volume properties of the tables created before the upgrade are reset to `null`. [#30647](https://github.com/StarRocks/starrocks/pull/30647)
 - If checkpointing and restoration are concurrently performed on tablet metadata, some tablet replicas will be lost and cannot be retrieved. [#30603](https://github.com/StarRocks/starrocks/pull/30603)
 - If users use CloudCanal to load data into table columns that are set to `NOT NULL` but have no default value specified, an error "Unsupported dataFormat value is : \N" is thrown. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+
+### Behavior Change
+
+- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, users must use the SEPARATOR keyword to declare the separator.
+- The default value of the session variable [`group_concat_max_len`](../reference/System_variable.md#group_concat_max_len) which controls the default maximum length of the string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function is changed from unlimited to `1024`.
 
 ## 3.1.2
 
