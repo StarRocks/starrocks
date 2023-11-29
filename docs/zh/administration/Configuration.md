@@ -123,6 +123,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 引入版本：2.5.5
 
+##### enable_statistics_collect_profile
+
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -1620,6 +1626,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### update_compaction_ratio_threshold
+
+- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 默认值：0.5
+
 #### max_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
@@ -1632,7 +1643,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
-#### 配置 BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
@@ -2003,3 +2014,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
+
+#### lake_service_max_concurrency
+
+- 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
+- 单位：N/A
+- 默认值：0

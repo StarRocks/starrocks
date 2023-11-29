@@ -273,6 +273,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
+    public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -462,6 +463,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
 
+    public static final String MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT =
+            "materialized_view_join_same_table_permutation_limit";
+
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
@@ -571,10 +575,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
-    
+
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
+    public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -988,6 +994,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
 
+    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
+    private long optimizerMaterializedViewTimeLimitMillis = 1000;
+
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
 
@@ -1301,6 +1310,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
 
+    @VarAttr(name = MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int materializedViewJoinSameTablePermutationLimit = 5;
+
     @VarAttr(name = MATERIALIZED_VIEW_REWRITE_MODE)
     private String materializedViewRewriteMode = MaterializedViewRewriteMode.MODE_DEFAULT;
 
@@ -1436,6 +1448,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
+    private boolean enableShortCircuit = false;
 
     private int exprChildrenLimit = -1;
 
@@ -2070,6 +2085,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
     }
 
+    public long getOptimizerMaterializedViewTimeLimitMillis() {
+        return optimizerMaterializedViewTimeLimitMillis;
+    }
+
+    public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
+        this.optimizerMaterializedViewTimeLimitMillis = millis;
+    }
+
     public boolean getEnableGroupbyUseOutputAlias() {
         return enableGroupbyUseOutputAlias;
     }
@@ -2558,6 +2581,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
     }
 
+    public int getMaterializedViewJoinSameTablePermutationLimit() {
+        return materializedViewJoinSameTablePermutationLimit;
+    }
+
     public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
         return enableMaterializedViewSingleTableViewDeltaRewrite;
     }
@@ -2809,6 +2836,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
+    }
+
+    public void setEnableShortCircuit(boolean enableShortCircuit) {
+        this.enableShortCircuit = enableShortCircuit;
+    }
+
+    public boolean isEnableShortCircuit() {
+        return enableShortCircuit;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {

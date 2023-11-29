@@ -763,17 +763,23 @@ public class MvUtils {
                 // close, open range
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryType.GE, partitionScalar, lowerBound);
-
                 ConstantOperator upperBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryType.LT, partitionScalar, upperBound);
-
-                CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
-                        CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
-                rangeParts.add(andPredicate);
+                if (lowerBound.getType().isStringType()) {
+                    // NOTE: For string type partition column, it should be list partition rather than range partition.
+                    Preconditions.checkState(upperBound.getType().isStringType());
+                    BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                            BinaryType.EQ, partitionScalar, lowerBound);
+                    rangeParts.add(lowerPredicate);
+                } else {
+                    BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                            BinaryType.GE, partitionScalar, lowerBound);
+                    BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                            BinaryType.LT, partitionScalar, upperBound);
+                    CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
+                            CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
+                    rangeParts.add(andPredicate);
+                }
             }
         }
         return rangeParts;
