@@ -374,17 +374,10 @@ You can find a function based on the following categories:
 
 ## Pattern matching functions
 
-<<<<<<< HEAD
-- [like](../sql-functions/like_predicate-functions/like.md)
-- [regexp](../sql-functions/like_predicate-functions/regexp.md)
-- [regexp_extract](../sql-functions/like_predicate-functions/regexp_extract.md)
-- [regexp_replace](../sql-functions/like_predicate-functions/regexp_replace.md)
-=======
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
->>>>>>> 28734b9524 ([Doc] Update ranger plugin, add sidebar for cloudcanal, fix function and configuration (#36054))
 
 ## Percentile functions
 
