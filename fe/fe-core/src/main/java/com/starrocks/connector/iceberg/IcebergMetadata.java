@@ -491,7 +491,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         Schema taskSchema = fileScanTask.spec().schema();
         String schemaString;
         String partitionString;
-        FileScanTaskSchema schemaKey = new FileScanTaskSchema(filter, taskSchema.schemaId(), taskSpec.specId());
+        FileScanTaskSchema schemaKey = new FileScanTaskSchema(filter.getDatabaseName(), filter.getTableName(),
+                taskSchema.schemaId(), taskSpec.specId());
         Pair<String, String> schema = fileScanTaskSchemas.get(schemaKey);
         if (schema == null) {
             schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
@@ -775,12 +776,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private static class FileScanTaskSchema {
-        private final IcebergFilter icebergFilter;
+        private final String dbName;
+        private final String tableName;
         private final int schemaId;
         private final int specId;
 
-        public FileScanTaskSchema(IcebergFilter icebergFilter, int schemaId, int specId) {
-            this.icebergFilter = icebergFilter;
+        public FileScanTaskSchema(String dbName, String tableName, int schemaId, int specId) {
+            this.dbName = dbName;
+            this.tableName = tableName;
             this.schemaId = schemaId;
             this.specId = specId;
         }
@@ -793,13 +796,15 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (o == null || getClass() != o.getClass()) {
                 return false;
             }
+
             FileScanTaskSchema that = (FileScanTaskSchema) o;
-            return schemaId == that.schemaId && specId == that.specId && Objects.equals(icebergFilter, that.icebergFilter);
+            return schemaId == that.schemaId && specId == that.specId &&
+                    Objects.equals(dbName, that.dbName) && Objects.equals(tableName, that.tableName);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(icebergFilter, schemaId, specId);
+            return Objects.hash(dbName, tableName, schemaId, specId);
         }
     }
 }
