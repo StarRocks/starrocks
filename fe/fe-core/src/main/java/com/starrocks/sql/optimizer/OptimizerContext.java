@@ -50,6 +50,7 @@ public class OptimizerContext {
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+    private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
 
     @VisibleForTesting
@@ -169,6 +170,25 @@ public class OptimizerContext {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean ruleExhausted(RuleType ruleType) {
+        Stopwatch watch = ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
+        long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+        long timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
+                sessionVariable.getOptimizerExecuteTimeout());
+        return elapsed > timeLimit;
+    }
+
+    public boolean isObtainedFromInternalStatistics() {
+        return isObtainedFromInternalStatistics;
+    }
+
+    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
+        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
+    }
+
+>>>>>>> 2a0b5b7eec ([BugFix] Fix iceberg statistics calculate when get statistics from internal (#35803))
     /**
      * Whether reach optimizer timeout
      */
