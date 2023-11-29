@@ -11,6 +11,8 @@ Release date: November 14, 2023
 ### Improvements
 
 - The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- Added a session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `cbo_eq_base_type`, which specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and DECIMAL is also a valid value. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
 
 ### Bug Fixes
 
@@ -18,7 +20,7 @@ Fixed the following issues:
 
 - The error `java.lang.IllegalStateException: null` is reported if the ON condition is nested with a subquery. [#30876](https://github.com/StarRocks/starrocks/pull/30876)
 - The result of COUNT(*) is inconsistent among replicas if COUNT(*) is run immediately after `INSERT INTO SELECT ... LIMIT` is successfully executed. [#24435](https://github.com/StarRocks/starrocks/pull/24435)
-- BE may crash for specific data types if the target data type specified in CAST is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- BE may crash for specific data types if the target data type specified in the cast() function is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
 - An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32721](https://github.com/StarRocks/starrocks/issues/32721)
 - During an upgrade to 3.x, if some column types are also upgraded (for example, Decimal is upgraded to Decimal v3), BEs crash when Compaction is performed on tables with specific characteristics. [#31626](https://github.com/StarRocks/starrocks/pull/31626)
 - When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP and Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
