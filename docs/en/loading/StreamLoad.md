@@ -4,14 +4,10 @@ displayed_sidebar: "English"
 
 # Load data from a local file system
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
-
 StarRocks provides two methods of loading data from a local file system:
 
 - Synchronous loading using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 - Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
-
-<InsertPrivNote />
 
 Each of these options has its own advantages:
 

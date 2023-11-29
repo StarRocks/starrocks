@@ -4,14 +4,10 @@ displayed_sidebar: "Chinese"
 
 # 从本地文件系统导入
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
-
 StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 - 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
 - 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
-
-<InsertPrivNote />
 
 两种导入方式各有优势：
 
