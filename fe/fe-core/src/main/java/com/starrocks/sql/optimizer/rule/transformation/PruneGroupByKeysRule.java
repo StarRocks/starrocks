@@ -149,6 +149,9 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // for queries with all constant in project and group by keys,
                 // like `select 'a','b' from table group by 'c','d'`,
                 // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
+                // This rule may be invoked after MERGE_LIMIT rule. So we need split the init limitOperator
+                // and merge the local limit its child here to avoid not processing init limitOperator
+                // in the plan.
                 Operator op = input.inputAt(0).inputAt(0).getOp();
                 if (!op.hasLimit() || op.getLimit() > 1) {
                     op.setLimit(1);
