@@ -258,8 +258,8 @@ public class CatalogMgr {
                 throw new DdlException("connector create failed");
             }
         } catch (StarRocksConnectorException e) {
-            LOG.error("connector create failed. catalog [{}] ", catalogName, e);
-            throw new DdlException(String.format("connector create failed {}", e.getMessage()));
+            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
         }
 
         Map<String, String> properties = catalog.getConfig();
