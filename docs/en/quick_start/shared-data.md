@@ -9,7 +9,7 @@ description: Separate compute and storage
 import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clients.mdx'
 import SQL from '../assets/quick-start/_sql.mdx'
-import curl from '../assets/quick-start/_curl.mdx'
+import Curl from '../assets/quick-start/_curl.mdx'
 
 This tutorial covers:
 
@@ -51,16 +51,44 @@ This guide uses MinIO, which is S3 compatible Object Storage provided under the 
 In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file. 
 
 ```bash
-curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/docker-compose.yml
+mkdir quickstart
+cd quickstart
+curl -O https://raw.githubusercontent.com/StarRocks/starrocks/update-quickstart/docs/en/quick_start/_data/docker-compose.yml
 ```
 
 ```bash
 docker compose up -d
 ```
 
+Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
+
+Run `docker compose ps` until the FE and CN show a status of `healthy`:
+
 ```bash
 docker compose ps
 ```
+
+```plaintext
+SERVICE        CREATED          STATUS                    PORTS
+starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
+starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
+minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
+```
+## Generate MinIO credentials
+
+In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
+
+### Open the MinIO web UI
+
+Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `minioadmin` and `minioadmin`. You should see that there are no access keys yet. Click **Create  access key +**.
+
+MinIO will generate a key, click **Create** and download the key.
+
+![Make sure to click create](../assets/quick-start/MinIO-create.png)
+
+:::note
+The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
+:::
 
 ## SQL Clients
 
@@ -68,7 +96,20 @@ docker compose ps
 
 ## Download the data
 
-Download these two datasets to your machine. You can download them to the host machine where you are running Docker, they do not need to be downloaded inside the container.
+Download these two datasets to your FE container.
+
+### Open a shell on the FE container
+
+Open a shell and create a directory for the downloaded files:
+
+```bash
+docker compose exec starrocks-fe bash
+```
+
+```bash
+mkdir quickstart
+cd quickstart
+```
 
 ### New York City crash data
 
@@ -82,17 +123,90 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/72505394728.csv
 ```
 
+## Configure StarRocks for shared-data
+
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
+
+### Connect to StarRocks
+
+:::tip
+If you are using the mysql CLI open a new shell on your system as you will need the shell in the FE for another step in the process.
+:::
+
+```sql
+mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+```
+
+### Create a storage volume
+
+Details for the configuration shown below:
+
+- The MinIO server is available at the URL `http://minio:9000`
+- The bucket created above is named `starrocks`
+- Data written to this volume will be stored in a folder named `shared` within the bucket `starrocks`
+:::tip
+The folder `shared` will be created the first time data is written to the volume
+:::
+- The MinIO server is not using SSL
+- The MinIO key and secret are entered as `aws.s3.access_key` and `aws.s3.secret_key`. Use the access key that you created in the MinIO web UI earlier.
+- The volume `shared` is the default volume
+
+:::tip
+Edit the command before you run it and replace the highlighted access key information with the access key and secret that you created in MinIO.
+:::
+
+```bash
+CREATE STORAGE VOLUME shared
+TYPE = S3
+LOCATIONS = ("s3://starrocks/shared/")
+PROPERTIES
+(
+    "enabled" = "true",
+    "aws.s3.endpoint" = "http://minio:9000",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.use_instance_profile" = "false",
+    # highlight-start
+    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
+    "aws.s3.secret_key" = "E33cdRM9MfWpP2FiRpc056Zclg6CntXWa3WPBNMy"
+    # highlight-end
+);
+
+SET shared AS DEFAULT STORAGE VOLUME;
+```
+
+```sql
+StarRocks > DESC STORAGE VOLUME shared\G
+```
+
+```plaintext
+*************************** 1. row ***************************
+     Name: shared
+     Type: S3
+IsDefault: true
+# highlight-start
+ Location: s3://starrocks/shared/
+   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"http://minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
+# highlight-end
+  Enabled: true
+  Comment:
+1 row in set (0.03 sec)
+```
+
+:::note
+The folder `shared` will not be visible in the MinIO object list until data is written to the bucket.
+:::
+
 ## Create some tables
 
 <DDL />
 
 ## Load two datasets
 
-Generally you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
-using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local filesystem. 
+There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip
-Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
+Run these curl commands from the FE shell in the directory where you downloaded the dataset.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 :::
@@ -136,12 +250,18 @@ Enter host password for user 'root':
     "WriteDataTimeMs": 870,
     "CommitAndPublishTimeMs": 57,
     # highlight-start
-    "ErrorURL": "http://127.0.0.1:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
+    "ErrorURL": "http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
     # highlight-end
 }%
 ```
 
-If there was an error the output provides a URL to see the error messages. Open this in a browser to find out what happened. Expand the detail to see the error message:
+If there was an error the output provides a URL to see the error messages. Because the container has a private IP address you will have to view it by running curl from the container.
+
+```bash
+curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
+```
+
+Expand the summary for the content seen while developing this tutorial:
 
 <details>
 
@@ -172,17 +292,41 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/weatherdata/_stream_load
 ```
 
+## Verify that data is stored in MinIO
+
+Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/browser/starrocks/) and verify that you have `data`, `metadata`, and `schema` entries in each of the directories under `starrocks/shared/`
+
+:::tip
+The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
+
+![MinIO object browser](../assets/quick-start/MinIO-data.png)
+:::
+
 ## Answer some questions
 
 <SQL />
 
-Drive carefully!
+## Summary
+
+In this tutorial you:
+
+- Deployed StarRocks and Minio in Docker
+- Created a MinIO access key
+- Configured a StarRocks Storage Volume that uses MinIO
+- Loaded crash data provided by New York City and weather data provided by NOAA
+- Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
+
+There is more to learn; we intentionally glossed over the data transform done during the Stream Load. The details on that are in the notes on the curl commands below.
 
 ## Notes on the curl commands
 
-<curl />
+<Curl />
 
 ## More information
+
+[StarRocks table design](../table_design/StarRocks_table_design.md)
+
+[Materialized views](../cover_pages/mv_use_cases.mdx)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

@@ -1,11 +1,15 @@
 ---
 displayed_sidebar: "English"
 sidebar_position: 1
+description: "StarRocks in Docker: Query real data with JOINs"
 ---
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
-# Learn by doing
+# StarRocks Docker lab
+
+import DDL from '../assets/quick-start/_DDL.mdx'
+import Clients from '../assets/quick-start/_clients.mdx'
+import SQL from '../assets/quick-start/_sql.mdx'
+import Curl from '../assets/quick-start/_curl.mdx'
 
 This tutorial covers:
 
@@ -21,7 +25,7 @@ Both of these datasets are very large, and because this tutorial is intended to 
 
 ### Docker
 
-- [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 or later)
+- [Docker Engine](https://docs.docker.com/engine/install/)
 - 4GB RAM assigned to Docker
 - 10GB free diskspace assigned to Docker
 
@@ -42,40 +46,7 @@ sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
 
 ## SQL Clients
 
-These three clients are tested with this tutorial, you only need one:
-
-- [DBeaver](https://dbeaver.io/download/) is available as a community version and a Pro version. 
-- [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
-- mysql CLI: The mysql client is packaged with MySQL Server. If you do use this client you might want to disable the MySQL server unless you plan to use that in addition to the client.
-
-#### Configuring the client
-
-<Tabs groupId="client">
-<TabItem value="DBeaver" label="DBeaver" default>
-
-- Install [DBeaver](https://dbeaver.io/download/), and add a connection:
-![Add a connection](../assets/quick-start/DBeaver-1.png)
-- Configure the port, IP, and username. Test the connection, and click Finish if the test succeeds:
-![Configure and test](../assets/quick-start/DBeaver-2.png)
-
-</TabItem>
-<TabItem value="MySQLWorkbench" label="MySQL Workbench">
-
-- Install the [MySQL Workbench](https://dev.mysql.com/downloads/workbench/), and add a connection.
-- Configure the port, IP, and username and then test the connection:
-![Connection settings](../assets/quick-start/Workbench-1.png)
-- You will see warnings from the Workbench as it is checking for a specific MySQL version. You can ignore the warnings and when prompted, you can configure Workbench to stop displaying the warnings:
-![Ignore warning](../assets/quick-start/Workbench-2.png)
-
-</TabItem>
-<TabItem value="mysqlCLI" label="mysql CLI">
-
-- macos: If you use Homebrew and do not need MySQL Server run `brew install mysql` to install the CLI.
-- Linux: Check your repository system for the `mysql` client. For example, `yum install mariadb`.
-- Microsoft Windows: Install the [MySQL Community Server](https://dev.mysql.com/downloads/mysql/) and run the provided client, or run `mysql` from WSL.
-
-</TabItem>
-</Tabs>
+<Clients />
 
 ## Download the data
 
@@ -95,70 +66,15 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 
 ## Connect to StarRocks
 
-You can use most SQL clients that work with MySQL. This tutorial is tested with the `mysql` client and with DBeaver as these are the two most commonly used clients among the StarRocks community.
-
-If you have the `mysql` client installed you can use that directly, if you need a client then install either `mysql` or DBeaver.
-
 ```sql
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-### Create a database
+## Create some tables
 
-Type these two lines in at the `StarRocks > ` prompt and press enter after each:
+<DDL />
 
-```sql
-CREATE DATABASE IF NOT EXISTS quickstart;
-
-USE quickstart;
-```
-
-### Create two tables
-
-#### Crashdata
-
-```sql
-CREATE TABLE IF NOT EXISTS crashdata (
-    CRASH_DATE DATETIME,
-    BOROUGH STRING,
-    ZIP_CODE STRING,
-    LATITUDE INT,
-    LONGITUDE INT,
-    LOCATION STRING,
-    ON_STREET_NAME STRING,
-    CROSS_STREET_NAME STRING,
-    OFF_STREET_NAME STRING,
-    CONTRIBUTING_FACTOR_VEHICLE_1 STRING,
-    CONTRIBUTING_FACTOR_VEHICLE_2 STRING,
-    COLLISION_ID INT,
-    VEHICLE_TYPE_CODE_1 STRING,
-    VEHICLE_TYPE_CODE_2 STRING
-);
-```
-
-#### Weatherdata
-
-```sql
-CREATE TABLE IF NOT EXISTS weatherdata (
-    DATE DATETIME,
-    NAME STRING,
-    HourlyDewPointTemperature STRING,
-    HourlyDryBulbTemperature STRING,
-    HourlyPrecipitation STRING,
-    HourlyPresentWeatherType STRING,
-    HourlyPressureChange STRING,
-    HourlyPressureTendency STRING,
-    HourlyRelativeHumidity STRING,
-    HourlySkyConditions STRING,
-    HourlyVisibility STRING,
-    HourlyWetBulbTemperature STRING,
-    HourlyWindDirection STRING,
-    HourlyWindGustSpeed STRING,
-    HourlyWindSpeed STRING
-);
-```
-
-### Load the NYC Crash data for 2014 and 2015
+## Load two datasets
 
 Generally you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
 using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local filesystem. 
@@ -170,6 +86,8 @@ You will be prompted for a password. You probably have not assigned a password t
 :::
 
 The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
+
+### New York City collision data - Crashes
 
 ```bash
 curl --location-trusted -u root             \
@@ -226,9 +144,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 </details>
 
-
-
-### Load the weather data for 2014 and 2015
+### Weather data
 
 Load the weather dataset in the same manner as you loaded the crash data.
 
@@ -246,238 +162,29 @@ curl --location-trusted -u root             \
 
 ## Answer some questions
 
-These queries can be run in your SQL client.
-
-#### How many crashes are there per hour in NYC?
-
-```sql
-SELECT COUNT(*),
-       date_trunc("hour", crashdata.CRASH_DATE) AS Time
-FROM crashdata
-GROUP BY Time
-ORDER BY Time ASC
-LIMIT 200;
-```
-
-Here is part of the output. Note that I am looking closer at January 6th and 7th as this is Monday and Tuesday of a non-holiday week. Looking at New Years Day is probably not indicative of a normal morning during rush-hour traffic.
-
-```plaintext
-|       14 | 2014-01-06 06:00:00 |
-|       16 | 2014-01-06 07:00:00 |
-# highlight-start
-|       43 | 2014-01-06 08:00:00 |
-|       44 | 2014-01-06 09:00:00 |
-|       21 | 2014-01-06 10:00:00 |
-# highlight-end
-|       28 | 2014-01-06 11:00:00 |
-|       34 | 2014-01-06 12:00:00 |
-|       31 | 2014-01-06 13:00:00 |
-|       35 | 2014-01-06 14:00:00 |
-|       36 | 2014-01-06 15:00:00 |
-|       33 | 2014-01-06 16:00:00 |
-|       40 | 2014-01-06 17:00:00 |
-|       35 | 2014-01-06 18:00:00 |
-|       23 | 2014-01-06 19:00:00 |
-|       16 | 2014-01-06 20:00:00 |
-|       12 | 2014-01-06 21:00:00 |
-|       17 | 2014-01-06 22:00:00 |
-|       14 | 2014-01-06 23:00:00 |
-|       10 | 2014-01-07 00:00:00 |
-|        4 | 2014-01-07 01:00:00 |
-|        1 | 2014-01-07 02:00:00 |
-|        3 | 2014-01-07 03:00:00 |
-|        2 | 2014-01-07 04:00:00 |
-|        6 | 2014-01-07 06:00:00 |
-|       16 | 2014-01-07 07:00:00 |
-# highlight-start
-|       41 | 2014-01-07 08:00:00 |
-|       37 | 2014-01-07 09:00:00 |
-|       33 | 2014-01-07 10:00:00 |
-# highlight-end
-```
-
-It looks like about 40 accidents on a Monday or Tuesday morning during rush hour traffic, and around the same at 17:00 hours.
-
-#### What is the average temperature in NYC?
-
-```sql
-SELECT avg(HourlyDryBulbTemperature),
-       date_trunc("hour", weatherdata.DATE) AS Time
-FROM weatherdata
-GROUP BY Time
-ORDER BY Time ASC
-LIMIT 100;
-```
-
-Output:
-
-Note that this is data from 2014, NYC has not been this cold lately.
-
-```plaintext
-+-------------------------------+---------------------+
-| avg(HourlyDryBulbTemperature) | Time                |
-+-------------------------------+---------------------+
-|                            25 | 2014-01-01 00:00:00 |
-|                            25 | 2014-01-01 01:00:00 |
-|                            24 | 2014-01-01 02:00:00 |
-|                            24 | 2014-01-01 03:00:00 |
-|                            24 | 2014-01-01 04:00:00 |
-|                            24 | 2014-01-01 05:00:00 |
-|                            25 | 2014-01-01 06:00:00 |
-|                            26 | 2014-01-01 07:00:00 |
-```
-
-#### Is it safe to drive in NYC when visibility is poor?
-
-Let's look at the number of crashes when visibility is poor (between 0 and 1.0 miles). To answer this question use a JOIN across the two tables on the DATETIME column.
-
-```sql
-SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
-       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
-       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
-       max(w.HourlyPrecipitation) AS Precipitation,
-       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
-FROM crashdata c
-LEFT JOIN weatherdata w
-ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
-WHERE w.HourlyVisibility BETWEEN 0.0 AND 1.0
-GROUP BY Hour
-ORDER BY Crashes DESC
-LIMIT 100;
-```
-
-The highest number of crashes in a single hour during low visibility is 129. There are multiple things to consider:
-
-- February 3rd 2014 was a Monday
-- 8AM is rush hour
-- It was raining (0.12 inches or precipitation that hour)
-- The temperature is 32 degrees F (the freezing point for water)
-- Visibility is bad at 0.25 miles, normal for NYC is 10 miles
-
-```plaintext
-+---------+--------+------------+---------------+-------------------+
-| Crashes | Temp_F | Visibility | Precipitation | Hour              |
-+---------+--------+------------+---------------+-------------------+
-|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
-|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
-|     104 |     23 |       0.33 | 0.03          | 09 Jan 2015 08:00 |
-|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
-|      95 |     26 |       0.37 | 0.12          | 01 Mar 2015 15:00 |
-|      93 |     35 |       0.75 | 0.09          | 18 Jan 2015 09:00 |
-|      92 |     31 |       0.25 | 0.12          | 03 Feb 2014 10:00 |
-|      87 |   26.8 |        0.5 | 0.09          | 01 Mar 2015 16:00 |
-|      85 |     55 |       0.75 | 0.20          | 23 Dec 2015 17:00 |
-|      85 |     20 |       0.62 | 0.01          | 06 Jan 2015 11:00 |
-|      83 |   19.6 |       0.41 | 0.04          | 05 Mar 2015 13:00 |
-|      80 |     20 |       0.37 | 0.02          | 06 Jan 2015 10:00 |
-|      76 |   26.5 |       0.25 | 0.06          | 05 Mar 2015 09:00 |
-|      71 |     26 |       0.25 | 0.09          | 05 Mar 2015 10:00 |
-|      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
-```
-
-#### What about driving in icy conditions?
-
-Water vapor can desublimate to ice at 40 degrees F; this query looks at temps between 0 and 40 degrees F.
-
-```sql
-SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
-       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
-       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
-       max(w.HourlyPrecipitation) AS Precipitation,
-       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
-FROM crashdata c
-LEFT JOIN weatherdata w
-ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
-WHERE w.HourlyDryBulbTemperature BETWEEN 0.0 AND 40.5 
-GROUP BY Hour
-ORDER BY Crashes DESC
-LIMIT 100;
-```
-
-The results for freezing temperatures suprised me a little, I did not expect too much traffic on a Sunday morning in the city on a cold January day.A quick look at [weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) showed that there was a big storm with many crashes that day, just like what can be seen in the data.
-
-```plaintext
-+---------+--------+------------+---------------+-------------------+
-| Crashes | Temp_F | Visibility | Precipitation | Hour              |
-+---------+--------+------------+---------------+-------------------+
-|     192 |     34 |        1.5 | 0.09          | 18 Jan 2015 08:00 |
-|     170 |     21 |       NULL |               | 21 Jan 2014 10:00 |
-|     145 |     19 |       NULL |               | 21 Jan 2014 11:00 |
-|     138 |   33.5 |          5 | 0.02          | 18 Jan 2015 07:00 |
-|     137 |     21 |       NULL |               | 21 Jan 2014 09:00 |
-|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
-|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
-|     104 |     23 |        0.7 | 0.04          | 09 Jan 2015 08:00 |
-|      98 |     16 |          8 | 0.00          | 06 Mar 2015 08:00 |
-|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
-```
+<SQL />
 
 Drive carefully!
 
+## Summary
+
+In this tutorial you:
+
+- Deployed StarRocks in Docker
+- Loaded crash data provided by New York City and weather data provided by NOAA
+- Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
+
+There is more to learn; we intentionally glossed over the data transform done during the Stream Load. The details on that are in the notes on the curl commands below.
+
 ## Notes on the curl commands
 
-StarRocks Stream Load and curl take many arguments. Only the ones used in this tutorial are described here, the rest will be linked to in the more information section.
-
-#### `--location-trusted`
-
-This configures curl to pass credentials to any redirected URLs.
-
-#### `-u root`
-
-The username used to log in to StarRocks
-
-#### `-T filename`
-
-T is for transfer, the filename to transfer.
-
-#### `label:name-num`
-
-The label to associate with this Stream Load job. The label must be unique, so if you run the job multiple times you can add a number and keep incrementing that.
-
-#### `column_separator:,`
-
-If you load a file that uses a single `,` then set it as shown above, if you use a different delimiter then set that delimiter here. Common choices are `\t`, `,`, and `|`.
-
-#### `skip_header:1`
-
-Some CSV files have a single header row with all of the column names listed, and some add a second line with datatypes. Set skip_header to `1` or `2` if you have one or two header lines, and set it to `0` if you have none.
-
-#### `enclose:\"`
-
-It is common to enclose strings that contain embedded commas with double-quotes. The sample datasets used in this tutorial have geo locations that contain commas and so the enclose setting is set to `\"`. Remember to escape the `"` with a `\`.
-
-#### `max_filter_ratio:1`
-
-This allows some errors in the data. Ideally this would be set to `0` and the job would fail with any errors. It is set to `1` to allow all rows to fail during debugging.
-
-#### `columns:`
-
-The mapping of CSV file columns to StarRocks table columns. You will notice that there are many more columns in the CSV files than columns in the table. Any columns that are not included in the table are skipped.
-
-You will also notice that there is some transformation of data included in the `columns:` line for the crash dataset. It is very common to find dates and times in CSV files that do not conform to standards. This is the logic for converting the CSV data for the time and date of the crash to a DATETIME type:
-
-##### The columns line
-
-This is the beginning of one data record. The date is in `MM/DD/YYYY` format, and the time is `HH:MI`. Since DATETIME is generally `YYYY-MM-DD HH:MI:SS` we need to transform this data.
-
-```plaintext
-08/05/2014,9:10,BRONX,10469,40.8733019,-73.8536375,"(40.8733019, -73.8536375)",
-```
-
-This is the beginning of the `columns:` parameter:
-
-```bash
--H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
-```
-
-This instructs StarRocks to:
-- Assign the content of the first column of the CSV file to `tmp_CRASH_DATE`
-- Assign the content of the second column of the CSV file to `tmp_CRASH_TIME`
-- `concat_ws()` concatenates `tmp_CRASH_DATE` and `tmp_CRASH_TIME` together with a space between them
-- `str_to_date()` creates a DATETIME from the concatenated string
-- store the resulting DATETIME in the column `CRASH_DATE`
+<Curl />
 
 ## More information
+
+[StarRocks table design](../table_design/StarRocks_table_design.md)
+
+[Materialized views](../cover_pages/mv_use_cases.mdx)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 
