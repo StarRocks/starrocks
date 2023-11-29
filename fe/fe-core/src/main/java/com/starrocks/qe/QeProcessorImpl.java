@@ -100,8 +100,8 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        if (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
-                info.getConnectContext().getSessionVariable().isAuditExecuteStmt()) {
+        if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
+                info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
             LOG.info("register query id = {}", DebugUtil.printId(queryId));
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
@@ -142,8 +142,8 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
-            if (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
-                    info.getConnectContext().getSessionVariable().isAuditExecuteStmt()) {
+            if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
+                    info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
                 LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
             }
         }
