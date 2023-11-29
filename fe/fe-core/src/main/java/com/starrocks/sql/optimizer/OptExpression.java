@@ -57,6 +57,8 @@ public class OptExpression {
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
 
+    private Boolean isShortCircuit = false;
+
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -65,6 +67,13 @@ public class OptExpression {
     public static OptExpression create(Operator op, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
+        return expr;
+    }
+
+    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = Lists.newArrayList(input);
+        expr.setShortCircuit(isShortCircuit);
         return expr;
     }
 
@@ -193,6 +202,14 @@ public class OptExpression {
 
     public void setCost(double cost) {
         this.cost = cost;
+    }
+
+    public Boolean getShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(Boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
     }
 
     @Override

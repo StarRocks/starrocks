@@ -165,6 +165,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private boolean useRuntimeAdaptiveDop = false;
 
+    private boolean isShortCircuit = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -744,6 +746,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
         }
         return false;
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
     }
 
     /**
