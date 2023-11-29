@@ -1,0 +1,94 @@
+version: "3"
+services:
+  minio:
+    container_name: starrocks-minio
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    # volumes:
+      # - starrocks-miniodata:/minio_data
+    entrypoint: sh
+    command: '-c ''mkdir -p /minio_data/starrocks && minio server /minio_data --console-address ":9001"'''
+    networks:
+      network:
+        ipv4_address: 10.5.0.6
+
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:3.1-latest
+    hostname: starrocks-fe
+    container_name: starrocks-fe
+    user: root
+    command: >
+      bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
+      echo cloud_native_meta_port=6090 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_path=starrocks >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
+      echo cloud_native_storage_type=S3 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_use_aws_sdk_default_behavior=true >> /opt/starrocks/fe/conf/fe.conf &&
+      sh /opt/starrocks/fe/bin/start_fe.sh"
+    ports:
+      - 8030:8030
+      - 9020:9020
+      - 9030:9030
+    healthcheck:
+      test: 'mysql -uroot -h10.5.0.2 -P 9030 -e "show frontends\G" |grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - minio
+    # volumes:
+      # - ./starrocks/starrocks-fe/conf:/opt/starrocks/fe/conf
+      # - starrocks-fe-meta:/opt/starrocks/fe/meta
+      # - starrocks-fe-log:/opt/starrocks/fe/log
+    networks:
+      network:
+        ipv4_address: 10.5.0.2
+
+  starrocks-cn:
+    image: starrocks/cn-ubuntu:3.1-latest
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sleep 15s; echo starlet_port = 8167 >> /opt/starrocks/cn/conf/cn.conf;
+        mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "ALTER SYSTEM ADD COMPUTE NODE \"starrocks-cn:9050\";"
+        /opt/starrocks/cn/bin/start_cn.sh
+    ports:
+      - 8040:8040
+    hostname: starrocks-cn
+    container_name: starrocks-cn
+    user: root
+    depends_on:
+      - starrocks-fe
+      - minio
+    healthcheck:
+      test: 'mysql -uroot -h10.5.0.2 -P 9030 -e "SHOW COMPUTE NODES\G" |grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    # volumes:
+      # - be.conf:/opt/starrocks/be/conf/be.conf
+      # - starrocks-be-storage:/opt/starrocks/be/storage
+      # - starrocks-cn-log:/opt/starrocks/cn/log
+    networks:
+      network:
+        ipv4_address: 10.5.0.3
+# volumes:
+  # starrocks-be-storage:
+  # starrocks-cn-log:
+  # starrocks-fe-meta:
+  # starrocks-fe-log:
+  # starrocks-miniodata:
+networks:
+  network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
+          gateway: 10.5.0.1
