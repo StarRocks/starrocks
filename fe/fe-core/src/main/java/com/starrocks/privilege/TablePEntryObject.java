@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -115,7 +116,13 @@ public class TablePEntryObject implements PEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
-                Table table = mgr.getMetadataMgr().getTable(catalogName, tokens.get(0), tokens.get(1));
+                Table table = null;
+                try {
+                    table = mgr.getMetadataMgr().getTable(catalogName, tokens.get(0), tokens.get(1));
+                } catch (StarRocksConnectorException e) {
+                    throw new PrivObjNotFoundException("cannot find table " +
+                            tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());
+                }
                 if (table == null || table.isView() || table.isMaterializedView()) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0));

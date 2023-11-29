@@ -33,9 +33,21 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
+=======
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.load.pipe.PipeManagerTest;
+import com.starrocks.load.routineload.RoutineLoadMgr;
+>>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AuthorizationMgr;
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
+=======
+import com.starrocks.privilege.PipePEntryObject;
+import com.starrocks.privilege.PrivObjNotFoundException;
+>>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -43,6 +55,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -454,6 +467,30 @@ public class PrivilegeCheckerV2Test {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
+    }
+
+    @Test
+    public void testGetResourceMappingExternalTableException() throws Exception {
+        ctxToTestUser();
+        // no throw
+        TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("test");
+            }
+        };
+
+        // throw
+        try {
+            TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                    Arrays.asList("resource_mapping_inside_catalog_iceberg0", "db1", "tbl1"));
+        } catch (PrivObjNotFoundException e) {
+            System.out.println(e.getMessage());
+            e.getMessage().contains("cannot find table tbl1 in db db1, msg: test");
+        }
     }
 
     @Test
@@ -1754,6 +1791,18 @@ public class PrivilegeCheckerV2Test {
             Assert.assertTrue(
                     e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
         }
+
+        new MockUp<RoutineLoadMgr>() {
+            @Mock
+            public Map<Long, Integer> getBeTasksNum() {
+                Map<Long, Integer> map = new HashMap<>();
+                map.put(1L, 0);
+                map.put(2L, 0);
+                return map;
+            }
+
+        };
+
         ctxToRoot();
         starRocksAssert.withRoutineLoad(createSql);
         ctxToTestUser();
@@ -1808,6 +1857,17 @@ public class PrivilegeCheckerV2Test {
                                                        ImmutableMap<String, String> properties) {
                 return Lists.newArrayList(0, 1, 2);
             }
+        };
+
+        new MockUp<RoutineLoadMgr>() {
+            @Mock
+            public Map<Long, Integer> getBeTasksNum() {
+                Map<Long, Integer> map = new HashMap<>();
+                map.put(1L, 0);
+                map.put(2L, 0);
+                return map;
+            }
+
         };
         starRocksAssert.withRoutineLoad(createSql);
 
