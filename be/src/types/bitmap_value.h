@@ -178,6 +178,17 @@ public:
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
+<<<<<<< HEAD
+=======
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
+                                         BitmapValue* ret_bitmap) const;
+
+    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+                                            BitmapValue* ret_bitmap) const;
+
+    std::vector<BitmapValue> split_bitmap(size_t batch_size);
+
+>>>>>>> ae1383c3e2 ([Feature] Add table function subdivide_bitmap (#35817))
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
 

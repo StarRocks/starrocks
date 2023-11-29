@@ -8,6 +8,7 @@
 #include "column/type_traits.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/multi_unnest.h"
+#include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"
@@ -86,6 +87,32 @@ TableFunctionResolver::TableFunctionResolver() {
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
+<<<<<<< HEAD
+=======
+
+#define M(TYPE)                                                                  \
+    add_function_mapping("subdivide_bitmap", {TYPE_OBJECT, TYPE}, {TYPE_OBJECT}, \
+                         std::make_shared<SubdivideBitmap<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
+
+    // ----=====---- generate_series ----====----
+    // implicit step size
+#define M(TYPE) add_function_mapping("generate_series", {TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
+
+    // explicit step size
+#define M(TYPE) \
+    add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
+
+    // ----=====---- list_rowsets ----====----
+    add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},
+                         {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BOOLEAN, TYPE_VARCHAR},
+                         std::make_shared<ListRowsets>());
+>>>>>>> ae1383c3e2 ([Feature] Add table function subdivide_bitmap (#35817))
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;

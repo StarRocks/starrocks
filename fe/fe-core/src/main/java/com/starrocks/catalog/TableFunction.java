@@ -65,10 +65,44 @@ public class TableFunction extends Function {
                 Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT), true);
         functionSet.addBuiltin(unnestFunction);
 
+<<<<<<< HEAD
         TableFunction jsonEachFunction =
                 new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
                         Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEachFunction);
+=======
+        TableFunction jsonEach = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
+                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+        functionSet.addBuiltin(jsonEach);
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
+                    Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
+            functionSet.addBuiltin(func);
+        }
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            // generate_series with default step size: 1
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type),
+                    Lists.newArrayList(type));
+            functionSet.addBuiltin(func);
+
+            // generate_series with explicit step size
+            func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type));
+            functionSet.addBuiltin(func);
+        }
+
+        TableFunction listRowsets = new TableFunction(new FunctionName("list_rowsets"),
+                Lists.newArrayList("id", "segments", "rows", "size", "overlapped", "delete_predicate"),
+                Lists.newArrayList(/*tablet_id*/Type.BIGINT, /*tablet_version*/Type.BIGINT),
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BOOLEAN, Type.STRING));
+        functionSet.addBuiltin(listRowsets);
+>>>>>>> ae1383c3e2 ([Feature] Add table function subdivide_bitmap (#35817))
     }
 
     public List<Type> getTableFnReturnTypes() {
