@@ -16,12 +16,16 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -137,5 +141,64 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
         delegate.deleteUncommittedDataFiles(fileLocations);
+    }
+
+    @Override
+    public void refreshTable(String dbName, String tableName) {
+        TableIdentifier identifier = TableIdentifier.of(dbName, tableName);
+        if (tables.getIfPresent(identifier) == null) {
+            partitionNames.remove(identifier);
+        } else {
+            BaseTable currentTable = (BaseTable) getTable(dbName, tableName);
+            BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
+            if (updateTable == null) {
+                clearCache(identifier);
+                return;
+            }
+            TableOperations currentOps = currentTable.operations();
+            TableOperations updateOps = updateTable.operations();
+            if (currentOps == null || updateOps == null) {
+                clearCache(identifier);
+                return;
+            }
+
+            TableMetadata currentPointer = currentOps.current();
+            TableMetadata updatePointer = updateOps.current();
+            if (currentPointer == null || updatePointer == null) {
+                clearCache(identifier);
+                return;
+            }
+
+            String currentLocation = currentOps.current().metadataFileLocation();
+            String updateLocation = updateOps.current().metadataFileLocation();
+            if (currentLocation == null || updateLocation == null) {
+                clearCache(identifier);
+                return;
+            }
+            if (!currentLocation.equals(updateLocation)) {
+                LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
+                        dbName, tableName, currentLocation, updateLocation);
+                tables.put(identifier, updateTable);
+                partitionNames.put(identifier, delegate.listPartitionNames(dbName, tableName));
+            }
+        }
+    }
+
+    private void clearCache(TableIdentifier identifier) {
+        tables.invalidate(identifier);
+        partitionNames.remove(identifier);
+    }
+
+    public void refreshCatalog() {
+        List<TableIdentifier> identifiers = Lists.newArrayList(tables.asMap().keySet());
+        for (TableIdentifier identifier : identifiers) {
+            String dbName = identifier.namespace().level(0);
+            String tableName = identifier.name();
+            try {
+                refreshTable(dbName, tableName);
+            } catch (Exception e) {
+                LOG.warn("refresh {}.{} metadata cache failed, msg : ", dbName, tableName, e);
+            }
+        }
     }
 }
