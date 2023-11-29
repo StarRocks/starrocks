@@ -111,10 +111,6 @@ displayed_sidebar: "Chinese"
 
 发布日期：2023 年 9 月 25 日
 
-### 行为变更
-
-- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 的分隔符必须使用 `SEPARATOR` 关键字声明。
-
 ### 新增特性
 
 - 存算分离下的主键模型支持基于本地磁盘上的持久化索引，使用方式与存算一体一致。

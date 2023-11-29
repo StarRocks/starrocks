@@ -111,10 +111,6 @@ Fixed the following issues:
 
 Release date: September 25, 2023
 
-### Behavior Change
-
-- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, you must use the SEPARATOR keyword to declare the separator.
-
 ### New Features
 
 - Primary Key tables created in shared-data StarRocks clusters support index persistence onto local disks in the same way as they do in shared-nothing StarRocks clusters.
