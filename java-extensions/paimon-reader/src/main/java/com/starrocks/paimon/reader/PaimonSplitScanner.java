@@ -17,6 +17,7 @@ package com.starrocks.paimon.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
@@ -34,6 +35,7 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +46,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
+    private final Map<String, String> paimonOptions = new HashMap<>();
     private final String[] requiredFields;
     private final String encodedTable;
     private ColumnType[] requiredTypes;
@@ -64,6 +67,21 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.predicateInfo = params.get("predicate_info");
         this.encodedTable = params.get("native_table");
 
+        ScannerHelper.parseOptions(params.get("paimon_options"), kv -> {
+            paimonOptions.put(kv[0], kv[1]);
+            return null;
+        }, t -> {
+            LOG.warn("Invalid paimon scanner option argument: " + t);
+            return null;
+        });
+        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), kv -> {
+            // see org.apache.paimon.utils.HadoopUtils.CONFIG_PREFIXES ["hadoop."]
+            paimonOptions.put("hadoop." + kv[0], kv[1]);
+            return null;
+        }, t -> {
+            LOG.warn("Invalid paimon scanner fs options props argument: " + t);
+            return null;
+        });
         this.classLoader = this.getClass().getClassLoader();
     }
 
@@ -171,6 +189,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
+        sb.append("paimon_options: ");
+        sb.append(paimonOptions);
         sb.append("\n");
         sb.append("databaseName: ");
         sb.append(databaseName);

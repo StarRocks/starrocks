@@ -507,6 +507,8 @@ struct THudiTable {
 struct TPaimonTable {
     // paimon table options
     1: optional string paimon_options
+    // paimon table
+    2: optional string paimon_native_table
 }
 
 struct TDeltaLakeTable {
