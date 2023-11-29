@@ -13,10 +13,11 @@ displayed_sidebar: "Chinese"
 - [修改表注释](#修改表的注释31-版本起)
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
 - [执行 schema change](#schema-change)
-   - [增加或删除列，修改列顺序](#增加或删除列修改列顺序)
-   - [修改排序键](#)
-   -  优化表结构:[修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
-   - [修改表的属性](#修改表的属性)
+  - [增加或删除列，修改列顺序](#增加或删除列修改列顺序)
+  - 优化表结构:
+    - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
+    - [修改排序键](#修改排序键)
+  - [修改表的属性](#修改表的属性)
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
@@ -302,14 +303,8 @@ ORDER BY (column_name1, column_name2, ...)
 
 注意：
 
-- 对于明细表、聚合表和更新表：
-
-  - index 中的所有列都要写出来。
-  - value 列在 key 列之后。
-
-- 对于主键表：
-  
-  对于排序键，支持通过 ALTER TABLE ... ORDER BY ... 重新指定排序键。
+- index 中的所有列都要写出来。
+- value 列在 key 列之后。
 
 **增加生成列**
 
@@ -322,7 +317,9 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 
 增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
 
-#### 修改分桶方式和分桶数量
+#### 优化表结构
+
+##### 修改分桶方式和分桶数量
 
 修改所有分区的分桶方式或分桶数量，也支持修改指定分区的分桶数量。
 
@@ -418,6 +415,51 @@ ALTER TABLE details DISTRIBUTED BY RANDOM;
 ```SQL
 ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
 ```
+
+##### 修改排序键
+
+修改主键表中组成排序键的列。
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ order_desc ]
+
+order_desc ::=
+    ORDER BY <column_name> [, <column_name> ...]
+```
+
+示例：
+
+假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+
+```SQL
+create table orders (
+    dt date NOT NULL,
+    order_id bigint NOT NULL,
+    user_id int NOT NULL,
+    merchant_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+) PRIMARY KEY (dt, order_id)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(order_id);
+```
+
+解耦排序键和主键，修改排序键为 `dt,revenue,state`。
+
+```SQL
+ALTER TABLE orders ORDER BY (dt,revenue,state);
+```
+
+> **注意**
+>
+> 您需要执行 [SHOW ALTER TABLE COLUMN](../data-manipulation/SHOW_ALTER.md) 查看修改任务状态。
 
 #### 修改表的属性
 
