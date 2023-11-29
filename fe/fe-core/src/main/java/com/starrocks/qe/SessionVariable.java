@@ -1480,7 +1480,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableReadIcebergPuffinNdv = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
-    private boolean enableIcebergColumnStatistics = true;
+    private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
