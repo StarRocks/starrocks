@@ -120,6 +120,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
 
+##### enable_statistics_collect_profile
+
+- **Unit**: N/A
+- **Default**: false
+- **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -1651,6 +1657,11 @@ BE dynamic parameters are as follows.
 
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
+
+#### update_compaction_ratio_threshold
+
+- **Default:** 0.5
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
 
 ### Configure BE static parameters
 
