@@ -96,7 +96,7 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-For Hive Catalog and Iceberg Catalog (starting from version 3.1.4), StarRocks supports detecting changes at the partition level. As a result, StarRocks can:
+For Hive Catalog and Iceberg Catalog (starting from v3.1.4), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
@@ -118,7 +118,7 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 | background_refresh_metadata_interval_millis                  | 600000 (10 minutes)        | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400 (24 hours)           | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
 
-For the Iceberg Catalog, starting with version 3.1.4, support for detecting data changes at the partition level is provided, currently only for Iceberg V1 tables.
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently only Iceberg V1 tables are supported.
 
 ### Enable query rewrite for external catalog-based materialized views
 
