@@ -29,16 +29,24 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 public class LakeTableTxnStateListenerTest {
     long dbId = 9;
@@ -90,6 +98,39 @@ public class LakeTableTxnStateListenerTest {
         LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         makeCompactionScoreExceedSlowdownThreshold();
         listener.preCommit(newTransactionState(), buildFullTabletCommitInfo(), Collections.emptyList());
+    }
+
+    @ParameterizedTest
+    @MethodSource("dataProvider")
+    public void testPostAbort(boolean skipCleanup, List<ComputeNode> nodes) {
+        new MockUp<LakeTableTxnStateListener>() {
+            @Mock
+            void sendAbortTxnRequestIgnoreResponse(AbortTxnRequest request, ComputeNode node) {
+                Assert.assertNotNull(node);
+                Assert.assertEquals(skipCleanup, request.skipCleanup);
+            }
+
+            @Mock
+            ComputeNode getAliveNode(Long nodeId) {
+                return nodes.isEmpty() ? null : nodes.get(0);
+            }
+
+            @Mock
+            List<ComputeNode> getAllAliveNodes() {
+                return nodes;
+            }
+        };
+
+        LakeTable table = buildLakeTable();
+        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+        TransactionState txnState = newTransactionState();
+        txnState.setTransactionStatus(TransactionStatus.ABORTED);
+        txnState.setReason("timed out");
+        if (!skipCleanup) {
+            txnState.setTabletCommitInfos(Collections.singletonList(new TabletCommitInfo(tableId, 10001)));
+        }
+        listener.postAbort(txnState, Collections.emptyList());
     }
 
     private LakeTable buildLakeTable() {
@@ -147,5 +188,13 @@ public class LakeTableTxnStateListenerTest {
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)));
+    }
+
+    private static Stream<Arguments> dataProvider() {
+        return Stream.of(
+                arguments(false, Collections.singletonList(new ComputeNode())),
+                arguments(false, Collections.emptyList()),
+                arguments(true, Collections.singletonList(new ComputeNode())),
+                arguments(true, Collections.emptyList()));
     }
 }

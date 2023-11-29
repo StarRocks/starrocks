@@ -78,20 +78,18 @@ Rowset::~Rowset() {
 }
 
 Status Rowset::load() {
+    // before lock, if rowset state is ROWSET_UNLOADING, maybe it is doing do_close in release
+    std::lock_guard<std::mutex> load_lock(_lock);
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
     if (_rowset_state_machine.rowset_state() == ROWSET_LOADED) {
         return Status::OK();
     }
-    {
-        // before lock, if rowset state is ROWSET_UNLOADING, maybe it is doing do_close in release
-        std::lock_guard<std::mutex> load_lock(_lock);
-        // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
-        if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
-            // first do load, then change the state
-            RETURN_IF_ERROR(do_load());
-            RETURN_IF_ERROR(_rowset_state_machine.on_load());
-        }
+    // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
+    if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
+        // first do load, then change the state
+        RETURN_IF_ERROR(do_load());
+        RETURN_IF_ERROR(_rowset_state_machine.on_load());
     }
     VLOG(1) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
             << ", state from ROWSET_UNLOADED to ROWSET_LOADED. tabletid:" << _rowset_meta->tablet_id();

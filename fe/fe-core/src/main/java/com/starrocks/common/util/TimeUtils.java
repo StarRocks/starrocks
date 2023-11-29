@@ -52,6 +52,7 @@ import org.threeten.extra.PeriodDuration;
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
+import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -159,6 +160,13 @@ public class TimeUtils {
             return getSystemTimeZone();
         }
         return TimeZone.getTimeZone(ZoneId.of(timeZone, TIME_ZONE_ALIAS_MAP));
+    }
+
+    /**
+     * Get UNIX timestamp/Epoch second at system timezone
+     */
+    public static long getEpochSeconds() {
+        return Clock.systemDefaultZone().instant().getEpochSecond();
     }
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {

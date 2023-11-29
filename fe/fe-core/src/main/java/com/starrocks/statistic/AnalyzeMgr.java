@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -206,6 +207,25 @@ public class AnalyzeMgr implements Writable {
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
+    public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
+        List<AnalyzeJob> expireList = Lists.newArrayList();
+        try {
+            for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+                if (analyzeJob.getCatalogName().equals(catalogName) &&
+                        analyzeJob.getDbName().equals(dbName) &&
+                        analyzeJob.getTableName().equals(tblName)) {
+                    expireList.add(analyzeJob);
+                }
+            }
+        } catch (MetaNotFoundException e) {
+            LOG.warn("drop analyze job failed", e);
+        }
+        expireList.forEach(job -> analyzeJobMap.remove(job.getId()));
+        for (AnalyzeJob job : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
+        }
+    }
+
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
         GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
@@ -262,7 +282,7 @@ public class AnalyzeMgr implements Writable {
         Table table;
         try {
             table = MetaUtils.getTable(catalogName, dbName, tableName);
-        } catch (SemanticException e) {
+        } catch (Exception e) {
             return;
         }
 

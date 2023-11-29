@@ -111,13 +111,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public Boolean getUseLightSchemaChange() {
+    public Boolean getUseFastSchemaEvolution() {
         return false;
     }
 
     @Override
-    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
-    }
+    public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {}
 
     public static class BasePartitionInfo {
 

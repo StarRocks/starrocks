@@ -288,6 +288,11 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 
+// This config is to limit the max candidate of compaction queue to avoid
+// too many candidates lead to OOM or cpu overload.
+// when candidate num reach this value, the condidate with lowest score will be dropped.
+CONF_mInt64(max_compaction_candidate_num, "40960");
+
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
@@ -296,6 +301,8 @@ CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
 CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
+// This config defines the maximum percentage of data allowed per compaction
+CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -904,8 +911,12 @@ CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
+CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
+CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
+CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1033,6 +1044,8 @@ CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
+// enable persistent index compression
+CONF_mBool(enable_pindex_compression, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
 // 1. The records to be found are in the index, bloom filter is no usage
 // 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io

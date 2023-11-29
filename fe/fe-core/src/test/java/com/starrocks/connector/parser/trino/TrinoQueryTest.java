@@ -652,16 +652,16 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testSelectCTE() throws Exception {
         String sql = "with c1(a,b,c) as (select * from t0) select c1.* from c1";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1(a,b,c) as (select * from t0) select t.* from c1 t";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1 as (select * from t0) select c1.* from c1";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1 as (select * from t0) select a.* from c1 a";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2";
         assertPlanContains(sql, "3:NESTLOOP JOIN");
@@ -671,16 +671,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v1 = 10: v4");
+                "  |  equal join conjunct: 1: v1 = 4: v4");
 
         sql = "with cte1 as ( with cte1 as (select * from t0) select * from cte1) select * from cte1";
-        assertPlanContains(sql, "10: v1 | 11: v2 | 12: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with cte1 as (select * from test.t0), cte2 as (select * from cte1) select * from cte1";
-        assertPlanContains(sql, "7: v1 | 8: v2 | 9: v3");
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
 
         sql = "with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1";
-        assertPlanContains(sql, "4: v1 | 5: v2");
+        assertPlanContains(sql, "1: v1 | 2: v2");
 
         sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
@@ -695,7 +695,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v4 = 10: v1");
+                "  |  equal join conjunct: 1: v4 = 4: v1");
 
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
@@ -774,10 +774,19 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "regexp('abc123', 'abc*')");
 
         sql = "select regexp_extract('1a 2b 14m', '\\d+');";
-        assertPlanContains(sql, "regexp_extract('1a 2b 14m', '\\\\d+', 0)");
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1a 2b 14m', '\\\\d+', 0)");
 
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
-        assertPlanContains(sql, "regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 1)");
     }
 
     @Test
@@ -1138,5 +1147,26 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "cross join unnest(plat.pid) as t(plat_id);";
         assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
                 "returnTypes: [TINYINT]");
+    }
+
+    @Test
+    public void testRandom() throws Exception {
+        String sql = "select rand();";
+        assertPlanContains(sql, "<slot 2> : rand()");
+
+        sql = "select rand(100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 100.0)");
+
+        sql = "select rand(10, 100);";
+        assertPlanContains(sql, "floor(random() * 90.0 + 10.0)");
+
+        sql = "select random();";
+        assertPlanContains(sql, "<slot 2> : random()");
+
+        sql = "select random(100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 100.0)");
+
+        sql = "select rand(10, 100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
     }
 }

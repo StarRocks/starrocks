@@ -814,6 +814,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int load_checker_interval_second = 5;
 
+    @ConfField(mutable = true)
+    public static long lock_checker_interval_second = 30;
+
+    /**
+     * Check of deadlock is time consuming. Open it only when tracking problems.
+     */
+    @ConfField(mutable = true)
+    public static boolean lock_checker_enable_deadlock_check = false;
+
     /**
      * Default broker load timeout
      */
@@ -1019,6 +1028,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+
+    /**
+     * max num of thread to handle task runs in task runs executor thread-pool.
+     */
+    @ConfField
+    public static int max_task_runs_threads_num = 512;
+
     /**
      * Default timeout of export jobs.
      */
@@ -2047,12 +2063,6 @@ public class Config extends ConfigBase {
     public static long es_state_sync_interval_second = 10;
 
     /**
-     * If set to true, StarRocks will check if the compiled and running versions of Java are compatible
-     */
-    @ConfField
-    public static boolean check_java_version = true;
-
-    /**
      * connection and socket timeout for broker client
      */
     @ConfField
@@ -2100,6 +2110,14 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
+
+    /**
+     *  StarRocks-manager pull queries every 1 second
+     *  metrics calculate query latency every 15 second
+     *  do not set cacheTime lower than these time
+     */
+    @ConfField(mutable = true)
+    public static long query_detail_cache_time_nanosecond = 30000000000L;
 
     /**
      * Min lag of routine load job to show in metrics
@@ -2317,6 +2335,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
+
+    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
+    public static int lake_publish_version_max_threads = 128;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -2545,7 +2566,7 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = true;
+    public static boolean enable_fast_schema_evolution = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
@@ -2612,4 +2633,10 @@ public class Config extends ConfigBase {
     // This limit limits the maximum size of json file to load.
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static boolean use_lock_manager = false;
 }

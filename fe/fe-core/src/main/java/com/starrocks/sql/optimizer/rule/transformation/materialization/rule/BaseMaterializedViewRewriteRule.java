@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
@@ -75,6 +76,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     }
 
     @Override
+    public boolean exhausted(OptimizerContext context) {
+        if (context.ruleExhausted(type())) {
+            Tracers.log(Tracers.Module.MV, args -> String.format("[MV TRACE] RULE %s exhausted\n", this));
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
         if (queryExpression.getGroupExpression() != null) {
@@ -100,6 +110,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
+            context.checkTimeout();
+
             // 1. check whether to need compensate or not
             // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
             boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);

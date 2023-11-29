@@ -34,7 +34,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
@@ -137,23 +136,4 @@ public class PartitionPersistInfo implements Writable {
         isTempPartition = in.readBoolean();
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(dbId, tableId);
-    }
-
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!(obj instanceof PartitionPersistInfo)) {
-            return false;
-        }
-
-        PartitionPersistInfo info = (PartitionPersistInfo) obj;
-
-        return dbId.equals(info.dbId)
-                && tableId.equals(info.tableId)
-                && partition.equals(info.partition);
-    }
 }

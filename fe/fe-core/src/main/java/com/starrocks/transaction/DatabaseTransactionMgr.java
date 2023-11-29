@@ -61,6 +61,8 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -410,9 +412,6 @@ public class DatabaseTransactionMgr {
         }
         if (transactionState.getWriteEndTimeMs() < 0) {
             transactionState.setWriteEndTimeMs(System.currentTimeMillis());
-        }
-        if (!tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
         }
 
         // update transaction state extra if exists
@@ -788,7 +787,8 @@ public class DatabaseTransactionMgr {
         if (db == null) {
             return true;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction
@@ -871,7 +871,7 @@ public class DatabaseTransactionMgr {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return true;
     }
@@ -901,7 +901,8 @@ public class DatabaseTransactionMgr {
             }
         }
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             boolean hasError = false;
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
@@ -1051,7 +1052,7 @@ public class DatabaseTransactionMgr {
                 updateCatalogSpan.end();
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1182,7 +1183,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if ((Config.enable_new_publish_mechanism || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) &&
+            if ((Config.enable_new_publish_mechanism || RunMode.isSharedDataMode()) &&
                     transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
@@ -1719,7 +1720,8 @@ public class DatabaseTransactionMgr {
             }
         }
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         finishSpan.addEvent("db_lock");
         try {
             boolean txnOperated = false;
@@ -1745,7 +1747,7 @@ public class DatabaseTransactionMgr {
                 updateCatalogSpan.end();
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1767,8 +1769,8 @@ public class DatabaseTransactionMgr {
                 writeUnlock();
             }
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             boolean txnOperated = false;
             writeLock();
@@ -1784,7 +1786,7 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterVisibleBatch(stateBatch, db);
 
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         collectStatisticsForStreamLoadOnFirstLoadBatch(stateBatch, db);

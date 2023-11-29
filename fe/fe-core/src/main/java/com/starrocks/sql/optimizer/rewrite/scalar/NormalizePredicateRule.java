@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -210,10 +211,11 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
             ConstantOperator op = collectionElement.getChild(1).cast();
             int index = 0;
-            try {
-                index = op.castTo(Type.INT).getInt();
-            } catch (Exception e) {
+            Optional<ConstantOperator> res = op.castTo(Type.INT);
+            if (!res.isPresent()) {
                 throw new SemanticException("Invalid index for struct element: " + collectionElement);
+            } else {
+                index = res.get().getInt();
             }
 
             if (index > 0) {

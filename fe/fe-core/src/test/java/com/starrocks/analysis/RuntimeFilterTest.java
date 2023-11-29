@@ -74,7 +74,7 @@ public class RuntimeFilterTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
-                "\"light_schema_change\" = \"true\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";
         starRocksAssert = new StarRocksAssert();
@@ -103,20 +103,20 @@ public class RuntimeFilterTest {
         System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("  4:Project\n" +
                 "  |  output columns:\n" +
-                "  |  66 <-> [66: k1, DATE, true]\n" +
-                "  |  78 <-> [78: k13, DECIMAL128(27,9), true]\n" +
+                "  |  14 <-> [14: k1, DATE, true]\n" +
+                "  |  26 <-> [26: k13, DECIMAL128(27,9), true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:OlapScanNode\n" +
                 "     table: duplicate_par_tbl, rollup: duplicate_par_tbl\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 68: k3 IN ('beijing', '')\n" +
+                "     Predicates: 16: k3 IN ('beijing', '')\n" +
                 "     partitionsRatio=1/3, tabletsRatio=3/3\n" +
                 "     tabletList=10010,10012,10014\n" +
                 "     actualRows=0, avgRowSize=3.0\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (78: k13)\n" +
+                "     - filter_id = 0, probe_expr = (26: k13)\n" +
                 "\n" +
                 "PLAN FRAGMENT 7(F00)"));
     }

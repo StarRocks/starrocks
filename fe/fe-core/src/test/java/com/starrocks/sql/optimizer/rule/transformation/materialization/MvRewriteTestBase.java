@@ -65,6 +65,7 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
@@ -75,6 +76,9 @@ public class MvRewriteTestBase {
     protected static StarRocksAssert starRocksAssert;
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
+
+    protected static long startSuiteTime = 0;
+    protected long startCaseTime = 0;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -88,6 +92,7 @@ public class MvRewriteTestBase {
         Config.enable_new_publish_mechanism = true;
         Config.alter_scheduler_interval_millisecond = 100;
         FeConstants.enablePruneEmptyOutputScan = false;
+        startSuiteTime = Instant.now().getEpochSecond();
 
         // build a small cache for test
         Config.mv_plan_cache_max_size = 10;
@@ -102,6 +107,7 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
 
         ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -118,10 +124,9 @@ public class MvRewriteTestBase {
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
                     if (tbl != null) {
-                        for (Partition partition : tbl.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
                         }
                     }
                 }
@@ -360,7 +365,7 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
-    protected void dropMv(String dbName, String mvName) throws Exception {
+    public static void dropMv(String dbName, String mvName) throws Exception {
         starRocksAssert.dropMaterializedView(mvName);
     }
 

@@ -66,6 +66,8 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -124,6 +126,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Pair<Integer, Long>> customeKafkaPartitionOffsets = null;
     boolean useDefaultGroupId = true;
 
+    private Map<Integer, Long> latestPartitionOffsets = Maps.newHashMap();
+
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
@@ -155,6 +159,22 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     public Map<String, String> getConvertedCustomProperties() {
         return convertedCustomProperties;
+    }
+
+    @Override
+    protected String getSourceProgressString() {
+        // To be compatible with progress format, we convert the Map<Integer, Long> to Map<String, String>
+        Map<String, String> partitionOffsets = Maps.newHashMap();
+        for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
+            partitionOffsets.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+
+        Gson gson = new Gson();
+        return gson.toJson(partitionOffsets);
+    }
+
+    public void setPartitionOffset(int partition, long offset) {
+        latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }
 
     @Override
@@ -244,7 +264,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
@@ -255,6 +275,19 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
         }
         int partitionNum = currentKafkaPartitions.size();
+        if (partitionNum == 0) {
+            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent 
+            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is 
+            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet. 
+            // At this point, the user-specified number of partitions is used.
+            partitionNum = customKafkaPartitions.size();
+            if (partitionNum == 0) {
+                // If the user hasn't specified partition information, then we no longer take the `partition` 
+                // variable into account when calculating concurrency.
+                partitionNum = Integer.MAX_VALUE;
+            }
+        }
+
         if (desireTaskConcurrentNum == 0) {
             desireTaskConcurrentNum = Config.max_routine_load_task_concurrent_num;
         }
@@ -396,7 +429,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return false;
         }
     }
-    
+
     @Override
     protected String getStatistic() {
         Map<String, Object> summary = Maps.newHashMap();
@@ -428,14 +461,15 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         long tableId = -1L;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = db.getTable(stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
             tableId = table.getId();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // init kafka routine load job
@@ -721,7 +755,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
             if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
                 for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-                    if (! customKafkaPartitions.contains(pair.first)) {
+                    if (!customKafkaPartitions.contains(pair.first)) {
                         throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                     }
                 }

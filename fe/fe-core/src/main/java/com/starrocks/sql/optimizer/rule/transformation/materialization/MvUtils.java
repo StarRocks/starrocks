@@ -96,6 +96,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -762,17 +763,23 @@ public class MvUtils {
                 // close, open range
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryType.GE, partitionScalar, lowerBound);
-
                 ConstantOperator upperBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryType.LT, partitionScalar, upperBound);
-
-                CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
-                        CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
-                rangeParts.add(andPredicate);
+                if (lowerBound.getType().isStringType()) {
+                    // NOTE: For string type partition column, it should be list partition rather than range partition.
+                    Preconditions.checkState(upperBound.getType().isStringType());
+                    BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                            BinaryType.EQ, partitionScalar, lowerBound);
+                    rangeParts.add(lowerPredicate);
+                } else {
+                    BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                            BinaryType.GE, partitionScalar, lowerBound);
+                    BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                            BinaryType.LT, partitionScalar, upperBound);
+                    CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
+                            CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
+                    rangeParts.add(andPredicate);
+                }
             }
         }
         return rangeParts;
@@ -1217,6 +1224,46 @@ public class MvUtils {
             return Range.downTo(lowerPartitionKey, from.lowerBoundType());
         }
         return Range.all();
+    }
+
+    public static boolean isDateRange(Range<PartitionKey> range) {
+        if (range.hasUpperBound()) {
+            PartitionKey partitionKey = range.upperEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        } else if (range.hasLowerBound()) {
+            PartitionKey partitionKey = range.lowerEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        }
+        return false;
+    }
+
+    // convert date to varchar type
+    public static Range<PartitionKey> convertToVarcharRange(
+            Range<PartitionKey> from, String dateFormat) throws AnalysisException {
+        DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            PartitionKey lowerPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.lowerEndpoint().getKeys().get(0), formatter);
+
+            PartitionKey upperPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.upperEndpoint().getKeys().get(0), formatter);
+            return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            PartitionKey upperPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.upperEndpoint().getKeys().get(0), formatter);
+            return Range.upTo(upperPartitionKey, from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            PartitionKey lowerPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.lowerEndpoint().getKeys().get(0), formatter);
+            return Range.downTo(lowerPartitionKey, from.lowerBoundType());
+        }
+        return Range.all();
+    }
+
+    private static PartitionKey convertToVarcharPartitionKey(DateLiteral dateLiteral, DateTimeFormatter formatter) {
+        String lowerDateString = dateLiteral.toLocalDateTime().toLocalDate().format(formatter);
+        PartitionKey partitionKey = PartitionKey.ofString(lowerDateString);
+        return partitionKey;
     }
 
     /**

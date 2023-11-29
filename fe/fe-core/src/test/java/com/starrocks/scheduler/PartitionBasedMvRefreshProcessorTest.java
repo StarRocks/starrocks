@@ -54,11 +54,15 @@ import mockit.MockUp;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -71,6 +75,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
+import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
@@ -307,6 +312,21 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "\"partition_refresh_number\" = \"1\"" +
                         ") " +
                         "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
+    }
+
+    @Before
+    public void before() {
+        startCaseTime = Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {

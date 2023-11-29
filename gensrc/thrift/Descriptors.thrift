@@ -161,7 +161,8 @@ enum TSchemaTableType {
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
     SCH_PIPES,
-    SCH_FE_METRICS
+    SCH_FE_METRICS,
+    STARROCKS_OBJECT_DEPENDENCIES,
 }
 
 enum THdfsCompression {
@@ -504,14 +505,8 @@ struct THudiTable {
 }
 
 struct TPaimonTable {
-    // paimon table catalog type
-    1: optional string catalog_type
-
-    // paimon table metastore URI
-    2: optional string metastore_uri
-
-    // paimon table warehouse path
-    3: optional string warehouse_path
+    // paimon table options
+    1: optional string paimon_options
 }
 
 struct TDeltaLakeTable {

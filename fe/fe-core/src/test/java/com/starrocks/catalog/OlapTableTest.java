@@ -153,4 +153,11 @@ public class OlapTableTest {
         Assert.assertNull(olapTable.getDefaultFilePathInfo());
         Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
     }
+
+    @Test
+    public void testNullDataCachePartitionDuration() {
+        OlapTable olapTable = new OlapTable();
+        Assert.assertNull(olapTable.getTableProperty() == null ? null : 
+                olapTable.getTableProperty().getDataCachePartitionDuration());
+    }
 }
