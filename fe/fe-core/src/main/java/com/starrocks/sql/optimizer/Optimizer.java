@@ -18,9 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -97,7 +95,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
 /**
@@ -109,6 +106,8 @@ public class Optimizer {
     private final OptimizerConfig optimizerConfig;
 
     private long updateTableId = -1;
+
+    private Set<OlapTable> queryTables;
 
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
@@ -133,12 +132,16 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
-        context.setUpdateTableId(updateTableId);
+
         if (optimizerConfig.isRuleBased()) {
             return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
             return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         }
+    }
+
+    public void setQueryTables(Set<OlapTable> queryTables) {
+        this.queryTables = queryTables;
     }
 
     public void setUpdateTableId(long updateTableId) {
@@ -247,28 +250,11 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
-        if (Config.enable_experimental_mv
-                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
-                && !optimizerConfig.isRuleBased()) {
-            MvRewritePreprocessor preprocessor =
-                    new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
-            try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
-                Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
-                logMVPrepare(connectContext, "Query input tables: {}", queryTables);
-                Set<MaterializedView> relatedMVs = preprocessor.getRelatedAsyncMVs(queryTables);
-                if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
-                    relatedMVs.addAll(preprocessor.getRelatedSyncMVs(queryTables));
-                }
-                preprocessor.prepareRelatedMVs(queryTables, relatedMVs);
-            }
-        } else {
-            if (!optimizerConfig.isRuleBased()) {
-                logMVPrepare(connectContext, "Do not prepare materialized views, " +
-                                "enable_experimental_mv:{}, enable_materialized_view_rewrite:{}",
-                        Config.enable_experimental_mv,
-                        connectContext.getSessionVariable().isEnableMaterializedViewRewrite());
-            }
-        }
+        context.setQueryTables(queryTables);
+        context.setUpdateTableId(updateTableId);
+
+        // prepare related mvs if needed
+        new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
