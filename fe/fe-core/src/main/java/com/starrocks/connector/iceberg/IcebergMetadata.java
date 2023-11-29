@@ -98,7 +98,6 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
-import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
@@ -223,7 +222,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
-        org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
@@ -231,20 +229,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        List<String> partitionNames = Lists.newArrayList();
-        // all partitions specs are unpartitioned
-        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-            return partitionNames;
-        }
-
-        TableScan tableScan = icebergTable.newScan();
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
-
-        for (FileScanTask fileScanTask : tasks) {
-            StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
-        }
-        return partitionNames;
+        return icebergCatalog.listPartitionNames(dbName, tblName);
     }
 
     @Override
