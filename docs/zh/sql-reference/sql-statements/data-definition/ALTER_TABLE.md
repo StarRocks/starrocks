@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 - [修改表注释](#修改表的注释31-版本起)
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
 - [执行 schema change](#schema-change)
-  - [增加或删除列，修改列顺序](#增加或删除列修改列顺序)
+  - [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
   - 优化表结构:
     - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
     - [修改排序键](#修改排序键)
@@ -190,7 +190,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 ### Schema change
 
-#### 增加或删除列，修改列顺序
+#### 修改列（增删列和修改列顺序）
 
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
