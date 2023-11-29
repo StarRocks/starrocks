@@ -20,8 +20,10 @@ import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -73,6 +75,16 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("element_at function must have 2 arguments");
             }
             return new CollectionElementExpr(args[0], args[1]);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], false);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNOTNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnotnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], true);
         }
         return null;
     }
