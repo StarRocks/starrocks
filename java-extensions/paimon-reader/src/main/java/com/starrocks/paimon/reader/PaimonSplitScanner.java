@@ -140,10 +140,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
         ReadBuilder readBuilder = table.newReadBuilder();
         RowType rowType = table.rowType();
         List<String> fieldNames = PaimonScannerUtils.fieldNames(rowType);
-        if (requiredFields.length < fieldNames.size()) {
-            int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
-            readBuilder.withProjection(projected);
-        }
+        int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
+        readBuilder.withProjection(projected);
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
