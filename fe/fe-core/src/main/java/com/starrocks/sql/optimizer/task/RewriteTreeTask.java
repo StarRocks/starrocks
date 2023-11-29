@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 
 import java.util.List;
@@ -130,9 +129,6 @@ public class RewriteTreeTask extends OptimizerTask {
     }
 
     private void deriveLogicalProperty(OptExpression root) {
-        if (root.getOp() instanceof PhysicalOperator) {
-            return;
-        }
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }

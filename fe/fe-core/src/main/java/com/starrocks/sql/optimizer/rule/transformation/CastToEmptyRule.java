@@ -39,9 +39,6 @@ public class CastToEmptyRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!(input.getOp() instanceof LogicalOperator)) {
-            return false;
-        }
         LogicalOperator lo = (LogicalOperator) input.getOp();
         for (ScalarOperator op : Utils.extractConjuncts(lo.getPredicate())) {
             if (!(op.isConstantRef())) {

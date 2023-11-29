@@ -87,8 +87,6 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
 
     //idx is column id, value is slot id
     if (result_size > 0) {
-        std::map<std::string, SlotId> column_name_to_slot_id;
-
         _key_chunk->filter(selections);
         for (auto slot_desc : _tuple_desc->slots()) {
             auto field = tablet_schema_without_rowstore->get_field_by_name(slot_desc->col_name());
@@ -152,6 +150,8 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
     return Status::OK();
 }
 
+// params: std::vector<int>& found
+// found vector value
 Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found) {
     std::vector<string> value_field_names;
     auto value_schema =
@@ -164,7 +164,13 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
         }
     }
 
+    // tmp value_chunk, order not match key_chunk
+    ChunkPtr value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+    // final value_chunk, order match key_chunk
     _value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+
+    std::vector<int> key_idx_to_value_idx(_num_rows, -1);
+    int value_chunk_idx = 0;
 
     for (int i = 0; i < _tablets.size(); ++i) {
         LocalTableReaderParams params;
@@ -174,6 +180,8 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
         RETURN_IF_ERROR(_table_reader->init(params));
 
         auto current_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
+        // current tablet will return all key_chunk mapping whether has value
+        // true , means vector idx of key_chunk have value
         std::vector<bool> curent_found;
         Status status =
                 _table_reader->multi_get(*(_key_chunk.get()), value_field_names, curent_found, *(current_chunk.get()));
@@ -183,12 +191,32 @@ Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found
         }
 
         // merge all tablet result
-        for (int i = 0; i < curent_found.size(); ++i) {
-            if (curent_found[i]) {
-                found[i] = true;
+        bool has_found_value = false;
+        for (int key_idx = 0; key_idx < curent_found.size(); ++key_idx) {
+            // 1 tablet will have many value hit predicate, so here need foreach end
+            if (curent_found[key_idx] && key_idx_to_value_idx[key_idx] == -1) {
+                // make sure found order is same between key_chunk and value_chunk
+                key_idx_to_value_idx[key_idx] = value_chunk_idx;
+                value_chunk_idx++;
+                if (UNLIKELY(found[key_idx])) {
+                    return Status::Corruption(
+                            fmt::format("one key can't be found twice in short circuit, tablet_id: {}, key_idx: {}",
+                                        params.tablet_id, key_idx));
+                }
+                found[key_idx] = true;
+                has_found_value = true;
             }
         }
-        _value_chunk->append(*(current_chunk.get()));
+        if (has_found_value) {
+            value_chunk->append(*(current_chunk.get()));
+        }
+    }
+
+    // transform  value
+    for (int key_idx = 0; key_idx < key_idx_to_value_idx.size(); ++key_idx) {
+        if (key_idx_to_value_idx[key_idx] != -1) {
+            _value_chunk->append(*(value_chunk.get()), key_idx_to_value_idx[key_idx], 1);
+        }
     }
 
     return Status::OK();

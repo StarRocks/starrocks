@@ -49,6 +49,8 @@ public class ShortCircuitExecutor {
 
     protected ShortCircuitResult result = null;
 
+    private static final Random RANDOM = new Random(); // NOSONAR
+
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
                                    List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                    boolean isBinaryRow, boolean enableProfile) {
@@ -71,7 +73,7 @@ public class ShortCircuitExecutor {
         }
 
         if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
-            return new ShortCircuitExecutorHybrid(context, fragments.get(0), scanRangeLocations,
+            return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations,
                     tDescriptorTable, isBinaryRow, enableProfile);
         }
         return null;
@@ -86,7 +88,7 @@ public class ShortCircuitExecutor {
         if (collections.size() == 1) {
             return collections.get(0);
         } else {
-            return collections.get(new Random().nextInt(collections.size()));
+            return collections.get(RANDOM.nextInt(collections.size()));
         }
     }
 

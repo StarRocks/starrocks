@@ -305,8 +305,8 @@ public class PlanFragmentBuilder {
         if (!enableComputeNode(execPlan)
                 && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
-                && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1) {
+                && ((execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
+                .reduce(Integer::sum).orElse(2) <= 1) || execPlan.getPhysicalPlan().getShortCircuit())) {
             inputFragment.setOutputExprs(outputExprs);
             return;
         }
