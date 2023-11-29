@@ -120,7 +120,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate,
                                                 ScalarOperatorRewriteContext context) {
-        return castForBetweenAndIn(predicate);
+        return castForBetweenAndIn(predicate, true);
     }
 
     @Override
@@ -209,7 +209,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
-        return castForBetweenAndIn(predicate);
+        return castForBetweenAndIn(predicate, false);
     }
 
     @Override
@@ -271,7 +271,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         return operator;
     }
 
-    private ScalarOperator castForBetweenAndIn(ScalarOperator predicate) {
+    private ScalarOperator castForBetweenAndIn(ScalarOperator predicate, boolean isBetween) {
         Type firstType = predicate.getChildren().get(0).getType();
         if (predicate.getChildren().stream().skip(1).allMatch(o -> firstType.matchesType(o.getType()))) {
             return predicate;
@@ -294,7 +294,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types);
+        Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types, isBetween);
         for (int i = 0; i < predicate.getChildren().size(); i++) {
             Type childType = predicate.getChild(i).getType();
 
