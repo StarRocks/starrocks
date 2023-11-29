@@ -62,12 +62,6 @@ Currently, StarRocks supports:
 
 2. Download [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) and [`mysql-connector-j`](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
 
-   ```SQL
-   cd {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
-   wget https://www.starrocks.io/download/community
-   wget https://dev.mysql.com/downloads/connector/j/
-   ```
-
 3. Restart Ranger Admin.
 
    ```SQL
