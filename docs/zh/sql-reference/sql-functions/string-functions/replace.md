@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 在 3.0 版本之前，该函数通过 [regexp_replace](../like_predicate-functions/regexp_replace.md) 来实现。
+> 在 3.0 版本之前，该函数通过 [regexp_replace](../like-predicate-functions/regexp_replace.md) 来实现。
 
 ## 语法
 
