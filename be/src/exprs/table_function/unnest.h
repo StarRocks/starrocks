@@ -41,7 +41,7 @@ public:
             auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
-            ColumnPtr compacted_offset_column = offset_column->clone_empty();
+            ColumnPtr compacted_offset_column = UInt32Column::create();
             compacted_offset_column->append_datum(Datum(0));
 
             auto compacted_array_elements = col_array->elements_column()->clone_empty();
