@@ -10,6 +10,8 @@ displayed_sidebar: "Chinese"
 
 获取 Query Profile 需要开启 Profile 功能，即设置会话变量 `set enable_profile = true;`。如果未开启，该函数返回为空。
 
+该函数从 3.0 版本开始支持。
+
 ## 语法
 
 ```Haskell
