@@ -45,6 +45,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.Util;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.server.GlobalStateMgr;
@@ -304,6 +305,9 @@ public class HeartbeatMgr extends FrontendDaemon {
                             System.currentTimeMillis(), version, cpuCores, isSetStoragePath);
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
+                    }
+                    if (tBackendInfo.isSetDatacache_metrics()) {
+                        backendHbResponse.setDataCacheMetrics(DataCacheMetrics.buildFromThrift(tBackendInfo.datacache_metrics));
                     }
                     return backendHbResponse;
                 } else {

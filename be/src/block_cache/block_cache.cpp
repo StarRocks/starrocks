@@ -166,6 +166,11 @@ void BlockCache::record_read_cache(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_cache(size, lateny_us);
 }
 
+
+const starcache::CacheMetrics BlockCache::cache_metrics() const {
+    return _kv_cache->cache_metrics();
+}
+
 Status BlockCache::shutdown() {
     Status st = _kv_cache->shutdown();
     _kv_cache = nullptr;

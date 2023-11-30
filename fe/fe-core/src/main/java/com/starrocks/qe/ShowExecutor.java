@@ -102,6 +102,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
@@ -176,6 +177,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheMetricsStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -384,6 +386,8 @@ public class ShowExecutor {
             handleShowSqlBlackListStmt();
         } else if (stmt instanceof ShowDataCacheRulesStmt) {
             handleShowDataCacheRulesStmt();
+        } else if (stmt instanceof ShowDataCacheMetricsStmt) {
+            handleShowDataCacheMetricsStmt();
         } else if (stmt instanceof ShowAnalyzeJobStmt) {
             handleShowAnalyzeJob();
         } else if (stmt instanceof ShowAnalyzeStatusStmt) {
@@ -2495,6 +2499,26 @@ public class ShowExecutor {
     private void handleShowDataCacheRulesStmt() {
         ShowDataCacheRulesStmt showStmt = (ShowDataCacheRulesStmt) stmt;
         resultSet = new ShowResultSet(showStmt.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
+    }
+
+    private void handleShowDataCacheMetricsStmt() {
+        ShowDataCacheMetricsStmt showStmt = (ShowDataCacheMetricsStmt) stmt;
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        List<Long> backendIds = clusterInfoService.getBackendIds(false);
+        List<List<String>> rows = new ArrayList<>(backendIds.size());
+        for (long backendId : backendIds) {
+            Backend backend = clusterInfoService.getBackend(backendId);
+            if (backend == null) {
+                continue;
+            }
+            Optional<DataCacheMetrics> metrics = backend.getDataCacheMetrics();
+            if (metrics.isPresent()) {
+                rows.add(ShowDataCacheMetricsStmt.convertDataCacheMetricsToRows(backendId, backend.getIP(), metrics.get()));
+            } else {
+                rows.add(ShowDataCacheMetricsStmt.convertDataCacheMetricsToRows(backendId, backend.getIP(), null));
+            }
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     private void handleShowAnalyzeJob() {

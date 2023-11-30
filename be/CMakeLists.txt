@@ -82,7 +82,7 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
-option(WITH_STARCACHE "Build binary with starcache library" OFF)
+option(WITH_STARCACHE "Build binary with starcache library" ON)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 

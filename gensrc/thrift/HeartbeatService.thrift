@@ -33,6 +33,30 @@ struct TMasterInfo {
     10: optional Types.TRunMode run_mode
 }
 
+enum TDataCacheStatus {
+    NORMAL,
+    UPDATING,
+    ABNORMAL
+}
+
+struct TDataCacheDiskDirSpace {
+    1: optional string path
+    2: optional i64 quota_bytes
+}
+
+struct TDataCacheMetrics {
+    1: optional TDataCacheStatus status
+    2: optional i64 mem_quota_bytes
+    3: optional i64 mem_used_bytes
+    4: optional i64 disk_quota_bytes
+    5: optional i64 disk_used_bytes
+    6: optional i64 meta_used_bytes
+
+    // space for numeric metrics
+
+    100: optional list<TDataCacheDiskDirSpace> disk_dir_spaces
+}
+
 struct TBackendInfo {
     1: required Types.TPort be_port
     2: required Types.TPort http_port
@@ -43,6 +67,7 @@ struct TBackendInfo {
     7: optional Types.TPort starlet_port
     8: optional i64 reboot_time
     9: optional bool is_set_storage_path
+    10: optional TDataCacheMetrics datacache_metrics
 }
 
 struct THeartbeatResult {

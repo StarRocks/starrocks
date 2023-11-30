@@ -50,6 +50,7 @@
 #include "util/debug_util.h"
 #include "util/network_util.h"
 #include "util/thrift_server.h"
+#include "block_cache/block_cache.h"
 
 using std::fstream;
 using std::nothrow;
@@ -123,6 +124,39 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
             heartbeat_result.backend_info.__set_is_set_storage_path(false);
         }
 #endif
+        if (config::datacache_enable) {
+            BlockCache* cache = BlockCache::instance();
+            const starcache::CacheMetrics& metrics = cache->cache_metrics();
+            TDataCacheMetrics t_metrics{};
+
+            switch (metrics.status) {
+            case starcache::CacheStatus::NORMAL:
+                t_metrics.__set_status(TDataCacheStatus::NORMAL);
+                break;
+            case starcache::CacheStatus::UPDATING:
+                t_metrics.__set_status(TDataCacheStatus::UPDATING);
+                break;
+            default:
+                t_metrics.__set_status(TDataCacheStatus::ABNORMAL);
+            }
+
+            t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
+            t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
+            t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
+            t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
+            t_metrics.__set_meta_used_bytes(metrics.meta_used_bytes);
+
+            std::vector<TDataCacheDiskDirSpace> disk_dir_spaces{};
+            for (const auto& dir_space : metrics.disk_dir_spaces) {
+                TDataCacheDiskDirSpace t_disk_dir_space{};
+                t_disk_dir_space.__set_path(dir_space.path);
+                t_disk_dir_space.__set_quota_bytes(dir_space.quota_bytes);
+                disk_dir_spaces.emplace_back(t_disk_dir_space);
+            }
+            t_metrics.__set_disk_dir_spaces(disk_dir_spaces);
+            heartbeat_result.backend_info.__set_datacache_metrics(t_metrics);
+        }
+
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         if (reboot_time == 0) {

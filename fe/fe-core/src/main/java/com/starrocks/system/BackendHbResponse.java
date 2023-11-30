@@ -36,10 +36,12 @@ package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.datacache.DataCacheMetrics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Optional;
 
 /**
  * Backend heartbeat response contains Backend's be port, http port and brpc port
@@ -63,6 +65,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int cpuCores;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
+    private DataCacheMetrics dataCacheMetrics = null;
     private boolean isSetStoragePath = false;
 
     public BackendHbResponse() {
@@ -102,6 +105,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public void setRebootTime(long rebootTime) {
         this.rebootTime = rebootTime * 1000;
+    }
+
+    public void setDataCacheMetrics(DataCacheMetrics dataCacheMetrics) {
+        this.dataCacheMetrics = dataCacheMetrics;
+    }
+
+    public Optional<DataCacheMetrics> getDataCacheMetrics() {
+        return Optional.ofNullable(dataCacheMetrics);
     }
 
     public long getBeId() {

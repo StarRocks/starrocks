@@ -163,6 +163,7 @@ enum TSchemaTableType {
     SCH_PIPES,
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
+    SCH_DATACACHE_METRICS,
 }
 
 enum THdfsCompression {
