@@ -360,6 +360,6 @@ public class AnalyzeInsertTest {
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
-                "select 1 as a, 2 as a", "got duplicate column name, expect all columns are distinct.");
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }

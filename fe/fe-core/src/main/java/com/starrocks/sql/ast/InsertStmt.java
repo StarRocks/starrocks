@@ -30,8 +30,11 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -282,8 +285,15 @@ public class InsertStmt extends DmlStmt {
                 .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
                 .collect(Collectors.toList());
 
-        if (columns.stream().map(Column::getName).distinct().count() != columns.size()) {
-            throw new SemanticException("got duplicate column name, expect all columns are distinct.");
+        List<String> columnNames = columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
+        Set<String> duplicateColumnNames = columns.stream()
+                .map(Column::getName)
+                .filter(name -> Collections.frequency(columnNames, name) > 1)
+                .collect(Collectors.toSet());
+        if (!duplicateColumnNames.isEmpty()) {
+            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
         }
 
         // parse table function properties
@@ -347,8 +357,6 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException(
                     "If partition_by is used, path should be a directory ends with forward slash(/).");
         }
-
-        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
 
         // parse and validate partition columns
         List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
