@@ -2025,7 +2025,7 @@ public class Config extends ConfigBase {
      * excessive machine load and triggering node anomalies.
      */
     @ConfField(mutable = true)
-    public static long iceberg_reserved_num_of_processors = 2;
+    public static int iceberg_reserved_num_of_processors = 2;
 
     /**
      * size of iceberg table refresh pool

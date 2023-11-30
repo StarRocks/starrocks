@@ -491,8 +491,11 @@ public class Util {
         if (sizeInBytes <= 0) {
             return "0B";
         }
-        final String[] units = new String[] {"B", "KB", "MB", "GB", "TB"};
+        final String[] units = new String[] {"B", "KB", "MB", "GB", "TB", "PB"};
         int digitGroups = (int) (Math.log10(sizeInBytes) / Math.log10(1024));
+        if (digitGroups >= units.length) {
+            digitGroups = units.length - 1;
+        }
         return String.format("%.1f%s", sizeInBytes / Math.pow(1024, digitGroups), units[digitGroups]);
     }
 
