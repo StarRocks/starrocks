@@ -147,7 +147,8 @@ Status OrcMappingFactory::_check_orc_type_can_convert_2_logical_type(const orc::
 
     if (!can_convert) {
         return Status::NotSupported(
-                strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other, filename = $2", orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
+                strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other, filename = $2",
+                                    orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
     }
     return Status::OK();
 }
