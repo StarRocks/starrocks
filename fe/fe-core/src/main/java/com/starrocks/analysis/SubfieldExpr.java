@@ -32,6 +32,7 @@ public class SubfieldExpr extends Expr {
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
     private List<String> fieldNames;
+    private boolean copyFlag = true;
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, List<String> fieldNames) {
@@ -61,10 +62,15 @@ public class SubfieldExpr extends Expr {
     public SubfieldExpr(SubfieldExpr other) {
         super(other);
         fieldNames = other.fieldNames;
+        copyFlag = other.copyFlag;
     }
 
     public void setFieldNames(List<String> fieldNames) {
         this.fieldNames = ImmutableList.copyOf(fieldNames);
+    }
+
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
     }
 
     public List<String> getFieldNames() {
@@ -82,13 +88,14 @@ public class SubfieldExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames);
+        return getChild(0).toSqlImpl() + "." + Joiner.on('.').join(fieldNames) + '[' + copyFlag + ']';
     }
 
     @Override
     protected void toThrift(TExprNode msg) {
         msg.setNode_type(TExprNodeType.SUBFIELD_EXPR);
         msg.setUsed_subfield_names(fieldNames);
+        msg.setCopy_flag(copyFlag);
     }
 
     @Override
@@ -110,11 +117,11 @@ public class SubfieldExpr extends Expr {
             return false;
         }
         SubfieldExpr that = (SubfieldExpr) o;
-        return Objects.equals(fieldNames, that.fieldNames);
+        return Objects.equals(fieldNames, that.fieldNames) && this.copyFlag == that.copyFlag;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), fieldNames);
+        return Objects.hash(super.hashCode(), fieldNames, copyFlag);
     }
 }

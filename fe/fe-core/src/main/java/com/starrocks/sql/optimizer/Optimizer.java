@@ -80,6 +80,7 @@ import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -359,6 +360,10 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
+        // after pruneSubfield which will push down subfield expr
+        if (sessionVariable.getEnableSubfieldNoCopy()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new SubfieldExprNoCopyRule());
+        }
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 

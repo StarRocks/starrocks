@@ -25,7 +25,11 @@ namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
-    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {}
+    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {
+        if (node.__isset.copy_flag) {
+            _copy_flag = node.copy_flag;
+        }
+    }
 
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
@@ -77,7 +81,11 @@ public:
         DCHECK_EQ(subfield_column->size(), result_null->size());
 
         // We need clone a new subfield column
-        return NullableColumn::create(subfield_column->clone_shared(), result_null);
+        if (_copy_flag) {
+            return NullableColumn::create(subfield_column->clone_shared(), result_null);
+        } else {
+            return NullableColumn::create(subfield_column, result_null);
+        }
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
@@ -89,6 +97,7 @@ public:
 
 private:
     std::vector<std::string> _used_subfield_names;
+    bool _copy_flag = true;
 };
 
 Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
