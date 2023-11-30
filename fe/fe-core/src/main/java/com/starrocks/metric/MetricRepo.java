@@ -65,7 +65,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.monitor.jvm.JvmService;
+import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
@@ -878,8 +878,8 @@ public final class MetricRepo {
         updateMetrics();
 
         // jvm
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        JvmStats jvmStats = jvmStatCollector.stats();
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
