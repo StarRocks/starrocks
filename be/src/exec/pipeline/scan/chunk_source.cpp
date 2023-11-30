@@ -87,11 +87,11 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
-        if (time_spent_ns >= YIELD_MAX_TIME_SPENT) {
+        if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {
             break;
         }
 
-        if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT &&
             _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }
