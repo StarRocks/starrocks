@@ -94,7 +94,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 
 目前，StarRocks 无法检测 Hudi Catalog 和 JDBC Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
-对于 Hive Catalog 和 Iceberg Catalog (从3.1.4版本开始), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
+对于 Hive Catalog 和 Iceberg Catalog (从 v3.1.4 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
@@ -115,7 +115,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 | background_refresh_metadata_interval_millis                  | 600000（10 分钟）               | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）                | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 |
 
-对于Iceberg Catalog, 从3.1.4版本开始，支持检测分区级别的数据更改，当前只支持Iceberg V1表。
+对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
 
 ### 启用 External Catalog 物化视图的查询改写
 
