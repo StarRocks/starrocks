@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-通过 query_id 来获取查询的 Profile。如果通过 query_id 获取不到 Query Profile，返回 NULL。
+通过 `query_id` 来获取指定查询的 Profile。如果 `query_id` 不存在或不准确，返回空。
 
 获取 Query Profile 需要开启 Profile 功能，即设置会话变量 `set enable_profile = true;`。如果未开启，该函数返回为空。
 
@@ -18,11 +18,11 @@ get_query_profile(x)
 
 ## 参数说明
 
-`x`: query_id 字符串。支持的数据类型是 VARCHAR。
+`x`: `query_id` 字符串。支持的数据类型是 VARCHAR。
 
 ## 返回值说明
 
-以文本格式返回 Query Profile，一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile.md)。
+Query Profile 一般包含以下字段，详情可参见 [查看分析 Query Profile](../../../administration/query_profile.md)。
 
 ```SQL
 Query:
@@ -62,7 +62,7 @@ select last_query_id();
 | 502f3c04-8f5c-11ee-a41f-b22a2c00f66b |
 +--------------------------------------+
 
--- 获取查询的 Profile。由于内容较长，不在这里展示。
+-- 获取该查询的 Profile。由于内容较长，不在这里展示。
 select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b');
 
 -- 搭配使用 regexp_extract 函数，从 Query Profile 中获取符合指定 Pattern 的 QueryPeakMemoryUsage。
