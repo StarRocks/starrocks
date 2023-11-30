@@ -40,6 +40,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -473,5 +474,33 @@ public class Util {
             dos.write(input);
         }
         return outputStream.toByteArray();
+    }
+
+    public static boolean isReservedMemoryNotSufficient() {
+        Runtime r = Runtime.getRuntime();
+
+        long totalMemory = r.totalMemory();
+        long usedMemory = totalMemory - r.freeMemory();
+        long maxMemory = r.maxMemory();
+
+        double memoryReservedPercentage = ((double) (maxMemory - usedMemory) / maxMemory) * 100;
+        return memoryReservedPercentage < Config.iceberg_query_fe_reserved_mem_percentage;
+    }
+
+    private static String formatBytes(long sizeInBytes) {
+        if (sizeInBytes <= 0) {
+            return "0B";
+        }
+        final String[] units = new String[] {"B", "KB", "MB", "GB", "TB"};
+        int digitGroups = (int) (Math.log10(sizeInBytes) / Math.log10(1024));
+        return String.format("%.1f%s", sizeInBytes / Math.pow(1024, digitGroups), units[digitGroups]);
+    }
+
+    public static String getFreeMemory() {
+        return formatBytes(Runtime.getRuntime().freeMemory());
+    }
+
+    public static String getMaxMemory() {
+        return formatBytes(Runtime.getRuntime().maxMemory());
     }
 }

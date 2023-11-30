@@ -70,6 +70,12 @@ public class IcebergConnector implements Connector {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
+        } else {
+            String number = String.valueOf(Math.max(2,
+                    Runtime.getRuntime().availableProcessors() - Config.iceberg_reserved_num_of_processors));
+            LOG.info("The default number for the Iceberg WORKER_POOL is set to " + number);
+            Properties props = System.getProperties();
+            props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, number);
         }
 
         switch (nativeCatalogType) {

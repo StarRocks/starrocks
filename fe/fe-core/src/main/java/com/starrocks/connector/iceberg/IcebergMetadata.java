@@ -24,11 +24,13 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionUtil;
@@ -44,6 +46,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -409,6 +413,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
+        long loopCount = 0L;
         while (fileScanTasks.hasNext()) {
             FileScanTask scanTask = fileScanTaskIterator.next();
 
@@ -440,6 +445,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
 
             icebergScanTasks.add(icebergSplitScanTask);
+
+            if (++loopCount % Config.iceberg_plan_files_defensive_check_divisor == 0) {
+                performIcebergPlanFilesDefensiveCheck(key, icebergScanTasks);
+            }
 
             String filePath = icebergSplitScanTask.file().path().toString();
             if (!filePaths.contains(filePath)) {
@@ -543,6 +552,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new IcebergSplitScanTask(offset, length, baseFileScanTask);
     }
 
+    private void performIcebergPlanFilesDefensiveCheck(IcebergFilter key, List<FileScanTask> tasks) {
+        if (Config.enable_iceberg_scan_tasks_limit && tasks.size() > Config.iceberg_scan_tasks_num) {
+            throw new StarRocksPlannerException(
+                    "The number of the Iceberg ScanTasks for query(" + key + ") has exceeded the limit(" +
+                            Config.iceberg_scan_tasks_num + ")", ErrorType.INTERNAL_ERROR);
+        }
+        if (Config.enable_iceberg_query_memory_defense && Util.isReservedMemoryNotSufficient()) {
+            throw new StarRocksPlannerException("The memory reserved(" +
+                    Config.iceberg_query_fe_reserved_mem_percentage + "%) of the Iceberg Table query(" + key +
+                    ") is not sufficient. " + "{Free: " + Util.getFreeMemory() + ", Max: " + Util.getMaxMemory() +
+                    "}", ErrorType.INTERNAL_ERROR);
+        }
+    }
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (isResourceMappingCatalog(catalogName)) {

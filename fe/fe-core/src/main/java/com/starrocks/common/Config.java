@@ -2020,6 +2020,14 @@ public class Config extends ConfigBase {
     public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
+     * To prevent the entire Frontend (fe) node's CPU resources from being fully occupied
+     * by the Iceberg planner when querying extremely large Iceberg tables, causing
+     * excessive machine load and triggering node anomalies.
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_reserved_num_of_processors = 2;
+
+    /**
      * size of iceberg table refresh pool
      */
     @ConfField(mutable = true)
@@ -2072,6 +2080,37 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long iceberg_metadata_cache_max_entry_size = 8388608L;
+
+    /**
+     * enable iceberg ScanTasks number limit, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_scan_tasks_limit = false;
+
+    /**
+     * iceberg ScanTasks number limit, default 500 * 1000
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_scan_tasks_num = 500L * 1000L;
+
+    /**
+     * enable iceberg query reserved memory defense, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_query_memory_defense = false;
+
+    /**
+     * iceberg table query FE reserved memory percentage, default 10
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_query_fe_reserved_mem_percentage = 10;
+
+    /**
+     * iceberg planFiles method runtime defensive check divisor, default 1000
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_plan_files_defensive_check_divisor = 1000;
+
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
