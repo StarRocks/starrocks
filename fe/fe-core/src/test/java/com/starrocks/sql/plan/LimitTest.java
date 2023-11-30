@@ -891,4 +891,21 @@ public class LimitTest extends PlanTestBase {
                 "  20:EXCHANGE\n" +
                 "     limit: 1");
     }
+
+    @Test
+    public void testTransformGroupByToLimit() throws Exception {
+        String sql = "select distinct v1 from (select t0.* from t0 join (select * from t1 where false) t1 " +
+                "right join t2 on t0.v1 = t2.v7) t";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  <slot 1> : NULL\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t2",
+                "RESULT SINK\n" +
+                        "\n" +
+                        "  2:EXCHANGE\n" +
+                        "     limit: 1");
+    }
 }
