@@ -86,7 +86,6 @@ public class LakeTableTestHelper {
                 new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
                         TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, null, 0, 60_000);
         transactionState.setPrepareTime(currentTimeMs - 10_000);
-        transactionState.setWriteEndTimeMs(currentTimeMs);
         return transactionState;
     }
 }
