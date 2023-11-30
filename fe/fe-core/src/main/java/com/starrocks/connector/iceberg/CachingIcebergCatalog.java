@@ -26,8 +26,6 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
-import org.apache.iceberg.exceptions.NoSuchNamespaceException;
-import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,14 +73,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
-        Database db;
-        try {
-            db = delegate.getDB(dbName);
-        } catch (NoSuchNamespaceException e) {
-            LOG.error("Database {} not found", dbName, e);
-            return null;
-        }
-
+        Database db = delegate.getDB(dbName);
         databases.put(dbName, db);
         return db;
     }
@@ -99,15 +90,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             return tables.getIfPresent(icebergTableName);
         }
 
-        try {
-            Table icebergTable = delegate.getTable(dbName, tableName);
-            tables.put(icebergTableName, icebergTable);
-            return icebergTable;
-
-        } catch (StarRocksConnectorException | NoSuchTableException e) {
-            LOG.error("Failed to get iceberg table {}", icebergTableName, e);
-            return null;
-        }
+        Table icebergTable = delegate.getTable(dbName, tableName);
+        tables.put(icebergTableName, icebergTable);
+        return icebergTable;
     }
 
     @Override
