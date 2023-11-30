@@ -93,6 +93,7 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "IcebergCatalog";
@@ -776,13 +777,14 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testRefreshTable() {
+    public void testRefreshTableWithResource() {
         Map<String, String> config = new HashMap<>();
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(
+                RESOURCE_MAPPING_CATALOG_PREFIX + CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Assert.assertFalse(icebergTable.getSnapshot().isPresent());
@@ -793,6 +795,37 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertSame(snapshot, icebergTable.getSnapshot().get());
         metadata.refreshTable("db_name", icebergTable, null, false);
         Assert.assertNotSame(snapshot, icebergTable.getSnapshot().get());
+    }
+
+    @Test
+    public void testRefreshTableWithCatalog() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 10);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog);
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        metadata.refreshTable("sr_db", icebergTable, new ArrayList<>(), false);
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableA;
+            }
+        };
+
+        IcebergTable table = (IcebergTable) metadata.getTable("db", "table");
+        Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
+
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
+                ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
+
+        metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);
+
     }
 
     @Test
