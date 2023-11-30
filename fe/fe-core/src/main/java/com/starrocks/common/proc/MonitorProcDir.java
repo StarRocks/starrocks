@@ -58,7 +58,7 @@ public class MonitorProcDir implements ProcDirInterface {
         }
 
         if (name.equalsIgnoreCase("jvm")) {
-            return new JvmProcDir();
+            return new JvmMonitorProcDir();
         } else {
             throw new AnalysisException("unknown name: " + name);
         }

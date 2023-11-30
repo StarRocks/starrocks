@@ -30,16 +30,16 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 
 /**
- * Obtain JVMInfo and JvmStats
+ * Obtain JvmInfo and JvmStats periodically.
  */
-public class JvmService {
-    private static final Logger LOG = LogManager.getLogger(JvmService.class);
+public class JvmStatCollector {
+    private static final Logger LOG = LogManager.getLogger(JvmStatCollector.class);
 
     private final JvmInfo jvmInfo;
 
     private JvmStats jvmStats;
 
-    public JvmService() {
+    public JvmStatCollector() {
         this.jvmInfo = JvmInfo.jvmInfo();
         this.jvmStats = JvmStats.jvmStats();
     }
