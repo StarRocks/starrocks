@@ -479,7 +479,7 @@ public class PlanTestNoneDBBase {
         String explainString = getFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+            Assert.assertTrue("expected is:\n" + expected + "\n but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
     }
