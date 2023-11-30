@@ -20,10 +20,10 @@
 #include "common/config.h"
 #include "exprs/table_function/table_function.h"
 #include "runtime/integer_overflow_arithmetics.h"
-#include "types/logical_type.h"
+#include "runtime/primitive_type.h"
 
-namespace starrocks {
-template <LogicalType Type>
+namespace starrocks::vectorized {
+template <PrimitiveType Type>
 class SubdivideBitmap final : public TableFunction {
     struct UnnestBitmapState final : public TableFunctionState {};
     using SrcSizeCppType = typename RunTimeTypeTraits<Type>::CppType;
@@ -121,4 +121,4 @@ public:
         return std::make_pair(dst_columns, dst_offset_col);
     }
 };
-} // namespace starrocks
+} // namespace starrocks::vectorized
