@@ -11,8 +11,8 @@ Modifies an existing table, including:
 - [Rename table, partition, index](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Add/delete partitions and modify partition attributes](#modify-partition)
-- [Modify bucketing method and number of buckets](#)
-- [Modify columns (add/delete columns, change the order of columns)](#schema-change)
+- [Modify bucketing method and the number of buckets](#modify-bucketing-method-and-the-number-of-buckets-from-v32)
+- [Modify columns (add/delete columns, change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
 - [Modify table properties](#modify-table-properties)
@@ -181,7 +181,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 - Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
 
-### Modify bucketing method and number of buckets (from v3.2)
+### Modify bucketing method and the number of buckets (from v3.2)
 
 You can modify the bucketing method and the number of buckets for all partitions. Also you can modify the number of buckets for specified partitions.
 
@@ -202,7 +202,7 @@ partition_names ::=
 
 Example:
 
-Assuming that the original table is a Duplicate Key table, Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
+Assuming that the original table is a Duplicate Key table where Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
 
 ```SQL
 CREATE TABLE IF NOT EXISTS details (
@@ -216,20 +216,20 @@ DUPLICATE KEY(event_time, event_type)
 PARTITION BY date_trunc('day', event_time)
 DISTRIBUTED BY HASH(user_id);
 
--- Insert data for multiple days
--- Data for November 26th
+-- Insert data of several days
+-- Data of November 26th
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-26 08:00:00', 1, 101, 12345, 2),
 ('2023-11-26 09:15:00', 2, 102, 54321, 3),
 ('2023-11-26 10:30:00', 1, 103, 98765, 1);
 
--- Data for November 27th
+-- Data of November 27th
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-27 08:30:00', 1, 104, 11111, 2),
 ('2023-11-27 09:45:00', 2, 105, 22222, 3),
 ('2023-11-27 11:00:00', 1, 106, 33333, 1);
 
--- Data for November 28th
+-- Data of November 28th
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-28 08:00:00', 1, 107, 44444, 2),
 ('2023-11-28 09:15:00', 2, 108, 55555, 3),
@@ -238,7 +238,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
 #### Modify bucketing method
 
-- Modify the bucketing method to random bucketing and the number of buckets remain automatically set by StarRocks.
+- The bucketing method is modified to random bucketing and the number of buckets is still automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY RANDOM;
@@ -273,7 +273,7 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   > **NOTICE**
   >
   > - Although this example doesn’t modify the bucketing method but only the number of buckets, it is still necessary to specify the bucketing method by using `HASH(user_id)` in the statement.
-  > - If `BUCKETS <num>` is not specified, it means that the number of buckets is changed to use system automatic configuration.
+  > - If `BUCKETS <num>` is not specified, it means that the number of buckets is changed to use StarRocks automatic configuration.
 
 - Modify the number of buckets for specified partitions to 15.
 
@@ -281,13 +281,11 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
   ```
 
-  > **Note**
+  > **NOTE**
   >
   > Partition names can be viewed by executing `SHOW PARTITIONS FROM <table_name>;`.
 
 ### Modify columns (add/delete columns, change the order of columns)
-
-Schema change supports the following modifications.
 
 #### Add a column to specified location of specified index
 
@@ -411,7 +409,8 @@ Note:
 - All columns in the index must be written.
 - The value column is listed after the key column.
 
-#### Modify columns comprising the sort Key in a Primary Key table**
+#### Modify columns of the sort key in a Primary Key table
+
 <!--Supported Versions-->
 
 Syntax:
@@ -426,7 +425,7 @@ order_desc ::=
 
 Example:
 
-Suppose the original table is a Primary Key table, where the sort key is coupled with the primary key `dt, order_id`.
+Suppose the original table is a Primary Key table where the sort key is coupled with the primary key `dt, order_id`.
 
 ```SQL
 create table orders (
@@ -445,7 +444,7 @@ PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(order_id);
 ```
 
-Decouple the sort key from the primary key,and modify the sort key to `dt, revenue, state`.
+Decouple the sort key from the primary key, and modify the sort key to `dt, revenue, state`.
 
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
