@@ -2662,7 +2662,7 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
         // Make sure l2 version equal to l2 version merged flag
         return true;
     }
-    return false;
+    return true;
 }
 
 Status PersistentIndex::load_from_tablet(Tablet* tablet) {
