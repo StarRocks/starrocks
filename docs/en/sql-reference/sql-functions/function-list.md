@@ -116,33 +116,6 @@ You can find a function based on the following categories:
 
 ## Bitmap functions
 
-<<<<<<< HEAD
-- [base64_to_bitmap](../sql-functions/bitmap-functions/base64_to_bitmap.md)
-- [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
-- [bitmap_and](../sql-functions/bitmap-functions/bitmap_and.md)
-- [bitmap_andnot](../sql-functions/bitmap-functions/bitmap_andnot.md)
-- [bitmap_contains](../sql-functions/bitmap-functions/bitmap_contains.md)
-- [bitmap_count](../sql-functions/bitmap-functions/bitmap_count.md)
-- [bitmap_from_string](../sql-functions/bitmap-functions/bitmap_from_string.md)
-- [bitmap_empty](../sql-functions/bitmap-functions/bitmap_empty.md)
-- [bitmap_has_any](../sql-functions/bitmap-functions/bitmap_has_any.md)
-- [bitmap_hash](../sql-functions/bitmap-functions/bitmap_hash.md)
-- [bitmap_intersect](../sql-functions/bitmap-functions/bitmap_intersect.md)
-- [bitmap_max](../sql-functions/bitmap-functions/bitmap_max.md)
-- [bitmap_min](../sql-functions/bitmap-functions/bitmap_min.md)
-- [bitmap_or](../sql-functions/bitmap-functions/bitmap_or.md)
-- [bitmap_remove](../sql-functions/bitmap-functions/bitmap_remove.md)
-- [bitmap_to_array](../sql-functions/bitmap-functions/bitmap_to_array.md)
-- [bitmap_to_base64](../sql-functions/bitmap-functions/bitmap_to_base64.md)
-- [bitmap_to_string](../sql-functions/bitmap-functions/bitmap_to_string.md)
-- [bitmap_union](../sql-functions/bitmap-functions/bitmap_union.md)
-- [bitmap_union_count](../sql-functions/bitmap-functions/bitmap_union_count.md)
-- [bitmap_union_int](../sql-functions/bitmap-functions/bitmap_union_int.md)
-- [bitmap_xor](../sql-functions/bitmap-functions/bitmap_xor.md)
-- [intersect_count](../sql-functions/bitmap-functions/intersect_count.md)
-- [sub_bitmap](../sql-functions/bitmap-functions/sub_bitmap.md)
-- [to_bitmap](../sql-functions/bitmap-functions/to_bitmap.md)
-=======
 - [base64_to_bitmap](./bitmap-functions/base64_to_bitmap.md)
 - [bitmap_agg](./bitmap-functions/bitmap_agg.md)
 - [bitmap_and](./bitmap-functions/bitmap_and.md)
@@ -170,7 +143,6 @@ You can find a function based on the following categories:
 - [intersect_count](./bitmap-functions/intersect_count.md)
 - [sub_bitmap](./bitmap-functions/sub_bitmap.md)
 - [to_bitmap](./bitmap-functions/to_bitmap.md)
->>>>>>> cbe433f165 ([Doc] Add doc for bitmap_to_binary/bitmap_from_binary (#36102))
 
 ## Conditional functions
 
