@@ -41,6 +41,7 @@ PROPERTIES
 
 select * from test_hive_avro_format where col_string = 'world';
 select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
+select col_tinyint,col_decimal,col_array from test_hive_avro_format;
 
 shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
@@ -82,6 +83,7 @@ PROPERTIES
 
 select * from test_hive_rcbinary_format where col_string = 'world';
 select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
+select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
 
 shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
@@ -122,6 +124,7 @@ PROPERTIES
 
 select * from test_hive_rctext_format where col_string = 'world';
 select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
+select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 
 shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
@@ -162,5 +165,6 @@ PROPERTIES
 
 select * from test_hive_sequence_format where col_string = 'world';
 select * from test_hive_sequence_format where abs(col_float - 1.23) < 0.01 ;
+select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
 
 shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
