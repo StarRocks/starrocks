@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -60,6 +59,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -96,7 +96,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
 
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
@@ -248,7 +247,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
+                            "   DISTRIBUTED BY HASH(`" + outputNames.get(0) + "`) BUCKETS 12\n" +
                             properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);
@@ -324,14 +323,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker contains(String... expects) {
-            for (String expect: expects) {
+            for (String expect : expects) {
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
         }
 
         public MVRewriteChecker contains(List<String> expects) {
-            for (String expect: expects) {
+            for (String expect : expects) {
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
