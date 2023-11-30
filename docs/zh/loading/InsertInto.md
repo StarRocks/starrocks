@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # 通过 INSERT 语句导入数据
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
 与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。自 v3.1 起，您可以使用 INSERT 语句和 [FILES()](../sql-reference/sql-functions/table-functions/files.md) 函数直接导入云存储或 HDFS 中的文件。
@@ -25,6 +27,12 @@ displayed_sidebar: "Chinese"
 - 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
+
+### 查看权限
+
+<InsertPrivNote />
+
+### 创建对象
 
 在 StarRocks 中创建数据库 `load_test`，并在其中创建导入目标表 `insert_wiki_edit` 以及数据源表 `source_wiki_edit`。
 

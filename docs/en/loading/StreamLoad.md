@@ -11,8 +11,6 @@ StarRocks provides two methods of loading data from a local file system:
 - Synchronous loading using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 - Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 
-<InsertPrivNote />
-
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
@@ -25,9 +23,15 @@ For CSV data, take note of the following points:
 
 Stream Load and Broker Load both support data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
+## Before you begin
+
+### Check privileges
+
+<InsertPrivNote />
+
 ## Loading from a local file system via Stream Load
 
-Stream Load runs in synchronous loading mode based on HTTP PUT. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
+Stream Load is an HTTP PUT-based synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
 > **NOTICE**
 >
