@@ -474,7 +474,7 @@ If partition data cannot be evenly distributed across all the buckets by using o
 
 - **When a table is created, you must specify the bucketing columns**.
 - The data types of bucketing columns must be INTEGER, DECIMAL, DATE/DATETIME, or CHAR/VARCHAR/STRING.
-- Bucketing columns cannot be modified after they are specified.
+- Since 3.2, bucketing columns cannot be modified after they are specified.
 
 #### Examples
 
@@ -637,3 +637,31 @@ Buckets reflect how data files are actually organized in StarRocks.
     ALTER TABLE <table_name> 
     SET ("dynamic_partition.buckets"="xxx");
     ```
+
+## Optimize data distribution after table creation (since 3.2)
+
+As query patterns and data volume change in business scenarios, the configurations specified at table creation, such as the bucketing method, number of buckets may no longer be suitable for the new business scenario. It can even can affect query performance. At this point, `ALTER TABLE` can be used to adjust the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
+
+- **Increase the number of buckets when data volume within partitions is significantly increased**
+
+  When the data volume within partitions becomes significantly larger than before, adjusting the number of buckets may be necessary to maintain tablet sizes generally within the range of 1GB to 10GB.
+  
+- **Adjust bucketing keys to avoid data skew**
+
+  When the current bucketing keys cause data skew (for example, only the `k1` column is configured as the bucketing key), it is necessary to specify more suitable columns or add additional columns to the bucketing key. For example:
+  
+  ```SQL
+  ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+  -- When the version of StarRocks is 3.1 or above, and the table uses Duplicate Key, you can consider directly using the system's default bucketing settings, that is, random bucketing and the number of buckets automatically set by StarRocks.
+  ALTER TABLE t DISTRIBUTED BY RANDOM;
+  ```
+
+- **Adapting sort keys due to changes in query patterns**
+  
+  If the business query patterns are significantly changed and additional columns are used as conditional columns, it can be beneficial to adjust the sort key. For example:
+  
+  ```SQL
+  ALTER TABLE t ORDER BY k2, k1;
+  ```
+
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
