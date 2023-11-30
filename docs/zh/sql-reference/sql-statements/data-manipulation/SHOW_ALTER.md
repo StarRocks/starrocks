@@ -17,9 +17,9 @@ displayed_sidebar: "Chinese"
 
     ```sql
     -- 查询修改列的任务执行情况
-    SHOW ALTER TABLE COLUMN [FROM db_name]
+    SHOW ALTER TABLE COLUMN [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
     -- 查询优化表结构的任务执行情况
-    SHOW ALTER TABLE OPTIMIZE [FROM db_name]
+    SHOW ALTER TABLE OPTIMIZE [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
     ```
 
 - 查询 Rollup 索引变更任务的执行情况。
@@ -31,7 +31,7 @@ displayed_sidebar: "Chinese"
 ## 参数说明
 
 - `COLUMN ｜ OPTIMIZE | ROLLUP`：从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。
-  - 如果指定了 COLUMN 或者 OPTIMIZE，该语句用于查询修改列和优化表结构任务。如果需要嵌套WHERE子句，支持的语法为 `[WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]`。
+  - 如果指定了 COLUMN 或者 OPTIMIZE，该语句用于查询修改列和优化表结构任务。
   - 如果指定了 ROLLUP，该语句用于查询创建或删除 ROLLUP 索引的任务。
 - `db_name`：可选。如果不指定，则默认使用当前数据库。
 
