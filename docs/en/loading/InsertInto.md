@@ -107,7 +107,7 @@ DISTRIBUTED BY HASH(user);
 
 ## Insert data via INSERT INTO VALUES
 
-You can append one or more rows to a specific table by using INSERT INTO VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can append one or more rows to a specific table by using INSERT INTO VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 > **CAUTION**
 >
@@ -125,7 +125,7 @@ VALUES
 
 ## Insert data via INSERT INTO SELECT
 
-You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 ### Insert data from an internal or external table into an internal table
 
@@ -203,7 +203,7 @@ INSERT INTO insert_wiki_edit
 
 ## Overwrite data via INSERT OVERWRITE VALUES
 
-You can overwrite a specific table with one or more rows by using INSERT OVERWRITE VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can overwrite a specific table with one or more rows by using INSERT OVERWRITE VALUES command. Multiple rows are separated by comma (,). For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 > **CAUTION**
 >
@@ -243,7 +243,7 @@ VALUES
 
 ## Overwrite data via INSERT OVERWRITE SELECT
 
-You can overwrite a table with the result of a query on a data source table via INSERT OVERWRITE SELECT command. INSERT OVERWRITE SELECT statement performs ETL operations on the data from one or more internal or external tables, and overwrites an internal table with the data For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can overwrite a table with the result of a query on a data source table via INSERT OVERWRITE SELECT command. INSERT OVERWRITE SELECT statement performs ETL operations on the data from one or more internal or external tables, and overwrites an internal table with the data For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 > **NOTE**
 >
@@ -397,7 +397,7 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-You can check the status of an asynchronous INSERT task by querying the metadata table `task_runs` in Information Schema.
+You can check the status of an asynchronous INSERT task by querying the metadata view `task_runs` in Information Schema.
 
 The following example checks the status of the INSERT task `async`.
 
@@ -480,7 +480,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
+For information about the fields in the return results, see [Information Schema > loads](../reference/information_schema/loads.md).
 
 ### Check via curl command
 

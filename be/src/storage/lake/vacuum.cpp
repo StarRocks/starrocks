@@ -17,12 +17,14 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include <set>
 #include <string_view>
 #include <unordered_map>
 
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "gutil/strings/util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -66,10 +68,43 @@ static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_d
                                                            get_num_active_file_queued_tasks, nullptr);
 namespace {
 
+const char* const kDuplicateFilesError =
+        "Duplicate files were returned from the remote storage. The most likely cause is an S3 or HDFS API "
+        "compatibility issue with your remote storage implementation.";
+
 std::future<Status> completed_future(Status value) {
     std::promise<Status> p;
     p.set_value(std::move(value));
     return p.get_future();
+}
+
+bool should_retry(const Status& st, int64_t attempted_retries) {
+    if (attempted_retries >= config::lake_vacuum_retry_max_attempts) {
+        return false;
+    }
+    if (st.is_resource_busy()) {
+        return true;
+    }
+    Slice message = st.message();
+    return MatchPattern(StringPiece(message.data, message.size), config::lake_vacuum_retry_pattern);
+}
+
+int64_t calculate_retry_delay(int64_t attempted_retries) {
+    int64_t min_delay = config::lake_vacuum_retry_min_delay_ms;
+    return min_delay * (1 << attempted_retries);
+}
+
+Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
+    for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
+        auto st = fs->delete_files(paths);
+        if (!st.ok() && should_retry(st, attempted_retries)) {
+            int64_t delay = calculate_retry_delay(attempted_retries);
+            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        } else {
+            return st;
+        }
+    }
 }
 
 // Batch delete files with specified FileSystem object |fs|
@@ -90,8 +125,7 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
 
     auto t0 = butil::gettimeofday_us();
-    auto st = fs->delete_files(paths);
-    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
+    auto st = delete_files_with_retry(fs, paths);
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);
@@ -427,16 +461,16 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
-    std::unordered_map<int64_t, std::vector<int64_t>> tablet_versions;
+    std::unordered_map<int64_t, std::set<int64_t>> tablet_versions;
     //                 ^^^^^^^ tablet id
-    //                                     ^^^^^^^^^ version number
+    //                                  ^^^^^^^^^ version number
 
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
 
     AsyncFileDeleter async_deleter;
-    std::vector<std::string> txn_logs;
+    std::set<std::string> txn_logs;
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
@@ -452,7 +486,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             return true;
         }
 
-        txn_logs.emplace_back(name);
+        auto [_, inserted] = txn_logs.emplace(name);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file:" << join_path(log_dir, name);
 
         return true;
     })));
@@ -503,18 +538,18 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        tablet_versions[tablet_id].emplace_back(version);
+        auto [_, inserted] = tablet_versions[tablet_id].insert(version);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file: " << join_path(meta_dir, name);
         return true;
     })));
 
     for (auto& [tablet_id, versions] : tablet_versions) {
         DCHECK(!versions.empty());
-        std::sort(versions.begin(), versions.end());
 
         TabletMetadataPtr latest_metadata = nullptr;
 
         // Find metadata files that has garbage data files and delete all those files
-        for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
+        for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
             if (res.status().is_not_found()) {

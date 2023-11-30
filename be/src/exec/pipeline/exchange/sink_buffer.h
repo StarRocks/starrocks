@@ -49,7 +49,7 @@ struct TransmitChunkInfo {
     // a same exchange source fragment instance, so we should use fragment_instance_id
     // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
-    doris::PBackendService_Stub* brpc_stub;
+    PInternalService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;

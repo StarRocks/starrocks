@@ -107,6 +107,8 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
 
         ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -123,10 +125,9 @@ public class MvRewriteTestBase {
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
                     if (tbl != null) {
-                        for (Partition partition : tbl.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
                         }
                     }
                 }

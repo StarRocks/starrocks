@@ -12,13 +12,20 @@ displayed_sidebar: "Chinese"
 
 - `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
+### 兼容性变更
+
+#### 系统变量
+
+- 新增会话变量 `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；当取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增会话变量 `cbo_eq_base_type` 用来指定 DECIMAL 类型和 STRING 类型的数据比较时强制类型，默认 `VARCHAR`，可选 `DECIMAL`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+
 ### 问题修复
 
 修复了如下问题：
 
 - 某些场景下 ON 条件中包含子查询会报错：`java.lang.IllegalStateException: null`。 [#30876](https://github.com/StarRocks/starrocks/pull/30876)
 - INSERT INTO SELECT ... LIMIT 执行成功后立刻使用 COUNT(*) 查询时，不同副本返回的结果不一致。 [#24435](https://github.com/StarRocks/starrocks/pull/24435)
-- 当数据类型转换前后类型一致，某些类型下会导致 BE crash。 [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- 使用 cast() 函数进行数据类型转换时，如果转换前后类型一致，某些类型下会导致 BE crash。 [#31465](https://github.com/StarRocks/starrocks/pull/31465)
 - Broker Load 导入数据时某些路径形式下会报错 `msg:Fail to parse columnsFromPath, expected: [rec_dt]`。 [#32721](https://github.com/StarRocks/starrocks/issues/32721)
 - 升级到 3.x 版本时，如果有的列类型也升级了（比如 Decimal 升级到 Decimal v3），某些特定特征的表在 Compaction 时会导致 BE crash。 [#31626](https://github.com/StarRocks/starrocks/pull/31626)
 - 使用 Flink Connector 导入数据时，如果并发高且 HTTP 和 Scan 线程数受限，会发生卡死。 [#32251](https://github.com/StarRocks/starrocks/pull/32251)
@@ -417,7 +424,7 @@ displayed_sidebar: "Chinese"
   - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键模型表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
-- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](../administration/information_schema.md)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](../reference/information_schema/information_schema.md)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - 优化备份恢复：
   - 支持数据库级别的备份恢复。相关文档，请参见[备份与恢复](../administration/Backup_and_restore.md)。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - 支持主键模型表的备份恢复。相关文档，请参见备份与恢复。[#11885](https://github.com/StarRocks/starrocks/pull/11885)

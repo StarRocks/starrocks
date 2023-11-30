@@ -113,7 +113,7 @@ public class OlapDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = getDeleteConditions();
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -222,7 +222,7 @@ public class OlapDeleteJob extends DeleteJob {
             LOG.warn("InterruptedException: ", e);
         }
         LOG.info("delete job finish, countDownLatch count: {}", countDownLatch.getCount());
- 
+
         String errMsg = "";
         List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
         Status st = countDownLatch.getStatus();
@@ -260,7 +260,7 @@ public class OlapDeleteJob extends DeleteJob {
                     long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
                     // if job's state is quorum_finished then wait for a period of time and commit it.
                     while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
-                          && countDownLatch.getCount() > 0) {
+                            && countDownLatch.getCount() > 0) {
                         checkAndUpdateQuorum();
                         Thread.sleep(1000);
                         nowQuorumTimeMs = System.currentTimeMillis();

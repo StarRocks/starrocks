@@ -123,6 +123,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 引入版本：2.5.5
 
+##### enable_statistics_collect_profile
+
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -509,6 +515,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
+##### fast_schema_evolution
+
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+  > **NOTE**
+  >
+  > - StarRocks 存算分离集群不支持该参数。
+  > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
+- 默认值：TRUE
+- 引入版本：3.2.0
+
 ##### recover_with_empty_tablet
 
 - 含义：在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。
@@ -665,6 +681,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v3.1.0 起新增。
 - 默认值：0
+
+##### allow_system_reserved_names
+
+- **默认值**: FALSE
+- 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
 
 ### 配置 FE 静态参数
 
@@ -823,7 +844,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### brpc_idle_wait_max_time
 
-- 含义：BRPC 的空闲等待时间。单位：毫秒。
+- 含义：bRPC 的空闲等待时间。单位：毫秒。
 - 默认值：10000
 
 ##### query_port
@@ -1605,6 +1626,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### update_compaction_ratio_threshold
+
+- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 默认值：0.5
+
 #### max_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
@@ -1617,7 +1643,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
-#### 配置 BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
@@ -1647,12 +1673,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_port
 
-- 含义：BRPC 的端口，可以查看 BRPC 的一些网络统计信息。
+- 含义：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
 - 默认值：8060
 
 #### brpc_num_threads
 
-- 含义：BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
+- 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
 - 默认值：-1
 
 #### priority_networks
@@ -1906,7 +1932,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_max_body_size
 
-- 含义：BRPC 最大的包容量。
+- 含义：bRPC 最大的包容量。
 - 单位：字节
 - 默认值：2147483648
 
@@ -1988,3 +2014,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
+
+#### lake_service_max_concurrency
+
+- 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
+- 单位：N/A
+- 默认值：0

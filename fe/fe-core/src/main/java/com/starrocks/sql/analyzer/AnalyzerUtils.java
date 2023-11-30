@@ -39,6 +39,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableIdentifier;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
@@ -516,6 +517,41 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Set<TableIdentifier> collectAllTableIdentifier(StatementBase statementBase) {
+        Set<TableIdentifier> tableIdentifiers = Sets.newHashSet();
+        new TableIdentifierCollector(tableIdentifiers).visit(statementBase);
+        return tableIdentifiers;
+    }
+
+    private static class TableIdentifierCollector extends AstTraverser<Void, Void> {
+        Set<TableIdentifier> tableIdentifiers;
+
+        public TableIdentifierCollector(Set<TableIdentifier> tableIdentifiers) {
+            this.tableIdentifiers = tableIdentifiers;
+        }
+
+        @Override
+        public Void visitQueryStatement(QueryStatement statement, Void context) {
+            return visit(statement.getQueryRelation());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.isSyncMVQuery()) {
+                tableIdentifiers.add(new TableIdentifier(node.getName(), TableRelation.TableHint._SYNC_MV_));
+            } else {
+                tableIdentifiers.add(new TableIdentifier(node.getName(), null));
+            }
+            return null;
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            tableIdentifiers.add(new TableIdentifier(node.getName(), null));
+            node.getQueryStatement().accept(this, null);
+            return null;
+        }
+    }
+
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -573,7 +609,11 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            if (!node.getTable().isNativeTableOrMaterializedView()) {
+
+            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+            boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
+                    relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;

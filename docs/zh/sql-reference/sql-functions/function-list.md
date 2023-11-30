@@ -34,24 +34,25 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
-|  [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
-|  [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
-|  [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
-|  [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
-|  [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
-|  [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
-|  [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
+| [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
+| [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
+| [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
+| [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
+| [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
+| [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
+| [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
+| [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
 |[date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
-|  [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
-|  [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
-|  [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
-|   [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
-|  [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
-|  [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
+| [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
+| [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
+| [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
+| [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
+| [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
+| [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
 | [dayname](./date-time-functions/dayname.md)| 返回指定日期对应的星期名称。|
 | [dayofmonth](./date-time-functions/dayofmonth.md)| 返回日期中的天信息，返回值范围 1~31。  |
 | [dayofweek](./date-time-functions/dayofweek.md)| 返回指定日期的工作日索引值。  |
+| [dayofweek_iso](./date-time-functions/day_of_week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一周内的星期几。  |
 | [dayofyear](./date-time-functions/dayofyear.md)|  计算指定日期为对应年中的哪一天。   |
 | [days_add](./date-time-functions/adddate.md)| 向日期添加指定的时间间隔。  |
 | [days_diff](./date-time-functions/days_diff.md)|  计算开始时间和结束时间相差几天。 |
@@ -62,8 +63,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [hours_add](./date-time-functions/hours_add.md)| 给指定的日期时间增加指定的小时数。  |
 | [hours_diff](./date-time-functions/hours_diff.md)|  计算开始时间和结束时间相差多少个小时。 |
 | [hours_sub](./date-time-functions/hours_sub.md)| 从指定的日期时间中减少指定的小时数。  |
-|[last_day](./date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
-|[makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
+| [jodatime_format](./date-time-functions/jodatime_format.md)| 将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。  |
+| [last_day](./date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
+| [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
@@ -83,18 +85,23 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [seconds_add](./date-time-functions/seconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为秒。  |
 | [seconds_diff](./date-time-functions/seconds_diff.md)| 计算开始时间和结束时间相差多少秒。  |
 | [seconds_sub](./date-time-functions/seconds_sub.md)|  给指定的日期时间或日期减去指定的秒数。 |
-| [str_to_date](./date-time-functions/str_to_date.md)| 按照 format 指定的格式将 str 转换为 DATETIME 类型的值。  |
 | [str2date](./date-time-functions/str2date.md)| 按照 format 指定的格式将 str 转换为 DATE 类型的值。  |
+| [str_to_date](./date-time-functions/str_to_date.md)| 按照 format 指定的格式将 str 转换为 DATETIME 类型的值。  |
+| [str_to_jodatime](./date-time-functions/str_to_jodatime.md)| 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式的 DATETIME 值。  |
 | [time_slice](./date-time-functions/time_slice.md)| 根据指定的时间粒度周期，将给定的时间转化为其所在的时间粒度周期的起始或结束时刻。  |
 | [time_to_sec](./date-time-functions/time_to_sec.md)| 将 time 时间值转换为秒数。  |
 | [timediff](./date-time-functions/timediff.md)| 返回两个 DATETIME 类型值之间的差值，返回 TIME 类型。  |
 | [timestamp](./date-time-functions/timestamp.md)|  将时间表达式转换为 DATETIME 值。 |
 | [timestampadd](./date-time-functions/timestampadd.md)| 将整数表达式间隔添加到日期或日期时间表达式中。  |
 | [timestampdiff](./date-time-functions/timestampdiff.md)|  返回两个日期或日期时间表达式的差值。 |
-| [to_days](./date-time-functions/to_days.md)| 返回指定日期距离 0000-01-01 的天数。  |
 | [to_date](./date-time-functions/to_date.md)| 返回 DATETIME 类型值中的日期部分。  |
+| [to_days](./date-time-functions/to_days.md)| 返回指定日期距离 0000-01-01 的天数。  |
+| [to_iso8601](./date-time-functions/to_iso8601.md)| 将某一个日期转换为 ISO 8601 标准格式的字符串。  |
+| [to_tera_date](./date-time-functions/to_tera_date.md)| 将某一个 VARCHAR 类型的值转换成指定格式的日期。  |
+| [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
+| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
 | [weekofyear](./date-time-functions/weekofyear.md)|  计算指定的日期时间属于一年中的第几周。 |
 | [weeks_add](./date-time-functions/weeks_add.md)|  向原始的日期时间加上指定周数。 |
@@ -398,10 +405,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [like](./like_predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
-|  [regexp](./like_predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
-|  [regexp_extract](./like_predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-|  [regexp_replace](./like_predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
+|  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
+|  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
+|  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
+|  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数
 
@@ -465,3 +472,4 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [murmur_hash3_32](./hash-functions/murmur_hash3_32.md) | 返回输入字符串的 32 位 murmur3 hash 值。 |
+| [xx_hash3_64](./hash-functions/xx_hash3_64.md) | 返回输入字符串的 64 位 xxhash3 值。 |

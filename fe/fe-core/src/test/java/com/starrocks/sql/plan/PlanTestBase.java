@@ -828,7 +828,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "\"password\"=\"test_passwd\",\n" +
                         "\"driver_url\"=\"test_driver_url\",\n" +
                         "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        "\"jdbc_uri\"=\"jdbc:mysql://127.0.0.1:3306\"\n" +
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
@@ -1048,6 +1048,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
     }
 
     @AfterClass

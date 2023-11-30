@@ -191,7 +191,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
-        predicate = removePartitionPredicate(predicate, node);
+        predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
         if (null != predicate) {
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
@@ -214,7 +214,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 statisticsBuilder.addColumnStatistic(entry.getKey(),
                         ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
             }
-
         }
         context.setStatistics(statisticsBuilder.build());
         return null;
@@ -1410,10 +1409,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
-
     // avoid use partition cols filter rows twice
-    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator) {
-        if (operator instanceof LogicalIcebergScanOperator) {
+    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
+                                                    OptimizerContext optimizerContext) {
+        if (operator instanceof LogicalIcebergScanOperator && !optimizerContext.isObtainedFromInternalStatistics()) {
             LogicalIcebergScanOperator icebergScanOperator = operator.cast();
             List<String> partitionColNames = icebergScanOperator.getTable().getPartitionColumnNames();
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);

@@ -1630,7 +1630,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 }
             } else {
-                throw new DdlException("only support alter enable_persistent_index in shared_data mode");
+                throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
+                                       " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
@@ -2202,7 +2203,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws UserException {
-        if (alterClause.getIndex() == null) {
+        Index newIndex = alterClause.getIndex();
+        if (newIndex == null) {
             return;
         }
 
@@ -2231,7 +2233,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        newIndexes.add(alterClause.getIndex());
+        newIndexes.add(newIndex);
     }
 
     private void processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)

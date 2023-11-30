@@ -120,6 +120,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
 
+##### enable_statistics_collect_profile
+
+- **Unit**: N/A
+- **Default**: false
+- **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -568,6 +574,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds.
 
+#### fast_schema_evolution
+
+- **Default**: TRUE
+- **Description**: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` (default) and `FALSE`. Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+  > **NOTE**
+  >
+  > - StarRocks shared-data clusters do not support this parameter.
+  > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+- **Introduced in**: v3.2.0
+
 ##### recover_with_empty_tablet
 
 - **Unit**: -
@@ -750,6 +766,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 0
 - **Description**: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.
 
+##### allow_system_reserved_names
+
+- **Default**: FALSE
+- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
@@ -902,7 +923,7 @@ This section provides an overview of the static parameters that you can configur
 ##### brpc_idle_wait_max_time
 
 - **Default:** 10000
-- **Description:** The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms.
+- **Description:** The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.
 
 ##### query_port
 
@@ -1637,6 +1658,11 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### update_compaction_ratio_threshold
+
+- **Default:** 0.5
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
 ### Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
@@ -1671,13 +1697,13 @@ BE static parameters are as follows.
 
 - **Default**: 8060
 - **Unit**: N/A
-- **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
+- **Description**: The BE bRPC port, which is used to view the network statistics of bRPCs.
 
 #### brpc_num_threads
 
 - **Default**: -1
 - **Unit**: N/A
-- **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
+- **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
 
 #### priority_networks
 
@@ -2008,7 +2034,7 @@ BE static parameters are as follows.
 
 - **Default**: 2147483648
 - **Unit**: Byte
-- **Description**: The maximum body size of a BRPC.
+- **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size
 
@@ -2099,6 +2125,12 @@ BE static parameters are as follows.
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+
+#### lake_service_max_concurrency
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |

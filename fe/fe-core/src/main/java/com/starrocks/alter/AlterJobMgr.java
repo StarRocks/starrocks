@@ -650,10 +650,6 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
 
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isCloudNativeTable()) {
-                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
-                }
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                     schemaChangeHandler.updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
@@ -774,6 +770,7 @@ public class AlterJobMgr {
             LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
+            view.lastSchemaUpdateTime.set(System.currentTimeMillis());
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {

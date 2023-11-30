@@ -268,7 +268,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 }
                 context.setThreadLocalInfo();
             } catch (DdlException e) {
-                throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
+                throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, e.getMessage());
             }
         }
     }

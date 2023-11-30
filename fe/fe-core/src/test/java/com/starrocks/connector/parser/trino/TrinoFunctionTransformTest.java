@@ -75,6 +75,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+
+        sql = "select contains_sequence(array[1,2,3], array[1,2])";
+        assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
     }
 
     @Test
@@ -255,6 +258,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "SELECT str_to_map('a:1,b:2,c:null');";
         assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
+
+        sql = "SELECT replace('hello-world', '-');";
+        assertPlanContains(sql, "replace('hello-world', '-', '')");
+
+        sql = "SELECT replace('hello-world', '-', '$');";
+        assertPlanContains(sql, "replace('hello-world', '-', '$')");
     }
 
     @Test
@@ -366,4 +375,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
     }
 
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
 }
