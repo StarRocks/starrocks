@@ -26,6 +26,7 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
@@ -106,9 +107,16 @@ public class IcebergConnector implements Connector {
             if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
                 long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
                 nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl);
+                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCachingIcebergCatalog(catalogName, nativeCatalog);
             }
             this.icebergNativeCatalog = nativeCatalog;
         }
         return icebergNativeCatalog;
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }
