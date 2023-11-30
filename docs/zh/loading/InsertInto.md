@@ -26,6 +26,12 @@ displayed_sidebar: "Chinese"
 
 ## 准备工作
 
+### 查看权限
+
+<InsertPrivNote />
+
+### 创建对象
+
 在 StarRocks 中创建数据库 `load_test`，并在其中创建导入目标表 `insert_wiki_edit` 以及数据源表 `source_wiki_edit`。
 
 > **说明**
