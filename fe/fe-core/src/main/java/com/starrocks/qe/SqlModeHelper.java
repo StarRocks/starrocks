@@ -92,6 +92,7 @@ public class SqlModeHelper {
     public static final long MODE_SORT_NULLS_LAST = 1L << 33;
     public static final long MODE_LAST = 1L << 34;
     public static final long MODE_ERROR_IF_OVERFLOW = 1L << 35;
+    public static final long MODE_GROUP_CONCAT_LEGACY = 1L << 36;
 
     public static final long MODE_ALLOWED_MASK =
             (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT | MODE_ANSI_QUOTES |
@@ -103,7 +104,8 @@ public class SqlModeHelper {
                     MODE_NO_ZERO_DATE | MODE_INVALID_DATES | MODE_ERROR_FOR_DIVISION_BY_ZERO |
                     MODE_HIGH_NOT_PRECEDENCE | MODE_NO_ENGINE_SUBSTITUTION |
                     MODE_PAD_CHAR_TO_FULL_LENGTH | MODE_TRADITIONAL | MODE_ANSI |
-                    MODE_TIME_TRUNCATE_FRACTIONAL | MODE_SORT_NULLS_LAST) | MODE_ERROR_IF_OVERFLOW;
+                    MODE_TIME_TRUNCATE_FRACTIONAL | MODE_SORT_NULLS_LAST) | MODE_ERROR_IF_OVERFLOW |
+                    MODE_GROUP_CONCAT_LEGACY;
 
     private static final Map<String, Long> SQL_MODE_SET = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
@@ -137,6 +139,7 @@ public class SqlModeHelper {
         SQL_MODE_SET.put("TIME_TRUNCATE_FRACTIONAL", MODE_TIME_TRUNCATE_FRACTIONAL);
         SQL_MODE_SET.put("SORT_NULLS_LAST", MODE_SORT_NULLS_LAST);
         SQL_MODE_SET.put("ERROR_IF_OVERFLOW", MODE_ERROR_IF_OVERFLOW);
+        SQL_MODE_SET.put("GROUP_CONCAT_LEGACY", MODE_GROUP_CONCAT_LEGACY);
 
         COMBINE_MODE_SET.put("ANSI", (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT |
                 MODE_ANSI_QUOTES | MODE_IGNORE_SPACE | MODE_ONLY_FULL_GROUP_BY));

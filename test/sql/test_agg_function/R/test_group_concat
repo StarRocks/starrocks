@@ -1651,3 +1651,51 @@ TomEnglish,王武程咬金语文北京上海
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
+set group_concat_max_len = 1024;
+-- result:
+-- !result
+set sql_mode = 'GROUP_CONCAT_LEGACY';
+-- result:
+-- !result
+select group_concat( name ) from ss group by id order by 1;
+-- result:
+None
+May, Ti, 欧阳诸葛方程
+Ti
+Tom, Tom
+Tom, Tom, 王武程咬金
+张三此地无银三百两, 张三掩耳盗铃
+李四大闹天空
+-- !result
+select group_concat( name , "-") from ss group by id order by 1;
+-- result:
+None
+May-Ti-欧阳诸葛方程
+Ti
+Tom-Tom
+Tom-Tom-王武程咬金
+张三此地无银三百两-张三掩耳盗铃
+李四大闹天空
+-- !result
+select group_concat( subject , "-") from ss group by id order by 1;
+-- result:
+None
+English-Math
+English-数学大不列颠
+English-语文北京上海
+物理Phy
+英文English-Math数学欧拉方程
+英语外语美誉
+-- !result
+select group_concat( name ) from ss;
+-- result:
+May, Ti, 欧阳诸葛方程, Tom, Tom, 王武程咬金, Tom, Tom, 张三此地无银三百两, 张三掩耳盗铃, Ti, 李四大闹天空
+-- !result
+select group_concat( name , "-") from ss;
+-- result:
+Tom-Tom-王武程咬金-May-Ti-欧阳诸葛方程-Ti-李四大闹天空-Tom-Tom-张三此地无银三百两-张三掩耳盗铃
+-- !result
+select group_concat( subject , "-") from ss;
+-- result:
+English-数学大不列颠-English-Math-英文English-Math数学欧拉方程-English-语文北京上海-物理Phy-英语外语美誉
+-- !result
