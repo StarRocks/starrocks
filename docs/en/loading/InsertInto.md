@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Load data using INSERT
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
 Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files on cloud storage using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
