@@ -117,28 +117,28 @@ Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc:
                                                                       const TypeDescriptor& slot_target_type) {
     bool can_convert = true;
     // check orc type -> slot type desc
-    if (orc_source_type->getKind() == orc::TypeKind::LIST) {
+    if (orc_source_type.getKind() == orc::TypeKind::LIST) {
         can_convert &= slot_target_type.is_array_type();
-    } else if (orc_source_type->getKind() == orc::TypeKind::MAP) {
+    } else if (orc_source_type.getKind() == orc::TypeKind::MAP) {
         can_convert &= slot_target_type.is_map_type();
-    } else if (orc_source_type->getKind() == orc::TypeKind::STRUCT) {
+    } else if (orc_source_type.getKind() == orc::TypeKind::STRUCT) {
         can_convert &= slot_target_type.is_struct_type();
     }
 
     // check slot type desc -> orc type
     if (slot_target_type.is_array_type()) {
-        can_convert &= orc_source_type->getKind() == orc::TypeKind::LIST;
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::LIST;
     } else if (slot_target_type.is_map_type()) {
-        can_convert &= orc_source_type->getKind() == orc::TypeKind::MAP;
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::MAP;
     } else if (slot_target_type.is_struct_type()) {
-        can_convert &= orc_source_type->getKind() == orc::TypeKind::STRUCT;
+        can_convert &= orc_source_type.getKind() == orc::TypeKind::STRUCT;
     }
 
     //TODO Other logical type not check now!
 
     if (!can_convert) {
         return Status::NotSupported(strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other",
-                                                        orc_source_type->toString(), slot_target_type.debug_string()));
+                                                        orc_source_type.toString(), slot_target_type.debug_string()));
     }
     return Status::OK();
 }
