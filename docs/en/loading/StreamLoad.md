@@ -113,7 +113,6 @@ Run the following command to load the data of `example1.csv` into `table1`:
 curl --location-trusted -u <username>:<password> -H "label:123" \
     -H "Expect:100-continue" \
     -H "column_separator:," \
-    -H "Expect:100-continue" \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
