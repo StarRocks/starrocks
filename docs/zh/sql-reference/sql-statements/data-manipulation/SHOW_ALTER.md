@@ -14,7 +14,7 @@ displayed_sidebar: "Chinese"
 
 ## 语法
 
-- 查询修改列或者优化表结构的任务执行情况
+- 查询修改列或者优化表结构的任务执行情况。
 
     ```sql
     SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
@@ -28,10 +28,10 @@ displayed_sidebar: "Chinese"
 
 ## 参数说明
 
-- `COLUMN ｜ OPTIMIZE | ROLLUP`：从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。
-  - 如果指定了 COLUMN，该语句用于查询修改任务。
-  - 如果指定了 OPTIMIZE，该语句用于查询优化表结构任务（修改分桶方式和分桶数量）。
-  - 如果指定了 ROLLUP，该语句用于查询创建或删除 ROLLUP 索引的任务。
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。
+  - 如果指定了 `COLUMN`，该语句用于查询修改任务。
+  - 如果指定了 `OPTIMIZE`，该语句用于查询优化表结构任务（修改分桶方式和分桶数量）。
+  - 如果指定了 `ROLLUP`，该语句用于查询创建或删除 ROLLUP 索引的任务。
 - `db_name`：可选。如果不指定，则默认使用当前数据库。
 
 ## 示例
@@ -52,7 +52,7 @@ displayed_sidebar: "Chinese"
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ````
 
-3. 查询指定表中最近一次修改列任务或者优化任务的执行情况。
+3. 查询指定表中最近一次修改列任务或者优化表结构任务的执行情况。
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;

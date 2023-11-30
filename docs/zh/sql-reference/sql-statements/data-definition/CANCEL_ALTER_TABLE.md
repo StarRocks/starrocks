@@ -18,17 +18,18 @@ displayed_sidebar: "Chinese"
 
 ## 语法
 
-    ```SQL
-    CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name
-    ```
+   ```SQL
+   CANCEL ALTER TABLE { COLUMN | OPTIMIZE | ROLLUP } FROM [db_name.]table_name
+   ```
 
 ## 参数说明
 
-| **参数**   | **必选** | **说明**                                         |
-| ---------- | -------- | ------------------------------------------------ |
- `COLUMN ｜ OPTIMIZE | ROLLUP`|是|从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。<ul><li>如果指定了 COLUMN，该语句用于取消修改列的任务。</li><li>如果指定了 OPTIMIZE，该语句用于取消优化表结构的任务（修改分桶方式和分桶数量）。</li><li>如果指定了 ROLLUP，该语句用于取消创建或删除 ROLLUP 索引的任务。</li></ul>
-| db_name    | 否       | 表所在的数据库名称。如不指定，默认为当前数据库。 |
-| table_name | 是       | 表名。                                           |
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：从 `COLUMN`、`OPTIMIZE` 和 `ROLLUP` 中必选其中一个。
+  - 如果指定了 `COLUMN`，该语句用于取消修改列的任务。
+  - 如果指定了 `OPTIMIZE`，该语句用于取消优化表结构的任务（修改分桶方式和分桶数量）。
+  - 如果指定了 `ROLLUP`，该语句用于取消创建或删除 ROLLUP 索引的任务。
+- `db_name`：可选。表所在的数据库名称。如不指定，默认为当前数据库。
+- `table_name`：必选。表名。
 
 ## 示例
 
