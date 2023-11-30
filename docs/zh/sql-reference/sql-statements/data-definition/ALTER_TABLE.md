@@ -240,7 +240,23 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 ('2023-11-28 10:30:00', 1, 109, 66666, 1);
 ```
 
-修改所有分区的分桶列为 `user_id, event_time`。
+#### 修改分桶方式
+
+- 修改分桶方式为 Random 分桶并且分桶数量由 StarRocks 自动设置。
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  ```
+
+- 修改分桶方式为 Random 分桶并且指定分桶数量为 10。
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+  ```
+
+#### 修改 Hash 分桶的分桶键**
+
+修改所有分区的分桶键为 `user_id, event_time`。
 
 ```SQL
 ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
@@ -248,39 +264,30 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
 
 > **注意**
 >
-> 修改分桶列只能针对整个表的所有分区，不能针对某个分区。
+> 修改哈希分桶键针对整个表的所有分区生效，不能仅仅针对某个分区生效。
 
-修改所有分区的分桶数量为 10。
+#### 修改分桶数量
 
-```SQL
-ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
-```
+- 修改所有分区的分桶数量为 10。
 
-> **注意**
->
-> 虽然本示例没有修改分桶方式只修改分桶数量，但是在语句中仍然需要说明分桶方式 `HASH(user_id)`。
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+  ```
 
-修改指定分区的分桶数量为 15。
+  > **注意**
+  >
+  > - 虽然本示例没有修改分桶方式只修改分桶数量，但是在语句中仍然需要说明分桶方式 `HASH(user_id)`。
+  > - 如果不指定 BUCKETS 子句，就代表修改为采用系统自动配置的。
 
-```SQL
-ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
-```
+- 修改指定分区的分桶数量为 15。
 
-> 说明
->
-> 分区名称可以执行 `SHOW PARTITIONS FROM <table_name>;` 进行查看。
+  ```SQL
+  ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
+  ```
 
-修改分桶方式为 Random 分桶并且分桶数量由 StarRocks 自动设置。
-
-```SQL
-ALTER TABLE details DISTRIBUTED BY RANDOM;
-```
-
-修改分桶方式为 Random 分桶并且指定分桶数量为 10。
-
-```SQL
-ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
-```
+  > **说明**
+  >
+  > 分区名称可以执行 `SHOW PARTITIONS FROM <table_name>;` 进行查看。
 
 ### 修改列（增删列和修改列顺序）
 
@@ -454,28 +461,6 @@ ALTER TABLE orders ORDER BY (dt,revenue,state);
 >
 > 您需要执行 [SHOW ALTER TABLE COLUMN](../data-manipulation/SHOW_ALTER.md) 查看修改任务状态。
 
-### 修改表的属性
-
-支持修改如下表属性：
-
-- `replication_num`
-- `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- Dynamic partitioning related properties
-- `enable_persistent_index`
-- `bloom_filter_columns`
-- `colocate_with`
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
-```
-
-注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
-
 ### 操作 rollup 相关语法
 
 #### 创建 rollup index (ADD ROLLUP)
@@ -584,6 +569,28 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP INDEX index_name;
 ```
+
+### 修改表的属性
+
+支持修改如下表属性：
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
+注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
 
 ### Swap 将两个表原子替换
 
