@@ -39,7 +39,15 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
+<<<<<<< HEAD
             Partition partition = table.getPartition(partitionId);
+=======
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
+                continue;
+            }
+>>>>>>> cc5290291a ([BugFix] Fixed NullPointerException in LakeTableTxnLogApplier (#36159))
             partition.setNextVersion(partition.getNextVersion() + 1);
         }
     }
@@ -52,7 +60,16 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
+=======
+            long partitionId = partitionCommitInfo.getPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
+                continue;
+            }
+>>>>>>> cc5290291a ([BugFix] Fixed NullPointerException in LakeTableTxnLogApplier (#36159))
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
