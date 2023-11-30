@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
  */
 class Unnest final : public TableFunction {
 public:
-    std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override {
         *eos = true;
         if (state->get_columns().empty()) {
             return {};
@@ -29,7 +29,7 @@ public:
             NullableColumn* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
-            ColumnPtr compacted_offset_column = offset_column->clone_empty();
+            auto compacted_offset_column = UInt32Column::create();
             compacted_offset_column->append_datum(Datum(0));
 
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
