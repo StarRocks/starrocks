@@ -6,11 +6,11 @@ displayed_sidebar: "English"
 
 ## Description
 
-Converts a bitmap to a binary string.
+Converts Bitmap values to a Binary string.
 
-bitmap_to_binary is mainly used for bitmap export, and the compression effect is better than bitmap_to_base64.
+bitmap_to_binary is mainly used for exporting Bitmap data. The compression effect is better than [bitmap_to_base64](./bitmap_to_base64).
 
-If you plan to export directly to a binary file such as parqeut, it is recommended to use this function.
+If you plan to export data directly to a binary file such as Parquet, this function is recommended.
 
 This function is supported from v3.0.
 
@@ -22,7 +22,7 @@ VARBINARY bitmap_to_binary(BITMAP bitmap)
 
 ## Parameters
 
-`bitmap`: the bitmap to convert. This parameter is required. If the input value is invalid, an error is returned.
+`bitmap`: the Bitmap to convert, required. If the input value is invalid, an error is returned.
 
 ## Return value
 
@@ -58,7 +58,7 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
 1 row in set (0.01 sec)
 ```
 
-Example 2: Convert each value in a BITMAP column into binary strings.
+Example 2: Convert each value in a BITMAP column into a binary string.
 
 1. Create an Aggregate table `page_uv` where the `AGGREGATE KEY` is (`page_id`, `visit_date`). This table contains a BITMAP column `visit_users` whose values are to be aggregated.
 
@@ -109,3 +109,4 @@ Example 2: Convert each value in a BITMAP column into binary strings.
        +---------+------------------------------------------------------------+
        3 rows in set (0.01 sec)
     ```
+    
