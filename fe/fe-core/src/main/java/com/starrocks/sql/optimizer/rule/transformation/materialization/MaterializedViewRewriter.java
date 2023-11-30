@@ -1555,7 +1555,9 @@ public class MaterializedViewRewriter {
         PredicateSplit mvPredicateSplit = rewriteContext.getMvPredicateSplit();
         PredicateSplit queryPredicateSplit = rewriteContext.getQueryPredicateSplit();
         Set<ColumnRefOperator> mvPredicateUsedColRefs = Utils.compoundAnd(mvPredicateSplit.getPredicates())
-                .getColumnRefs().stream().collect(Collectors.toSet());
+                .getColumnRefs().stream()
+                .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
+                .collect(Collectors.toSet());
 
         // filter out query's predicates that its column refs are not contained in mv's predicate:
         // when column ref is not contained in mv's predicates, query's predicate cannot be rewritten.
@@ -1623,7 +1625,6 @@ public class MaterializedViewRewriter {
         final PredicateSplit mvCompensationToQuery = getUnionRewriteQueryCompensation(rewriteContext,
                 columnRewriter);
         if (mvCompensationToQuery == null) {
-            // filter all predicates that
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot get compensation from view to query");
             return null;
         }

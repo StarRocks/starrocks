@@ -481,7 +481,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
         OptExpression result = createNewAggregate(rewriteContext, queryAgg, newAggregations, aggregateMapping,
                 unionExpr, newProjection);
-
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
             LogicalFilterOperator filter =
                     new LogicalFilterOperator(rewriteContext.getUnionRewriteQueryExtraPredicate());
