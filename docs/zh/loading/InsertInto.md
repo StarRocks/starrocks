@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # 通过 INSERT 语句导入数据
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
 与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。自 v3.1 起，您可以使用 INSERT 语句和 [FILES()](../sql-reference/sql-functions/table-functions/files.md) 函数直接导入云存储或 HDFS 中的文件。
