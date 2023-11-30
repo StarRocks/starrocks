@@ -28,6 +28,12 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 
 ## Preparation
 
+### Check privileges
+
+<InsertPrivNote />
+
+### Create objects
+
 Create a database named `load_test`, and create a table `insert_wiki_edit` as the destination table and a table `source_wiki_edit` as the source table.
 
 > **NOTE**
