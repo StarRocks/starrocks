@@ -149,9 +149,17 @@ SELECT /*+ SET_VAR
 
 当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。
 
+### cbo_decimal_cast_string_strict （2.5.14 及以后）
+
+用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
+
 ### cbo_enable_low_cardinality_optimize
 
 是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。默认值：true。
+
+### cbo_eq_base_type （2.5.14 及以后）
+
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。
 
 ### character_set_database（global）
 

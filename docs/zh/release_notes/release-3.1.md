@@ -8,11 +8,20 @@ displayed_sidebar: "Chinese"
 
 发布日期：2023 年 11 月 28 日
 
+### 新增特性
+
+- 存算分离模式下 CN 节点支持数据导出。[#34018](https://github.com/StarRocks/starrocks/pull/34018)
+
 ### 功能优化
 
 - [`INFORMATION_SCHEMA.COLUMNS`](../reference/information_schema/columns.md) 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - 支持查询 [Hive](../data_source/catalog/hive_catalog.md) 中使用 LZO 算法压缩的 Parquet、ORC、和 CSV 格式的文件。[#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
 - 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- 当创建物化视图涉及的表、视图及视图内涉及的表、物化视图发生 Swap、Drop 或者 Schema Change 操作后，物化视图可以进行自动刷新。[#32829](https://github.com/StarRocks/starrocks/pull/32829)
+- 优化 Bitmap 相关的某些操作的性能，主要包括：
+  - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
 ### 问题修复
 
@@ -39,6 +48,20 @@ displayed_sidebar: "Chinese"
 - FE 启动失败，报错 "failed to load journal type 118"。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
 - 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
 - 副本操作重放失败可能会引起 FE Crash。[#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
+### 兼容性变更
+
+#### 配置参数
+
+- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- FE 配置项 [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
+
+#### 系统变量
+
+- 新增会话变量 `cbo_decimal_cast_string_strict`，用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x 及之后版本的处理逻辑，执行严格转换（即，按 Scale 截断补 `0`）；当取值为 `false` 时，保留 v2.5.x 之前版本的处理逻辑（即，按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增会话变量 `cbo_eq_base_type`，用于指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增会话变量 `big_query_profile_second_threshold`，当会话变量 [`enable_profile`](../reference/System_variable.md#enable_profile) 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。[#33825](https://github.com/StarRocks/starrocks/pull/33825)
 
 ## 3.1.4
 
@@ -88,10 +111,6 @@ displayed_sidebar: "Chinese"
 
 发布日期：2023 年 9 月 25 日
 
-### 行为变更
-
-- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 的分隔符必须使用 `SEPARATOR` 关键字声明。
-
 ### 新增特性
 
 - 存算分离下的主键模型支持基于本地磁盘上的持久化索引，使用方式与存算一体一致。
@@ -123,6 +142,11 @@ displayed_sidebar: "Chinese"
 - 升级到 3.1.2 版本后，原来创建的表中 Storage Volume 属性被重置成了 `null`。[#30647](https://github.com/StarRocks/starrocks/pull/30647)
 - Tablet 元数据做 Checkpoint 与 Restore 操作并行时， 会导致某些副本丢失不可查。[#30603](https://github.com/StarRocks/starrocks/pull/30603)
 - 如果表字段为 `NOT NULL` 但没有设置默认值，使用 CloudCanal 导入时会报错“Unsupported dataFormat value is : \N”。[#30799](https://github.com/StarRocks/starrocks/pull/30799)
+
+### 行为变更
+
+- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 的分隔符必须使用 `SEPARATOR` 关键字声明。
+- 会话变量 [`group_concat_max_len`](../reference/System_variable.md#group_concat_max_len)（用于控制聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 可以返回的字符串最大长度）的默认值由原来的没有限制变更为默认 `1024`。
 
 ## 3.1.2
 
