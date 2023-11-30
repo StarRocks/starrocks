@@ -3242,6 +3242,9 @@ public class CreateMaterializedViewTest {
                     "as select v2.k1, v2.s2 from view_2 v2;";
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         }
+        starRocksAssert.dropView("view_1");
+        starRocksAssert.dropView("view_2");
+        starRocksAssert.dropView("view_3");
     }
 
     @Test
