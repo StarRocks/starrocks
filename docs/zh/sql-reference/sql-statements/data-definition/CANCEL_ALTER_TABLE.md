@@ -33,19 +33,19 @@ displayed_sidebar: "Chinese"
 
 ## 示例
 
-1. 取消数据库 `example_db` 中，`example_table` 的修改列任务。
+1. 取消数据库 `example_db` 中表 `example_table` 的修改列任务。
 
    ```SQL
    CANCEL ALTER TABLE COLUMN FROM example_db.example_table;
    ```
 
-2. 取消数据库 `example_db` 中，`example_table` 的优化表结构任务。
+2. 取消数据库 `example_db` 中表 `example_table` 的优化表结构任务。
 
    ```SQL
    CANCEL ALTER TABLE OPTIMIZE FROM example_db.example_table;
    ```
 
-3. 取消当前数据库中，`example_table` 的 Rollup 索引变更操作。
+3. 取消当前数据库中，`example_table` 的创建和删除 Rollup 索引的任务。
 
     ```SQL
     CANCEL ALTER TABLE ROLLUP FROM example_table;

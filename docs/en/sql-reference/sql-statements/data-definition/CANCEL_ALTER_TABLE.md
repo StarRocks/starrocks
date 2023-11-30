@@ -31,7 +31,7 @@ Cancels the execution of the following ongoing ALTER TABLE tasks on a given tabl
   - If `ROLLUP` is specified, this statement cancels tasks for adding or deleting ROLLUP indexes.
 
 - `db_name`: optional. The name of the database to which the table belongs. If this parameter is not specified, your current database is used by default.
-- `table_name`: required.The table name.
+- `table_name`: required. The table name.
 
 ## Examples
 
@@ -47,7 +47,7 @@ Cancels the execution of the following ongoing ALTER TABLE tasks on a given tabl
    CANCEL ALTER TABLE OPTIMIZE FROM example_db.example_table;
    ```
 
-3. Cancel the Rollup index alteration operation for `example_table` in the current database.
+3. Cancel the task of adding or deleting Rollup index for `example_table` in the current database.
 
    ```SQL
    CANCEL ALTER TABLE ROLLUP FROM example_table;
