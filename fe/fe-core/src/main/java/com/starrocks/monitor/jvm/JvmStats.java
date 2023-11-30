@@ -23,6 +23,7 @@ package com.starrocks.monitor.jvm;
 
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.monitor.unit.TimeValue;
+import org.jetbrains.annotations.NotNull;
 
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ClassLoadingMXBean;
@@ -69,7 +70,7 @@ public class JvmStats {
                 MemoryUsage usage = memoryPoolMXBean.getUsage();
                 MemoryUsage peakUsage = memoryPoolMXBean.getPeakUsage();
                 String name = GcNames.getByMemoryPoolName(memoryPoolMXBean.getName(), null);
-                if (name == null) { // if we can't resolve it, its not interesting.... (Per Gen, Code Cache)
+                if (name == null) { // if we can't resolve it, it's not interesting.... (Per Gen, Code Cache)
                     continue;
                 }
                 pools.add(new MemoryPool(name,
@@ -226,6 +227,7 @@ public class JvmStats {
             return this.collectors;
         }
 
+        @NotNull
         @Override
         public Iterator<GarbageCollector> iterator() {
             return Arrays.stream(collectors).iterator();
@@ -362,6 +364,7 @@ public class JvmStats {
             this.pools = pools;
         }
 
+        @NotNull
         @Override
         public Iterator<MemoryPool> iterator() {
             return pools.iterator();
