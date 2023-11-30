@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "column/column.h"
+#include "column/fixed_length_column.h"
 #include "exprs/function_helper.h"
 #include "runtime/runtime_state.h"
 
@@ -35,6 +35,10 @@ public:
 
     starrocks::Columns& get_columns() { return _columns; }
 
+    void set_status(Status status) { _status = std::move(status); }
+
+    const Status& status() const { return _status; }
+
 private:
     //Params of table function
     starrocks::Columns _columns;
@@ -45,6 +49,7 @@ private:
      * the result can be returned multiple times according to this offset
      */
     int _offset;
+    Status _status;
 };
 
 class TableFunction {
@@ -60,7 +65,7 @@ public:
     virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
 
     //Table function processing logic
-    virtual std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const = 0;
+    virtual std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const = 0;
 
     //Release the resources constructed in init and prepare
     virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
