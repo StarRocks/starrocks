@@ -562,9 +562,6 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         _tablet_schema = ori_tablet_schema;
     }
 
-    LOG(INFO) << "tablet:" << _tablet->tablet_id() << " schema id:" << _tablet_schema->id()
-              << " use count:" << _tablet_schema.use_count();
-
     return st;
 }
 

@@ -259,19 +259,12 @@ private:
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }
         }
-        if (_schema != nullptr) {
-            LOG(INFO) << "tablet:" << tablet_id() << " rowset:" << rowset_id() << " schema id:" << _schema->id()
-                      << " use count:" << _schema.use_count();
-        }
     }
 
     int64_t _calc_mem_usage() const {
         int64_t size = sizeof(RowsetMeta);
         if (_rowset_meta_pb != nullptr) {
             size += static_cast<int64_t>(_rowset_meta_pb->SpaceUsedLong());
-        }
-        if (_schema != nullptr && _schema.use_count() <= 1) {
-            size += _schema->mem_usage();
         }
         return size;
     }
