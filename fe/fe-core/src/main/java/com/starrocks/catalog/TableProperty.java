@@ -838,5 +838,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildConstraint();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();
+        buildStorageType();
     }
 }
