@@ -51,14 +51,14 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
         return Status::InternalError(msg.str());
     }
     VLOG(3) << "register_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     _pipeline_report_tasks.emplace(std::move(key), PipelineReportTask(UnixMillis(), TQueryType::LOAD));
     return Status::OK();
 }
 
 void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
     VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
 }
