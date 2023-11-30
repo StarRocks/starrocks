@@ -25,6 +25,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -72,12 +74,13 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
 
             List<Table> tables;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 tables = db.getTables().stream().filter(Table::isCloudNativeTableOrMaterializedView)
                         .collect(Collectors.toList());
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             for (Table table : tables) {
@@ -92,7 +95,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             partitions = table.getPartitions().stream()
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
@@ -101,7 +105,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                             p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
                     .collect(Collectors.toList());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         for (Partition partition : partitions) {
@@ -127,7 +131,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minActiveTxnId = computeMinActiveTxnId(db, table);
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             tablets = partition.getBaseIndex().getTablets();
             visibleVersion = partition.getVisibleVersion();
@@ -136,7 +141,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         for (Tablet tablet : tablets) {

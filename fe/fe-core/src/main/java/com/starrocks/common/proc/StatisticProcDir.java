@@ -52,6 +52,8 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -129,7 +131,8 @@ public class StatisticProcDir implements ProcDirInterface {
 
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -206,7 +209,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         } // end for dbs
 

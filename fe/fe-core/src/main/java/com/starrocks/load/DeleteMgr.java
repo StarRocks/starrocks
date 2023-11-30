@@ -80,6 +80,8 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.delete.LakeDeleteJob;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -169,7 +171,8 @@ public class DeleteMgr implements Writable {
             Table table = null;
             long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 String tableName = stmt.getTableName().getTbl();
                 table = db.getTable(tableName);
@@ -197,7 +200,7 @@ public class DeleteMgr implements Writable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);

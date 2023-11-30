@@ -2621,4 +2621,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static boolean use_lock_manager = false;
 }

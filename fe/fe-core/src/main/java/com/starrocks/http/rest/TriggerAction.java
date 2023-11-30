@@ -22,6 +22,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -88,7 +90,8 @@ public class TriggerAction extends RestBaseAction {
         if (method.equals(HttpMethod.GET)) {
             DynamicPartitionScheduler dynamicPartitionScheduler = globalStateMgr.getDynamicPartitionScheduler();
             Table table = null;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 if (!Strings.isNullOrEmpty(tableName)) {
                     table = db.getTable(tableName);
@@ -100,7 +103,7 @@ public class TriggerAction extends RestBaseAction {
                     return;
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), table.getId());
             response.appendContent("Success");

@@ -57,6 +57,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -113,7 +115,8 @@ public class OlapDeleteJob extends DeleteJob {
         MarkedCountDownLatch<Long, Long> countDownLatch;
         List<Predicate> conditions = stmt.getDeleteConditions();
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
@@ -190,7 +193,7 @@ public class OlapDeleteJob extends DeleteJob {
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 

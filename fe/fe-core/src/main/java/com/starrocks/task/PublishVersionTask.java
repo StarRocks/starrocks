@@ -39,6 +39,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
@@ -176,7 +178,8 @@ public class PublishVersionTask extends AgentTask {
         if (!droppedTablets.isEmpty()) {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -188,7 +191,7 @@ public class PublishVersionTask extends AgentTask {
                 replica.updateVersion(tabletVersion.version);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

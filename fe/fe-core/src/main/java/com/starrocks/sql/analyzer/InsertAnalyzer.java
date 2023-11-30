@@ -35,6 +35,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -283,21 +285,22 @@ public class InsertAnalyzer {
             }
         }
     }
-  
-    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database db, ExternalOlapTable externalOlapTable) {
         // copy the table, and release database lock when synchronize table meta
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
         int lockTimes = 0;
-        while (database.isReadLockHeldByCurrentThread()) {
-            database.readUnlock();
+        Locker locker = new Locker();
+        while (locker.isReadLockHeldByCurrentThread(db)) {
+            locker.unLockDatabase(db, LockType.READ);
             lockTimes++;
         }
         try {
             new TableMetaSyncer().syncTable(copiedTable);
         } finally {
             while (lockTimes-- > 0) {
-                database.readLock();
+                locker.lockDatabase(db, LockType.READ);
             }
         }
         return copiedTable;

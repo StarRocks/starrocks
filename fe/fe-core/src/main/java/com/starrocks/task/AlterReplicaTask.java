@@ -50,6 +50,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterJobType;
@@ -298,8 +300,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(getTableId());
             if (tbl == null) {
@@ -344,7 +346,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         setFinished(true);
     }

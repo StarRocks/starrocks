@@ -53,6 +53,8 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -296,7 +298,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         if (db == null) {
             return false;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
@@ -305,7 +308,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return false;
     }
@@ -390,7 +393,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         // version -> shadowTablets
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
@@ -437,7 +441,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -642,7 +646,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
@@ -674,7 +679,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         try {
@@ -711,11 +716,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (long tableId : transactionState.getTableIdList()) {
             Table table;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 table = db.getTable(tableId);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
@@ -726,7 +732,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             while (mvIdIterator.hasNext()) {
                 MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                mvDb.readLock();
+                locker.lockDatabase(mvDb, LockType.READ);
                 try {
                     MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
                     if (materializedView == null) {
@@ -740,7 +746,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
-                    mvDb.readUnlock();
+                    locker.unLockDatabase(mvDb, LockType.READ);
                 }
             }
         }

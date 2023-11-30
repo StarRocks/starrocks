@@ -35,6 +35,8 @@ import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.BinaryPredicatePB;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
@@ -81,7 +83,8 @@ public class LakeDeleteJob extends DeleteJob {
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isCloudNativeTable());
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, workerGroupId);
         } catch (Throwable t) {
@@ -93,7 +96,7 @@ public class LakeDeleteJob extends DeleteJob {
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // create delete predicate

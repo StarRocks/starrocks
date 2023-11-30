@@ -63,6 +63,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -451,7 +453,8 @@ public class BackupJob extends AbstractJob {
         // generate job id
         jobId = globalStateMgr.getNextId();
         batchTask = new AgentBatchTask();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // check all backup tables again
             checkBackupTables(db);
@@ -513,7 +516,7 @@ public class BackupJob extends AbstractJob {
             }
             backupMeta = new BackupMeta(copiedTables);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // send tasks

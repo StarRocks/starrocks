@@ -192,6 +192,8 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -3902,7 +3904,8 @@ public class GlobalStateMgr {
         }
 
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)) {
@@ -3910,7 +3913,7 @@ public class GlobalStateMgr {
                         "table : " + tableName + " not exists, or is not hive/hudi external table/view");
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -3940,6 +3943,7 @@ public class GlobalStateMgr {
         String dumpFilePath;
         Map<Long, Database> lockedDbMap = Maps.newTreeMap();
         tryLock(true);
+        Locker locker = new Locker();
         try {
             // sort all dbs
             for (long dbId : getDbIds()) {
@@ -3950,7 +3954,7 @@ public class GlobalStateMgr {
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -3966,7 +3970,7 @@ public class GlobalStateMgr {
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             unlock();
         }

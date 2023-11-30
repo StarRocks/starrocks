@@ -50,6 +50,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,7 +91,8 @@ public class TablesProcDir implements ProcDirInterface {
         }
 
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             try {
                 table = db.getTable(Long.parseLong(tableIdOrName));
@@ -97,7 +100,7 @@ public class TablesProcDir implements ProcDirInterface {
                 table = db.getTable(tableIdOrName);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (table == null) {
@@ -113,7 +116,8 @@ public class TablesProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (Table table : db.getTables()) {
                 List<Comparable> tableInfo = new ArrayList<Comparable>();
@@ -132,7 +136,7 @@ public class TablesProcDir implements ProcDirInterface {
                 tableInfos.add(tableInfo);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // sort by table id

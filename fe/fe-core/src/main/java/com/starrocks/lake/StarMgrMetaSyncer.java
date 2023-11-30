@@ -30,6 +30,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -67,7 +69,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -80,7 +83,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return groupIds;
@@ -149,9 +152,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
-                        .stream()
-                        .filter(x -> x.getGroupId() != 0L)
-                        .collect(Collectors.toList());
+                .stream()
+                .filter(x -> x.getGroupId() != 0L)
+                .collect(Collectors.toList());
 
         if (shardGroupsInfo.isEmpty()) {
             return;
@@ -247,7 +250,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
 
         HashMap<Long, List<Long>> feGroupToShards = new HashMap<>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -276,7 +280,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         } catch (Exception e) {
             throw new DdlException(e.getMessage());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // delete tablet meta and data, outside db lock

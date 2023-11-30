@@ -31,6 +31,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -233,13 +235,14 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             return false;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // lake table or lake materialized view
             OlapTable table = (OlapTable) db.getTable(partition.getTableId());
             return table != null && table.getPartition(partition.getPartitionId()) != null;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -256,7 +259,8 @@ public class CompactionScheduler extends Daemon {
         Partition partition;
         Map<Long, List<Long>> beToTablets;
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
 
         try {
             // lake table or lake materialized view
@@ -294,7 +298,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
@@ -403,12 +407,13 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

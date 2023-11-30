@@ -45,6 +45,8 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +80,8 @@ public class EsPartitionsProcDir implements ProcDirInterface {
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
@@ -118,7 +121,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // set result
@@ -143,11 +146,12 @@ public class EsPartitionsProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             return new EsShardProcDir(db, esTable, indexName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

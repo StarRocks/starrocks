@@ -65,6 +65,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
@@ -730,7 +732,8 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             // check drop rollup index operation
             for (AlterClause alterClause : dropRollupClauses) {
@@ -757,13 +760,14 @@ public class MaterializedViewHandler extends AlterHandler {
             LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                     olapTable.getName());
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     public void processDropMaterializedView(DropMaterializedViewStmt dropMaterializedViewStmt, Database db,
                                             OlapTable olapTable) throws DdlException, MetaNotFoundException {
-        Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
+        Locker locker = new Locker();
+        Preconditions.checkState(locker.isWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
             // Step1: check drop mv index operation
@@ -837,7 +841,8 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void replayDropRollup(DropInfo dropInfo, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(dropInfo.getDbId());
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             long tableId = dropInfo.getTableId();
             long rollupIndexId = dropInfo.getIndexId();
@@ -858,7 +863,7 @@ public class MaterializedViewHandler extends AlterHandler {
             String rollupIndexName = olapTable.getIndexNameById(rollupIndexId);
             olapTable.deleteIndexInfo(rollupIndexName);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         LOG.info("replay drop rollup {}", dropInfo.getIndexId());
     }
@@ -892,7 +897,8 @@ public class MaterializedViewHandler extends AlterHandler {
                     dbId, tableId);
             return;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null || tbl.getState() == olapTableState) {
@@ -900,7 +906,7 @@ public class MaterializedViewHandler extends AlterHandler {
             }
             tbl.setState(olapTableState);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -1053,7 +1059,8 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         List<AlterJobV2> rollupJobV2List = new ArrayList<>();
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -1085,7 +1092,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException("Table[" + tableName + "] is under ROLLUP but job does not exist.");
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -1114,7 +1121,8 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         AlterJobV2 materializedViewJob = null;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             for (Table table : db.getTables()) {
                 if (table instanceof OlapTable) {
@@ -1129,7 +1137,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         if (materializedViewJob == null) {

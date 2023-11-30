@@ -30,6 +30,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -71,6 +72,7 @@ public class TabletSchedulerTest {
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
+
     @Before
     public void setup() throws Exception {
         systemInfoService = new SystemInfoService();
@@ -132,12 +134,12 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
-        for (int i = 0; i != allCtxs.size(); ++ i) {
+        for (int i = 0; i != allCtxs.size(); ++i) {
             Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
         }
 
         long expireTime = now + (Config.catalog_trash_expire_second + 600) * 1000L;
-        for (int i = 0; i != allCtxs.size() - 1; ++ i) {
+        for (int i = 0; i != allCtxs.size() - 1; ++i) {
             Assert.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
         }
         // only the last survive
@@ -153,6 +155,7 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
         Partition goodPartition = new Partition(6, "bueno", null, null);
+        Locker locker = new Locker();
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
         for (int i = 0; i < 10; i++) {

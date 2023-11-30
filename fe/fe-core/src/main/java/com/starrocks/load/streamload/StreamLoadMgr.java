@@ -29,6 +29,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -172,12 +174,13 @@ public class StreamLoadMgr {
                                          boolean isRoutineLoad, long warehouseId)
             throws UserException {
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = db.getTable(tableName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // init stream load task
@@ -190,12 +193,13 @@ public class StreamLoadMgr {
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
                                          int channelNum, int channelId, long warehouseId) throws UserException {
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = db.getTable(tableName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // init stream load task
