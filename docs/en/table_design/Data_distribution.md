@@ -640,15 +640,15 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 ## Optimize data distribution after table creation (since 3.2)
 
-As query patterns and data volume change in business scenarios, the configurations specified at table creation, such as the bucketing method, number of buckets may no longer be suitable for the new business scenario. It can even can affect query performance. At this point, `ALTER TABLE` can be used to adjust the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
+As query patterns and data volume change in business scenarios, the configurations specified at table creation, such as the bucketing method, the number of buckets, and the sort key, may no longer be suitable for the new business scenario and even cause query performance to decrease. At this point, you can sue `ALTER TABLE` to adjust the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
 
 - **Increase the number of buckets when data volume within partitions is significantly increased**
 
-  When the data volume within partitions becomes significantly larger than before, adjusting the number of buckets may be necessary to maintain tablet sizes generally within the range of 1GB to 10GB.
+  When the data volume within partitions becomes significantly larger than before, it is necessary to adjust the number of buckets to maintain tablet sizes generally within the range of 1GB to 10GB.
   
-- **Adjust bucketing keys to avoid data skew**
+- **Adjust the bucketing key to avoid data skew**
 
-  When the current bucketing keys cause data skew (for example, only the `k1` column is configured as the bucketing key), it is necessary to specify more suitable columns or add additional columns to the bucketing key. For example:
+  When the current bucketing key causes data skew (for example, only the `k1` column is configured as the bucketing key), it is necessary to specify more suitable columns or add additional columns to the bucketing key. For example:
   
   ```SQL
   ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
@@ -656,7 +656,7 @@ As query patterns and data volume change in business scenarios, the configuratio
   ALTER TABLE t DISTRIBUTED BY RANDOM;
   ```
 
-- **Adapting sort keys due to changes in query patterns**
+- **Adapting the sort key due to changes in query patterns**
   
   If the business query patterns are significantly changed and additional columns are used as conditional columns, it can be beneficial to adjust the sort key. For example:
   
