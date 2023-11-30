@@ -681,17 +681,14 @@ public class IcebergMetadataTest extends TableTestBase {
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
-        new ConnectContext().setThreadLocalInfo();
         OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
-        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
-        Assert.assertTrue(context.getSessionVariable().enableIcebergColumnStatistics());
-        context.getSessionVariable().setEnableReadIcebergPuffinNdv(true);
+        Assert.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
         Assert.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
         Statistics statistics = metadata.getTableStatistics(context, icebergTable, colRefToColumnMetaMap, null, null, -1);
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
-        Assert.assertFalse(statistics.getColumnStatistic(columnRefOperator2).isUnknown());
+        Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator2).isUnknown());
     }
 
     @Test
@@ -713,8 +710,9 @@ public class IcebergMetadataTest extends TableTestBase {
         colRefToColumnMetaMap.put(columnRefOperator1, new Column("k1", Type.INT));
         colRefToColumnMetaMap.put(columnRefOperator2, new Column("k2", Type.INT));
         new ConnectContext().setThreadLocalInfo();
+        ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(true);
         Statistics statistics = metadata.getTableStatistics(
-                new OptimizerContext(null, null), icebergTable, colRefToColumnMetaMap, null, null, -1);
+                new OptimizerContext(null, null, ConnectContext.get()), icebergTable, colRefToColumnMetaMap, null, null, -1);
         Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
@@ -814,8 +812,12 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         mockedNativeTableA.refresh();
-        Statistics statistics = metadata.getTableStatistics(
-                new OptimizerContext(null, null), icebergTable, colRefToColumnMetaMap, null, null, -1);
+
+        new ConnectContext().setThreadLocalInfo();
+        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory(), ConnectContext.get());
+        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
+
+        Statistics statistics = metadata.getTableStatistics(context, icebergTable, colRefToColumnMetaMap, null, null, -1);
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
     }
 

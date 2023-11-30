@@ -392,21 +392,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             fileScanTasks = fileScanTaskIterator;
         }
 
-        List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-        Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                .filter(column -> column.type().isPrimitiveType())
-                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-        Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                .filter(x -> x.transform().isIdentity())
-                .map(PartitionField::sourceId)
-                .collect(Collectors.toSet());
-
-        List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                        column.type().isPrimitiveType())
-                .collect(toImmutableList());
-
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         long totalReadCount = 0;
 
@@ -414,12 +399,36 @@ public class IcebergMetadata implements ConnectorMetadata {
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
             FileScanTask scanTask = fileScanTaskIterator.next();
-            statisticProvider.updateIcebergFileStats(
-                    icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
-                icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                }
+
+                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                        .filter(column -> column.type().isPrimitiveType())
+                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                        .filter(x -> x.transform().isIdentity())
+                        .map(PartitionField::sourceId)
+                        .collect(Collectors.toSet());
+
+                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                column.type().isPrimitiveType())
+                        .collect(toImmutableList());
+
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                    statisticProvider.updateIcebergFileStats(
+                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                }
+            } else {
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateCardinality")) {
+                    statisticProvider.updateIcebergCardinality(key, scanTask);
+                }
             }
             icebergScanTasks.add(icebergSplitScanTask);
 
@@ -475,7 +484,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
-        return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
+        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
+            return statisticProvider.getCardinalityStats(icebergTable, columns, predicate);
+        } else {
+            return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
+        }
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
