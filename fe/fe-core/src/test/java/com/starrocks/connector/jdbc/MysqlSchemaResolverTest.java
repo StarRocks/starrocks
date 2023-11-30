@@ -110,6 +110,48 @@ public class MysqlSchemaResolverTest {
     public void testCheckPartitionWithoutPartitionsTable() {
         try {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            Assert.assertFalse(schemaResolver.checkSupportPartitionInformation(connection));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCheckPartitionWithPartitionsTable() throws SQLException {
+        new Expectations() {
+            {
+                String catalogSchema = "information_schema";
+
+                dbResult = new MockResultSet("catalog");
+                dbResult.addColumn("TABLE_CAT", Arrays.asList(catalogSchema));
+
+                connection.getMetaData().getCatalogs();
+                result = dbResult;
+                minTimes = 0;
+
+                String partitionInfoTable = "partitions";
+                tableResult = new MockResultSet("tables");
+                tableResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
+                connection.getMetaData().getTables(catalogSchema, null, null,
+                        new String[] {"SYSTEM TABLE", "SYSTEM VIEW"});
+                result = tableResult;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            Assert.assertTrue(schemaResolver.checkSupportPartitionInformation(connection));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCheckPartitionWithoutPartitionsTable() {
+        try {
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
             Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
             System.out.println(e.getMessage());

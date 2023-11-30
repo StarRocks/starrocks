@@ -72,6 +72,15 @@ public class JDBCMetadata implements ConnectorMetadata {
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
     }
 
+    public boolean checkSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.setSupportPartitionInformation(
+                    schemaResolver.checkSupportPartitionInformation(connection));
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
     @Override
     public List<String> listDbNames() {
         ImmutableMap<String, String> metaInfo =
