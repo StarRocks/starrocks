@@ -6,9 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Returns the ISO standard weekday number for a given date.
-
-The date parameter must be of the DATE or DATETIME type.
+Returns the ISO standard day of the week for the specified date as an integer within the range of `1` to `7`. In this standard, `1` represents Monday, and `7` represents Sunday.
 
 ## Syntax
 
@@ -16,10 +14,16 @@ The date parameter must be of the DATE or DATETIME type.
 INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 
+## Parameters
+
+`date`: the date you want to convert. It must be of the DATE or DATETIME type.
+
 ## Examples
 
-```Plain Text
-mysql> select dayofweek_iso("2023-01-01");
+The following example returns the ISO standard day of the week for the date `2023-01-01`:
+
+```SQL
+MySQL > select dayofweek_iso('2023-01-01');
 +-----------------------------+
 | dayofweek_iso('2023-01-01') |
 +-----------------------------+
@@ -27,6 +31,6 @@ mysql> select dayofweek_iso("2023-01-01");
 +-----------------------------+
 ```
 
-## keyword
+## Keywords
 
 DAY_OF_WEEK_ISO

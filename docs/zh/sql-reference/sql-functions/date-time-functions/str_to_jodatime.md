@@ -1,32 +1,32 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # str_to_jodatime
 
-## Description
+## 功能
 
-Converts a Joda-formatted string into a DATETIME value in the specified Joda DateTime format like `yyyy-MM-dd HH:mm:ss`.
+将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式（如 `yyyy-MM-dd HH:mm:ss`）的 DATETIME 值。
 
-## Syntax
+## 语法
 
 ```Haskell
 DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ```
 
-## Parameters
+## 参数说明
 
-- `str`: the time expression you want to convert. It must be of the VARCHAR type.
-- `format`: the Joda DateTime format of the DATETIME value to be returned. For information about the formats available, see [Joda DateTime](https://www.joda.org/joda-time/apidocs/org/joda/time/format/DateTimeFormat.html).
+- `str`：待计算转换的时间表达式，取值必须是 VARCHAR 数据类型。
+- `format`：计算转换后生成的 DATETIME 值的 Joda DateTime 格式。参见 [Joda DateTime](https://www.joda.org/joda-time/apidocs/org/joda/time/format/DateTimeFormat.html)。
 
-## Return value
+## 返回值说明
 
-- If parsing the input string succeeds, a DATETIME value is returned.
-- If parsing the input string fails, `NULL` is returned.
+- 如果输入的字符串解析成功，系统返回 DATETIME 类型的值。
+- 如果输入的字符串解析失败，系统返回 `NULL`。
 
-## Examples
+## 示例
 
-Example 1: Convert the string `2014-12-21 12:34:56` into a DATETIME value in `yyyy-MM-dd HH:mm:ss` format.
+示例一：将字符串 `2014-12-21 12:34:56` 转换成 `yyyy-MM-dd HH:mm:ss` 格式的 DATETIME 值。
 
 ```SQL
 MySQL > select str_to_jodatime('2014-12-21 12:34:56', 'yyyy-MM-dd HH:mm:ss');
@@ -37,7 +37,7 @@ MySQL > select str_to_jodatime('2014-12-21 12:34:56', 'yyyy-MM-dd HH:mm:ss');
 +--------------------------------------------------------------+
 ```
 
-Example 2: Convert the string `21/December/23 12:34:56` with a text-style month into a DATETIME value in `dd/MMMM/yy HH:mm:ss` format.
+示例二：将字符串 `21/December/23 12:34:56`（字符串所表示的时间中月份通过单词文本表示）转换成 `dd/MMMM/yy HH:mm:ss` 格式的 DATETIME 值。
 
 ```SQL
 MySQL > select str_to_jodatime('21/December/23 12:34:56', 'dd/MMMM/yy HH:mm:ss');
@@ -48,7 +48,7 @@ MySQL > select str_to_jodatime('21/December/23 12:34:56', 'dd/MMMM/yy HH:mm:ss')
 +------------------------------------------------------------------+
 ```
 
-Example 3: Convert the string `21/December/23 12:34:56.123` accurate to milliseconds into a DATETIME value in `dd/MMMM/yy HH:mm:ss.SSS` format.
+示例三：将字符串 `21/December/23 12:34:56.123` （字符串所表示的时间精确到毫秒）转换成 `dd/MMMM/yy HH:mm:ss.SSS` 格式的 DATETIME 值。
 
 ```SQL
 MySQL > select str_to_jodatime('21/December/23 12:34:56.123', 'dd/MMMM/yy HH:mm:ss.SSS');
@@ -59,6 +59,6 @@ MySQL > select str_to_jodatime('21/December/23 12:34:56.123', 'dd/MMMM/yy HH:mm:
 +--------------------------------------------------------------------------+
 ```
 
-## Keywords
+## 关键字
 
 STR_TO_JODATIME, DATETIME
