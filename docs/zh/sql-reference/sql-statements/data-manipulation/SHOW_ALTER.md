@@ -9,7 +9,7 @@ displayed_sidebar: "Chinese"
 查询正在进行的以下变更 (Alter) 任务的执行情况：
 
 - 修改列
-- 优化表结构（自 3.2 版本起）
+- 优化表结构（自 3.2 版本起），包括修改分桶方式和分桶数量。
 - 创建和删除 Rollup 索引
 
 ## 语法
@@ -29,7 +29,8 @@ displayed_sidebar: "Chinese"
 ## 参数说明
 
 - `COLUMN ｜ OPTIMIZE | ROLLUP`：从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。
-  - 如果指定了 COLUMN 或者 OPTIMIZE，该语句用于查询修改列和优化表结构任务。
+  - 如果指定了 COLUMN，该语句用于查询修改任务。
+  - 如果指定了 OPTIMIZE，该语句用于查询优化表结构任务（修改分桶方式和分桶数量）。
   - 如果指定了 ROLLUP，该语句用于查询创建或删除 ROLLUP 索引的任务。
 - `db_name`：可选。如果不指定，则默认使用当前数据库。
 
