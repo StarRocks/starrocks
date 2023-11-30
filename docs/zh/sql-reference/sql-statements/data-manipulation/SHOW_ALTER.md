@@ -8,18 +8,16 @@ displayed_sidebar: "Chinese"
 
 查询正在进行的以下变更 (Alter) 任务的执行情况：
 
-- Schema Change：修改列和优化表结构。
-- Rollup 索引: 创建和删除 Rollup 索引。
+- 修改列
+- 优化表结构（自 3.2）
+- 创建和删除 Rollup 索引
 
 ## 语法
 
-- 查询 Schema Change 任务的执行情况。
+- 查询修改列或者优化表结构的任务执行情况
 
     ```sql
-    -- 查询修改列的任务执行情况
-    SHOW ALTER TABLE COLUMN [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
-    -- 查询优化表结构的任务执行情况
-    SHOW ALTER TABLE OPTIMIZE [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
+    SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
     ```
 
 - 查询 Rollup 索引变更任务的执行情况。

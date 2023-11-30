@@ -254,7 +254,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
   ```
 
-#### 修改 Hash 分桶的分桶键**
+#### 修改 Hash 分桶的分桶键
 
 修改所有分区的分桶键为 `user_id, event_time`。
 
