@@ -15,24 +15,14 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TStorageMedium;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -41,20 +31,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-public class LakeTableTxnStateListenerTest {
-    long dbId = 9;
-    long tableId = 10;
-    long partitionId = 11;
-    long indexId = 12;
-    long[] tabletId = {13, 14};
-
+public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
     @Test
     public void testHasUnfinishedTablet() {
         LakeTable table = buildLakeTable();
@@ -131,56 +114,6 @@ public class LakeTableTxnStateListenerTest {
             txnState.setTabletCommitInfos(Collections.singletonList(new TabletCommitInfo(tableId, 10001)));
         }
         listener.postAbort(txnState, Collections.emptyList());
-    }
-
-    private LakeTable buildLakeTable() {
-        MaterializedIndex index = new MaterializedIndex(indexId);
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (long id : tabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
-            invertedIndex.addTablet(id, tabletMeta);
-            index.addTablet(new LakeTablet(id), tabletMeta);
-        }
-        Partition partition = new Partition(partitionId, "p0", index, null);
-        LakeTable table = new LakeTable(
-                tableId, "t0",
-                Lists.newArrayList(new Column("c0", Type.BIGINT)),
-                KeysType.DUP_KEYS, null, null);
-        table.addPartition(partition);
-        return table;
-    }
-
-    private DatabaseTransactionMgr addDatabaseTransactionMgr() {
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
-        try {
-            return GlobalStateMgr.getCurrentGlobalTransactionMgr().getDatabaseTransactionMgr(dbId);
-        } catch (AnalysisException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private List<TabletCommitInfo> buildFullTabletCommitInfo() {
-        List<TabletCommitInfo> tabletCommitInfos = new ArrayList<>();
-        for (long id : tabletId) {
-            tabletCommitInfos.add(new TabletCommitInfo(id, 1));
-        }
-        return tabletCommitInfos;
-    }
-
-    private List<TabletCommitInfo> buildPartialTabletCommitInfo() {
-        List<TabletCommitInfo> tabletCommitInfos = new ArrayList<>();
-        tabletCommitInfos.add(new TabletCommitInfo(tabletId[0], 1));
-        return tabletCommitInfos;
-    }
-
-    private TransactionState newTransactionState() {
-        long currentTimeMs = System.currentTimeMillis();
-        TransactionState transactionState =
-                new TransactionState(dbId, Lists.newArrayList(tableId), 123456L, "label", null,
-                        TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, null, 0, 60_000);
-        transactionState.setPrepareTime(currentTimeMs - 10_000);
-        transactionState.setWriteEndTimeMs(currentTimeMs);
-        return transactionState;
     }
 
     private void makeCompactionScoreExceedSlowdownThreshold() {
