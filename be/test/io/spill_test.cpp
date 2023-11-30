@@ -40,6 +40,7 @@
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spill/spiller_factory.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
@@ -140,15 +141,21 @@ public:
 struct SyncExecutor {
     template <class Runnable>
     Status submit(Runnable&& runnable) {
-        std::forward<Runnable>(runnable)();
+        workgroup::YieldContext yield_ctx;
+        do {
+            std::forward<Runnable>(runnable)(yield_ctx);
+        } while (!yield_ctx.is_finished());
         return Status::OK();
     }
 };
 
 struct ASyncExecutor {
+    using ExecFunction = std::function<void(workgroup::YieldContext&)>;
     template <class Runnable>
     Status submit(Runnable&& runnable) {
-        _threads.emplace_back(std::forward<Runnable>(runnable));
+        ExecFunction func = std::forward<Runnable>(runnable);
+        _ctxs.emplace_back(std::make_unique<workgroup::YieldContext>());
+        _threads.emplace_back(func, std::ref(*_ctxs.back()));
         return Status::OK();
     }
     ~ASyncExecutor() {
@@ -158,6 +165,7 @@ struct ASyncExecutor {
     }
 
 private:
+    std::vector<std::unique_ptr<workgroup::YieldContext>> _ctxs;
     std::vector<std::thread> _threads;
 };
 
