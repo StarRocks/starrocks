@@ -107,6 +107,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -392,21 +393,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             fileScanTasks = fileScanTaskIterator;
         }
 
-        List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-        Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                .filter(column -> column.type().isPrimitiveType())
-                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-        Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                .filter(x -> x.transform().isIdentity())
-                .map(PartitionField::sourceId)
-                .collect(Collectors.toSet());
-
-        List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                        column.type().isPrimitiveType())
-                .collect(toImmutableList());
-
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         long totalReadCount = 0;
 
@@ -414,12 +400,36 @@ public class IcebergMetadata implements ConnectorMetadata {
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
             FileScanTask scanTask = fileScanTaskIterator.next();
-            statisticProvider.updateIcebergFileStats(
-                    icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
-                icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                }
+
+                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                        .filter(column -> column.type().isPrimitiveType())
+                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                        .filter(x -> x.transform().isIdentity())
+                        .map(PartitionField::sourceId)
+                        .collect(Collectors.toSet());
+
+                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                column.type().isPrimitiveType())
+                        .collect(toImmutableList());
+
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                    statisticProvider.updateIcebergFileStats(
+                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                }
+            } else {
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateCardinality")) {
+                    statisticProvider.updateIcebergCardinality(key, scanTask);
+                }
             }
             icebergScanTasks.add(icebergSplitScanTask);
 
@@ -475,7 +485,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
-        return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
+        if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
+            return statisticProvider.getCardinalityStats(icebergTable, columns, predicate);
+        } else {
+            return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
+        }
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
@@ -491,7 +505,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         Schema taskSchema = fileScanTask.spec().schema();
         String schemaString;
         String partitionString;
-        FileScanTaskSchema schemaKey = new FileScanTaskSchema(filter, taskSchema.schemaId(), taskSpec.specId());
+        FileScanTaskSchema schemaKey = new FileScanTaskSchema(filter.getDatabaseName(), filter.getTableName(),
+                taskSchema.schemaId(), taskSpec.specId());
         Pair<String, String> schema = fileScanTaskSchemas.get(schemaKey);
         if (schema == null) {
             schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
@@ -515,6 +530,17 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        if (isResourceMappingCatalog(catalogName)) {
+            refreshTableWithResource(table);
+        } else {
+            IcebergTable icebergTable = (IcebergTable) table;
+            String dbName = icebergTable.getRemoteDbName();
+            String tableName = icebergTable.getRemoteTableName();
+            icebergCatalog.refreshTable(dbName, tableName);
+        }
+    }
+
+    private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         try {
@@ -775,12 +801,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private static class FileScanTaskSchema {
-        private final IcebergFilter icebergFilter;
+        private final String dbName;
+        private final String tableName;
         private final int schemaId;
         private final int specId;
 
-        public FileScanTaskSchema(IcebergFilter icebergFilter, int schemaId, int specId) {
-            this.icebergFilter = icebergFilter;
+        public FileScanTaskSchema(String dbName, String tableName, int schemaId, int specId) {
+            this.dbName = dbName;
+            this.tableName = tableName;
             this.schemaId = schemaId;
             this.specId = specId;
         }
@@ -793,13 +821,15 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (o == null || getClass() != o.getClass()) {
                 return false;
             }
+
             FileScanTaskSchema that = (FileScanTaskSchema) o;
-            return schemaId == that.schemaId && specId == that.specId && Objects.equals(icebergFilter, that.icebergFilter);
+            return schemaId == that.schemaId && specId == that.specId &&
+                    Objects.equals(dbName, that.dbName) && Objects.equals(tableName, that.tableName);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(icebergFilter, schemaId, specId);
+            return Objects.hash(dbName, tableName, schemaId, specId);
         }
     }
 }

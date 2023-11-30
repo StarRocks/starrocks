@@ -491,6 +491,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
@@ -1377,6 +1378,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+    @VarAttr(name = ENABLE_SUBFIELD_NO_COPY)
+    private boolean enableSubfieldNoCopy = true;
+
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
     private boolean enablePruneComplexTypesInUnnest = true;
 
@@ -1480,7 +1484,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableReadIcebergPuffinNdv = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
-    private boolean enableIcebergColumnStatistics = true;
+    private boolean enableIcebergColumnStatistics = false;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -2708,6 +2712,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public boolean getEnableSubfieldNoCopy() {
+        return this.enableSubfieldNoCopy;
+    }
+
+    public void setEnableSubfieldNoCopy(boolean enableSubfieldNoCopy) {
+        this.enableSubfieldNoCopy = enableSubfieldNoCopy;
     }
 
     public boolean getEnablePruneComplexTypesInUnnest() {

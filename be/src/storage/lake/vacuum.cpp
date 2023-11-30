@@ -17,6 +17,7 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include <set>
 #include <string_view>
 #include <unordered_map>
 
@@ -66,6 +67,10 @@ static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_d
 static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_delete_file_tasks",
                                                            get_num_active_file_queued_tasks, nullptr);
 namespace {
+
+const char* const kDuplicateFilesError =
+        "Duplicate files were returned from the remote storage. The most likely cause is an S3 or HDFS API "
+        "compatibility issue with your remote storage implementation.";
 
 std::future<Status> completed_future(Status value) {
     std::promise<Status> p;
@@ -456,16 +461,16 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
-    std::unordered_map<int64_t, std::vector<int64_t>> tablet_versions;
+    std::unordered_map<int64_t, std::set<int64_t>> tablet_versions;
     //                 ^^^^^^^ tablet id
-    //                                     ^^^^^^^^^ version number
+    //                                  ^^^^^^^^^ version number
 
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
 
     AsyncFileDeleter async_deleter;
-    std::vector<std::string> txn_logs;
+    std::set<std::string> txn_logs;
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
@@ -481,7 +486,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             return true;
         }
 
-        txn_logs.emplace_back(name);
+        auto [_, inserted] = txn_logs.emplace(name);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file:" << join_path(log_dir, name);
 
         return true;
     })));
@@ -532,18 +538,18 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        tablet_versions[tablet_id].emplace_back(version);
+        auto [_, inserted] = tablet_versions[tablet_id].insert(version);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file: " << join_path(meta_dir, name);
         return true;
     })));
 
     for (auto& [tablet_id, versions] : tablet_versions) {
         DCHECK(!versions.empty());
-        std::sort(versions.begin(), versions.end());
 
         TabletMetadataPtr latest_metadata = nullptr;
 
         // Find metadata files that has garbage data files and delete all those files
-        for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
+        for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
             if (res.status().is_not_found()) {

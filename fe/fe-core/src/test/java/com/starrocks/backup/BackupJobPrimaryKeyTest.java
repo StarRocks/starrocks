@@ -87,6 +87,9 @@ public class BackupJobPrimaryKeyTest {
     private BackupJob job;
     private Database db;
 
+    private final String testDbName = "testDbPK";
+    private final String testTableName = "testTablePK";
+
     private long dbId = 11;
     private long tblId = 12;
     private long partId = 13;
@@ -132,7 +135,7 @@ public class BackupJobPrimaryKeyTest {
     @Mocked
     private EditLog editLog;
 
-    private Repository repo = new Repository(repoId, "repo", false, "my_repo",
+    private Repository repo = new Repository(repoId, "repo_pk", false, "my_repo_pk",
             new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeClass
@@ -164,7 +167,8 @@ public class BackupJobPrimaryKeyTest {
         // Thread is unmockable after Jmockit version 1.48, so use reflection to set field instead.
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
-        db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS);
+        db = UnitTestUtil.createDbByName(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS,
+                                         testDbName, testTableName);
 
         new Expectations(globalStateMgr) {
             {
@@ -215,8 +219,8 @@ public class BackupJobPrimaryKeyTest {
         };
 
         List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        tableRefs.add(new TableRef(new TableName(testDbName, testTableName), null));
+        job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
     }
 
@@ -230,7 +234,7 @@ public class BackupJobPrimaryKeyTest {
 
         BackupMeta backupMeta = job.getBackupMeta();
         Assert.assertEquals(1, backupMeta.getTables().size());
-        OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.TABLE_NAME);
+        OlapTable backupTbl = (OlapTable) backupMeta.getTable(testTableName);
         List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
         Assert.assertNotNull(backupTbl);
         Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
@@ -318,13 +322,13 @@ public class BackupJobPrimaryKeyTest {
             Assert.assertEquals(1, restoreMetaInfo.getTables().size());
             OlapTable olapTable = (OlapTable) restoreMetaInfo.getTable(tblId);
             Assert.assertNotNull(olapTable);
-            Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
+            Assert.assertNotNull(restoreMetaInfo.getTable(testTableName));
             List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
             Assert.assertEquals(((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
                     olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
-            Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
+            Assert.assertEquals(testDbName, restoreJobInfo.dbName);
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(1, restoreJobInfo.tables.size());
         } catch (IOException e) {
@@ -347,8 +351,8 @@ public class BackupJobPrimaryKeyTest {
         AgentTaskQueue.clearAllTasks();
 
         List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        tableRefs.add(new TableRef(new TableName(testDbName, "unknown_tbl"), null));
+        job = new BackupJob("label", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());

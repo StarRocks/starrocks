@@ -39,6 +39,13 @@ bool PriorityScanTaskQueue::try_offer(ScanTask task) {
     return _queue.try_put(std::move(task));
 }
 
+void PriorityScanTaskQueue::force_put(ScanTask task) {
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
+    }
+    _queue.force_put(std::move(task));
+}
+
 /// MultiLevelFeedScanTaskQueue.
 MultiLevelFeedScanTaskQueue::MultiLevelFeedScanTaskQueue() {
     double factor = 1;
@@ -116,6 +123,10 @@ bool MultiLevelFeedScanTaskQueue::try_offer(ScanTask task) {
 
     _cv.notify_one();
     return true;
+}
+
+void MultiLevelFeedScanTaskQueue::force_put(ScanTask task) {
+    (void)try_offer(std::move(task));
 }
 
 void MultiLevelFeedScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
@@ -211,6 +222,25 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     _num_tasks++;
     _cv.notify_one();
     return true;
+}
+
+void WorkGroupScanTaskQueue::force_put(ScanTask task) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
+    auto* wg_entity = _sched_entity(task.workgroup);
+    wg_entity->set_in_queue(this);
+    wg_entity->queue()->force_put(std::move(task));
+
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup(wg_entity);
+    }
+
+    _num_tasks++;
+    _cv.notify_one();
 }
 
 void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
