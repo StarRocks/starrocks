@@ -420,18 +420,18 @@ vectorized_functions = [
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
     [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-     
+
     # From string to DATE/DATETIME
     # the function will call by FE getStrToDateFunction, and is invisible to user
     [50240, 'str_to_date', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str_to_date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
-    
+
     # Joda Time parse & format
-    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'], 
-            'TimeFunctions::parse_jodatime', 
-            'TimeFunctions::parse_joda_prepare', 
+    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'],
+            'TimeFunctions::parse_jodatime',
+            'TimeFunctions::parse_joda_prepare',
             'TimeFunctions::parse_joda_close'],
-            
+
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
 
@@ -624,6 +624,8 @@ vectorized_functions = [
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
     [91001, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
     [91002, 'bitmap_subset_in_range', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_in_range', False],
+    [91003, 'bitmap_to_binary', 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary', False],
+    [91004, 'bitmap_from_binary', 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
