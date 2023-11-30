@@ -153,6 +153,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     TABLE: part_tbl1\n" +
                     "     PREDICATES: 13: d != '2023-08-01', 13: d != '2023-08-02'");
         }
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test

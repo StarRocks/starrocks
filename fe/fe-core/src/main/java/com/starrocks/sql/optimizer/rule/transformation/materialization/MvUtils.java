@@ -735,7 +735,7 @@ public class MvUtils {
         return columnRefOperators;
     }
 
-    public static ScalarOperator convertListPartitionKeys(ColumnRefOperator partitionColRef,
+    public static ScalarOperator convertListPartitionKeys(ScalarOperator partitionColRef,
                                                           List<Range<PartitionKey>> partitionRanges) {
         List<ScalarOperator> inArgs = Lists.newArrayList();
         inArgs.add(partitionColRef);
@@ -743,15 +743,30 @@ public class MvUtils {
             if (range.isEmpty()) {
                 continue;
             }
-            // partition range must have lower bound and upper bound
-            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
-            ConstantOperator lowerBound =
-                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-            ConstantOperator upperBound =
-                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-            Preconditions.checkState(lowerBound.getType().isStringType());
-            Preconditions.checkState(upperBound.getType().isStringType());
-            inArgs.add(lowerBound);
+
+            // see `convertToDateRange`
+            if (range.hasLowerBound() && range.hasUpperBound()) {
+                // partition range must have lower bound and upper bound
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                Preconditions.checkState(lowerBound.getType().isStringType());
+                Preconditions.checkState(upperBound.getType().isStringType());
+                inArgs.add(lowerBound);
+            } else if (range.hasUpperBound()) {
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                Preconditions.checkState(upperBound.getType().isStringType());
+                inArgs.add(upperBound);
+            } else if (range.hasLowerBound()) {
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                Preconditions.checkState(lowerBound.getType().isStringType());
+                inArgs.add(lowerBound);
+            } else {
+                // continue
+            }
         }
         if (inArgs.size() == 1) {
             return ConstantOperator.TRUE;
@@ -760,9 +775,20 @@ public class MvUtils {
         }
     }
 
-    public static List<ScalarOperator> convertRanges(
-            ScalarOperator partitionScalar,
-            List<Range<PartitionKey>> partitionRanges) {
+    public static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,
+                                                                 List<Range<PartitionKey>> partitionKeys) {
+        boolean isListPartition = partitionColumn.getType().isStringType();
+        // NOTE: For string type partition column, it should be list partition rather than range partition.
+        if (isListPartition) {
+            return convertListPartitionKeys(partitionColumn, partitionKeys);
+        } else {
+            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumn, partitionKeys);
+            return Utils.compoundOr(rangePredicates);
+        }
+    }
+
+    public static List<ScalarOperator> convertRanges(ScalarOperator partitionScalar,
+                                                     List<Range<PartitionKey>> partitionRanges) {
         List<ScalarOperator> rangeParts = Lists.newArrayList();
         for (Range<PartitionKey> range : partitionRanges) {
             if (range.isEmpty()) {
@@ -920,8 +946,7 @@ public class MvUtils {
 
         List<Range<PartitionKey>> mergedRanges = mergeRanges(ranges);
         ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(hiveTable.getPartitionColumns().get(0));
-        List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
-        ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+        ScalarOperator partitionPredicate = convertPartitionKeysToPredicate(partitionColumnRef, mergedRanges);
         if (partitionPredicate != null) {
             partitionPredicates.add(partitionPredicate);
         }
@@ -1138,8 +1163,8 @@ public class MvUtils {
 
             // normalize selected partition ranges
             List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
-            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
-            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            ScalarOperator partitionPredicate =
+                    convertPartitionKeysToPredicate(partitionScalarOperator, mergedRanges);
             partitionPredicates.add(partitionPredicate);
         } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
@@ -1152,10 +1177,10 @@ public class MvUtils {
             for (long pid : olapScanOperator.getSelectedPartitionId()) {
                 selectedRanges.add(rangePartitionInfo.getRange(pid));
             }
-            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
             ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
-            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
-            ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+            List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+            ScalarOperator partitionPredicate =
+                    convertPartitionKeysToPredicate(partitionColumnRef, mergedRanges);
             if (partitionPredicate != null) {
                 partitionPredicates.add(partitionPredicate);
             }
@@ -1200,14 +1225,7 @@ public class MvUtils {
             }
 
             ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            // NOTE: For string type partition column, it should be list partition rather than range partition.
-            if (partitionColumn.getType().isStringType()) {
-                return convertListPartitionKeys(columnRef, latestBaseTableRanges);
-            } else {
-                List<ScalarOperator> partitionPredicates = MvUtils.convertRanges(columnRef, latestBaseTableRanges);
-                ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
-                return partialPartitionPredicate;
-            }
+            return convertPartitionKeysToPredicate(columnRef, latestBaseTableRanges);
         }
         return null;
     }
