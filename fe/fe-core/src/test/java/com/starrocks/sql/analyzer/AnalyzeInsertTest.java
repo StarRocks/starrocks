@@ -359,7 +359,7 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
-                "\t\"compression\" = \"uncompressed\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select 1 as a, 2 as a", "got duplicate column name, expect all columns are distinct.");
     }
 }
