@@ -639,7 +639,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
     ```SQL
     ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
-    -- 如果是3.1及以上版本，并且使用的是明细模型表，则建议直接改成 RANDOM 方式、并采用系统默认分桶设置
+    -- 如果是3.1及以上版本，并且使用的是明细模型表，则建议直接改成默认分桶设置，即随机分桶并且由系统自动设置分桶数量
     ALTER TABLE t DISTRIBUTED BY RANDOM;
     ```
 
