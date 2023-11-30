@@ -187,7 +187,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 ### 修改分桶方式和分桶数量（自 3.2 版本起）
 
-修改所有分区的分桶方式或分桶数量，也支持修改指定分区的分桶数量。
+修改所有分区的分桶方式和分桶数量，也支持修改指定分区的分桶数量。
 
 语法：
 
@@ -242,7 +242,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
 #### 修改分桶方式
 
-- 修改分桶方式为 Random 分桶并且分桶数量由 StarRocks 自动设置。
+- 修改分桶方式为 Random 分桶并且分桶数量仍然由 StarRocks 自动设置。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY RANDOM;
@@ -256,7 +256,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
 #### 修改 Hash 分桶的分桶键
 
-修改所有分区的分桶键为 `user_id, event_time`。
+修改所有分区 Hash 分桶时所使用的分桶键为 `user_id, event_time`。
 
 ```SQL
 ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
@@ -277,7 +277,7 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   > **注意**
   >
   > - 虽然本示例没有修改分桶方式只修改分桶数量，但是在语句中仍然需要说明分桶方式 `HASH(user_id)`。
-  > - 如果不指定 BUCKETS 子句，就代表修改为采用系统自动配置的。
+  > - 如果不指定 `BUCKETS <num>`，则表示修改为由 StarRocks 自动设置分桶数量。
 
 - 修改指定分区的分桶数量为 15。
 
@@ -295,7 +295,7 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
 
 base index 和 rollup index 都是物化索引。下方语句在编写时如果没有指定 `rollup_index_name`，默认操作基表。
 
-**向指定 index 的指定位置添加一列 (ADD COLUMN)**
+#### 向指定 index 的指定位置添加一列 (ADD COLUMN)
 
 语法：
 
@@ -313,7 +313,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 2. 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
-**向指定 index 添加多列**
+#### 向指定 index 添加多列
 
 语法：
 
@@ -342,7 +342,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
-**增加生成列**
+#### 增加生成列
 
 语法：
 
@@ -353,7 +353,7 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 
 增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
 
-**从指定 index 中删除一列 (DROP COLUMN)**
+#### 从指定 index 中删除一列 (DROP COLUMN)
 
 语法：
 
@@ -368,7 +368,7 @@ DROP COLUMN column_name
 1. 不能删除分区列。
 2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除。
 
-**修改指定 index 的列类型以及列位置 (MODIFY COLUMN)**
+#### 修改指定 index 的列类型以及列位置 (MODIFY COLUMN)
 
 语法：
 
@@ -400,7 +400,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 6. 不支持从 NULL 转为 NOT NULL。
 
-**对指定 index 的列进行重新排序**
+#### 对指定 index 的列进行重新排序
 
 语法：
 
@@ -416,7 +416,7 @@ ORDER BY (column_name1, column_name2, ...)
 - index 中的所有列都要写出来。
 - value 列在 key 列之后。
 
-**重新指定主键表中组成排序键的列**
+#### 重新指定主键表中组成排序键的列
 <!--支持版本-->
 
 语法：

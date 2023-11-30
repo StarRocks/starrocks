@@ -10,11 +10,13 @@ Modifies an existing table, including:
 
 - [Rename table, partition, index](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
-- [Atomic swap](#swap)
 - [Add/delete partitions and modify partition attributes](#modify-partition)
-- [Schema change](#schema-change)
+- [Modify bucketing method and number of buckets](#)
+- [Modify columns (add/delete columns, change the order of columns)](#schema-change)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
+- [Modify table properties](#modify-table-properties)
+- [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
 
 > **NOTE**
@@ -179,7 +181,111 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 - Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
 
-### Schema change
+### Modify bucketing method and number of buckets (from v3.2)
+
+You can modify the bucketing method and the number of buckets for all partitions. Also you can modify the number of buckets for specified partitions.
+
+Syntax:
+
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ partition_names ]
+[ distribution_desc ]
+
+distribution_desc ::=
+    DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
+    DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
+
+partition_names ::= 
+    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
+```
+
+Example:
+
+Assuming that the original table is a Duplicate Key table, Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
+
+```SQL
+CREATE TABLE IF NOT EXISTS details (
+    event_time DATETIME NOT NULL COMMENT "datetime of event",
+    event_type INT NOT NULL COMMENT "type of event",
+    user_id INT COMMENT "id of user",
+    device_code INT COMMENT "device code",
+    channel INT COMMENT ""
+)
+DUPLICATE KEY(event_time, event_type)
+PARTITION BY date_trunc('day', event_time)
+DISTRIBUTED BY HASH(user_id);
+
+-- Insert data for multiple days
+-- Data for November 26th
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-26 08:00:00', 1, 101, 12345, 2),
+('2023-11-26 09:15:00', 2, 102, 54321, 3),
+('2023-11-26 10:30:00', 1, 103, 98765, 1);
+
+-- Data for November 27th
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-27 08:30:00', 1, 104, 11111, 2),
+('2023-11-27 09:45:00', 2, 105, 22222, 3),
+('2023-11-27 11:00:00', 1, 106, 33333, 1);
+
+-- Data for November 28th
+INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+('2023-11-28 08:00:00', 1, 107, 44444, 2),
+('2023-11-28 09:15:00', 2, 108, 55555, 3),
+('2023-11-28 10:30:00', 1, 109, 66666, 1);
+```
+
+#### Modify bucketing method
+
+- Modify the bucketing method to random bucketing and the number of buckets remain automatically set by StarRocks.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  ```
+
+- Modify the bucketing method to random bucketing and change the number of buckets to 10.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+  ```
+
+#### Modify the key for hash bucketing
+
+Modify the keys for hash bucketing of all partitions to `user_id, event_time`.
+
+```SQL
+ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
+```
+
+> **Note**
+>
+> Modify the keys for hash bucketing applies to all partitions in the table and cannot only be applied to specific partitions.
+
+#### Modify the number of buckets
+
+- Modify the number of buckets for all partitions to 10.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+  ```
+
+  > **NOTICE**
+  >
+  > - Although this example doesn’t modify the bucketing method but only the number of buckets, it is still necessary to specify the bucketing method by using `HASH(user_id)` in the statement.
+  > - If `BUCKETS <num>` is not specified, it means that the number of buckets is changed to use system automatic configuration.
+
+- Modify the number of buckets for specified partitions to 15.
+
+  ```SQL
+  ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
+  ```
+
+  > **Note**
+  >
+  > Partition names can be viewed by executing `SHOW PARTITIONS FROM <table_name>;`.
+
+### Modify columns (add/delete columns, change the order of columns)
 
 Schema change supports the following modifications.
 
@@ -231,6 +337,17 @@ Note:
 2. If you add a key column to a non-aggregate table, you need to specify the KEY keyword.
 
 3. You cannot add a column that already exists in the base index to the rollup index. (You can create another rollup index if needed.)
+
+#### Add a generated column (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```
+
+You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 #### Drop a column from specified index
 
@@ -291,21 +408,50 @@ ORDER BY (column_name1, column_name2, ...)
 
 Note:
 
-1. All columns in the index must be written.
-2. The value column is listed after the key column.
+- All columns in the index must be written.
+- The value column is listed after the key column.
 
-#### Add a generated column (from v3.1)
+#### Modify columns comprising the sort Key in a Primary Key table**
+<!--Supported Versions-->
 
 Syntax:
 
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```SQL
+ALTER TABLE [<db_name>.]<table_name>
+[ order_desc ]
+
+order_desc ::=
+    ORDER BY <column_name> [, <column_name> ...]
 ```
 
-You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+Example:
 
-#### Modify table properties
+Suppose the original table is a Primary Key table, where the sort key is coupled with the primary key `dt, order_id`.
+
+```SQL
+create table orders (
+    dt date NOT NULL,
+    order_id bigint NOT NULL,
+    user_id int NOT NULL,
+    merchant_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+) PRIMARY KEY (dt, order_id)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(order_id);
+```
+
+Decouple the sort key from the primary key,and modify the sort key to `dt, revenue, state`.
+
+```SQL
+ALTER TABLE orders ORDER BY (dt, revenue, state);
+```
+
+### Modify table properties
 
 Currently, StarRocks supports modifying the following table properties:
 
