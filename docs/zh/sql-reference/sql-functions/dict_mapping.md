@@ -124,7 +124,7 @@ key_column_expr ::= <column_name> | <expr>
       4 rows in set (0.02 sec)
       ```
 
-    本示例中介绍的 `dict_mapping` 使用方式可以用于加速去重计算和 JOIN 的查询。相对于之前的[构建全局字典加速精确去重](https://docs.starrocks.io/zh/docs/using_starrocks/query_acceleration_with_auto_increment/)中提供的两种解决方案，使用 `dict_mapping` 的解决方案更加灵活易用。因为使用 `dict_mapping` 的解决方案时，在“将字典的映射关系导入至数据表”这一阶段，是由直接 StarRocks 从字典表获取映射的值，而不再需要您手动编写语句关联字典表，来获取映射的值。并且，该解决方案还支持使用各种导入方式导入数据。详细的使用方式，请参见xxx。
+    本示例中介绍的 `dict_mapping` 使用方式可以用于加速去重计算和 JOIN 的查询。相对于之前的[构建全局字典加速精确去重](../../using_starrocks/query_acceleration_with_auto_increment.md)中提供的两种解决方案，使用 `dict_mapping` 的解决方案更加灵活易用。因为使用 `dict_mapping` 的解决方案时，在“将字典的映射关系导入至数据表”这一阶段，是由直接 StarRocks 从字典表获取映射的值，而不再需要您手动编写语句关联字典表，来获取映射的值。并且，该解决方案还支持使用各种导入方式导入数据。<!--详细的使用方式，请参见xxx。-->
 
 **示例三：如果数据表中没有将映射列配置为生成列，则在导入至数据表时您需要显式为映射列配置 `dict _mapping` 函数，从而获取 key 所映射的 value。**
 
