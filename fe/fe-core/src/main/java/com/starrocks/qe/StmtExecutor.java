@@ -2046,9 +2046,12 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
-            } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+            } else if (targetTable.isTableFunctionTable()) {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
+            } else if (targetTable.isBlackHoleTable()) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_BLACKHOLE_TABLE_SINK_LABEL";
             } else if (isExplainAnalyze) {
                 transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze");
                 txnStatus = TransactionStatus.ABORTED;
