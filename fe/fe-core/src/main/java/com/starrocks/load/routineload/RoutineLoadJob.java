@@ -82,6 +82,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -376,7 +378,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = Strings.nullToEmpty(otherMsg);
+        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + ": " + Strings.nullToEmpty(otherMsg);
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -929,6 +932,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             .build());
                 }
                 ++abortedTaskNum;
+                setOtherMsg(txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
