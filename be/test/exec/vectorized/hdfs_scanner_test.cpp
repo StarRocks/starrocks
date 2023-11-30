@@ -970,10 +970,10 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
     };
     std::vector<Case> cases = {
             {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 0},
+            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 0},
             {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
