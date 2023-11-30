@@ -342,6 +342,17 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
+**增加生成列**
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```
+
+增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
+
 **从指定 index 中删除一列 (DROP COLUMN)**
 
 语法：
@@ -405,20 +416,8 @@ ORDER BY (column_name1, column_name2, ...)
 - index 中的所有列都要写出来。
 - value 列在 key 列之后。
 
-**增加生成列**
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
-```
-
-增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
-
-##### 修改排序键
-
-修改主键表中组成排序键的列。
+**重新指定主键表中组成排序键的列**
+<!--支持版本-->
 
 语法：
 
@@ -456,10 +455,6 @@ DISTRIBUTED BY HASH(order_id);
 ```SQL
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
-
-> **注意**
->
-> 您需要执行 [SHOW ALTER TABLE COLUMN](../data-manipulation/SHOW_ALTER.md) 查看修改任务状态。
 
 ### 操作 rollup 相关语法
 
