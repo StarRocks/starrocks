@@ -8,7 +8,7 @@ description: Separate compute and storage
 
 import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clients.mdx'
-import SQL from '../assets/quick-start/_sql.mdx'
+import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
 This tutorial covers:
@@ -20,15 +20,15 @@ This tutorial covers:
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
-Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
 
 ## Prerequisites
 
 ### Docker
 
 - [Docker Engine](https://docs.docker.com/engine/install/)
-- 4GB RAM assigned to Docker
-- 10GB free diskspace assigned to Docker
+- 4 GB RAM assigned to Docker
+- 10 GB free disk space assigned to Docker
 
 ### SQL client
 
@@ -36,7 +36,7 @@ The SQL clients will be discussed after starting StarRocks as StarRocks needs to
 
 ### curl
 
-curl is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 ## Launch StarRocks
 
@@ -80,7 +80,7 @@ In order to use MinIO for Object Storage with StarRocks you need to generate an 
 
 ### Open the MinIO web UI
 
-Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `minioadmin` and `minioadmin`. You should see that there are no access keys yet. Click **Create  access key +**.
+Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `minioadmin` and `minioadmin`. You should see that there are no access keys yet. Click **Create access key +**.
 
 MinIO will generate a key, click **Create** and download the key.
 
@@ -206,12 +206,14 @@ The folder `shared` will not be visible in the MinIO object list until data is w
 There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip
+
 Run these curl commands from the FE shell in the directory where you downloaded the dataset.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
+
 :::
 
-The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
+The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now, we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
 
 ### New York City collision data - Crashes
 

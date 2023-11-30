@@ -8,7 +8,7 @@ description: "StarRocks in Docker: Query real data with JOINs"
 
 import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clients.mdx'
-import SQL from '../assets/quick-start/_sql.mdx'
+import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
 This tutorial covers:
@@ -19,15 +19,17 @@ This tutorial covers:
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
-Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+
+---
 
 ## Prerequisites
 
 ### Docker
 
 - [Docker Engine](https://docs.docker.com/engine/install/)
-- 4GB RAM assigned to Docker
-- 10GB free diskspace assigned to Docker
+- 4 GB RAM assigned to Docker
+- 10 GB free disk space assigned to Docker
 
 ### SQL client
 
@@ -35,7 +37,9 @@ The SQL clients will be discussed after starting StarRocks as StarRocks needs to
 
 ### curl
 
-curl is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+
+---
 
 ## Launch StarRocks
 
@@ -43,10 +47,12 @@ curl is used to issue the data load job to StarRocks, and to download the datase
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
     -itd starrocks/allin1-ubuntu
 ```
-
-## SQL Clients
+---
+## SQL clients
 
 <Clients />
+
+---
 
 ## Download the data
 
@@ -64,28 +70,33 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/72505394728.csv
 ```
 
+---
+
 ## Connect to StarRocks
 
 ```sql
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
+---
+
 ## Create some tables
 
 <DDL />
 
+---
+
 ## Load two datasets
+Generally, you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
+using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local file system.
 
-Generally you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
-using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local filesystem. 
-
-:::tip
+::: tip
 Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
 :::
 
-The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
+The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now, we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
 
 ### New York City collision data - Crashes
 
@@ -101,7 +112,7 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
 ```
 
-Here is the output of the above command. The first highlighted section shown what you should expect to see (OK and all but one row inserted). One row was filtered out because it does not contain the correct number of columns.
+Here is the output of the preceding command. The first highlighted section shows what you should expect to see (OK and all but one row inserted). One row was filtered out because it does not contain the correct number of columns.
 
 ```bash
 Enter host password for user 'root':
@@ -160,11 +171,15 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/weatherdata/_stream_load
 ```
 
+---
+
 ## Answer some questions
 
 <SQL />
 
 Drive carefully!
+
+---
 
 ## Summary
 
@@ -174,11 +189,15 @@ In this tutorial you:
 - Loaded crash data provided by New York City and weather data provided by NOAA
 - Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
 
-There is more to learn; we intentionally glossed over the data transform done during the Stream Load. The details on that are in the notes on the curl commands below.
+There is more to learn; we intentionally glossed over the data transformation done during the Stream Load. The details on that are in the notes on the curl commands below.
+
+---
 
 ## Notes on the curl commands
 
 <Curl />
+
+---
 
 ## More information
 
