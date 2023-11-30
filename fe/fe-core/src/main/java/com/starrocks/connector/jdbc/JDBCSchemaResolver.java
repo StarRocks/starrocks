@@ -33,6 +33,8 @@ import java.util.Map;
 
 public abstract class JDBCSchemaResolver {
 
+    boolean supportPartitionInformation = false;
+
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
@@ -95,5 +97,18 @@ public abstract class JDBCSchemaResolver {
 
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) throws SQLException {
         throw new SQLException("should not arrival here");
+    }
+
+    public boolean checkSupportPartitionInformation(Connection connection) {
+        return false;
+
+    }
+
+    public boolean isSupportPartitionInformation() {
+        return supportPartitionInformation;
+    }
+
+    public boolean setSupportPartitionInformation(boolean supportPartitionInformation) {
+        return this.supportPartitionInformation = supportPartitionInformation;
     }
 }

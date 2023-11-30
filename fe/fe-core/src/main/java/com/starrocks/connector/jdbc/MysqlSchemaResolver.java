@@ -41,6 +41,9 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
+            // In unit testing, there is always a situation where the next method is false,
+            // and the beforefirst method needs to be called first
+            resultSet.beforeFirst();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
                 // skip internal schemas
@@ -55,6 +58,31 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
+    }
+
+    @Override
+    public boolean checkSupportPartitionInformation(Connection connection) {
+        String catalogSchema = "information_schema";
+        String partitionInfoTable = "partitions";
+        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
+            while (catalogSet.next()) {
+                String schemaName = catalogSet.getString("TABLE_CAT");
+                if (schemaName.equalsIgnoreCase(catalogSchema)) {
+                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null,
+                            new String[] {"SYSTEM TABLE", "SYSTEM VIEW"})) {
+                        while (tableSet.next()) {
+                            String tableName = tableSet.getString("TABLE_NAME");
+                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+        return false;
     }
 
     @Override

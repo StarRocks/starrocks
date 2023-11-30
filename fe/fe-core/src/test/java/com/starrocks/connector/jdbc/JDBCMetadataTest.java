@@ -32,6 +32,7 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -56,6 +57,9 @@ public class JDBCMetadataTest {
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
+    @Mocked
+    PreparedStatement preparedStatement;
+    private MockResultSet partitionsResult;
 
     @Before
     public void setUp() throws SQLException {
@@ -85,6 +89,11 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+        partitionsResult = new MockResultSet("partitions");
+        partitionsResult.addColumn("NAME", Arrays.asList("'20230810'"));
+        partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
 
 
         new Expectations() {
@@ -156,11 +165,48 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testGetTable() {
+    public void testGetTableWithoutPartition() throws SQLException {
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = null;
+                minTimes = 0;
+            }
+        };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
+            Assert.assertTrue(table.getPartitionColumns().isEmpty());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetTableWithPartition() throws SQLException {
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = partitionsResult;
+                minTimes = 0;
+
+                String catalogSchema = "information_schema";
+                String partitionInfoTable = "partitions";
+                MockResultSet piResult = new MockResultSet(partitionInfoTable);
+                piResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
+                connection.getMetaData().getTables(catalogSchema, null, null,
+                        new String[] {"SYSTEM TABLE", "SYSTEM VIEW"});
+                result = piResult;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table instanceof JDBCTable);
+            Assert.assertFalse(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
