@@ -2,7 +2,7 @@
 [UC]shell: avro_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/avro_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/22d31c2544de4459a5f36c20b49cf1d2/avro_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/18b53aff8c6f422e87ef9e3b4a3219e5/avro_format/
 -- !result
 shell: ossutil64 mkdir ${avro_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -56,6 +56,11 @@ select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
 1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k1":3,"k2":5}	{"name":"chandler","age":54}
 -- !result
+select col_tinyint,col_decimal,col_array from test_hive_avro_format;
+-- result:
+7	57.30	["A","B","C"]
+1	100.50	["D","E","F"]
+-- !result
 shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -65,7 +70,7 @@ shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/nul
 [UC]shell: rcbinary_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rcbinary_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/9173a3116080493998b40261430e4fc3/rcbinary_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/ed0414200602437987c7771c55e98b05/rcbinary_format/
 -- !result
 shell: ossutil64 mkdir ${rcbinary_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -119,6 +124,11 @@ select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
 1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 02:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
+select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
+-- result:
+7	57.30	["A","B","C"]
+1	100.50	["D","E","F"]
+-- !result
 shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -128,7 +138,7 @@ shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: rctext_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rctext_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/1b45b0945f744e4fbe9efddc0fe7021d/rctext_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/ac2c404dfb8e4a17ace8e3aa6d2c0e47/rctext_format/
 -- !result
 shell: ossutil64 mkdir ${rctext_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -182,6 +192,11 @@ select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
 1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
+select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
+-- result:
+7	57.30	["A","B","C"]
+1	100.50	["D","E","F"]
+-- !result
 shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -191,7 +206,7 @@ shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 [UC]shell: sequence_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/sequence_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/59a32058171440509022e4f4baa1cc61/sequence_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/7847f5f081e54501a414380f71600937/sequence_format/
 -- !result
 shell: ossutil64 mkdir ${sequence_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -244,6 +259,11 @@ select * from test_hive_sequence_format where col_string = 'world';
 select * from test_hive_sequence_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
 1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+-- !result
+select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
+-- result:
+7	57.30	["A","B","C"]
+1	100.50	["D","E","F"]
 -- !result
 shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
