@@ -72,7 +72,6 @@ public class JDBCMetadata implements ConnectorMetadata {
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
     }
 
-
     @Override
     public List<String> listDbNames() {
         ImmutableMap<String, String> metaInfo =
