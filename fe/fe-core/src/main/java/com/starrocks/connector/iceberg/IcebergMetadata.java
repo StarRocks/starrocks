@@ -426,11 +426,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     statisticProvider.updateIcebergFileStats(
                             icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
                 }
-            } else {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateCardinality")) {
-                    statisticProvider.updateIcebergCardinality(key, scanTask);
-                }
             }
+
             icebergScanTasks.add(icebergSplitScanTask);
 
             String filePath = icebergSplitScanTask.file().path().toString();
@@ -486,7 +483,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
-            return statisticProvider.getCardinalityStats(icebergTable, columns, predicate);
+            List<FileScanTask> icebergScanTasks = splitTasks.get(key);
+            if (icebergScanTasks == null) {
+                throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
+                        icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), predicate);
+            }
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
+                return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
+            }
         } else {
             return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
         }
