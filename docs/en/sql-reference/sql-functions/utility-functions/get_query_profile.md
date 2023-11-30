@@ -76,5 +76,5 @@ select regexp_extract(get_query_profile('bd3335ce-8dde-11ee-92e4-3269eb8da7d1'),
 
 ## Related functions
 
-- last_query_id(./last_query_id.md)
+- [last_query_id](./last_query_id.md)
 - [regexp_extract](../like-predicate-functions/regexp_extract.md)
