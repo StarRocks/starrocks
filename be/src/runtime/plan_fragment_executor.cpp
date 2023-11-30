@@ -186,7 +186,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
-    tls_thread_status.set_query_id(_runtime_state->query_id());
+    // tls_thread_status.set_query_id(_runtime_state->query_id());
+    CurrentThread::current().set_query_id(_runtime_state->query_id());
 
     // Only register profile report worker for broker load and insert into here,
     // for stream load and routine load, currently we don't need BE to report their progress regularly.

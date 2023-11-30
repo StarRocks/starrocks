@@ -82,6 +82,7 @@
 #include "util/thrift_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -91,8 +92,16 @@ extern std::atomic<bool> k_starrocks_exit_quick;
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
+bthread_key_t bthread_tls_key;
+
+static void bthread_tls_deleter(void* var) {
+    delete static_cast<CurrentThread*>(var);
+}
+
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {
+    CHECK_EQ(0, bthread_key_create(&bthread_tls_key, bthread_tls_deleter));
+}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;

@@ -42,10 +42,14 @@ struct EmptyMemGuard {
 struct MemTrackerGuard {
     MemTrackerGuard(MemTracker* scope_tracker_) : scope_tracker(scope_tracker_) {}
     bool scoped_begin() const {
-        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        // old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        old_tracker = CurrentThread::current().set_mem_tracker(scope_tracker);
         return true;
     }
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    void scoped_end() const {
+        // tls_thread_status.set_mem_tracker(old_tracker);
+        CurrentThread::current().set_mem_tracker(old_tracker);
+    }
     MemTracker* scope_tracker;
     mutable MemTracker* old_tracker = nullptr;
 };
@@ -117,7 +121,7 @@ struct SyncTaskExecutor {
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
-    spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
+    spill::ResourceMemTrackerGuard(CurrentThread::mem_tracker(), state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 

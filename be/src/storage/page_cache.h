@@ -135,9 +135,10 @@ public:
     ~PageCacheHandle() {
         if (_handle != nullptr) {
 #ifndef BE_TEST
-            MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->page_cache_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            // MemTracker* prev_tracker =
+            //         tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->page_cache_mem_tracker());
+            // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->page_cache_mem_tracker());
 #endif
             _cache->release(_handle);
         }

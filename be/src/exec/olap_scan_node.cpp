@@ -283,12 +283,15 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    MemTracker* prev_tracker = CurrentThread::current().set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
-        tls_thread_status.set_mem_tracker(prev_tracker);
+        // tls_thread_status.set_mem_tracker(prev_tracker);
+        CurrentThread::current().set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });
-    tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
+    // tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
+    CurrentThread::current().set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(runtime_state());
     if (!status.ok()) {

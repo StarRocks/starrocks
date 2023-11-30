@@ -23,20 +23,25 @@
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/uid_util.h"
+#include "bthread/bthread.h"
 
 #define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
+    /*LOG(INFO) << "set mem tracker";*/ \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check);
 
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
+    /*LOG(INFO) << "set mem tracker";*/ \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
 #define SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(operator) \
+    /*LOG(INFO) << "set operator mem tracker";*/ \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadOperatorMemTrackerSetter(operator->mem_tracker())
 
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
+// @TODO change it
 #define CHECK_MEM_LIMIT(err_msg)                                                              \
     do {                                                                                      \
         if (tls_thread_status.check_mem_limit() && CurrentThread::mem_tracker() != nullptr) { \
@@ -48,16 +53,44 @@ namespace starrocks {
 
 class TUniqueId;
 
-inline thread_local MemTracker* tls_mem_tracker = nullptr;
-inline thread_local MemTracker* tls_operator_mem_tracker = nullptr;
-inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
+// inline thread_local MemTracker* tls_mem_tracker = nullptr;
+// inline thread_local MemTracker* tls_operator_mem_tracker = nullptr;
+// inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
 inline thread_local bool tls_is_thread_status_init = false;
 
+// bthread and pthread should hold it by itself
+// @TODO how about mem cache manager?
+// @TODO maybe we don't need it
+class RuntimeContext {
+private:
+    MemTracker* mem_tracker = nullptr;
+    MemTracker* operator_mem_tracker = nullptr;
+    MemTracker* tls_exceed_mem_tracker = nullptr;
+
+    // trace info
+    TUniqueId query_id;
+    TUniqueId fragment_instance_id;
+    int32_t pipeline_driver_id = 0;
+    std::string custom_coredump_msg;
+    bool is_catched = false;
+    bool check = true;
+};
+inline thread_local RuntimeContext pthread_local_context;
+// @TODO in bthread, set_mem_tracker should update BThreadContext
+// @TODO in mem_hook, we check tls_mem_tracker, if bthread scheduled, it may changed
+// @TODO how can we always use it
+inline thread_local RuntimeContext* bthread_local_context;
+
+// @TODO should take aware pthread and bthread
 class CurrentThread {
 private:
     class MemCacheManager {
     public:
-        MemCacheManager(std::function<MemTracker*()>&& loader) : _loader(std::move(loader)) {}
+        // @TODO can we bind CurrentThread directly
+        // MemCacheManager(std::function<MemTracker*()>&& loader) : _loader(std::move(loader)) {}
+        // MemCacheManager(std::function<CurrentThread&()>&& loader) : _loader(std::move(loader)) {}
+        MemCacheManager(CurrentThread* current_thread, std::function<MemTracker*()>&& loader):
+            _current_thread(current_thread), _loader(std::move(loader)) {}
         MemCacheManager(const MemCacheManager&) = delete;
         MemCacheManager(MemCacheManager&&) = delete;
 
@@ -72,6 +105,9 @@ private:
         }
 
         bool try_mem_consume(int64_t size) {
+            // MemTracker* cur_tracker = _loader();
+            // auto& current_thread = _loader();
+            // MemTracker* cur_tracker = current_thread._mem_tracker;
             MemTracker* cur_tracker = _loader();
             int64_t prev_reserved = _reserved_bytes;
             size = _consume_from_reserved(size);
@@ -88,7 +124,9 @@ private:
                     _cache_size -= size;
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
-                    tls_exceed_mem_tracker = limit_tracker;
+                    // tls_exceed_mem_tracker = limit_tracker;
+                    // current_thread._exceed_mem_tracker = limit_tracker;
+                    _current_thread->_exceed_mem_tracker = limit_tracker;
                     return false;
                 }
             }
@@ -96,6 +134,9 @@ private:
         }
 
         bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
+            // MemTracker* cur_tracker = _loader();
+            // auto& current_thread = _loader();
+            // MemTracker* cur_tracker = current_thread._mem_tracker;
             MemTracker* cur_tracker = _loader();
             _cache_size += size;
             _allocated_cache_size += size;
@@ -109,7 +150,9 @@ private:
                     _cache_size -= size;
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
-                    tls_exceed_mem_tracker = limit_tracker;
+                    // current_thread._exceed_mem_tracker = limit_tracker;
+                    _current_thread->_exceed_mem_tracker = limit_tracker;
+                    // tls_exceed_mem_tracker = limit_tracker;
                     return false;
                 }
             }
@@ -142,6 +185,8 @@ private:
         }
 
         void commit(bool is_ctx_shift) {
+            // auto& current_thread = _loader();
+            // MemTracker* cur_tracker = current_thread.get_mem_tracker();
             MemTracker* cur_tracker = _loader();
             if (cur_tracker != nullptr) {
                 cur_tracker->consume(_cache_size);
@@ -180,7 +225,11 @@ private:
 
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
+        // std::function<MemTracker*()> _loader;
+        // std::function<CurrentThread&()> _loader;
+        CurrentThread* _current_thread = nullptr;
         std::function<MemTracker*()> _loader;
+
 
         int64_t _reserved_bytes = 0;
 
@@ -195,9 +244,19 @@ private:
     };
 
 public:
-    CurrentThread() : _mem_cache_manager(mem_tracker), _operator_mem_cache_manager(operator_mem_tracker) {
-        tls_is_thread_status_init = true;
-    }
+    CurrentThread();
+    // CurrentThread() : _mem_cache_manager(CurrentThread::current), _operator_mem_cache_manager(CurrentThread::current) {
+    //     if (LIKELY(GlobalEnv::is_init())) {
+    //         _mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    //         _is_init = true;
+    //     }
+    //     // if(!bthread_self()) {
+    //         // tls_is_thread_status_init = true;
+    //     // }
+    //     // if (bthread_self()) {
+    //         // LOG(INFO) << "CurrentThread is create in bthread: " << bthread_self();
+    //     // }
+    // }
     ~CurrentThread();
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
@@ -211,26 +270,38 @@ public:
     }
     const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
+    // @TODO make get/set name consistent
     int32_t get_driver_id() const { return _driver_id; }
 
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
     const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
+    bool is_init() const {
+        return _is_init;
+    }
+    void set_is_init(bool val) {
+        _is_init = val;
+    }
+    void init();
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
         release_reserved();
         mem_tracker_ctx_shift();
-        auto* prev = tls_mem_tracker;
-        tls_mem_tracker = mem_tracker;
+        // auto* prev = tls_mem_tracker;
+        // tls_mem_tracker = mem_tracker;
+        auto* prev = _mem_tracker;
+        _mem_tracker = mem_tracker;
         return prev;
     }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
         operator_mem_tracker_ctx_shift();
-        auto* prev = tls_operator_mem_tracker;
-        tls_operator_mem_tracker = operator_mem_tracker;
+        // auto* prev = tls_operator_mem_tracker;
+        // tls_operator_mem_tracker = operator_mem_tracker;
+        auto* prev = _operator_mem_tracker;
+        _operator_mem_tracker = operator_mem_tracker;
         return prev;
     }
 
@@ -242,12 +313,34 @@ public:
 
     bool check_mem_limit() { return _check; }
 
+    MemTracker* get_mem_tracker() {
+        init();
+        return _mem_tracker;
+    }
+    MemTracker* get_operator_mem_tracker() {
+        return _operator_mem_tracker;
+    }
+    MemTracker* get_exceed_mem_tracker() const {
+        return _exceed_mem_tracker;
+    }
+    void set_exceed_mem_tracker(MemTracker* mem_tracker) {
+        _exceed_mem_tracker = mem_tracker;
+    }
+
     static starrocks::MemTracker* mem_tracker();
     static starrocks::MemTracker* operator_mem_tracker();
+    static bool is_check_mem_limit();
 
+    // @TODO should consider bthread and pthread
     static CurrentThread& current();
+    // @TODO test
+    static CurrentThread* current_ptr();
 
-    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
+    // @TODO consider bthread and pthread
+    // static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker);
+    // {
+    //     tls_exceed_mem_tracker = mem_tracker;
+    // }
 
     bool set_is_catched(bool is_catched) {
         bool old = _is_catched;
@@ -286,12 +379,14 @@ public:
 
     static void mem_consume_without_cache(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
+        // MemTracker* cur_tracker = current().mem_tracker();
         if (cur_tracker != nullptr && size != 0) {
             cur_tracker->consume(size);
         }
     }
 
     static bool try_mem_consume_without_cache(int64_t size) {
+        // MemTracker* cur_tracker = current().mem_tracker();
         MemTracker* cur_tracker = mem_tracker();
         if (cur_tracker != nullptr && size != 0) {
             MemTracker* limit_tracker = cur_tracker->try_consume(size);
@@ -324,6 +419,10 @@ private:
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
     MemCacheManager _operator_mem_cache_manager;
+
+    MemTracker* _mem_tracker = nullptr;
+    MemTracker* _operator_mem_tracker = nullptr;
+    MemTracker* _exceed_mem_tracker = nullptr;
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
@@ -331,24 +430,92 @@ private:
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
+    bool _is_init = false;
+
+    // RuntimeContext* _ctx = nullptr;
 };
+
+// @TODO need a context, each bthread should know its context, before do other thing, set it to tls and when it switched, should set it back?
+// used to set bthread specific data
+extern bthread_key_t bthread_tls_key;
+inline thread_local CurrentThread* bthread_tls_thread_status;
+inline thread_local bthread_t bthread_tls_id;
 
 inline thread_local CurrentThread tls_thread_status;
 
+class ThreadLocalSwitcher {
+public:
+    static void switch_to_bthread_local() {
+        if (bthread_self()) {
+            // @TODO check if bthread is change?
+            bthread_tls_thread_status = static_cast<CurrentThread*>(bthread_getspecific(bthread_tls_key));
+            // @TODO first time to set
+            if (bthread_tls_thread_status == nullptr) {
+                // @TODO current thread may populate tls var, need refactor
+                // tls_is_thread_status_init = false;
+                // @TODO seems not set init?
+                tls_thread_status.set_is_init(false);
+                LOG(INFO) << "switch to bthread_local, create CurrentThread for bthread: " << bthread_self();
+                bthread_tls_thread_status = new CurrentThread();
+                // @TODO should set mem tracker and trace info outside it?
+                CHECK_EQ(0, bthread_setspecific(bthread_tls_key, bthread_tls_thread_status));
+                // tls_is_thread_status_init = true;
+                tls_thread_status.set_is_init(true);
+            } else {
+                LOG(INFO) << "bthread tls already exists: " << bthread_self();
+            }
+            bthread_tls_id = bthread_self();
+            // return true;
+        }
+        // return false;
+    }
+
+    static void switch_to_pthread_local() {
+        if (bthread_self()) {
+            if (bthread_equal(bthread_self(), bthread_tls_id) != 0) {
+                // same bthread
+                LOG(INFO) << "pthread not changed for bthread: " << bthread_self();
+                bthread_tls_thread_status = static_cast<CurrentThread*>(bthread_getspecific(bthread_tls_key));
+                DCHECK(bthread_tls_thread_status != nullptr);
+            } else {
+                LOG(INFO) << "pthread changed for bthread: " << bthread_self();
+            }
+            // @TODO what should we do
+            LOG(INFO) << "switch to pthread_local, bthread_id: " << bthread_self();
+            // return true;
+        }
+        // return false;
+    }
+};
+
 class CurrentThreadMemTrackerSetter {
 public:
+    // @TODO record current thread?
     explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.mem_tracker();
+        ThreadLocalSwitcher::switch_to_bthread_local();
+        _current_thread = CurrentThread::current_ptr();
+        _old_mem_tracker = _current_thread->get_mem_tracker();
+        // _old_mem_tracker = CurrentThread::mem_tracker();
+        // @TODO record thread status
+        // _old_mem_tracker = tls_thread_status.mem_tracker();
         _is_same = (_old_mem_tracker == new_mem_tracker);
         if (!_is_same) {
-            tls_thread_status.set_mem_tracker(new_mem_tracker);
+            // LOG(INFO) << "old tracker: " << (_old_mem_tracker == nullptr ? "null" : _old_mem_tracker->label())
+            //     << ", new tracker: " << (new_mem_tracker == nullptr ? "null" : new_mem_tracker->label())
+            //     << ", bthread: " << bthread_self();
+            // tls_thread_status.set_mem_tracker(new_mem_tracker);
+            // CurrentThread::current().set_mem_tracker(new_mem_tracker);
+            _current_thread->set_mem_tracker(new_mem_tracker);
         }
     }
 
     ~CurrentThreadMemTrackerSetter() {
         if (!_is_same) {
-            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
+            // (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
+            // CurrentThread::current().set_mem_tracker(_old_mem_tracker);
+            _current_thread->set_mem_tracker(_old_mem_tracker);
         }
+        ThreadLocalSwitcher::switch_to_pthread_local();
     }
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
@@ -359,23 +526,34 @@ public:
 private:
     MemTracker* _old_mem_tracker;
     bool _is_same;
+    // @TODO record current thread
+    CurrentThread* _current_thread = nullptr;
 };
+
 
 class CurrentThreadOperatorMemTrackerSetter {
 public:
     explicit CurrentThreadOperatorMemTrackerSetter(MemTracker* new_mem_tracker) {
         // operator's mem tracker must have no parent
         DCHECK(new_mem_tracker == nullptr || new_mem_tracker->parent() == nullptr);
-        _old_mem_tracker = tls_thread_status.operator_mem_tracker();
+        // @TODO reduce function call
+        ThreadLocalSwitcher::switch_to_bthread_local();
+        _old_mem_tracker = CurrentThread::operator_mem_tracker();
+        // _old_mem_tracker = tls_thread_status.operator_mem_tracker();
         _is_same = (_old_mem_tracker == new_mem_tracker);
         if (!_is_same) {
-            tls_thread_status.set_operator_mem_tracker(new_mem_tracker);
+            // LOG(INFO) << "old op tracker: " << (_old_mem_tracker == nullptr ? "null" : _old_mem_tracker->label())
+            //     << ", new op tracker: " << (new_mem_tracker == nullptr ? "null" : new_mem_tracker->label())
+            //     << ", bthread: " << bthread_self();
+            // tls_thread_status.set_operator_mem_tracker(new_mem_tracker);
+            CurrentThread::current().set_operator_mem_tracker(new_mem_tracker);
         }
     }
 
     ~CurrentThreadOperatorMemTrackerSetter() {
         if (!_is_same) {
-            (void)tls_thread_status.set_operator_mem_tracker(_old_mem_tracker);
+            // (void)tls_thread_status.set_operator_mem_tracker(_old_mem_tracker);
+            CurrentThread::current().set_operator_mem_tracker(_old_mem_tracker);
         }
     }
 
@@ -392,10 +570,14 @@ private:
 class CurrentThreadCheckMemLimitSetter {
 public:
     explicit CurrentThreadCheckMemLimitSetter(bool check) {
-        _prev_check = tls_thread_status.set_check_mem_limit(check);
+        _prev_check = CurrentThread::current().set_check_mem_limit(check);
+        // _prev_check = tls_thread_status.set_check_mem_limit(check);
     }
 
-    ~CurrentThreadCheckMemLimitSetter() { (void)tls_thread_status.set_check_mem_limit(_prev_check); }
+    ~CurrentThreadCheckMemLimitSetter() {
+        // (void)tls_thread_status.set_check_mem_limit(_prev_check);
+        (void)CurrentThread::current().set_check_mem_limit(_prev_check);
+    }
 
     CurrentThreadCheckMemLimitSetter(const CurrentThreadCheckMemLimitSetter&) = delete;
     void operator=(const CurrentThreadCheckMemLimitSetter&) = delete;
@@ -406,11 +588,23 @@ private:
     bool _prev_check;
 };
 
+// class CurrentBThreadCheckMemLimitSetter {
+// public:
+//     explicit CurrentBThreadCheckMemLimitSetter(bool check) {}
+// };
+
+
 class CurrentThreadCatchSetter {
 public:
-    explicit CurrentThreadCatchSetter(bool catched) { _prev_catched = tls_thread_status.set_is_catched(catched); }
+    explicit CurrentThreadCatchSetter(bool catched) {
+        // _prev_catched = tls_thread_status.set_is_catched(catched);
+        _prev_catched = CurrentThread::current().set_is_catched(catched);
+    }
 
-    ~CurrentThreadCatchSetter() { (void)tls_thread_status.set_is_catched(_prev_catched); }
+    ~CurrentThreadCatchSetter() {
+        // (void)tls_thread_status.set_is_catched(_prev_catched);
+        (void)CurrentThread::current().set_is_catched(_prev_catched);
+    }
 
     CurrentThreadCatchSetter(const CurrentThreadCatchSetter&) = delete;
     void operator=(const CurrentThreadCatchSetter&) = delete;
@@ -451,12 +645,13 @@ private:
 #define TRY_CATCH_ALLOC_SCOPE_END()                                                                                    \
     }                                                                                                                  \
     catch (std::bad_alloc const&) {                                                                                    \
-        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                                                           \
-        tls_exceed_mem_tracker = nullptr;                                                                              \
-        tls_thread_status.set_is_catched(false);                                                                       \
+        CurrentThread& current_thread = CurrentThread::current(); \
+        MemTracker* exceed_tracker = current_thread.get_exceed_mem_tracker(); \
+        current_thread.set_exceed_mem_tracker(nullptr); \
+        current_thread.set_is_catched(false); \
         if (LIKELY(exceed_tracker != nullptr)) {                                                                       \
             return Status::MemoryLimitExceeded(                                                                        \
-                    exceed_tracker->err_msg(fmt::format("try consume:{}", tls_thread_status.try_consume_mem_size()))); \
+                    exceed_tracker->err_msg(fmt::format("try consume:{}", current_thread.try_consume_mem_size()))); \
         } else {                                                                                                       \
             return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE");                                \
         }                                                                                                              \
