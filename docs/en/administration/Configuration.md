@@ -771,6 +771,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: FALSE
 - Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
 
+##### enable_backup_materialized_view
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: In BACKUP operation, enable or disable to backup asynchronized materialized views in the specific database. If not, will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+
+##### enable_colocate_mv_index
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: When creating synchronized materialized view, whether to support colocate the synchronized mv index with the base table. if enabled, tablet sink will only send chunk once to speed up the sync mv's transformation performance. This item is supported from v3.2.0 onwards.
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
