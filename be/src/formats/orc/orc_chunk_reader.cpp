@@ -44,7 +44,6 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*>
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
-    _row_reader_options.useWriterTimezone();
 
     // some caller of `OrcChunkReader` may pass nullptr
     // This happens when there are extra fields in broker load specification
