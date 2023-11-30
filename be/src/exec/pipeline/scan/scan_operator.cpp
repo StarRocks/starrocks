@@ -379,7 +379,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano]() {
+                          io_task_start_nano](auto& ctx) {
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
