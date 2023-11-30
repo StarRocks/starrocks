@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Converts Bitmap values to a Binary string.
 
-bitmap_to_binary is mainly used for exporting Bitmap data. The compression effect is better than [bitmap_to_base64](./bitmap_to_base64).
+bitmap_to_binary is mainly used for exporting Bitmap data. The compression effect is better than [bitmap_to_base64](./bitmap_to_base64.md).
 
 If you plan to export data directly to a binary file such as Parquet, this function is recommended.
 
