@@ -229,6 +229,7 @@ struct TExprNode {
   // Used for SubfieldExpr
   30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
+  32: optional bool copy_flag;
 
   // For vector query engine
   50: optional bool use_vectorized
