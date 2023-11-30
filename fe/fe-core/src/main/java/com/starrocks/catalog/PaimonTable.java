@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -123,6 +124,7 @@ public class PaimonTable extends Table {
         String option = sb.substring(0, sb.length() - 1);
 
         tPaimonTable.setPaimon_options(option);
+        tPaimonTable.setPaimon_native_table(PaimonScanNode.encodeObjectToString(paimonNativeTable));
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
