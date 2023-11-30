@@ -76,5 +76,5 @@ select regexp_extract(get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b'),
 
 ## 相关函数
 
-- last_query_id(./last_query_id.md)
+- [last_query_id](./last_query_id.md)
 - [regexp_extract](../like-predicate-functions/regexp_extract.md)
