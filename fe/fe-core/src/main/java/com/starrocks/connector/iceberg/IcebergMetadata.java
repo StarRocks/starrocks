@@ -415,7 +415,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Set<String> filePaths = new HashSet<>();
         long loopCount = 0L;
         while (fileScanTasks.hasNext()) {
-            FileScanTask scanTask = fileScanTaskIterator.next();
+            FileScanTask scanTask = fileScanTasks.next();
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
