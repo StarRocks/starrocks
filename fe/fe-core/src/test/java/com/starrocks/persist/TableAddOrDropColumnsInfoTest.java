@@ -24,7 +24,7 @@ public class TableAddOrDropColumnsInfoTest {
     public void test() {
         TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, 0,
-                Collections.emptySet());
+                Collections.emptySet(), Collections.emptyMap());
 
         Assert.assertEquals(1, info.getDbId());
         Assert.assertEquals(1, info.getTableId());
@@ -37,7 +37,7 @@ public class TableAddOrDropColumnsInfoTest {
 
         TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, 0,
-                Collections.emptySet());
+                Collections.emptySet(), Collections.emptyMap());
 
         Assert.assertEquals(info.hashCode(), info2.hashCode());
         Assert.assertEquals(info, info2);

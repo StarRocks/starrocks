@@ -562,7 +562,8 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         _tablet_schema = ori_tablet_schema;
     }
 
-    LOG(INFO) << "tablet:" << _tablet->tablet_id() << " schema id:" << _tablet_schema->id() << " use count:" << _tablet_schema.use_count();
+    LOG(INFO) << "tablet:" << _tablet->tablet_id() << " schema id:" << _tablet_schema->id()
+              << " use count:" << _tablet_schema.use_count();
 
     return st;
 }
@@ -627,7 +628,6 @@ Status DeltaWriter::commit() {
         return res.status();
     }
 
-    _cur_rowset->set_schema(_tablet_schema);
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {

@@ -260,7 +260,8 @@ private:
             }
         }
         if (_schema != nullptr) {
-            LOG(INFO) << "tablet:" << tablet_id() << " rowset:" << rowset_id() << " schema id:" << _schema->id() << " use count:" << _schema.use_count();
+            LOG(INFO) << "tablet:" << tablet_id() << " rowset:" << rowset_id() << " schema id:" << _schema->id()
+                      << " use count:" << _schema.use_count();
         }
     }
 
