@@ -14,9 +14,8 @@ displayed_sidebar: "Chinese"
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
 - [执行 schema change](#schema-change)
   - [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
-  - 优化表结构:
-    - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
-    - [修改排序键](#修改排序键)
+  - [修改排序键](#修改排序键)
+  - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量)
   - [修改表的属性](#修改表的属性)
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
@@ -29,7 +28,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ALTER TABLE 语法格式如下：
-
+修改分桶方式和分桶数量
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
