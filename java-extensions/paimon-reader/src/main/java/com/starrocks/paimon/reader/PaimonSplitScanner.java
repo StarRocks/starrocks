@@ -22,12 +22,7 @@ import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.catalog.Catalog;
-import org.apache.paimon.catalog.CatalogContext;
-import org.apache.paimon.catalog.CatalogFactory;
-import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -61,6 +56,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final String predicateInfo;
     private final Map<String, String> optionInfo = new HashMap<>();
     private final String[] requiredFields;
+    private final String encodedTable;
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
     private Table table;
@@ -78,6 +74,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.requiredFields = params.get("required_fields").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
+        this.encodedTable = params.get("native_table");
 
         ScannerHelper.parseOptions(params.get("option_info"), kv -> {
             optionInfo.put(kv[0], kv[1]);
@@ -97,6 +94,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.classLoader = this.getClass().getClassLoader();
     }
 
+<<<<<<< HEAD
     private void initTable() throws IOException {
         Options options = new Options();
         options.setString(METASTORE.key(), catalogType);
@@ -118,6 +116,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
         }
     }
 
+=======
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
     private void parseRequiredTypes() {
         List<String> fieldNames = PaimonScannerUtils.fieldNames(table.rowType());
         requiredTypes = new ColumnType[requiredFields.length];
@@ -152,7 +152,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            initTable();
+            table = PaimonScannerUtils.decodeStringToObject(encodedTable);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();

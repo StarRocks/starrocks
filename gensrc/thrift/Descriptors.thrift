@@ -456,6 +456,7 @@ struct THudiTable {
 }
 
 struct TPaimonTable {
+<<<<<<< HEAD
     // paimon table catalog type
     1: optional string catalog_type
 
@@ -464,6 +465,12 @@ struct TPaimonTable {
 
     // paimon table warehouse path
     3: optional string warehouse_path
+=======
+    // paimon table options
+    1: optional string paimon_options
+    // paimon table
+    2: optional string paimon_native_table
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
 }
 
 struct TDeltaLakeTable {

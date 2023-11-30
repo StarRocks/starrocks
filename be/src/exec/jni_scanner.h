@@ -91,6 +91,8 @@ private:
     std::string _jni_scanner_factory_class;
     Filter _chunk_filter;
 
+    const std::set<std::string> _skipped_log_jni_scanner_params = {"split_info", "native_table", "predicate_info"};
+
 private:
     long* _chunk_meta_ptr;
     int _chunk_meta_index;

@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -121,9 +122,20 @@ public class PaimonTable extends Table {
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
         TPaimonTable tPaimonTable = new TPaimonTable();
+<<<<<<< HEAD
         tPaimonTable.setCatalog_type(catalogType);
         tPaimonTable.setMetastore_uri(metastoreUris);
         tPaimonTable.setWarehouse_path(warehousePath);
+=======
+        StringBuilder sb = new StringBuilder();
+        for (String key : this.paimonOptions.keySet()) {
+            sb.append(key).append("=").append(this.paimonOptions.get(key)).append(",");
+        }
+        String option = sb.substring(0, sb.length() - 1);
+
+        tPaimonTable.setPaimon_options(option);
+        tPaimonTable.setPaimon_native_table(PaimonScanNode.encodeObjectToString(paimonNativeTable));
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);

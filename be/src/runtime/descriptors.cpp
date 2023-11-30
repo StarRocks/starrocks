@@ -278,6 +278,7 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
     _warehouse_path = tdesc.paimonTable.warehouse_path;
     _database_name = tdesc.dbName;
     _table_name = tdesc.tableName;
+<<<<<<< HEAD
 }
 
 const std::string& PaimonTableDescriptor::get_catalog_type() const {
@@ -290,6 +291,10 @@ const std::string& PaimonTableDescriptor::get_metastore_uri() const {
 
 const std::string& PaimonTableDescriptor::get_warehouse_path() const {
     return _warehouse_path;
+=======
+    _paimon_options = tdesc.paimonTable.paimon_options;
+    _paimon_native_table = tdesc.paimonTable.paimon_native_table;
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
 }
 
 const std::string& PaimonTableDescriptor::get_database_name() const {
@@ -300,6 +305,17 @@ const std::string& PaimonTableDescriptor::get_table_name() const {
     return _table_name;
 }
 
+<<<<<<< HEAD
+=======
+const std::string& PaimonTableDescriptor::get_paimon_options() const {
+    return _paimon_options;
+}
+
+const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
+    return _paimon_native_table;
+}
+
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
 bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {

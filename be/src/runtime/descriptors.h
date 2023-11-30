@@ -276,6 +276,11 @@ public:
     const std::string& get_warehouse_path() const;
     const std::string& get_database_name() const;
     const std::string& get_table_name() const;
+<<<<<<< HEAD
+=======
+    const std::string& get_paimon_options() const;
+    const std::string& get_paimon_native_table() const;
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
 
 private:
     std::string _catalog_type;
@@ -283,6 +288,11 @@ private:
     std::string _warehouse_path;
     std::string _database_name;
     std::string _table_name;
+<<<<<<< HEAD
+=======
+    std::string _paimon_options;
+    std::string _paimon_native_table;
+>>>>>>> 398f581143 ([BugFix] Fix paimon jni reader may explore the hive metastore (#35777))
 };
 
 // ===========================================
