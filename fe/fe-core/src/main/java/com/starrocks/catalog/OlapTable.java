@@ -112,7 +112,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -3004,16 +3003,18 @@ public class OlapTable extends Table {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
-            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
-                LocalDateTime upper = LocalDateTime.now();
-                LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
-                LocalDate upper = LocalDate.now();
-                LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
-                return partitionRange.isConnected(dataCacheRange);
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME) ||
+                    rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                try {
+                    LocalDateTime upper = LocalDateTime.now();
+                    LocalDateTime lower = upper.minus(cacheDuration);
+                    dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                    return partitionRange.isConnected(dataCacheRange);
+                } catch (Exception e) {
+                    LOG.warn("Table name: {}, datacache.partiton_duration: {}, Failed to compare with partition range. " +
+                            "Error: {}.", super.name, cacheDuration.toString(), e.getMessage());
+                    return false;
+                }
             } else {
                 // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
                 // enable data cache by default.
