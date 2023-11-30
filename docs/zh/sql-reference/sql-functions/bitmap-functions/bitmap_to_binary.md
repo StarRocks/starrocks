@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 将 Bitmap 根据 StarRocks 定义的规则，转换为二进制字符串。
 
-该函数主要用于将 Bitmap 数据导出，压缩效果要好于 [bitmap_to_base64](./bitmap_to_base64)，如果要导出 Bitmap 数据到 Parquet 等二进制文件，建议用 bitmap_to_binary 函数。
+该函数主要用于将 Bitmap 数据导出，压缩效果要好于 [bitmap_to_base64](./bitmap_to_base64.md)，如果要导出 Bitmap 数据到 Parquet 等二进制文件，建议用 bitmap_to_binary 函数。
 
 该函数从 3.0 版本开始支持。
 
