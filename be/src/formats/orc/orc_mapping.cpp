@@ -82,7 +82,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             }
         }
     } else {
-        DCHECK(false) << "Unreachable!";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }
@@ -116,19 +116,44 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
 Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
                                                                       const TypeDescriptor& slot_target_type) {
     bool can_convert = true;
+<<<<<<< HEAD
     if (orc_source_type.getKind() == orc::TypeKind::LIST) {
         can_convert = slot_target_type.is_array_type();
     } else if (orc_source_type.getKind() == orc::TypeKind::MAP) {
         can_convert = slot_target_type.is_map_type();
     } else if (orc_source_type.getKind() == orc::TypeKind::STRUCT) {
         can_convert = slot_target_type.is_struct_type();
+=======
+    // check orc type -> slot type desc
+    if (orc_source_type->getKind() == orc::TypeKind::LIST) {
+        can_convert &= slot_target_type.is_array_type();
+    } else if (orc_source_type->getKind() == orc::TypeKind::MAP) {
+        can_convert &= slot_target_type.is_map_type();
+    } else if (orc_source_type->getKind() == orc::TypeKind::STRUCT) {
+        can_convert &= slot_target_type.is_struct_type();
+    }
+
+    // check slot type desc -> orc type
+    if (slot_target_type.is_array_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::LIST;
+    } else if (slot_target_type.is_map_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::MAP;
+    } else if (slot_target_type.is_struct_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::STRUCT;
+>>>>>>> 53a8082b02 ([Enhancement] Merge orc type checking logic in OrcMapping (#36127))
     }
 
     //TODO Other primitive type not check now!
 
     if (!can_convert) {
+<<<<<<< HEAD
         return Status::NotSupported("Not support to convert orc's type: " + orc_source_type.toString() +
                                     " to: " + slot_target_type.debug_string());
+=======
+        return Status::NotSupported(
+                strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other, filename = $2",
+                                    orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
+>>>>>>> 53a8082b02 ([Enhancement] Merge orc type checking logic in OrcMapping (#36127))
     }
     return Status::OK();
 }
@@ -233,9 +258,13 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
 Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                              const orc::Type& orc_type, const bool case_sensitive) {
     DCHECK(origin_type.is_complex_type());
+<<<<<<< HEAD
     if (origin_type.type == PrimitiveType::TYPE_STRUCT) {
         DCHECK(orc_type.getKind() == orc::TypeKind::STRUCT);
 
+=======
+    if (origin_type.type == LogicalType::TYPE_STRUCT) {
+>>>>>>> 53a8082b02 ([Enhancement] Merge orc type checking logic in OrcMapping (#36127))
         std::unordered_map<std::string, size_t> tmp_orc_fieldname_2_pos;
         for (size_t i = 0; i < orc_type.getSubtypeCount(); i++) {
             std::string field_name = format_column_name(orc_type.getFieldName(i), case_sensitive);
@@ -266,9 +295,14 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             }
             mapping->add_mapping(index, need_add_column_id, need_add_child_mapping);
         }
+<<<<<<< HEAD
     } else if (origin_type.type == PrimitiveType::TYPE_ARRAY) {
         DCHECK(orc_type.getKind() == orc::TypeKind::LIST);
         const orc::Type& orc_child_type = *orc_type.getSubtype(0);
+=======
+    } else if (origin_type.type == LogicalType::TYPE_ARRAY) {
+        const orc::Type* orc_child_type = orc_type->getSubtype(0);
+>>>>>>> 53a8082b02 ([Enhancement] Merge orc type checking logic in OrcMapping (#36127))
         const TypeDescriptor& origin_child_type = origin_type.children[0];
         // Check Array's element can be converted
         RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(orc_child_type, origin_child_type));
@@ -282,10 +316,15 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
                     _set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, case_sensitive));
         }
 
+<<<<<<< HEAD
         mapping->add_mapping(0, need_add_column_id, need_add_child_mapping);
     } else if (origin_type.type == PrimitiveType::TYPE_MAP) {
         DCHECK(orc_type.getKind() == orc::TypeKind::MAP);
 
+=======
+        mapping->add_mapping(0, need_add_child_mapping, orc_child_type);
+    } else if (origin_type.type == LogicalType::TYPE_MAP) {
+>>>>>>> 53a8082b02 ([Enhancement] Merge orc type checking logic in OrcMapping (#36127))
         // Check Map's key can be converted
         if (!origin_type.children[0].is_unknown_type()) {
             RETURN_IF_ERROR(
@@ -315,7 +354,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         }
         mapping->add_mapping(1, need_add_value_column_id, need_add_vaule_child_mapping);
     } else {
-        DCHECK(false) << "Unreachable";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }
