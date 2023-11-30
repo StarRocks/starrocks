@@ -6,9 +6,9 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-将 btimap 根据 StarRocks 定义的规则，转换为二进制字符串。
+将 Bitmap 根据 StarRocks 定义的规则，转换为二进制字符串。
 
-这个函数主要用于 bitmap 导出，这种格式的压缩效果要好于 bitmap_to_base64，如果想导出到 parquet 等二进制文件，建议用这个函数。
+该函数主要用于将 Bitmap 数据导出。Binary 格式的压缩效果要好于 [bitmap_to_base64](./bitmap_to_base64)，如果要导出 Bitmap 数据到 Parquet 等二进制文件，建议用 bitmap_to_binary 函数。
 
 该函数从 3.0 版本开始支持。
 
@@ -24,11 +24,11 @@ VARBINARY bitmap_to_binary(BITMAP bitmap)
 
 ## 返回值说明
 
-返回 varbinary 类型的值。
+返回 VARBINARY 类型的值。
 
 ## 示例
 
-示例 1: 该函数与其它 bitmap 函数搭配使用。
+示例一: 该函数与其它 Bitmap 函数搭配使用。
 
 ```Plain
 mysql> select hex(bitmap_to_binary(bitmap_from_string("0, 1, 2, 3")));
@@ -56,7 +56,7 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
 1 row in set (0.01 sec)
 ```
 
-示例 2: 将数据表中的 bitmap 列转换为 varbinary 字符串。
+示例二: 将数据表中的 Bitmap 列转换为 Varbinary 字符串。
 
 1. 创建一张含有 BITMAP 列的聚合表，其中 `visit_users` 列为聚合列，列类型为 BITMAP，使用聚合函数 bitmap_union()。
 
@@ -94,8 +94,7 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
       +---------+---------------------+-------------+
     ```
 
-3. 将 `visit_users` 列的每行 `bitmap` 值转为 varbinary 字符串。
-   hex 函数只是为了将不见字符串显示到客户端，用于导出时可以不使用。
+3. 将 `visit_users` 列的每行 Bitmap 值转为 Varbinary 字符串。hex 函数只是为了将不可见字符串显示到客户端，用于导出时可以不使用。
 
     ```Plain
        mysql> select page_id, hex(bitmap_to_binary(visit_users)) from page_uv;
@@ -108,3 +107,4 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
        +---------+------------------------------------------------------------+
        3 rows in set (0.01 sec)
     ```
+    
