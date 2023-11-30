@@ -2135,6 +2135,7 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
 }
 
 TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
+    // Type: struct<col_string:string,col_map:map<int,decimal(9,9)>>
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_type_mismatched.orc";
 
     SlotDesc c0{"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)};
@@ -2169,6 +2170,27 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     EXPECT_EQ(result->num_columns(), 2);
 
     EXPECT_EQ("['1', {-2147483648:'0.999999999'}]", result->debug_row(0));
+}
+
+TEST_F(OrcChunkReaderTest, TestTypeMismatchedArray2String) {
+    // Type: struct<col_string:string,col_map:map<int,decimal(9,9)>>
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_type_mismatched.orc";
+
+    SlotDesc c0{"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY)};
+    c0.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+    reader.set_use_orc_column_names(true);
+    reader.set_case_sensitive(true);
+    auto input_stream = orc::readLocalFile(input_orc_file);
+    Status st = reader.init(std::move(input_stream));
+    EXPECT_FALSE(st.ok());
 }
 
 TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
