@@ -235,10 +235,10 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "18:Project\n" +
+            assertContains(plan, "17:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN");
@@ -254,10 +254,10 @@ public class SubqueryTest extends PlanTestBase {
                     "IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "18:Project\n" +
+            assertContains(plan, "17:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
@@ -273,10 +273,10 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "  17:Project\n" +
                     "  |  <slot 4> : 4: t1d\n" +
                     "  |  \n" +
-                    "  17:NESTLOOP JOIN\n" +
+                    "  16:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
