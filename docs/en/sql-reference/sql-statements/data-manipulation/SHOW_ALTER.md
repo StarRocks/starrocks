@@ -6,44 +6,60 @@ displayed_sidebar: "English"
 
 ## Description
 
-Shows the execution of ongoing ALTER TABLE tasks.
+Shows the execution of the following ongoing ALTER TABLE tasks:
+
+- Modify columns
+- Optimize table structure (since v3.2), including modifying bucketing method and the number of buckets.
+- Create and delete ROLLUP indexes
 
 ## Syntax
 
-```sql
-SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM <db_name>]
-```
+- Show the execution of tasks related to modifying columns or optimizing table structure.
+
+    ```sql
+    SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
+    ```
+
+- Show the execution of tasks related to adding or deleting ROLLUP indexes.
+
+    ```sql
+    SHOW ALTER TABLE ROLLUP [FROM db_name]
+    ```
 
 ## Parameters
 
-- COLUMN | ROLLUP
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：
 
-  - If COLUMN is specified, this statement shows tasks for modifying columns. If you need to nest a WHERE clause, the supported syntax is `[WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]`.
-
-  - If ROLLUP is specified, this statement shows tasks for creating or deleting ROLLUP indexes.
+  - If `COLUMN` is specified, this statement shows tasks for modifying columns.
+  - If `OPTIMIZE` is specified, this statement shows tasks for optimizing table structure.
+  - If `ROLLUP` is specified, this statement shows tasks for adding or deleting ROLLUP indexes.
 
 - `db_name`: optional. If `db_name` is not specified, the current database is used by default.
 
 ## Examples
 
-Example 1: Show column modification tasks in the current database.
+1. Show the execution status of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in the current database.
 
-```sql
-SHOW ALTER TABLE COLUMN;
-```
+    ```sql
+    SHOW ALTER TABLE COLUMN;
+    SHOW ALTER TABLE OPTIMIZE;
+    SHOW ALTER TABLE ROLLUP;
+    ```
 
-Example 2: Show the latest column modification task of a table.
+2. Show the execution status of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in a specified database.
 
-```sql
-SHOW ALTER TABLE COLUMN WHERE TableName = "table1"
-ORDER BY CreateTime DESC LIMIT 1;
- ```
+    ```sql
+    SHOW ALTER TABLE COLUMN FROM example_db;
+    SHOW ALTER TABLE OPTIMIZE FROM example_db;
+    SHOW ALTER TABLE ROLLUP FROM example_db;
+    ```
 
-Example 3: Show tasks for creating or deleting ROLLUP indexes in a specified database.
+3. Show the execution of the most recent task related to modifying columns or optimizing table structure in a specified table.
 
-```sql
-SHOW ALTER TABLE ROLLUP FROM example_db;
-````
+    ```sql
+    SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
+    SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
+    ```
 
 ## References
 
