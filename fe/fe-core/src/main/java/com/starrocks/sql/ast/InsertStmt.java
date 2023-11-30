@@ -277,9 +277,14 @@ public class InsertStmt extends DmlStmt {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         // fetch schema from query
         QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Field> allFields = query.getRelationFields().getAllFields();
-        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
-                field.getType(), field.isNullable())).collect(Collectors.toList());
+        List<Column> columns = query.getRelationFields().getAllFields().stream()
+                .filter(Field::isVisible)
+                .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
+                .collect(Collectors.toList());
+
+        if (columns.stream().map(Column::getName).distinct().count() != columns.size()) {
+            throw new SemanticException("got duplicate column name, expect all columns are distinct.");
+        }
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();
