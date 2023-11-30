@@ -153,6 +153,7 @@ public class RoutineLoadSchedulerTest {
 
         Deencapsulation.setField(kafkaRoutineLoadJob, "desireTaskConcurrentNum", 3);
 
+        // 1. there're 2 alive bes and the job is divided into 2 tasks.
         new Expectations() {
             {
                 globalStateMgr.getRoutineLoadMgr();
@@ -185,25 +186,26 @@ public class RoutineLoadSchedulerTest {
                 Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
         Assert.assertEquals(2, routineLoadTaskInfoList.size());
 
+        // 2. the job is not changed.
         routineLoadScheduler.runAfterCatalogReady();
         routineLoadTaskInfoList =
                 Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
         Assert.assertEquals(2, routineLoadTaskInfoList.size());
 
+        // 3. there're 3 alive bes and the job is divided into 3 tasks.
         new Expectations() {
             {
                 systemInfoService.getAliveBackendNumber();
                 times = 1;
                 result = 3;
 
-                routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
+                routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.RUNNING));
                 minTimes = 0;
                 result = routineLoadJobList;
             }
         };
 
         routineLoadScheduler.setNeedReschedule();
-        Deencapsulation.setField(kafkaRoutineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
         Deencapsulation.setField(kafkaRoutineLoadJob, "routineLoadTaskInfoList", Lists.newArrayList());
 
         routineLoadScheduler.runAfterCatalogReady();
