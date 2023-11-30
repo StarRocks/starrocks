@@ -534,6 +534,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
+            inputFragment.setShortCircuit(optExpr.getShortCircuit());
             return inputFragment;
         }
 
@@ -825,7 +826,13 @@ public class PlanFragmentBuilder {
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             fragment.setQueryGlobalDicts(node.getGlobalDicts());
+            fragment.setShortCircuit(optExpr.getShortCircuit());
             context.getFragments().add(fragment);
+
+            // set row store literal
+            if (optExpr.getShortCircuit()) {
+                scanNode.computePointScanRangeLocations();
+            }
             return fragment;
         }
 
