@@ -2580,6 +2580,12 @@ public class Config extends ConfigBase {
     public static long mv_active_checker_interval_seconds = 60;
 
     /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
+
+    /**
      * Whether analyze the mv after refresh in async mode.
      */
     @ConfField(mutable = true)
