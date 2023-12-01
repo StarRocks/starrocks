@@ -4,6 +4,52 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.16
+
+发布日期：2023 年 12 月 1 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 特定场景下 Global Runtime Filter 可能会引发 BE crash。 [#35776](https://github.com/StarRocks/starrocks/pull/35776)
+
+## 2.5.15
+
+发布日期：2023 年 11 月 29 日
+
+### 功能优化
+
+- 增加 Metric 慢访问日志。 [#33908](https://github.com/StarRocks/starrocks/pull/33908)
+- 优化文件较多时 Spark Load 读取 Parquet/Orc 文件的性能。 [#34787](https://github.com/StarRocks/starrocks/pull/34787)
+- 优化 Bitmap 相关的某些操作的性能，主要包括：
+  - 优化 Nested Loop Join 性能。 [#340804](https://github.com/StarRocks/starrocks/pull/34804) [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - 优化 `bitmap_xor` 函数性能。 [#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。 [#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+### 兼容性变更
+
+#### 参数变更
+
+- 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果提交的 Broker Load 作业包含过滤条件，在数据导入过程中，某些情况下会出现 BE Crash。 [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- 副本操作重放失败可能会引起 FE Crash。 [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+- 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。 [#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- 查询时报错 "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction"。 [#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- 查询中包括窗口函数可能会导致 BE crash。 [#33671](https://github.com/StarRocks/starrocks/pull/33671)
+- 执行 `show proc '/statistic'` 有概率出现卡住的情况。 [#34237](https://github.com/StarRocks/starrocks/pull/34237/files)
+- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。 [#34566](https://github.com/StarRocks/starrocks/pull/34566)
+- 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。 [#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。 [#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。 [#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- 集群执行导入任务或者查询时，可能会出现 FE 卡住的情况。 [#34569](https://github.com/StarRocks/starrocks/pull/34569)
+
 ## 2.5.14
 
 发布日期：2023 年 11 月 14 日
