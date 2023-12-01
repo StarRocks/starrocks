@@ -2513,6 +2513,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l2_vec.clear();
     }
     if (index_meta.l2_versions_size() > 0) {
+        DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
             auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
                                                      index_meta.l2_versions(i).minor(),
@@ -2658,6 +2659,11 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
     }
+    if (index_meta.l2_versions_size() != index_meta.l2_version_merged_size()) {
+        // Make sure l2 version equal to l2 version merged flag
+        return true;
+    }
+
     return false;
 }
 
@@ -2726,6 +2732,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
                 if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
                         std::string l2_file_name =
@@ -2803,6 +2810,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
     index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     lastest_applied_version.to_pb(index_meta.mutable_version());
@@ -4061,7 +4069,7 @@ Status PersistentIndex::_merge_compaction() {
     if (_usage != writer->total_kv_size()) {
         _usage = writer->total_kv_size();
     }
-    if (_size != writer->total_kv_num()) {
+    if (_l2_vec.size() == 0 && _size != writer->total_kv_num()) {
         std::string msg =
                 strings::Substitute("inconsistent kv num after merge compaction, actual:$0, expect:$1, index_file:$2",
                                     writer->total_kv_num(), _size, writer->index_file());
@@ -4315,6 +4323,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
@@ -4357,6 +4366,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
@@ -4380,8 +4390,10 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
+        const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+        EditVersion l0_version = l0_meta.snapshot().version();
         RETURN_IF_ERROR(_delete_expired_index_file(
-                _version, _l1_version,
+                l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
     _delete_major_compaction_tmp_index_file();
