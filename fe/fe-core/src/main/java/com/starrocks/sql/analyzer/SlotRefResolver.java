@@ -14,9 +14,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -35,6 +37,12 @@ import com.starrocks.sql.ast.ViewRelation;
  */
 public class SlotRefResolver {
     private  static final AstVisitor<Expr, Relation> EXPR_SHUTTLE = new AstVisitor<Expr, Relation>() {
+        @Override
+        public Expr visit(ParseNode node) {
+            throw new SemanticException("Cannot resolve materialized view's partition slot ref, " +
+                    "statement is not supported:%s", node);
+        }
+
         @Override
         public Expr visitExpression(Expr expr, Relation node) {
             expr = expr.clone();
@@ -64,6 +72,12 @@ public class SlotRefResolver {
     };
 
     private static final AstVisitor<Expr, SlotRef> SLOT_REF_RESOLVER = new AstVisitor<Expr, SlotRef>() {
+        @Override
+        public Expr visit(ParseNode node) {
+            throw new SemanticException("Cannot resolve materialized view's partition expression, " +
+                    "statement is not supported:%s", node);
+        }
+
         @Override
         public Expr visitSelect(SelectRelation node, SlotRef slot) {
             for (SelectListItem selectListItem : node.getSelectList().getItems()) {
@@ -148,6 +162,18 @@ public class SlotRefResolver {
                 }
             }
             return null;
+        }
+
+        @Override
+        public Expr visitCTE(CTERelation node, SlotRef slot) {
+            String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
+            String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
+            if (!cteName.equalsIgnoreCase(tableName)) {
+                return null;
+            }
+            slot = (SlotRef) slot.clone();
+            slot.setTblName(null); //clear table name here, not check it inside
+            return node.getCteQueryStatement().getQueryRelation().accept(this, slot);
         }
 
         @Override
