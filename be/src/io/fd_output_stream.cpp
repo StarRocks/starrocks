@@ -21,6 +21,7 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/io_error.h"
+#include "io/io_profiler.h"
 
 namespace starrocks::io {
 
@@ -68,6 +69,7 @@ Status FdOutputStream::write(const void* data, int64_t count) {
             }
         }
     }
+    IOProfiler::add_write(bytes_written);
     return Status::OK();
 }
 
