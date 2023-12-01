@@ -30,8 +30,10 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -277,9 +279,21 @@ public class InsertStmt extends DmlStmt {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         // fetch schema from query
         QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Field> allFields = query.getRelationFields().getAllFields();
-        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
-                field.getType(), field.isNullable())).collect(Collectors.toList());
+        List<Column> columns = query.getRelationFields().getAllFields().stream()
+                .filter(Field::isVisible)
+                .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
+                .collect(Collectors.toList());
+
+        List<String> columnNames = columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
+        Set<String> duplicateColumnNames = columns.stream()
+                .map(Column::getName)
+                .filter(name -> Collections.frequency(columnNames, name) > 1)
+                .collect(Collectors.toSet());
+        if (!duplicateColumnNames.isEmpty()) {
+            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
+        }
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();
@@ -342,8 +356,6 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException(
                     "If partition_by is used, path should be a directory ends with forward slash(/).");
         }
-
-        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
 
         // parse and validate partition columns
         List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
