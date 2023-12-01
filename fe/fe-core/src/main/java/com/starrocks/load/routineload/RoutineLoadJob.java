@@ -244,6 +244,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("p")
     protected RoutineLoadProgress progress;
 
+    @SerializedName("tp")
+    protected RoutineLoadProgress timestampProgress;
+
     protected long firstResumeTimestamp; // the first resume time
     protected long autoResumeCount;
     protected boolean autoResumeLock = false; //it can't auto resume iff true
@@ -600,6 +603,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public RoutineLoadProgress getProgress() {
         return progress;
+    }
+
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
     }
 
     protected abstract String getSourceProgressString();
@@ -1464,6 +1471,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
             row.add(getProgress().toJsonString());
+            row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     row.add(pauseReason == null ? "" : pauseReason.toString());

@@ -114,10 +114,10 @@ public class RoutineLoadJobTest {
         RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
         TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
         tKafkaRLTaskProgress.partitionCmtOffset = Maps.newHashMap();
-        KafkaProgress kafkaProgress = new KafkaProgress(tKafkaRLTaskProgress);
+        KafkaProgress kafkaProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
         Deencapsulation.setField(attachment, "progress", kafkaProgress);
 
-        KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress);
+        KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
 
         new Expectations() {
             {

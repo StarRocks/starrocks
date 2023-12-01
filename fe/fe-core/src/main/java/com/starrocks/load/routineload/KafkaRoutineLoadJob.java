@@ -139,6 +139,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.brokerList = brokerList;
         this.topic = topic;
         this.progress = new KafkaProgress();
+        this.timestampProgress = new KafkaProgress();
     }
 
     public String getConfluentSchemaRegistryUrl() {
@@ -336,13 +337,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
+        this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
     }
 
     @Override

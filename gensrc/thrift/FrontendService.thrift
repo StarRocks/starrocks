@@ -907,6 +907,7 @@ struct TStreamLoadPutResult {
 
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
+    2: required map<i32,i64> partitionCmtOffsetTimestamp
 }
 
 struct TPulsarRLTaskProgress {
