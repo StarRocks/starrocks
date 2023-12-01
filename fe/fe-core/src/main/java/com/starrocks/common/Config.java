@@ -879,7 +879,7 @@ public class Config extends ConfigBase {
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
     /**
-     * Max load timeout applicable to all type of load except for stream load
+     * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
     @ConfField(mutable = true)
     public static int max_load_timeout_second = 259200; // 3days
@@ -2369,6 +2369,19 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
+
+    /**
+     * Default lake compaction txn timeout
+     */
+    @ConfField(mutable = true)
+    public static int lake_compaction_default_timeout_second = 86400; // 1 day
+
+    /**
+     * Max timeout for lake compaction transaction.
+     * This value should always be greater than `lake_compaction_default_timeout_second`
+     */
+    @ConfField(mutable = true)
+    public static int max_lake_compaction_timeout_second = 259200; // 3days
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;

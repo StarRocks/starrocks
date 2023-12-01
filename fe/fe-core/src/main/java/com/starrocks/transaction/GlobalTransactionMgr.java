@@ -154,6 +154,10 @@ public class GlobalTransactionMgr implements Writable {
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
                         Config.min_load_timeout_second);
                 break;
+            case LAKE_COMPACTION:
+                checkValidTimeoutSecond(timeoutSecond, Config.max_lake_compaction_timeout_second,
+                        Config.min_load_timeout_second);
+                break;
             default:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
         }
@@ -312,6 +316,10 @@ public class GlobalTransactionMgr implements Writable {
         switch (sourceType) {
             case BACKEND_STREAMING:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
+                        Config.min_load_timeout_second);
+                break;
+            case LAKE_COMPACTION:
+                checkValidTimeoutSecond(timeoutSecond, Config.max_lake_compaction_timeout_second,
                         Config.min_load_timeout_second);
                 break;
             default:
