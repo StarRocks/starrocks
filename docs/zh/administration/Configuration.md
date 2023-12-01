@@ -607,6 +607,80 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 默认值：15 \* 60 \* 100
 
+#### 存算分离相关动态参数
+
+##### lake_compaction_score_selector_min_score
+
+- 含义：触发compaction操作的compaction score阈值。<br />
+compaction score代表了一个表分区是否值得进行compaction的一个评分，可以通过[show partitions](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)输出中的`MaxCS`一列的值来查看某个分区的compaction score。<br />
+compaction score和分区中的文件数量有关系，文件数量过多将影响查询性能，因此StarRocks后台会定期执行compaction操作来合并小文件，减少文件数量。<br />
+只有当一个表分区的compaction score大于或等于`lake_compaction_score_selector_min_score`时，才会对该分区执行compaction操作。
+- 默认值： 10.0
+
+
+##### lake_compaction_max_tasks
+- 含义： 允许同时执行的compaction任务数。<br />
+compaction任务数是按照Tablet数量来计算的，例如一个分区如果有10个Tablet，那么对该分区作一次copmaciton就会创建10个compaction任务。<br />
+如果正在执行中的compaction任务数超过该阈值，不会有新的compaction任务被创建。<br />
+将该值设置为0表示禁止compaction，-1表示系统会采取自适应策略自动计算该值。
+- 默认值：-1
+
+##### lake_compaction_history_size
+- 含义： 在FE主节点内存中保留多少条最近成功的compaction任务历史记录。可以通过`show proc '/transactions'`命令查看最近成功的compaction任务记录。<br />
+ 需要注意的是，compaction历史记录是保存在FE进程内存中的，FE进程重启后历史记录会丢失。
+- 默认值： 12
+
+##### lake_compaction_fail_history_size
+- 含义： 在FE主节点内存中保留多少条最近失败的compaction任务历史记录。可以通过`show proc '/transactions'`命令查看最近失败的compaction任务记录。<br />
+ 需要注意的是，compaction历史记录是保存在FE进程内存中的，FE进程重启后历史记录会丢失。
+- 默认值： 12 
+
+##### lake_publish_version_max_threads
+- 含义：发送生效版本任务的最大线程数。
+- 默认值：128
+
+##### lake_autovacuum_parallel_partitions
+- 含义：最多可以同时对多少个表分区进行垃圾数据清理。
+- 默认值：8
+
+##### lake_autovacuum_partition_naptime_seconds
+- 含义：同一个表分区进行垃圾数据清理的最小间隔时间。
+- 单位：秒
+- 默认值：180
+
+##### lake_autovacuum_grace_period_minutes
+- 含义：此时间范围内的历史数据版本将不会被自动清理。应当将该值设置的比最大查询时间更长，避免正在访问中的数据被删除导致查询失败。
+- 单位：分钟
+- 默认值：5
+
+##### lake_autovacuum_stale_partition_threshold
+- 含义：以小时为单位的时间阈值，如果某个表分区在该阈值范围内没有任何更新操作(导入、删除、compaction)，将不再触发该分区的自动垃圾数据清理操作。
+- 单位：小时
+- 默认值：12
+
+##### lake_enable_ingest_slowdown
+- 含义：是否开启导入限速功能。开启导入限速功能后，当某个表分区的compaction score超过了`lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限制导入速度。<br />
+- 默认值：false
+
+##### lake_ingest_slowdown_threshold
+- 含义：触发导入限速的compaction score阈值。只有当`lake_enable_ingest_slowdown`开启后，该配置项才会生效。
+<br />注：当`lake_ingest_slowdown_threshold`比配置项`lake_compaction_score_selector_min_score`小时，实际生效的阈值会是`lake_compaction_score_selector_min_score`。
+- 默认值：100
+
+##### lake_ingest_slowdown_ratio
+- 含义：导入限速比例。<br />
+数据导入任务可以分为数据写入和数据提交(commit)两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，降速比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`<br />
+例如，数据写入阶段耗时为5分钟，`lake_ingest_slowdown_ratio`为0.1，compaction score比`lake_ingest_slowdown_threshold`多10个点，那么延迟提交的时间为`5 * 10 * 0.1 = 5`分钟，相当于写入阶段的耗时由5分钟增加到了10分钟，平均导入速度下降了一倍。<br />
+注：如果一个导入任务同时向多个分区写入，那么会取所有分区的compaction score的最大值来计算延迟提交时间。<br />
+注：延迟提交的延迟时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要compaction score不超过`lake_compaction_score_upper_bound`，都会执行数据提交(commit)操作。<br />
+注：如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
+- 默认值：0.1
+
+##### lake_compaction_score_upper_bound
+- 含义：表分区的compaction score的上限, 0表示没有上限。只有当`lake_enable_ingest_slowdown`开启后，该配置项才会生效。<br />
+当表分区compaction score达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到compaction score降到`lake_compaction_score_upper_bound`以下或者任务超时。
+- 默认值：0
+
 #### 其他动态参数
 
 ##### plugin_enable
