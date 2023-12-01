@@ -685,7 +685,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - 含义：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
-- **默认值**: FALSE
+- 默认值: FALSE
 
 ##### enable_backup_materialized_view
 
