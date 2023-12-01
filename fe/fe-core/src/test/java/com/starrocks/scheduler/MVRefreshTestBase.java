@@ -53,6 +53,7 @@ public class MVRefreshTestBase {
     protected static StarRocksAssert starRocksAssert;
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
+    private static short previousReplicationNum = Config.default_replication_num;
 
     protected static long startSuiteTime = 0;
     protected long startCaseTime = 0;
@@ -62,6 +63,8 @@ public class MVRefreshTestBase {
         FeConstants.runningUnitTest = true;
         FeConstants.enablePruneEmptyOutputScan = false;
         Config.enable_experimental_mv = true;
+        previousReplicationNum = Config.default_replication_num;
+        Config.default_replication_num = 1;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
@@ -107,6 +110,7 @@ public class MVRefreshTestBase {
 
     @AfterClass
     public static void tearDown() throws Exception {
+        Config.default_replication_num = previousReplicationNum;
     }
 
 }
