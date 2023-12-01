@@ -24,7 +24,6 @@ services:
     user: root
     command: >
       bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
-      echo cloud_native_meta_port=6090 >> /opt/starrocks/fe/conf/fe.conf &&
       echo aws_s3_path=starrocks >> /opt/starrocks/fe/conf/fe.conf &&
       echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
       echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
@@ -56,7 +55,7 @@ services:
       - /bin/bash
       - -c
       - |
-        sleep 15s; echo starlet_port = 8167 >> /opt/starrocks/cn/conf/cn.conf;
+        sleep 15s;
         mysql --connect-timeout 2 -h starrocks-fe -P9030 -uroot -e "ALTER SYSTEM ADD COMPUTE NODE \"starrocks-cn:9050\";"
         /opt/starrocks/cn/bin/start_cn.sh
     ports:
