@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Release date: December 1, 2023
 
-### Bugfixes
+### Bug Fixes
 
 Fixed the following issues:
 
@@ -33,7 +33,7 @@ Release date: November 29, 2023
 
 - The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 
-### Bugfixes
+### Bug Fixes
 
 - If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
 - Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
