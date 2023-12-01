@@ -83,7 +83,117 @@ public class MvRewritePreprocessor {
         this.logicOperatorTree = logicOperatorTree;
     }
 
+<<<<<<< HEAD
     public Set<MaterializedView> getRelatedAsyncMVs(Set<Table> queryTables) {
+=======
+    public void prepare(OptExpression optExpression) {
+        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
+            Set<Table> queryTables = MvUtils.getAllTables(optExpression).stream().collect(Collectors.toSet());
+            logMVPrepare(connectContext, "Query input tables: {}", queryTables);
+            logMVPrepare(connectContext, "Materialized views params, " +
+                            "enable_experimental_mv:{}, enable_materialized_view_rewrite:{}," +
+                            "isRuleBased:{}",
+                    Config.enable_experimental_mv,
+                    connectContext.getSessionVariable().isEnableMaterializedViewRewrite(),
+                    context.getOptimizerConfig().isRuleBased());
+            logMVPrepare(connectContext, "QueryID:", context.getQueryId());
+            try {
+                Set<MaterializedView> relatedMVs =
+                        getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
+                Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
+                prepareRelatedMVs(queryTables, validMVs);
+            } catch (Exception e) {
+                // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
+                List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
+                LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
+                throw e;
+            }
+        }
+    }
+
+    private MaterializedView copyOnlyMaterializedView(MaterializedView mv) {
+        // TODO: add read lock?
+        // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
+        // metadata race for different operations.
+        // Ensure to re-optimize if the mv's version has changed after the optimization.
+        MaterializedView copiedMV = new MaterializedView();
+        mv.copyOnlyForQuery(copiedMV);
+        return copiedMV;
+    }
+
+    private static Set<MaterializedView> getRelatedMVs(ConnectContext connectContext,
+                                                       Set<Table> queryTables,
+                                                       boolean isRuleBased) {
+        if (Config.enable_experimental_mv
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                && !isRuleBased) {
+            Set<MaterializedView> relatedMVs = getRelatedAsyncMVs(connectContext, queryTables);
+            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                relatedMVs.addAll(getRelatedSyncMVs(connectContext, queryTables));
+            }
+            return relatedMVs;
+        } else {
+            return Sets.newHashSet();
+        }
+    }
+
+    private static Set<Pair<MaterializedView, MvPlanContext>> filterValidMVs(ConnectContext connectContext,
+                                                                             Set<MaterializedView> relatedMVs) {
+        // filter mvs by including/excluding settings
+        String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
+        if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
+            logMVPrepare(connectContext, "queryExcludingMVNames:{}, queryIncludingMVNames:{}",
+                    Strings.nullToEmpty(queryExcludingMVNames), Strings.nullToEmpty(queryIncludingMVNames));
+
+            final Set<String> queryExcludingMVNamesSet = Strings.isNullOrEmpty(queryExcludingMVNames) ? Sets.newHashSet()
+                    : Arrays.stream(queryExcludingMVNames.split(",")).map(String::trim).collect(Collectors.toSet());
+
+            final Set<String> queryIncludingMVNamesSet = Strings.isNullOrEmpty(queryIncludingMVNames) ? Sets.newHashSet()
+                    : Arrays.stream(queryIncludingMVNames.split(",")).map(String::trim).collect(Collectors.toSet());
+            relatedMVs = relatedMVs.stream()
+                    .filter(mv -> queryIncludingMVNamesSet.isEmpty() || queryIncludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> queryExcludingMVNamesSet.isEmpty() || !queryExcludingMVNamesSet.contains(mv.getName()))
+                    .collect(Collectors.toSet());
+        }
+
+        // filter mvs which are active and have valid plans
+        Set<Pair<MaterializedView, MvPlanContext>> filteredMVs = Sets.newHashSet();
+        for (MaterializedView mv : relatedMVs) {
+            if (!mv.isActive()) {
+                logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+                continue;
+            }
+
+            MvPlanContext mvPlanContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+                    connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+            if (mvPlanContext == null) {
+                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
+                        mv.getName());
+                continue;
+            }
+            if (!mvPlanContext.isValidMvPlan()) {
+                if (mvPlanContext.getLogicalPlan() != null) {
+                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
+                            mv.getName(), mvPlanContext.getLogicalPlan().debugString());
+                } else {
+                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
+                            mv.getName());
+                }
+                continue;
+            }
+
+            filteredMVs.add(Pair.create(mv, mvPlanContext));
+        }
+        if (filteredMVs.isEmpty()) {
+            logMVPrepare(connectContext, "There are no valid related mvs for the query plan");
+        }
+        return filteredMVs;
+    }
+
+    private static Set<MaterializedView> getRelatedAsyncMVs(ConnectContext connectContext,
+                                                            Set<Table> queryTables) {
+>>>>>>> 7cce26f8cf ([BugFix] Support union rewrite by pulling up query's extra predicates (#35983))
         // get all related materialized views, include nested mvs
         return MvUtils.getRelatedMvs(connectContext,
                 connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
