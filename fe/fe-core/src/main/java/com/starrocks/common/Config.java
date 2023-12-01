@@ -2483,6 +2483,12 @@ public class Config extends ConfigBase {
     public static long mv_active_checker_interval_seconds = 60;
 
     /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
