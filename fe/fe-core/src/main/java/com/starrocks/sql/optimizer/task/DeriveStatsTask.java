@@ -86,7 +86,7 @@ public class DeriveStatsTask extends OptimizerTask {
             return true;
         }
 
-        if (isMaterializedView()) {
+        if (isMaterializedView(groupExpression)) {
             return false;
         }
 
