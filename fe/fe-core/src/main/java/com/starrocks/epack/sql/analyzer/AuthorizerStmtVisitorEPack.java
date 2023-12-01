@@ -56,6 +56,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -613,6 +614,25 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     @Override
     public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
         super.visitCreateRoutineLoadStatement(statement, context);
+        // check warehouse privilege
+        Map<String, String> properties = statement.getJobProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            try {
+                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext context) {
+        super.visitAlterRoutineLoadStatement(statement, context);
         // check warehouse privilege
         Map<String, String> properties = statement.getJobProperties();
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {

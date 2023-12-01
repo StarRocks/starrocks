@@ -1903,7 +1903,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             throws DdlException;
 
     // for ALTER ROUTINE LOAD
-    private void modifyCommonJobProperties(Map<String, String> jobProperties) {
+    private void modifyCommonJobProperties(Map<String, String> jobProperties) throws DdlException {
         // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
         Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
@@ -1934,6 +1934,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
         }
+
+        if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = copiedJobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse != null) {
+                this.warehouseId = warehouse.getId();
+            } else {
+                // because default_warehouse not persist, so when replay, warehouse will be null, cause npe
+                if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                    this.warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                } else {
+                    throw new DdlException("Warehouse " + warehouseName + " not exist");
+                }
+            }
+        }
+
         this.jobProperties.putAll(copiedJobProperties);
     }
 

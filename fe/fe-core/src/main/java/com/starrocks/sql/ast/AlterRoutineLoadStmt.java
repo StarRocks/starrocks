@@ -22,10 +22,13 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.List;
 import java.util.Map;
@@ -58,6 +61,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     private LabelName labelName;
@@ -125,6 +129,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
 
     public List<ParseNode> getLoadPropertyList() {
         return loadPropertyList;
+    }
+
+    public Map<String, String> getJobProperties() {
+        return jobProperties;
     }
 
     public void checkJobProperties() throws UserException {
@@ -276,6 +284,15 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         if (jobProperties.containsKey(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)) {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
+        }
+
+        if (jobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = jobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse == null) {
+                throw new UserException("Warehouse " + warehouseName + " not exist");
+            }
+            analyzedJobProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouseName);
         }
     }
 
