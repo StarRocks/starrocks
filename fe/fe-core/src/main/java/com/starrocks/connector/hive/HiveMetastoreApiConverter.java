@@ -144,14 +144,16 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
+                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
+                    HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
+                    HiveView.Type.Hive);
         }
 
         try {
-            hiveView.getQueryStatementWithSRParser();
+            hiveView.getQueryStatement();
         } catch (StarRocksPlannerException e) {
             throw new StarRocksConnectorException("failed to parse hive view text", e);
         }
