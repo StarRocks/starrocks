@@ -49,6 +49,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -224,6 +225,13 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxColUniqueId")
     protected int maxColUniqueId = -1;
 
+    // We can utilize a monotonically increasing IndexId,
+    // which is based on the OlapTable, to uniquely identify an index. When adding a multi-column index,
+    // we can assign the 'indexId' as the index's name. Furthermore, if we need to replace an old index
+    // with a new one that has the same 'indexName', the unique 'indexId' allows us to distinguish between them.
+    @SerializedName(value = "maxIndexId")
+    protected long maxIndexId = -1;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -298,6 +306,7 @@ public class OlapTable extends Table {
         this.colocateGroup = null;
 
         this.indexes = indexes;
+        tryToAssignIndexId();
 
         this.tableProperty = null;
     }
@@ -403,6 +412,19 @@ public class OlapTable extends Table {
 
     public void setMaxColUniqueId(int maxColUniqueId) {
         this.maxColUniqueId = maxColUniqueId;
+    }
+
+    public long incAndGetMaxIndexId() {
+        this.maxIndexId++;
+        return this.maxIndexId;
+    }
+
+    public long getMaxIndexId() {
+        return this.maxIndexId;
+    }
+
+    public void setMaxIndexId(long maxIndexId) {
+        this.maxIndexId = maxIndexId;
     }
 
     public boolean dynamicPartitionExists() {
@@ -950,7 +972,7 @@ public class OlapTable extends Table {
 
 
     /**
-     * @return  : table's partition name to range partition key mapping.
+     * @return : table's partition name to range partition key mapping.
      */
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
         Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
@@ -2725,6 +2747,7 @@ public class OlapTable extends Table {
     @Override
     public void onReload() {
         analyzePartitionInfo();
+        tryToAssignIndexId();
     }
 
     @Override
@@ -2832,6 +2855,7 @@ public class OlapTable extends Table {
     }
 
     private static class DeleteOlapTableTask implements Runnable {
+
         private final OlapTable table;
 
         public DeleteOlapTableTask(OlapTable table) {
@@ -2960,11 +2984,11 @@ public class OlapTable extends Table {
 
     /**
      * Check if data cache is allowed for the specified partition's data:
-     *  - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
-     *  - If the partition is partitioned by DATE or DATETIME:
-     *    - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
-     *      duration, allow data cache for the partition.
-     *    - otherwise, disallow the data cache for the partition
+     * - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
+     * - If the partition is partitioned by DATE or DATETIME:
+     * - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
+     * duration, allow data cache for the partition.
+     * - otherwise, disallow the data cache for the partition
      *
      * @param partition the partition to check. the partition must belong to this table.
      * @return true if the partition is enabled for the data cache, false otherwise
@@ -2974,6 +2998,21 @@ public class OlapTable extends Table {
             return isEnableFillDataCacheImpl(Objects.requireNonNull(partition, "partition is null"));
         } catch (AnalysisException ignored) {
             return true;
+        }
+    }
+
+    // Read indexes and assign indexId for some compatible reasons when upgrade from old version
+    private void tryToAssignIndexId() {
+        if (this.indexes != null && !this.indexes.getIndexes().isEmpty()) {
+            this.maxIndexId = Math.max(
+                    this.indexes.getIndexes().stream()
+                            .filter(index -> index.getIndexType() == IndexType.GIN)
+                            .mapToLong(Index::getIndexId).max().orElse(-1),
+                    this.maxIndexId);
+            this.indexes.getIndexes().stream()
+                    .filter(index -> index.getIndexType() == IndexType.GIN && index.getIndexId() < 0)
+                    .forEach(index -> index.setIndexId(this.incAndGetMaxIndexId()));
+
         }
     }
 

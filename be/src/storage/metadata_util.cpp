@@ -22,6 +22,8 @@
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
+#include "util/json_util.h"
+#include "utils.h"
 
 namespace starrocks {
 
@@ -239,6 +241,8 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     // set column information
     uint32_t col_ordinal = 0;
     bool has_bf_columns = false;
+    std::unordered_map<std::string, ColumnPB*> column_map;
+
     uint32_t max_col_unique_id = 0;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
@@ -256,15 +260,47 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
         has_bf_columns |= column->is_bf_column();
 
-        if (tablet_schema.__isset.indexes) {
-            for (auto& index : tablet_schema.indexes) {
-                if (index.index_type == TIndexType::type::BITMAP) {
-                    DCHECK_EQ(index.columns.size(), 1);
-                    if (boost::iequals(tcolumn.column_name, index.columns[0])) {
-                        column->set_has_bitmap_index(true);
-                        break;
-                    }
+        column_map.emplace(boost::to_lower_copy(column->name()), column);
+    }
+
+    if (tablet_schema.__isset.indexes) {
+        for (auto& index : tablet_schema.indexes) {
+            TabletIndexPB* index_pb = schema->add_table_indices();
+            index_pb->set_index_id(index.index_id);
+            index_pb->set_index_name(index.index_name);
+            if (index.index_type == TIndexType::type::BITMAP) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("BITMAP index " + index.index_name +
+                                            " do not support to build with more than one column"));
+
+                index_pb->set_index_type(IndexType::BITMAP);
+                const auto& mit = column_map.find(boost::to_lower_copy(index.columns[0]));
+                RETURN_IF(mit == column_map.end(), Status::Cancelled("index column (" + index.columns[0] +
+                                                                     ") can not be found in table columns"));
+                mit->second->set_has_bitmap_index(true);
+            } else if (index.index_type == TIndexType::type::GIN) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("GIN index " + index.index_name +
+                                            " do not support to build with more than one column"));
+                index_pb->set_index_type(IndexType::GIN);
+
+                for (const auto& index_col_name : index.columns) {
+                    const auto& mit = column_map.find(index_col_name);
+                    RETURN_IF(mit == column_map.end(),
+                              Status::Cancelled("index " + index_col_name + " can not be found in table columns"));
+                    index_pb->add_col_unique_id(column_map.at(index_col_name)->unique_id());
                 }
+
+                std::map<std::string, std::map<std::string, std::string>> properties_map;
+                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
+                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
+                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
+                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
+                index_pb->set_index_properties(to_json(properties_map));
+            } else {
+                std::string index_type;
+                EnumToString(TIndexType, index.index_type, index_type);
+                return Status::Cancelled("Not supported index type " + index_type);
             }
         }
     }

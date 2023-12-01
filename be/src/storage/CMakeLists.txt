@@ -60,6 +60,7 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp

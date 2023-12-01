@@ -76,4 +76,8 @@ ToJsonValue(const T& value, const TUnit::type unit, rapidjson::Document* documen
 }
 
 std::string to_json(const Status& status);
+
+std::string to_json(const std::map<std::string, std::map<std::string, std::string>>& value);
+
+Status from_json(const std::string& json_value, std::map<std::string, std::map<std::string, std::string>>* map_result);
 } // namespace starrocks

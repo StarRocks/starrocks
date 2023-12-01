@@ -2213,6 +2213,11 @@ public class SchemaChangeHandler extends AlterHandler {
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
+            if (existedIdx.getIndexId() >= newIndex.getIndexId()) {
+                throw new IllegalStateException(
+                        String.format("New index id %s should be lg than existed idx %s in OlapTable",
+                                newIndex.getIndexId(), existedIdx.getIndexId()));
+            }
             if (existedIdx.getIndexName().equalsIgnoreCase(indexDef.getIndexName())) {
                 throw new DdlException("index `" + indexDef.getIndexName() + "` already exist.");
             }
@@ -2232,7 +2237,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
             }
         }
-
+        Preconditions.checkArgument(newIndex.isValidIndex(),
+                "You should ensure that the indexId of the new type index was assigned when the table is OlapTable");
         newIndexes.add(newIndex);
     }
 
