@@ -22,6 +22,8 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
+import org.apache.avro.Schema;
+import org.apache.hadoop.hive.common.StringInternUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -30,20 +32,28 @@ import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
+import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.avro.AvroObjectInspectorGenerator;
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
@@ -392,6 +402,25 @@ public class HiveMetaClient {
             if (client != null) {
                 client.close();
             }
+        }
+    }
+
+    public List<FieldSchema> getAvroFields(String dbName, String tableName, Map<String, String> parameters) {
+        Properties properties = new Properties();
+        properties.putAll(parameters);
+        try {
+            Schema schema = AvroSerdeUtils.determineSchemaOrThrowException(conf, properties);
+            AvroObjectInspectorGenerator aoig = new AvroObjectInspectorGenerator(schema);
+            List<String> columnNames = StringInternUtils.internStringsInList(aoig.getColumnNames());
+            List<TypeInfo> columnTypes = aoig.getColumnTypes();
+            List<FieldSchema> fieldSchemas = new ArrayList<>();
+            for (int i = 0; i < columnNames.size(); i++) {
+                fieldSchemas.add(new FieldSchema(columnNames.get(i), columnTypes.get(i).getTypeName(), null));
+            }
+            return fieldSchemas;
+        } catch (IOException | SerDeException e) {
+            throw new StarRocksConnectorException("Failed to get Avro fields on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage());
         }
     }
 

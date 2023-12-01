@@ -29,6 +29,7 @@ import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +52,9 @@ import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastore
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.updateStatisticsParameters;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
+import static com.starrocks.connector.hive.HiveStorageFormat.AVRO;
 import static com.starrocks.connector.hive.Partition.TRANSIENT_LAST_DDL_TIME;
+import static org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.SCHEMA_URL;
 
 public class HiveMetastore implements IHiveMetastore {
 
@@ -118,11 +121,40 @@ public class HiveMetastore implements IHiveMetastore {
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
+                if (isAvroTableWithSchemas(table)) {
+                    HashMap<String, String> tableProperties = new HashMap<>();
+                    // directly copied from Hive's commit Hive-1712
+                    for (Map.Entry<String, String> param : table.getSd().getSerdeInfo().getParameters().entrySet()) {
+                        tableProperties.put(param.getKey(), param.getValue() != null ? param.getValue() : "");
+                    }
+                    tableProperties.putAll(table.getParameters());
+
+                    return HiveMetastoreApiConverter.toHiveTable(table, catalogName,
+                            client.getAvroFields(table.getDbName(), table.getTableName(), tableProperties));
+                }
                 return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
             }
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
+    }
+
+    private static boolean isAvroTableWithSchemas(org.apache.hadoop.hive.metastore.api.Table table) {
+        if (table.getParameters() == null) {
+            return false;
+        }
+        StorageDescriptor sd = table.getSd();
+        if (sd == null) {
+            throw new StarRocksConnectorException("Table is missing storage descriptor");
+        }
+        SerDeInfo serdeInfo = sd.getSerdeInfo();
+        if (serdeInfo == null) {
+            throw new StarRocksConnectorException("Table storage descriptor is missing SerDe info");
+        }
+        return serdeInfo.getSerializationLib() != null &&
+                (table.getParameters().get(SCHEMA_URL) != null ||
+                        (serdeInfo.getParameters() != null && serdeInfo.getParameters().get(SCHEMA_URL) != null)) &&
+                serdeInfo.getSerializationLib().equals(AVRO.getSerde());
     }
 
     @Override
