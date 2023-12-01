@@ -18,26 +18,58 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Config;
 import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
 import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 import static java.util.Locale.ENGLISH;
 
 public abstract class RangerAccessController extends ExternalAccessController {
+    private static final Logger LOG = LoggerFactory.getLogger(RangerAccessController.class);
     protected final RangerBasePlugin rangerPlugin;
 
     public RangerAccessController(String serviceType, String serviceName) {
+        String principal = Config.ranger_spnego_kerberos_principal;
+        String keyTab = Config.ranger_spnego_kerberos_keytab;
+        String krb5 = Config.ranger_kerberos_krb5_conf;
+
+        if (!principal.isEmpty() && !keyTab.isEmpty()) {
+            LOG.info("Interacting with Ranger Admin Server using Kerberos authentication");
+            if (krb5 != null && !krb5.isEmpty()) {
+                LOG.info("Load system property java.security.krb5.conf with path : " + krb5);
+                System.setProperty("java.security.krb5.conf", krb5);
+            }
+            Configuration hadoopConf = new Configuration();
+            hadoopConf.set("hadoop.security.authorization", "true");
+            hadoopConf.set("hadoop.security.auth_to_local", "DEFAULT");
+            hadoopConf.set("hadoop.security.authentication", "kerberos");
+            UserGroupInformation.setConfiguration(hadoopConf);
+
+            try {
+                UserGroupInformation.loginUserFromKeytab(principal, keyTab);
+            } catch (IOException ioe) {
+                LOG.error("Performing kerberos login failed", ioe);
+            }
+        } else {
+            LOG.info("Interacting with Ranger Admin Server using SIMPLE authentication");
+        }
+
         rangerPlugin = new RangerBasePlugin(serviceType, serviceName, serviceType);
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
