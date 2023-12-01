@@ -355,5 +355,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }
