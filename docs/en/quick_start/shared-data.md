@@ -4,23 +4,33 @@ sidebar_position: 2
 description: Separate compute and storage
 ---
 
-# StarRocks Object Storage lab
-
 import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clients.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
+# Separate storage and compute
+
+In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
+
 This tutorial covers:
 
 - Running StarRocks in Docker containers
 - Using MinIO for Object Storage
-- Loading two public datasets including basic transformation of the data
+- Configuring StarRocks for shared-data
+- Loading two public datasets
 - Analyzing the data with SELECT and JOIN
+- Basic data transformation (the `T` in ETL)
 
-The data used is provided by NYC OpenData and the National Centers for Environmental Information.
+The data used is provided by NYC OpenData and the National Centers for Environmental Information at NOAA.
 
 Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+
+There is a lot of information in this document, and it is presented with the step by step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
+
+1. Allow the reader to load data in a shared-data deployment and analyze that data.
+2. Provide the configuration details for shared-data deployments.
+3. Explain the basics of data transformation during loading.
 
 ## Prerequisites
 
@@ -32,11 +42,26 @@ Both of these datasets are very large, and because this tutorial is intended to 
 
 ### SQL client
 
-The SQL clients will be discussed after starting StarRocks as StarRocks needs to be running to configure a client.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
 
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+
+## Terminology
+
+### FE
+Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
+
+### CN
+Compute Nodes are responsible for executing query plans in shared-data deployments.
+
+### BE
+Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments.
+
+:::note
+This guide does not use BEs, this information is included here so that you understand the difference between BEs and CNs.
+:::
 
 ## Launch StarRocks
 
@@ -127,13 +152,17 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 
 At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
 
-### Connect to StarRocks
+### Connect to StarRocks with a SQL client
 
 :::tip
-If you are using the mysql CLI open a new shell on your system as you will need the shell in the FE for another step in the process.
+
+Run this command from the directory containing the `docker-compose.yml` file.
+
+If you are using a client other than the mysql CLI, open that now.
 :::
 
 ```sql
+docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
@@ -178,6 +207,13 @@ SET shared AS DEFAULT STORAGE VOLUME;
 ```sql
 StarRocks > DESC STORAGE VOLUME shared\G
 ```
+
+:::tip
+Some of the SQL in this document, and many other documents in the StarRocks documentation, and with `\G` instead
+of a semicolon. The `\G` causes the mysql CLI to render the query results vertically.
+
+Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;`.
+:::
 
 ```plaintext
 *************************** 1. row ***************************
@@ -307,6 +343,103 @@ The folder names below `starrocks/shared/` are generated when you load the data.
 ## Answer some questions
 
 <SQL />
+
+## Configuring StarRocks for shared-data
+
+Now that you have experienced using StarRocks with shared-data it is important to understand the configuration. 
+
+### CN configuration
+
+The CN configuration used here is the default, as the CN is designed for shared-data use. The default configuration is shown below. You do not need to make any changes.
+
+```bash
+sys_log_level = INFO
+
+be_port = 9060
+be_http_port = 8040
+heartbeat_service_port = 9050
+brpc_port = 8060
+```
+
+### FE configuration
+
+The FE configuration is slightly different from the default as the FE must be configured to expect that data is stored in Object Storage rather than on local disks on BE nodes.
+
+The `docker-compose.yml` file generates the FE configuration in the `command`.
+
+```yml
+    command: >
+      bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
+      echo cloud_native_meta_port=6090 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_path=starrocks >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
+      echo cloud_native_storage_type=S3 >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_use_aws_sdk_default_behavior=true >> /opt/starrocks/fe/conf/fe.conf &&
+      sh /opt/starrocks/fe/bin/start_fe.sh"
+```
+
+This results in this config file:
+
+```bash title='fe/fe.conf'
+LOG_DIR = ${STARROCKS_HOME}/log
+
+DATE = "$(date +%Y%m%d-%H%M%S)"
+JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:${LOG_DIR}/fe.gc.log.$DATE -XX:+PrintConcurrentLocks"
+
+JAVA_OPTS_FOR_JDK_11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+
+sys_log_level = INFO
+
+http_port = 8030
+rpc_port = 9020
+query_port = 9030
+edit_log_port = 9010
+mysql_service_nio_enabled = true
+
+# highlight-start
+run_mode=shared_data
+aws_s3_path=starrocks
+aws_s3_endpoint=minio:9000
+aws_s3_use_instance_profile=false
+cloud_native_storage_type=S3
+aws_s3_use_aws_sdk_default_behavior=true
+# highlight-end
+```
+
+:::note
+This config file contains the default entries and the additions for shared-data. The entries for shared-data are highlighted.
+:::
+
+The non-default FE configuration settings:
+
+::: note
+Many configuration parameters are prefixed with `s3_`. This prefix is used for all Amazon S3 compatible storage types (for example: S3, GCS, and MinIO). When using Azure Blob Storage the prefix is `azure_`.
+:::
+
+#### `run_mode=shared_data`
+
+This enables shared-data use.
+
+#### `aws_s3_path=starrocks`
+
+The bucket name.
+
+#### `aws_s3_endpoint=minio:9000`
+
+The MinIO endpoint, including port number.
+
+#### `aws_s3_use_instance_profile=false`
+
+When using MinIO an access key is used, and so instance profiles are not used with MinIO.
+
+#### `cloud_native_storage_type=S3`
+
+This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
+
+#### `aws_s3_use_aws_sdk_default_behavior=true`
+
+When using MinIO this parameter is always set to true.
 
 ## Summary
 
