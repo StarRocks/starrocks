@@ -202,7 +202,7 @@ partition_names ::=
 
 Example:
 
-Assuming that the original table is a Duplicate Key table where Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
+For example, the original table is a Duplicate Key table where Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
 
 ```SQL
 CREATE TABLE IF NOT EXISTS details (
@@ -258,9 +258,9 @@ Modify the keys for hash bucketing of all partitions to `user_id, event_time`.
 ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
 ```
 
-> **Note**
+> **NOTICE**
 >
-> Modify the keys for hash bucketing applies to all partitions in the table and cannot only be applied to specific partitions.
+> Modifying the keys for hash bucketing is applied to all partitions in the table and cannot be applied to specific partitions only.
 
 #### Modify the number of buckets
 
@@ -273,7 +273,7 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   > **NOTICE**
   >
   > - Although this example doesn’t modify the bucketing method but only the number of buckets, it is still necessary to specify the bucketing method by using `HASH(user_id)` in the statement.
-  > - If `BUCKETS <num>` is not specified, it means that the number of buckets is changed to use StarRocks automatic configuration.
+  > - If `BUCKETS <num>` is not specified, it means that StarRocks automatically set the number of buckets.
 
 - Modify the number of buckets for specified partitions to 15.
 
@@ -425,7 +425,7 @@ order_desc ::=
 
 Example:
 
-Suppose the original table is a Primary Key table where the sort key is coupled with the primary key `dt, order_id`.
+For example, the original table is a Primary Key table where the sort key is coupled with the primary key `dt, order_id`.
 
 ```SQL
 create table orders (
@@ -449,29 +449,6 @@ Decouple the sort key from the primary key, and modify the sort key to `dt, reve
 ```SQL
 ALTER TABLE orders ORDER BY (dt, revenue, state);
 ```
-
-### Modify table properties
-
-Currently, StarRocks supports modifying the following table properties:
-
-- `replication_num`
-- `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- Dynamic partitioning related properties
-- `enable_persistent_index`
-- `bloom_filter_columns`
-- `colocate_with`
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
-```
-
-Note:
-You can also modify the properties by merging into the above schema change operation. See the following examples.
 
 ### Modify rollup index
 
@@ -578,6 +555,29 @@ Syntax:
 ```sql
 DROP INDEX index_name;
 ```
+
+### Modify table properties
+
+Currently, StarRocks supports modifying the following table properties:
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
+Note:
+You can also modify the properties by merging into the above schema change operation. See the following examples.
 
 ### Swap
 

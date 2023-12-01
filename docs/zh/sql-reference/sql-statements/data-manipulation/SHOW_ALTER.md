@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
     SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
     ```
 
-- 查询 Rollup 索引变更任务的执行情况。
+- 查询创建和删除 Rollup 索引的任务执行情况。
 
     ```sql
     SHOW ALTER TABLE ROLLUP [FROM db_name]

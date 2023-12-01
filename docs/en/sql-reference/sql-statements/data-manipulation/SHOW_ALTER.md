@@ -28,7 +28,7 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
 
 ## Parameters
 
-- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`:
 
   - If `COLUMN` is specified, this statement shows tasks for modifying columns.
   - If `OPTIMIZE` is specified, this statement shows tasks for optimizing table structure.
@@ -38,7 +38,7 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
 
 ## Examples
 
-1. Show the execution status of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in the current database.
+1. Show the execution of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in the current database.
 
     ```sql
     SHOW ALTER TABLE COLUMN;
@@ -46,7 +46,7 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
     SHOW ALTER TABLE ROLLUP;
     ```
 
-2. Show the execution status of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in a specified database.
+2. Show the execution of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in a specified database.
 
     ```sql
     SHOW ALTER TABLE COLUMN FROM example_db;
