@@ -1,5 +1,7 @@
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import Allin1Mysql from './Allin1Mysql.mdx'
+import ComposeMysql from './ComposeMysql.mdx'
 
 These three clients are tested with this tutorial, you only need one:
 
@@ -16,7 +18,7 @@ The easiest way to use the mysql CLI is to run it from the StarRocks container `
 
 ```bash
 docker compose exec starrocks-fe \
-mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
 :::tip

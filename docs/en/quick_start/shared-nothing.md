@@ -3,23 +3,28 @@ displayed_sidebar: "English"
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
-
-# StarRocks Docker lab
-
 import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clients.mdx'
+import Clients from '../assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
+
+# StarRocks basics
 
 This tutorial covers:
 
 - Running StarRocks in a single Docker container
 - Loading two public datasets including basic transformation of the data
 - Analyzing the data with SELECT and JOIN
+- Basic data transformation (the **T** in ETL)
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
 Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+
+There is a lot of information in this document, and it is presented with the step by step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
+
+1. Allow the reader to load data in StarRocks and analyze that data.
+2. Explain the basics of data transformation during loading.
 
 ---
 
@@ -27,25 +32,34 @@ Both of these datasets are very large, and because this tutorial is intended to 
 
 ### Docker
 
-- [Docker Engine](https://docs.docker.com/engine/install/)
+- [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
 - 10 GB free disk space assigned to Docker
 
 ### SQL client
 
-The SQL clients will be discussed after starting StarRocks as StarRocks needs to be running to configure a client.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
 
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 ---
+## Terminology
+
+### FE
+Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
+
+### BE
+Backend nodes are responsible for both data storage and executing query plans.
+
+---
 
 ## Launch StarRocks
 
 ```bash
-sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks/allin1-ubuntu
+docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd \
+--name quickstart starrocks/allin1-ubuntu
 ```
 ---
 ## SQL clients
@@ -72,10 +86,18 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 
 ---
 
-## Connect to StarRocks
+### Connect to StarRocks with a SQL client
+
+:::tip
+
+If you are using a client other than the mysql CLI, open that now.
+:::
+
+This command will run the `mysql` command in the Docker container:
 
 ```sql
-mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+docker exec -it quickstart \
+mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
 ---
@@ -87,10 +109,9 @@ mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ---
 
 ## Load two datasets
-Generally, you will load data using a tool like ?????. Since this is a tutorial to get started with StarRocks we are
-using curl and the built-in stream load mechanism. Stream load and curl are popular when loading files from the local file system.
+There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
-::: tip
+:::tip
 Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
 
 You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
@@ -177,8 +198,6 @@ curl --location-trusted -u root             \
 
 <SQL />
 
-Drive carefully!
-
 ---
 
 ## Summary
@@ -204,6 +223,8 @@ There is more to learn; we intentionally glossed over the data transformation do
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
 [Materialized views](../cover_pages/mv_use_cases.mdx)
+
+[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

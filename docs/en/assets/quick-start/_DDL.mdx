@@ -13,6 +13,10 @@ USE quickstart;
 
 #### Crashdata
 
+The crash dataset contains many more fields than these, the schema has been trimmed
+down to include only the fields that might be useful to answer questions about the
+impact weather has on driving conditions.
+
 ```sql
 CREATE TABLE IF NOT EXISTS crashdata (
     CRASH_DATE DATETIME,
@@ -34,6 +38,10 @@ CREATE TABLE IF NOT EXISTS crashdata (
 
 #### Weatherdata
 
+Similar to the crash data, the weather dataset has many more columns (a total of
+125 columns) and only the ones that are expected to answer the questions are
+included in the database.
+
 ```sql
 CREATE TABLE IF NOT EXISTS weatherdata (
     DATE DATETIME,
@@ -53,4 +61,3 @@ CREATE TABLE IF NOT EXISTS weatherdata (
     HourlyWindSpeed STRING
 );
 ```
-

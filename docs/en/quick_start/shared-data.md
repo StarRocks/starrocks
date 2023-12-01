@@ -4,12 +4,12 @@ sidebar_position: 2
 description: Separate compute and storage
 ---
 
+# Separate storage and compute
 import DDL from '../assets/quick-start/_DDL.mdx'
-import Clients from '../assets/quick-start/_clients.mdx'
+import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
-# Separate storage and compute
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -20,7 +20,7 @@ This tutorial covers:
 - Configuring StarRocks for shared-data
 - Loading two public datasets
 - Analyzing the data with SELECT and JOIN
-- Basic data transformation (the `T` in ETL)
+- Basic data transformation (the **T** in ETL)
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information at NOAA.
 
@@ -32,11 +32,13 @@ There is a lot of information in this document, and it is presented with the ste
 2. Provide the configuration details for shared-data deployments.
 3. Explain the basics of data transformation during loading.
 
+---
+
 ## Prerequisites
 
 ### Docker
 
-- [Docker Engine](https://docs.docker.com/engine/install/)
+- [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
 - 10 GB free disk space assigned to Docker
 
@@ -47,6 +49,8 @@ You can use the SQL client provided in the Docker environment, or use one on you
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+
+---
 
 ## Terminology
 
@@ -62,6 +66,8 @@ Backend nodes are responsible for both data storage and executing query plans in
 :::note
 This guide does not use BEs, this information is included here so that you understand the difference between BEs and CNs.
 :::
+
+---
 
 ## Launch StarRocks
 
@@ -99,6 +105,9 @@ starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
 starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
 minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
 ```
+
+---
+
 ## Generate MinIO credentials
 
 In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
@@ -115,9 +124,13 @@ MinIO will generate a key, click **Create** and download the key.
 The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
 :::
 
+---
+
 ## SQL Clients
 
 <Clients />
+
+---
 
 ## Download the data
 
@@ -147,6 +160,8 @@ curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c54455290
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/72505394728.csv
 ```
+
+---
 
 ## Configure StarRocks for shared-data
 
@@ -205,7 +220,7 @@ SET shared AS DEFAULT STORAGE VOLUME;
 ```
 
 ```sql
-StarRocks > DESC STORAGE VOLUME shared\G
+DESC STORAGE VOLUME shared\G
 ```
 
 :::tip
@@ -233,9 +248,13 @@ IsDefault: true
 The folder `shared` will not be visible in the MinIO object list until data is written to the bucket.
 :::
 
+---
+
 ## Create some tables
 
 <DDL />
+
+---
 
 ## Load two datasets
 
@@ -330,6 +349,8 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/weatherdata/_stream_load
 ```
 
+---
+
 ## Verify that data is stored in MinIO
 
 Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/browser/starrocks/) and verify that you have `data`, `metadata`, and `schema` entries in each of the directories under `starrocks/shared/`
@@ -340,9 +361,13 @@ The folder names below `starrocks/shared/` are generated when you load the data.
 ![MinIO object browser](../assets/quick-start/MinIO-data.png)
 :::
 
+---
+
 ## Answer some questions
 
 <SQL />
+
+---
 
 ## Configuring StarRocks for shared-data
 
@@ -413,7 +438,7 @@ This config file contains the default entries and the additions for shared-data.
 
 The non-default FE configuration settings:
 
-::: note
+:::note
 Many configuration parameters are prefixed with `s3_`. This prefix is used for all Amazon S3 compatible storage types (for example: S3, GCS, and MinIO). When using Azure Blob Storage the prefix is `azure_`.
 :::
 
@@ -441,6 +466,8 @@ This specifies whether S3 compatible storage or Azure Blob Storage is used. For 
 
 When using MinIO this parameter is always set to true.
 
+---
+
 ## Summary
 
 In this tutorial you:
@@ -462,6 +489,8 @@ There is more to learn; we intentionally glossed over the data transform done du
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
 [Materialized views](../cover_pages/mv_use_cases.mdx)
+
+[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 
