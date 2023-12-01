@@ -769,19 +769,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - **Default**: FALSE
-- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+- **Description**: Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
 
 ##### enable_backup_materialized_view
 
-- **Unit**: -
 - **Default**: TRUE
-- **Description**: In BACKUP operation, enable or disable to backup asynchronized materialized views in the specific database. If not, will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views wihtin when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
 
 ##### enable_colocate_mv_index
 
-- **Unit**: -
 - **Default**: TRUE
-- **Description**: When creating synchronized materialized view, whether to support colocate the synchronized mv index with the base table. if enabled, tablet sink will only send chunk once to speed up the sync mv's transformation performance. This item is supported from v3.2.0 onwards.
+- **Description**: Whether to support colocate the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `ture`, tablet sink will only send chunk once to speed up the synchronous materialized view's transformation performance. This item is supported from v3.2.0 onwards.
 
 ### Configure FE static parameters
 
