@@ -152,23 +152,6 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>com.aliyun.odps</groupId>
-                <artifactId>odps-sdk-core</artifactId>
-                <version>${odps.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.aliyun.odps</groupId>
-                <artifactId>odps-sdk-table-api</artifactId>
-                <version>${odps.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.aliyun.odps</groupId>
-                <artifactId>odps-jdbc</artifactId>
-                <version>3.5.0</version>
-            </dependency>
 
             <dependency>
                 <groupId>com.starrocks</groupId>
@@ -745,6 +728,18 @@ under the License.
                 <groupId>io.airlift</groupId>
                 <artifactId>concurrent</artifactId>
                 <version>202</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-core</artifactId>
+                <version>${odps.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-table-api</artifactId>
+                <version>${odps.version}</version>
             </dependency>
 
         </dependencies>
