@@ -49,6 +49,8 @@ import com.starrocks.proto.VacuumResponse;
 import java.util.concurrent.Future;
 
 public interface LakeService {
+    long TIMEOUT_GET_TABLET_STATS = 15 * 60 * 1000L;
+
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = /*1m=*/60000)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
 
@@ -64,7 +66,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = /*5m=*/300000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = TIMEOUT_GET_TABLET_STATS)
     Future<TabletStatResponse> getTabletStats(TabletStatRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = /*5m=*/300000)

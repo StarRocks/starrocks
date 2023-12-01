@@ -1407,6 +1407,21 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+
+    // test timeout
+    response.clear_tablet_stats();
+    request.set_timeout_ms(5);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:before_submit",
+                                          [](void*) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:before_submit");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.tablet_stats_size());
 }
 
 // NOLINTNEXTLINE
