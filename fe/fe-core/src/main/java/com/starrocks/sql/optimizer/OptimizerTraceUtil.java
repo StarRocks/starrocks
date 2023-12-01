@@ -55,12 +55,11 @@ public class OptimizerTraceUtil {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    mvContext.getOptimizerContext().getQueryId(),
                     mvRewriteContext.getRule().type().name(),
                     mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {} {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] {}", args).getMessage();
         });
     }
 

@@ -93,6 +93,7 @@ public class MvRewritePreprocessor {
                     Config.enable_experimental_mv,
                     connectContext.getSessionVariable().isEnableMaterializedViewRewrite(),
                     context.getOptimizerConfig().isRuleBased());
+            logMVPrepare(connectContext, "QueryID:", context.getQueryId());
             try {
                 Set<MaterializedView> relatedMVs =
                         getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
