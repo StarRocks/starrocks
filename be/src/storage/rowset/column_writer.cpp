@@ -965,7 +965,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
     const size_t dictionary_min_rowcount = 256;
 
     auto row_count = bin_col->size();
-    auto ratio = config::dictionary_encoding_ratio;
+    auto ratio = config::dictionary_encoding_ratio_for_non_string_column;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
     if (row_count > dictionary_min_rowcount) {
