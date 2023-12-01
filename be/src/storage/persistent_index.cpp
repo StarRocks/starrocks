@@ -4529,6 +4529,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // step 1.a
         // move tmp l1 to l1
         std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(new_l1_filename);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
         if (_l0->size() > 0) {
             // check if need to dump snapshot
@@ -4570,6 +4572,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(l2_file_path);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
         index_meta->add_l2_version_merged(false);
