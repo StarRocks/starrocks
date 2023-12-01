@@ -438,3 +438,7 @@ You can find a function based on the following categories:
 - [uuid](./utility-functions/uuid.md)
 - [uuid_numeric](./utility-functions/uuid_numeric.md)
 - [version](./utility-functions/version.md)
+
+## Utility functions
+
+[dict_mapping](./dict-functions/dict_mapping.md)
