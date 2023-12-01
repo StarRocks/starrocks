@@ -22,6 +22,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
+#include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
@@ -125,6 +126,10 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
+static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
+    return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -150,6 +155,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
+        cls.funcStaticExt<&io_profile_and_get_topn_stats>("io_profile_and_get_topn_stats");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");

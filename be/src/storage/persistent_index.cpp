@@ -21,6 +21,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -1801,6 +1802,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
         size_t snapshot_size = _index_file->size();
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add write stats manually
+        IOProfiler::add_write(snapshot_size);
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -1863,6 +1867,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add read stats manually
+        IOProfiler::add_read(snapshot_size);
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
@@ -3090,16 +3097,18 @@ class GetFromImmutableIndexTask : public Runnable {
 public:
     GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
                               std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
-                              PersistentIndex* index)
+                              PersistentIndex* index, IOStatEntry* io_stat_entry)
             : _num(num),
               _immu_index(immu_index),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
               _found_keys_info(found_keys_info),
-              _index(index) {}
+              _index(index),
+              _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+        auto scope = IOProfiler::scope(_io_stat_entry);
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
     }
@@ -3112,6 +3121,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
+    IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3152,9 +3162,9 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
     for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
         ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
-        GetFromImmutableIndexTask task(n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                       &keys_info_by_key_size, &_found_keys_info[i], this);
-        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
+        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
+                n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()), &keys_info_by_key_size,
+                &_found_keys_info[i], this, IOProfiler::get_context()));
         auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
         if (!st.ok()) {
             error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());

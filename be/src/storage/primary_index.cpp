@@ -19,6 +19,7 @@
 
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -939,6 +940,7 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, tablet->tablet_id());
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
@@ -984,6 +986,7 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 }
 
 Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->prepare(version, n);
     }
@@ -991,6 +994,7 @@ Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
 }
 
 Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->commit(index_meta);
     }
@@ -998,6 +1002,7 @@ Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
 }
 
 Status PrimaryIndex::on_commited() {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->on_commited();
     }
@@ -1005,6 +1010,7 @@ Status PrimaryIndex::on_commited() {
 }
 
 Status PrimaryIndex::abort() {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->abort();
     }
@@ -1012,6 +1018,8 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
+    _table_id = tablet->belonged_table_id();
+    _tablet_id = tablet->tablet_id();
     auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());
     auto scoped_span = trace::Scope(span);
     MonotonicStopWatch timer;
@@ -1123,8 +1131,6 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
             itr->close();
         }
     }
-    _table_id = tablet->belonged_table_id();
-    _tablet_id = tablet->tablet_id();
     if (size() != total_rows - total_dels) {
         LOG(WARNING) << strings::Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2",
                                             _tablet_id, size(), total_rows - total_dels);
@@ -1187,6 +1193,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                    uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
                                                    IOStat* stat) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
@@ -1239,6 +1246,7 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
 [[maybe_unused]] Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                                 const vector<uint32_t>& src_rssid,
                                                                 vector<uint32_t>* deletes) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
@@ -1268,6 +1276,7 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
 Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         _insert_into_persistent_index(rssid, rowids, pks);
     }
     return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
@@ -1333,6 +1342,7 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         st = _erase_persistent_index(key_col, deletes);
     } else {
         _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
@@ -1344,6 +1354,7 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         st = _get_from_persistent_index(key_col, rowids);
     } else {
         _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
