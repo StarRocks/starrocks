@@ -108,8 +108,10 @@ public:
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
-        // 字典页没有写满时，binary dict的数据页的header是DICT_ENCODING，此时需要用bitshuffle decode
-        // 字典页写满时，binary dict的数据页的header是PLAIN_ENCODING，新引入的dict数据页的header是BIT_SHUFFLE
+        // When the dictionary page is not full, the header of the binary dictionary's data 
+        // page is DICT_ENCODING, and bitshuffle decode is needed at this point. When the 
+        // dictionary page is full, the header of the binary dictionary's data page is PLAIN_ENCODING. 
+        // For the newly introduced dictionary data page, the header is BIT_SHUFFLE.
         size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
         if (type == DICT_ENCODING || type == BIT_SHUFFLE) {
             return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
@@ -150,11 +152,15 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     }
 }
 
-
-// 对于字典类型的数据页，它有两种情况，一种是PLAIN编码，PALIN编码我们不要做任何额外的解压。另一种是BITSHUFFLE，此时需要page数据的预解压
-// 对于字典类型的字典页，之前只有一种用PLAIN编码的页，此时不需要做额外操作，但是这个PR我们将字典数据页也用BITSHUFFLE编码，所以此时需要预解压
-// 字典类型的字典页和字典类型的数据页的BITSHUFFLE编码页有所不同，数据页的BITSHUFFLE编码页预留了一个header用于记录编码类型，但是字典页的
-// BITSHUFFLE编码页没有预留header
+// For dictionary-type data pages, there are two scenarios. One is PLAIN encoding, 
+// and for PLAIN encoding, no additional decompression is required. The other is 
+// BITSHUFFLE, and in this case, pre-decompression of the page data is needed. For 
+// dictionary-type dictionary pages, there used to be only one type of page encoded 
+// with PLAIN, so no additional operation was needed. However, in this PR, we encode 
+// dictionary data pages with BITSHUFFLE, so pre-decompression is needed in this case. 
+// BITSHUFFLE encoding pages for data pages have a reserved header for recording the 
+// encoding type. Still, BITSHUFFLE encoding pages for dictionary pages do not have a 
+// reserved header.
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                                        std::unique_ptr<char[]>* page, Slice* page_slice) {
     DCHECK(footer->has_type()) << "type must be set";

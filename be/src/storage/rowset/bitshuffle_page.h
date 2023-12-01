@@ -62,8 +62,6 @@ namespace starrocks {
 
 std::string bitshuffle_error_msg(int64_t err);
 
-// 从bitshuffle的实现来看，真正的encoding也是在一个page写满以后做的
-
 // BitshufflePageBuilder bitshuffles and compresses the bits of fixed
 // size type blocks with lz4.
 //

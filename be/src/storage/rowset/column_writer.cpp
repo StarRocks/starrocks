@@ -209,8 +209,7 @@ private:
     faststring _encode_buf;
     NullEncodingPB _null_encoding;
 };
-// 一个列是如何确定自己该用哪种编码方式的
-// 参考StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create
+
 class StringColumnWriter final : public ColumnWriter {
 public:
     StringColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
@@ -803,8 +802,6 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
     CHECK(st.ok()) << st;
 }
 
-// 这里的检测逻辑是用一个set记录一个Sample Column的不同值，当不同值的个数大于row_count*ratio时，不再采用字典编码
-// 其中row_count是sample column的元素个数，ration由用户设置
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
     const size_t dictionary_min_rowcount = 256;
 
@@ -952,6 +949,9 @@ inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& 
     return st;
 }
 
+// The detection logic here uses a set to record the distinct values of a sample column. When the number 
+// of distinct values exceeds row_count * ratio, dictionary encoding is no longer used.
+// Here, row_count is the number of elements in the sample column, and ratio is set by the user.
 template <LogicalType Type>
 inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column) {
     using ColumnType = typename RunTimeTypeTraits<Type>::ColumnType;

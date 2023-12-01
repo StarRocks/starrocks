@@ -197,30 +197,27 @@ private:
         auto key = std::make_pair(type, encoding_type);
         DCHECK(_encoding_map.count(key) == 0);
 
-        // 对于相同的LogicType, 第一次调用_add_map函数，会被加入到_default_encoding_type_map
+        // For the same LogicType, the first call to the _add_map function will be added to 
+        // the _default_encoding_type_map.
         if (_default_encoding_type_map.find(type) == _default_encoding_type_map.end()) {
             _default_encoding_type_map[type] = encoding_type;
         }
-        // optimize_value_seek看起来是查询加速用的
         if (optimize_value_seek && _value_seek_encoding_map.find(type) == _value_seek_encoding_map.end()) {
             _value_seek_encoding_map[type] = encoding_type;
         }
         _encoding_map.emplace(key, new EncodingInfo(EncodingTraits<type, encoding_type>()));
     }
 
-    // 获取LogicType的默认encoding
     std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _default_encoding_type_map;
 
     // default encoding for each type which optimizes value seek
     std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _value_seek_encoding_map;
 
-    // 根据LogicType和encoding，获取EncodingInfo
-    // TODO：EncodingInfo是什么？
     std::unordered_map<std::pair<LogicalType, EncodingTypePB>, EncodingInfo*, EncodingMapHash> _encoding_map;
 };
 
-// 我们将一些scalar类型的默认编码调整为dict encoding，由于TYPE_DATE_V1/TYPE_DATETIME_V1/TYPE_DECIMAL是legacy类型，
-// 此处不再做改动
+// We have adjusted the default encoding for some scalar types to dictionary encoding. 
+// As TYPE_DATE_V1/TYPE_DATETIME_V1/TYPE_DECIMAL are legacy types, no changes are made here.
 EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_TINYINT, DICT_ENCODING>();
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
@@ -288,8 +285,9 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DECIMAL, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMAL, PLAIN_ENCODING>();
 
-    // 对于TYPE_DECIMALV2类型，BIT_SHUFFLE用于optimizes value seek，所以我们仅仅
-    // 将默认编码调整为DICT_ENCODING，BIT_SHUFFLE仍然作为optimizes value seek的编码
+    // For TYPE_DECIMALV2, BIT_SHUFFLE is used to optimize value seek. 
+    // Therefore, we have only adjusted the default encoding to DICT_ENCODING, 
+    // while BIT_SHUFFLE continues to serve as the encoding for optimizing value seek.
     _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
     _add_map<TYPE_DECIMALV2, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMALV2, PLAIN_ENCODING>();

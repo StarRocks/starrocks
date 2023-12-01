@@ -30,9 +30,11 @@ namespace starrocks {
 
 using strings::Substitute;
 
-// int32的最大值为2147483647，表示字典页最多可以存2147483648个元素
-// 如果字典页存储了2147483648个元素，假设一个元素仅仅只占用一个byte，
-// 那么表示字典页的size将会有2GB，这是不可能的，所以int32用来存储字典页的索引足够了，不会发生溢出
+// The maximum value of int32 is 2147483647, representing that a dictionary page can store 
+// a maximum of 2147483648 elements. If a dictionary page stores 2147483648 elements, assuming 
+// one element only occupies one byte, the size of the dictionary page will be 2GB, which is 
+// impossible. Therefore, int32 is sufficient to store the index of the dictionary page,
+// and overflow will not occur.
 template <LogicalType field_type>
 struct DataTypeTraits {
     static const LogicalType type = TYPE_INT;
