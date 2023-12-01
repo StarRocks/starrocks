@@ -47,6 +47,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -341,60 +342,62 @@ public class TabletChecker extends FrontendDaemon {
                         /*
                          * Tablet in SHADOW index can not be repaired of balanced
                          */
-                        for (MaterializedIndex idx : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            for (Tablet tablet : idx.getTablets()) {
-                                LocalTablet localTablet = (LocalTablet) tablet;
-                                totalTabletNum++;
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                for (Tablet tablet : idx.getTablets()) {
+                                    LocalTablet localTablet = (LocalTablet) tablet;
+                                    totalTabletNum++;
 
-                                if (tabletScheduler.containsTablet(tablet.getId())) {
-                                    tabletInScheduler++;
-                                    continue;
+                                    if (tabletScheduler.containsTablet(tablet.getId())) {
+                                        tabletInScheduler++;
+                                        continue;
+                                    }
+
+                                    Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
+                                            localTablet.getHealthStatusWithPriority(
+                                                    GlobalStateMgr.getCurrentSystemInfo(),
+                                                    physicalPartition.getVisibleVersion(),
+                                                    replicaNum,
+                                                    aliveBeIdsInCluster);
+
+                                    if (statusWithPrio.first == TabletStatus.HEALTHY) {
+                                        // Only set last status check time when status is healthy.
+                                        localTablet.setLastStatusCheckTime(System.currentTimeMillis());
+                                        continue;
+                                    } else if (isPartitionUrgent) {
+                                        statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
+                                        isUrgentPartitionHealthy = false;
+                                    }
+
+                                    unhealthyTabletNum++;
+
+                                    if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
+                                        tabletNotReady++;
+                                        continue;
+                                    }
+
+                                    TabletSchedCtx tabletCtx = new TabletSchedCtx(
+                                            TabletSchedCtx.Type.REPAIR,
+                                            db.getId(), olapTbl.getId(), partition.getId(),
+                                            physicalPartition.getId(), idx.getId(), tablet.getId(),
+                                            System.currentTimeMillis());
+                                    // the tablet status will be set again when being scheduled
+                                    tabletCtx.setTabletStatus(statusWithPrio.first);
+                                    tabletCtx.setOrigPriority(statusWithPrio.second);
+                                    tabletCtx.setTablet(localTablet);
+                                    if (!tryChooseSrcBeforeSchedule(tabletCtx)) {
+                                        continue;
+                                    }
+
+                                    Pair<Boolean, Long> result =
+                                            tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
+                                    waitTotalTime += result.second;
+                                    if (result.first) {
+                                        addToSchedulerTabletNum++;
+                                    }
                                 }
-
-                                Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
-                                        localTablet.getHealthStatusWithPriority(
-                                                GlobalStateMgr.getCurrentSystemInfo(),
-                                                partition.getVisibleVersion(),
-                                                replicaNum,
-                                                aliveBeIdsInCluster);
-
-                                if (statusWithPrio.first == TabletStatus.HEALTHY) {
-                                    // Only set last status check time when status is healthy.
-                                    localTablet.setLastStatusCheckTime(System.currentTimeMillis());
-                                    continue;
-                                } else if (isPartitionUrgent) {
-                                    statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
-                                    isUrgentPartitionHealthy = false;
-                                }
-
-                                unhealthyTabletNum++;
-
-                                if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
-                                    tabletNotReady++;
-                                    continue;
-                                }
-
-                                TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                        TabletSchedCtx.Type.REPAIR,
-                                        db.getId(), olapTbl.getId(),
-                                        partition.getId(), idx.getId(), tablet.getId(),
-                                        System.currentTimeMillis());
-                                // the tablet status will be set again when being scheduled
-                                tabletCtx.setTabletStatus(statusWithPrio.first);
-                                tabletCtx.setOrigPriority(statusWithPrio.second);
-                                tabletCtx.setTablet(localTablet);
-                                if (!tryChooseSrcBeforeSchedule(tabletCtx)) {
-                                    continue;
-                                }
-
-                                Pair<Boolean, Long> result =
-                                        tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
-                                waitTotalTime += result.second;
-                                if (result.first) {
-                                    addToSchedulerTabletNum++;
-                                }
-                            }
-                        } // indices
+                            } // indices
+                        }
 
                         if (isUrgentPartitionHealthy && isPartitionUrgent) {
                             // if all replicas in this partition are healthy, remove this partition from
