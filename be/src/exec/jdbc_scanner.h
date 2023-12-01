@@ -56,34 +56,34 @@ public:
 
     ~JDBCScanner() = default;
 
-    Status open(RuntimeState* state);
+    [[nodiscard]] Status open(RuntimeState* state);
 
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    [[nodiscard]] Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
-    Status close(RuntimeState* state);
+    [[nodiscard]] Status close(RuntimeState* state);
 
 private:
     void _init_profile();
 
     StatusOr<LogicalType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
 
-    Status _init_jdbc_bridge();
+    [[nodiscard]] Status _init_jdbc_bridge();
 
-    Status _init_jdbc_scan_context(RuntimeState* state);
+    [[nodiscard]] Status _init_jdbc_scan_context(RuntimeState* state);
 
-    Status _init_jdbc_scanner();
+    [[nodiscard]] Status _init_jdbc_scanner();
 
-    Status _init_column_class_name(RuntimeState* state);
+    [[nodiscard]] Status _init_column_class_name(RuntimeState* state);
 
-    Status _init_jdbc_util();
+    [[nodiscard]] Status _init_jdbc_util();
 
-    Status _has_next(bool* result);
+    [[nodiscard]] Status _has_next(bool* result);
 
-    Status _get_next_chunk(jobject* chunk, size_t* num_rows);
+    [[nodiscard]] Status _get_next_chunk(jobject* chunk, size_t* num_rows);
 
-    Status _fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk);
+    [[nodiscard]] Status _fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk);
 
-    Status _close_jdbc_scanner();
+    [[nodiscard]] Status _close_jdbc_scanner();
 
     JDBCScanContext _scan_ctx;
     // result column slot desc

@@ -34,6 +34,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -131,6 +132,16 @@ public class Frontend implements Writable {
     public void updateHostAndEditLogPort(String host, int editLogPort) {
         this.host = host;
         this.editLogPort = editLogPort;
+    }
+
+    @VisibleForTesting
+    public void setRpcPort(int rpcPort) {
+        this.rpcPort = rpcPort;
+    }
+
+    @VisibleForTesting
+    public void setAlive(boolean isAlive) {
+        this.isAlive = isAlive;
     }
 
     /**

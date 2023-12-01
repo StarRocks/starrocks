@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.delete;
 
 import com.google.common.base.Preconditions;
@@ -52,6 +51,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -93,7 +93,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         // create delete predicate
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = getDeleteConditions();
         DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
 
         // send delete data request to BE
@@ -192,7 +192,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Lists.newArrayList(),
+                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Collections.emptyList(),
                         timeoutMs);
     }
 }

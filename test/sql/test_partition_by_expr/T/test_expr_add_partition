@@ -1,0 +1,23 @@
+-- name: test_expr_add_partition
+CREATE TABLE `bill_detail` (
+  `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT "运单号"
+) ENGINE=OLAP
+PRIMARY KEY(`bill_code`)
+PARTITION BY RANGE(cast(substr(bill_code, 3, 11) as bigint))
+(PARTITION p1 VALUES [('0'), ('5000000')),
+PARTITION p2 VALUES [('5000000'), ('10000000')),
+PARTITION p3 VALUES [('10000000'), ('15000000')),
+PARTITION p4 VALUES [('15000000'), ('20000000'))
+)
+DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+alter table bill_detail add PARTITION p6 VALUES [('20000000'), ('3021712368984'));
+insert into bill_detail values("JT2921712368984");
+select * from bill_detail;
+select * from bill_detail where bill_code = "JT2921712368984";
+alter table bill_detail drop PARTITION p6;
+select * from bill_detail;

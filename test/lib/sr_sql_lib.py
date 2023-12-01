@@ -244,7 +244,6 @@ class StarrocksSQLApiLib(object):
         try:
             with self.mysql_lib.connector.cursor() as cursor:
                 cursor.execute(sql)
-
                 result = cursor.fetchall()
                 if isinstance(result, tuple):
                     index = 0
@@ -909,10 +908,10 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
@@ -940,6 +939,12 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
 
 
+    def check_hit_materialized_view_plan(self, res, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
@@ -947,7 +952,7 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        print(res)
+        #print(res)
         tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
     def check_no_hit_materialized_view(self, query, mv_name):
@@ -959,7 +964,48 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql, True)
         tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
-    def wait_alter_table_finish(self, alter_type="COLUMN"):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
+        """
+        wait alter table job finish and return status
+        """
+        status = ""
+        sleep_time = 0
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return ""
+
+            status = res["result"][0][off]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                if sleep_time <= 1:
+                    time.sleep(1)
+                break
+            time.sleep(0.5)
+            sleep_time += 0.5
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+    def wait_alter_table_not_pending(self, alter_type="COLUMN"):
+        """
+        wait until the status of the latest alter table job becomes from PNEDING to others
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return None
+
+            status = res["result"][0][9]
+            if status != "PENDING":
+                break
+            time.sleep(0.5)
+    
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
         wait alter table job finish and return status
         """
@@ -972,7 +1018,26 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][9]
+            status = res["result"][0][6]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                break
+            time.sleep(0.5)
+        tools.assert_equal(expect_status, status, "wait alter table finish error")
+
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+        """
+        wait alter table job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return ""
+
+            status = res["result"][0][6]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
@@ -1140,7 +1205,6 @@ class StarrocksSQLApiLib(object):
         create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, data_name))
         res = self.execute_sql(create_table_sqls, True)
         tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
-
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
@@ -1198,3 +1262,70 @@ class StarrocksSQLApiLib(object):
 
             res = self._stream_load(label, db, table_name, data, headers)
             tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
+
+    def execute_cmd(self, exec_url):
+        cmd_template = "curl -XPOST -u {user}:{passwd} '" + exec_url + "'"
+        cmd = cmd_template.format(user=self.mysql_user, passwd=self.mysql_password)
+        res = subprocess.run(
+            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800
+        )
+        return str(res)
+
+    def manual_compact(self, database_name, table_name):
+        sql = "show tablet from " + database_name + "." + table_name
+        res = self.execute_sql(sql, "dml")
+        tools.assert_true(res["status"], res["msg"])
+        url = res["result"][0][20]
+
+        pos = url.find("api")
+        exec_url = url[0:pos] + "api/update_config?min_cumulative_compaction_num_singleton_deltas=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?base_compaction_interval_seconds_since_last_operation=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?cumulative_compaction_skip_window_seconds=1"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=cumulative"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=base"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+    def wait_analyze_finish(self, database_name, table_name, sql):
+        timeout = 300
+        analyze_sql = "show analyze status where `Database` = 'default_catalog.%s'" % database_name
+        res = self.execute_sql(analyze_sql, "dml")
+        while timeout > 0:
+            res = self.execute_sql(analyze_sql, "dml")
+            if len(res["result"]) > 0:
+                for table in res["result"]:
+                    if table[2] == table_name and table[4] == "FULL" and table[6] == "SUCCESS":
+                        break
+                break
+            else:
+                time.sleep(1)
+                timeout -= 1
+        else:
+            tools.assert_true(False, "analyze timeout")
+
+        finished = False
+        counter = 0
+        while True:
+            res = self.execute_sql(sql, "dml")
+            tools.assert_true(res["status"], res["msg"])
+            if str(res["result"]).find("Decode") > 0:
+                finished = True
+                break
+            time.sleep(5)
+            if counter > 10:
+                break
+            counter = counter + 1
+
+        tools.assert_true(finished, "analyze timeout")

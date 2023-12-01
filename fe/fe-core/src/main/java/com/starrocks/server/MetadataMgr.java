@@ -200,6 +200,9 @@ public class MetadataMgr {
     public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
+            if (getDb(catalogName, dbName) == null) {
+                throw new MetaNotFoundException(String.format("Database %s.%s doesn't exists", catalogName, dbName));
+            }
             connectorMetadata.get().dropDb(dbName, isForce);
         }
     }
@@ -337,6 +340,19 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit);
+            } catch (Exception e) {
+                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
@@ -358,6 +374,7 @@ public class MetadataMgr {
         return statistics.build();
     }
 
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -366,11 +383,13 @@ public class MetadataMgr {
                                          ScalarOperator predicate,
                                          long limit) {
         Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata ->
-                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
         } else {
+            session.setObtainedFromInternalStatistics(true);
             return statistics;
         }
     }

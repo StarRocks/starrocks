@@ -97,6 +97,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
+    RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
     _is_used = true;
     return Status::OK();
@@ -325,7 +326,15 @@ Status DataDir::load() {
 
     for (int64_t tablet_id : tablet_ids) {
         TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id);
-        if (tablet && tablet->set_tablet_schema_into_rowset_meta()) {
+        /*
+         * check path here, in migration case, it is possible that
+         * there are two different tablets with the same tablet id
+         * in two different paths. And one of them is shutdown.
+         * For the path with shutdown tablet, should skip the
+         * tablet meta save here. (tablet get from manager is not the shutdown one)
+        */
+        if (tablet && tablet->data_dir()->path_hash() == this->path_hash() &&
+            tablet->set_tablet_schema_into_rowset_meta()) {
             TabletMetaPB tablet_meta_pb;
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             TabletMetaManager::save(this, tablet_meta_pb);

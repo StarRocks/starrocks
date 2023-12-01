@@ -20,12 +20,15 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 
+namespace starrocks {
+class HdfsScanStats;
+}
 namespace starrocks::parquet {
 
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values);
+    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values, HdfsScanStats* stats);
 
     ~PageReader() = default;
 
@@ -70,6 +73,7 @@ private:
 
     uint64_t _num_values_read = 0;
     const uint64_t _num_values_total = 0;
+    HdfsScanStats* _stats;
 };
 
 } // namespace starrocks::parquet

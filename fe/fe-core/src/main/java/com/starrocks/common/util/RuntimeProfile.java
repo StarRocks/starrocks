@@ -405,6 +405,8 @@ public class RuntimeProfile {
                 }
             } else if (type == TUnit.DOUBLE_VALUE) {
                 builder.append(fmt.format("%.3f", (double) value));
+            } else if (type == TUnit.NONE) {
+                // Do nothing
             } else {
                 Preconditions.checkState(false, "type=" + type);
             }

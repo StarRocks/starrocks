@@ -90,6 +90,7 @@ import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
@@ -166,7 +167,6 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
-import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -218,18 +218,19 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -286,8 +287,6 @@ public class ShowExecutor {
             handleHelp();
         } else if (stmt instanceof ShowWarehousesStmt) {
             handleShowWarehouses();
-        } else if (stmt instanceof ShowClustersStmt) {
-            handleShowClusters();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -1058,9 +1057,9 @@ public class ShowExecutor {
                     // Auto_increment
                     row.add(null);
                     // Create_time
-                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(table.getCreateTime(), currentTimeZoneId));
                     // Update_time
-                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(info.getUpdate_time(), currentTimeZoneId));
                     // Check_time
                     row.add(null);
                     // Collation
@@ -1112,7 +1111,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        } else if (RunMode.isSharedDataMode()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -1740,6 +1739,9 @@ public class ShowExecutor {
         if (procNodeI instanceof SchemaChangeProcDir) {
             rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
+        } else if (procNodeI instanceof OptimizeProcDir) {
+            rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
+                    showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
         } else {
             rows = procNodeI.fetchResult().getRows();
         }
@@ -1860,8 +1862,8 @@ public class ShowExecutor {
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getQualifiedUser(),
-                            connectContext.getRemoteIP(),
+                            connectContext.getCurrentUserIdentity().getUser(),
+                            connectContext.getCurrentUserIdentity().getHost(),
                             tableName);
                 }
 
@@ -2590,6 +2592,7 @@ public class ShowExecutor {
                 }
             } catch (MetaNotFoundException e) {
                 // pass
+                LOG.warn("analyze job {} meta not found, {}", job.getId(), e);
             }
         }
         rows = doPredicate(stmt, stmt.getMetaData(), rows);
@@ -2629,6 +2632,19 @@ public class ShowExecutor {
                 // pass
             }
         }
+        List<ExternalBasicStatsMeta> externalMetas =
+                new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr().getExternalBasicStatsMetaMap().values());
+        for (ExternalBasicStatsMeta meta : externalMetas) {
+            try {
+                List<String> result = ShowBasicStatsMetaStmt.showExternalBasicStatsMeta(connectContext, meta);
+                if (result != null) {
+                    rows.add(result);
+                }
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+
         rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
@@ -2690,16 +2706,6 @@ public class ShowExecutor {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
-    }
-
-    // show cluster statement
-    private void handleShowClusters() {
-        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
-        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
-        List<List<String>> rowSet = warehouse.getClusterInfo().stream()
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
@@ -2812,6 +2818,16 @@ public class ShowExecutor {
             if (pipe.getPipeId().getDbId() != dbId) {
                 continue;
             }
+
+            // check privilege
+            try {
+                Authorizer.checkAnyActionOnPipe(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), new PipeName(dbName, pipe.getName()));
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            // execute
             List<Comparable> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);

@@ -117,12 +117,14 @@ import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -145,7 +147,7 @@ public class DDLStmtExecutor {
             } else if (re.getCause() instanceof IOException) {
                 throw (IOException) re.getCause();
             } else if (re.getCause() != null) {
-                throw new DdlException(re.getCause().getMessage());
+                throw new DdlException(re.getCause().getMessage(), re);
             } else {
                 throw re;
             }
@@ -668,6 +670,12 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().setConfig(stmt);
+                if (stmt.getConfig().containsKey("mysql_server_version")) {
+                    String version = stmt.getConfig().getMap().get("mysql_server_version");
+                    if (!Strings.isNullOrEmpty(version)) {
+                        GlobalVariable.version = version;
+                    }
+                }
             });
             return null;
         }
@@ -774,8 +782,12 @@ public class DDLStmtExecutor {
                             stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                             LocalDateTime.MIN);
                 } else {
-                    // Todo: support external analyze job
-                    analyzeJob = null;
+                    analyzeJob = new ExternalAnalyzeJob(stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
+                            stmt.getTableName().getTbl(), stmt.getColumnNames(),
+                            stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.SCHEDULE,
+                            stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                            LocalDateTime.MIN);
                 }
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
@@ -783,7 +795,6 @@ public class DDLStmtExecutor {
                 // from current session, may execute analyze stmt
                 statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                         context.getSessionVariable().getStatisticCollectParallelism());
-                statsConnectCtx.setStatisticsConnection(true);
                 Thread thread = new Thread(() -> {
                     statsConnectCtx.setThreadLocalInfo();
                     StatisticExecutor statisticExecutor = new StatisticExecutor();

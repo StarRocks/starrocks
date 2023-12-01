@@ -39,6 +39,7 @@
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -59,6 +60,7 @@
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/runtime_profile.h"
@@ -130,8 +132,14 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.enable_pipeline_level_shuffle) {
+        _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
+    }
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_enable_profile();
+    }
+    if (query_options.__isset.big_query_profile_second_threshold) {
+        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_second_threshold);
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
@@ -187,7 +195,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
         wg = WorkGroupManager::instance()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
-    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
+
+    const auto& query_options = request.common().query_options;
+    bool enable_group_level_query_queue = false;
+    if (query_options.__isset.query_queue_options) {
+        const auto& queue_options = query_options.query_queue_options;
+        enable_group_level_query_queue =
+                queue_options.__isset.enable_group_level_query_queue && queue_options.enable_group_level_query_queue;
+    }
+    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get(), enable_group_level_query_queue));
+
     _fragment_ctx->set_workgroup(wg);
     _wg = wg;
 
@@ -230,9 +247,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_be_number(request.backend_num());
 
     // RuntimeFilterWorker::open_query is idempotent
-    if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
+    const TRuntimeFilterParams* runtime_filter_params = nullptr;
+    if (request.unique().params.__isset.runtime_filter_params &&
+        !request.unique().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.unique().params.runtime_filter_params;
+    } else if (request.common().params.__isset.runtime_filter_params &&
+               !request.common().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.common().params.runtime_filter_params;
+    }
+    if (runtime_filter_params != nullptr) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, query_options, params.runtime_filter_params, true);
+        exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
@@ -678,6 +703,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
+    _query_ctx->mark_prepared();
     prepare_success = true;
 
     return Status::OK();
@@ -727,11 +753,13 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     bool is_dest_merge = stream_sink.__isset.is_merge && stream_sink.is_merge;
 
     bool is_pipeline_level_shuffle = false;
-    int32_t dest_dop = -1;
-    if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        dest_dop = stream_sink.dest_dop;
+    int32_t dest_dop = 1;
+    bool enable_pipeline_level_shuffle = context->runtime_state()->query_ctx()->enable_pipeline_level_shuffle();
+    if (enable_pipeline_level_shuffle &&
+        (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+         sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED)) {
         is_pipeline_level_shuffle = true;
+        dest_dop = stream_sink.dest_dop;
         DCHECK_GT(dest_dop, 0);
     }
 
@@ -766,9 +794,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             op = std::make_shared<FileSinkOperatorFactory>(context->next_operator_id(), result_sink->get_output_exprs(),
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
-            op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
-                                                             result_sink->get_format_type(),
-                                                             result_sink->get_output_exprs(), fragment_ctx);
+            op = std::make_shared<ResultSinkOperatorFactory>(
+                    context->next_operator_id(), result_sink->get_sink_type(), result_sink->isBinaryFormat(),
+                    result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
@@ -968,6 +996,64 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
                     partition_expr_ctxs, source_operator_dop, desired_hive_sink_dop);
+        }
+    } else if (typeid(*datasink) == typeid(starrocks::TableFunctionTableSink)) {
+        DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
+        DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
+
+        const auto& target_table = thrift_sink.table_function_table_sink.target_table;
+        DCHECK(target_table.__isset.path);
+        DCHECK(target_table.__isset.file_format);
+        DCHECK(target_table.__isset.columns);
+        DCHECK(target_table.__isset.write_single_file);
+        DCHECK(target_table.columns.size() == output_exprs.size());
+
+        std::vector<std::string> column_names;
+        for (const auto& column : target_table.columns) {
+            column_names.push_back(column.column_name);
+        }
+
+        std::vector<TExpr> partition_exprs;
+        std::vector<std::string> partition_column_names;
+        if (target_table.__isset.partition_column_ids) {
+            for (auto id : target_table.partition_column_ids) {
+                partition_exprs.push_back(output_exprs[id]);
+                partition_column_names.push_back(target_table.columns[id].column_name);
+            }
+        }
+        std::vector<ExprContext*> partition_expr_ctxs;
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                runtime_state));
+
+        std::vector<ExprContext*> output_expr_ctxs;
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
+
+        auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
+                context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
+                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
+                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
+                fragment_ctx);
+
+        size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        size_t sink_dop = request.pipeline_sink_dop();
+
+        if (target_table.write_single_file) {
+            sink_dop = 1;
+        }
+
+        if (partition_expr_ctxs.empty()) {
+            if (sink_dop != source_dop) {
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop,
+                        sink_dop);
+            } else {
+                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
+            }
+        } else {
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
+                    sink_dop);
         }
     }
 

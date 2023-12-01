@@ -43,12 +43,10 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                                     [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
 }
 
-GlobalDriverExecutor::~GlobalDriverExecutor() {
-    close();
-}
-
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
+    _thread_pool->wait();
+    _blocked_driver_poller->shutdown();
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
@@ -252,7 +250,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
-    driver->start_schedule(_schedule_count, _driver_execution_ns);
+    driver->start_timers();
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
@@ -345,7 +343,8 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     TReportAuditStatisticsParams params;
     params.__set_query_id(fragment_ctx->query_id());
     params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
-    query_statistics->to_params(&params);
+    params.__set_audit_statistics({});
+    query_statistics->to_params(&params.audit_statistics);
 
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {

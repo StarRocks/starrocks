@@ -123,27 +123,11 @@ public class PartitionColPredicateEvaluator {
                     Range<PartitionKey> newRange;
                     if (!range.hasUpperBound() || range.upperEndpoint().getKeys().get(0) instanceof MaxLiteral) {
                         newRange = createFullScopeRange(returnType);
-                    } else if (!range.hasLowerBound()) {
-                        PartitionKey lowerKey = new PartitionKey();
-                        PartitionKey upperKey = new PartitionKey();
-
-                        LiteralExpr lowerBound = createInfinity(partitionColumn.getType(), false);
-
-                        Optional<LiteralExpr> mappingLowerBound = mapRangeBoundValue(call, lowerBound);
-                        Optional<LiteralExpr> mappingUpperBound = mapRangeBoundValue(call,
-                                range.upperEndpoint().getKeys().get(0));
-                        if (mappingLowerBound.isPresent() && mappingUpperBound.isPresent()) {
-                            lowerKey.pushColumn(mappingLowerBound.get(), returnType);
-                            upperKey.pushColumn(mappingUpperBound.get(), returnType);
-                            newRange = Range.range(lowerKey, BoundType.CLOSED, upperKey, BoundType.OPEN);
-                        } else {
-                            newRange = createFullScopeRange(call.getType().getPrimitiveType());
-                        }
                     } else {
                         PartitionKey lowerKey = new PartitionKey();
                         PartitionKey upperKey = new PartitionKey();
-
-                        LiteralExpr lowerBound = range.lowerEndpoint().getKeys().get(0);
+                        LiteralExpr lowerBound = range.hasLowerBound() ? range.lowerEndpoint().getKeys().get(0)
+                                : createInfinity(partitionColumn.getType(), false);
                         LiteralExpr upperBound = range.upperEndpoint().getKeys().get(0);
                         Optional<LiteralExpr> mappingLowerBound = mapRangeBoundValue(call, lowerBound);
                         Optional<LiteralExpr> mappingUpperBound = mapRangeBoundValue(call, upperBound);
@@ -158,7 +142,7 @@ public class PartitionColPredicateEvaluator {
                             }
                             lowerKey.pushColumn(newLowerBound, returnType);
                             upperKey.pushColumn(newUpperBound, returnType);
-                            newRange = Range.range(lowerKey, BoundType.CLOSED, upperKey, BoundType.OPEN);
+                            newRange = Range.range(lowerKey, BoundType.CLOSED, upperKey, BoundType.CLOSED);
                         } else {
                             newRange = createFullScopeRange(call.getType().getPrimitiveType());
                         }

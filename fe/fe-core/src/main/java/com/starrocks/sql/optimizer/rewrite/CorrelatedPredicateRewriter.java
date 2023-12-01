@@ -12,17 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -39,7 +36,7 @@ import java.util.Map;
  * then and rewrite the predicate like:
  * t1.col1 + t2.col1 = columnRef1 + t2.col1 + concat(t1.col3, t2.col1) + columnRef1
  */
-public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
+public class CorrelatedPredicateRewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
 
     private final ColumnRefSet correlationColSet;
 
@@ -49,7 +46,7 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefToExprMap() {
         Map<ColumnRefOperator, ScalarOperator> columnRefToExprMap = Maps.newHashMap();
-        exprToColumnRefMap.entrySet().stream().forEach(e -> columnRefToExprMap.put(e.getValue(), e.getKey()));
+        exprToColumnRefMap.forEach((key, value) -> columnRefToExprMap.put(value, key));
         return columnRefToExprMap;
     }
 
@@ -59,8 +56,30 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
         exprToColumnRefMap = Maps.newHashMap();
     }
 
+    public ScalarOperator rewrite(ScalarOperator correlationPredicate) {
+        if (correlationPredicate == null) {
+            return null;
+        }
+        return correlationPredicate.clone().accept(this, null);
+    }
+
     @Override
     public ScalarOperator visit(ScalarOperator operator, Void context) {
+        ColumnRefSet usedColumns = operator.getUsedColumns();
+
+        if (correlationColSet.containsAll(usedColumns)) {
+            return operator;
+        }
+
+        if (!correlationColSet.isIntersect(usedColumns)) {
+            return addExprToColumnRefMap(operator);
+        }
+
+        for (int i = 0; i < operator.getChildren().size(); i++) {
+            ScalarOperator child = operator.getChild(i);
+            operator.getChildren().set(i, child.accept(this, null));
+        }
+
         return operator;
     }
 
@@ -73,50 +92,6 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
         }
         exprToColumnRefMap.putIfAbsent(variable, variable);
         return variable;
-    }
-
-    @Override
-    public ScalarOperator visitCall(CallOperator call, Void context) {
-        ColumnRefSet usedColumns = call.getUsedColumns();
-
-        if (correlationColSet.containsAll(usedColumns)) {
-            return call;
-        }
-
-        if (!correlationColSet.isIntersect(usedColumns)) {
-            return addExprToColumnRefMap(call);
-        }
-
-        return super.visitCall(call, context);
-    }
-
-    @Override
-    public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-        ColumnRefSet usedColumns = operator.getUsedColumns();
-
-        if (correlationColSet.containsAll(usedColumns)) {
-            return operator;
-        }
-
-        if (!correlationColSet.isIntersect(usedColumns)) {
-            return addExprToColumnRefMap(operator);
-        }
-
-        return super.visitCaseWhenOperator(operator, context);
-    }
-
-    @Override
-    public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
-        ColumnRefSet usedColumns = operator.getUsedColumns();
-
-        if (correlationColSet.containsAll(usedColumns)) {
-            return operator;
-        }
-
-        if (!correlationColSet.isIntersect(usedColumns)) {
-            return addExprToColumnRefMap(operator);
-        }
-        return super.visitCastOperator(operator, context);
     }
 
     /**

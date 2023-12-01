@@ -54,6 +54,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -272,6 +273,36 @@ public class TransactionState implements Writable {
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
 
+    // The time of first commit attempt, i.e, the end time when ingestion write is completed.
+    // Measured in milliseconds since epoch.
+    // -1 means this field is unset.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long writeEndTimeMs = -1;
+
+    // The duration of the ingestion data write operation in milliseconds.
+    // This field is normally set automatically during commit based on
+    // writeEndTime and prepareTime. However, for cases like broker load
+    // with scheduling delays and concurrent ingestion, the auto calculated
+    // value may have large error compared to actual data write duration.
+    // In these cases, the upper ingestion job should set this field manually
+    // before commit.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long writeDurationMs = -1;
+
+    // The minimum time allowed to commit the transaction.
+    // Measured in milliseconds since epoch.
+    //
+    // Protected by database lock.
+    //
+    // NOTE: This field is only used in shared data mode.
+    private long allowCommitTimeMs = -1;
+
     @SerializedName("cb")
     private long callbackId = -1;
     @SerializedName("to")
@@ -357,7 +388,12 @@ public class TransactionState implements Writable {
     }
 
     public boolean isRunning() {
-        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
+        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
+                transactionStatus == TransactionStatus.COMMITTED;
+    }
+
+    public Set<TabletCommitInfo> getTabletCommitInfos() {
+        return tabletCommitInfos;
     }
 
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
@@ -367,12 +403,14 @@ public class TransactionState implements Writable {
 
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+        if (this.tabletCommitInfos == null) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
+            LOG.warn("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
+                    tabletId, backend != null ? backend.toString() : "", transactionId);
             return true;
-        } else {
-            return false;
         }
+        return this.tabletCommitInfos.contains(info);
     }
 
     // Only for OlapTable
@@ -691,6 +729,8 @@ public class TransactionState implements Writable {
         sb.append(", error replicas num: ").append(errorReplicas.size());
         sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
         sb.append(", prepare time: ").append(prepareTime);
+        sb.append(", write end time: ").append(writeEndTimeMs);
+        sb.append(", allow commit time: ").append(allowCommitTimeMs);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
         if (commitTime > prepareTime) {
@@ -719,6 +759,9 @@ public class TransactionState implements Writable {
         }
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
+        }
+        if (tabletCommitInfos != null) {
+            sb.append(" tabletCommitInfos size: ").append(tabletCommitInfos.size());
         }
         return sb.toString();
     }
@@ -1022,5 +1065,32 @@ public class TransactionState implements Writable {
 
     public String getTraceParent() {
         return traceParent;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getWriteEndTimeMs() {
+        return writeEndTimeMs;
+    }
+
+    public void setWriteEndTimeMs(long writeEndTimeMs) {
+        this.writeEndTimeMs = writeEndTimeMs;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getAllowCommitTimeMs() {
+        return allowCommitTimeMs;
+    }
+
+    public void setAllowCommitTimeMs(long allowCommitTimeMs) {
+        this.allowCommitTimeMs = allowCommitTimeMs;
+    }
+
+    // A value of -1 indicates this field is not set.
+    public long getWriteDurationMs() {
+        return writeDurationMs;
+    }
+
+    public void setWriteDurationMs(long writeDurationMs) {
+        this.writeDurationMs = writeDurationMs;
     }
 }

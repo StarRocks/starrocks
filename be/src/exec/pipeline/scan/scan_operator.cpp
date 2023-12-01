@@ -42,6 +42,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
           _dop(dop),
           _output_chunk_by_bucket(scan_node->output_chunk_by_bucket()),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _is_asc(scan_node->is_asc_hint()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
           _chunk_sources(_io_tasks_per_scan_operator) {
@@ -70,6 +71,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
+            RuntimeProfile::ROOT_COUNTER);
+
+    _peak_buffer_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakChunkBufferMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_ALL),
             RuntimeProfile::ROOT_COUNTER);
 
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
@@ -164,7 +170,10 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
-        return true;
+        auto status_or_is_ready = _morsel_queue->ready_for_next();
+        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            return true;
+        }
     }
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
@@ -227,6 +236,7 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_get_scan_status());
 
     _peak_buffer_size_counter->set(buffer_size());
+    _peak_buffer_memory_usage->set(buffer_memory_usage());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     ChunkPtr res = get_chunk_from_buffer();

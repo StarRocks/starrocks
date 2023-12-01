@@ -34,8 +34,11 @@
 
 package com.starrocks.plugin;
 
+import com.google.common.base.Joiner;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 
 /*
  * AuditEvent contains all information about audit log info.
@@ -125,6 +128,13 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+
+    // Materialized View usage info
+    @AuditField(value = "CandidateMVs", ignore_zero = true)
+    public String candidateMvs;
+    @AuditField(value = "HitMvs", ignore_zero = true)
+    public String hitMVs;
+
 
     public static class AuditEventBuilder {
 
@@ -283,6 +293,20 @@ public class AuditEvent {
         public AuditEventBuilder setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
             auditEvent.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
             return this;
+        }
+
+        public AuditEventBuilder setCandidateMvs(List<String> mvs) {
+            this.auditEvent.candidateMvs = Joiner.on(",").join(mvs);
+            return this;
+        }
+
+        public AuditEventBuilder setHitMvs(List<String> mvs) {
+            this.auditEvent.hitMVs = Joiner.on(",").join(mvs);
+            return this;
+        }
+
+        public String getHitMvs() {
+            return this.auditEvent.hitMVs;
         }
 
         public AuditEvent build() {

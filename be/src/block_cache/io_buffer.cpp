@@ -29,12 +29,13 @@ size_t IOBuffer::copy_to(void* data, ssize_t size, size_t pos) const {
                 skip -= sp.size();
                 continue;
             }
-            size_t to_cp = std::min(sp.size(), bytes_to_copy - bytes_copied);
+            size_t to_cp = std::min(sp.size() - skip, bytes_to_copy - bytes_copied);
             strings::memcpy_inlined((char*)data + bytes_copied, sp.data() + skip, to_cp);
             bytes_copied += to_cp;
             if (bytes_copied >= size) {
                 break;
             }
+            skip = 0;
         }
     }
     return bytes_copied;

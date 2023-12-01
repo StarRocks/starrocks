@@ -1,0 +1,10 @@
+-- name: test_generated_column_rewrite
+CREATE DATABASE test_generated_column_rewrite;
+USE test_generated_column_rewrite;
+
+CREATE TABLE t (id BIGINT NOT NULL, g1 bigint null as id + 1) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t values(1);
+ explain select * from (select id + 1 as v from t) t2;
+ explain select v from (select id + 1 as v from t) t2;
+
+DROP DATABASE test_generated_column_rewrite;

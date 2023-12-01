@@ -31,6 +31,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -38,6 +39,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
+import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
@@ -93,7 +95,7 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds);
+                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds, null);
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
@@ -178,6 +180,17 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+    public void testReplayTruncateTable() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+        Partition p = table.getPartitions().stream().findFirst().get();
+        TruncateTableInfo info = new TruncateTableInfo(db.getId(), table.getId(), Lists.newArrayList(p), false);
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.replayTruncateTable(info);
+    }
+
+    @Test
     public void testModifyAutomaticBucketSize() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
@@ -217,5 +230,11 @@ public class LocalMetaStoreTest {
         starRocksAssert.useDatabase("test").withTable(
                 "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
                         " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        // w/o IF NOT EXIST
+        Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.useDatabase("test").withTable(
+                        "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
     }
 }

@@ -15,10 +15,12 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
@@ -80,16 +82,30 @@ public class TaskBuilder {
         if (ctx == null) {
             return "";
         }
-        String stmt;
         String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        String stmt;
+        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE TABLE " + tableName + async;
         } else {
             stmt = "";
         }
+        if (FeConstants.runningUnitTest) {
+            stmt = "";
+        }
         return stmt;
+    }
+
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+        OptimizeTask task = new OptimizeTask(name);
+        task.setSource(Constants.TaskSource.INSERT);
+        task.setDbName(dbName);
+        task.setProperties(properties);
+        task.setDefinition(sql);
+        task.setExpireTime(0L);
+        return task;
     }
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {

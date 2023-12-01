@@ -26,10 +26,10 @@ namespace starrocks {
 
 class OlapMetaScanNode;
 
-class OlapMetaScanner : public MetaScanner {
+class OlapMetaScanner final : public MetaScanner {
 public:
     OlapMetaScanner(OlapMetaScanNode* parent);
-    ~OlapMetaScanner() = default;
+    ~OlapMetaScanner() override = default;
 
     OlapMetaScanner(const OlapMetaScanner&) = delete;
     OlapMetaScanner(OlapMetaScanner&) = delete;
@@ -47,8 +47,8 @@ public:
     bool has_more() override;
 
 private:
-    Status _get_tablet(const TInternalScanRange* scan_range) override;
-    Status _init_meta_reader_params() override;
+    Status _get_tablet(const TInternalScanRange* scan_range);
+    Status _init_meta_reader_params();
 
     OlapMetaScanNode* _parent;
     TabletSharedPtr _tablet;

@@ -53,7 +53,8 @@ enum TDataSinkType {
     MULTI_CAST_DATA_STREAM_SINK,
     SCHEMA_TABLE_SINK,
     ICEBERG_TABLE_SINK,
-    HIVE_TABLE_SINK
+    HIVE_TABLE_SINK,
+    TABLE_FUNCTION_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -152,6 +153,7 @@ struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
     3: optional TResultSinkFormatType format;
+    4: optional bool is_binary_row;
 }
 
 struct TMysqlTableSink {
@@ -240,6 +242,11 @@ struct THiveTableSink {
     7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct TTableFunctionTableSink {
+    1: optional Descriptors.TTableFunctionTable target_table
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -252,4 +259,5 @@ struct TDataSink {
   10: optional TSchemaTableSink schema_table_sink
   11: optional TIcebergTableSink iceberg_table_sink
   12: optional THiveTableSink hive_table_sink
+  13: optional TTableFunctionTableSink table_function_table_sink
 }

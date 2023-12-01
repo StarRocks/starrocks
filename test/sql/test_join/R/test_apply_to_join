@@ -1,0 +1,97 @@
+-- name: test_apply_to_join
+CREATE TABLE `t0` (
+  `v1` bigint NULL COMMENT "",
+  `v2` bigint NULL COMMENT "",
+  `v3` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, v3)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `v4` bigint NULL COMMENT "",
+  `v5` bigint NULL COMMENT "",
+  `v6` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`, `v5`, v6)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `v7` bigint NULL COMMENT "",
+  `v8` bigint NULL COMMENT "",
+  `v9` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v7`, `v8`, v9)
+DISTRIBUTED BY HASH(`v7`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+insert into t0 values (null, 1, 1), (2, null, null), (3, 3, null), (4, 4, 4), (5, 5, 5), (6, 6, 6), (null, null, null), (7, 7, 7), (8, 8, 8);
+-- result:
+-- !result
+insert into t1 values (null, 1, 1), (2, null, null), (3, 3, null), (4, 4, 4), (5, 5, 5), (6, 6, 6), (null, null, null), (7, 7, 7), (8, 8, 8);
+-- result:
+-- !result
+insert into t2 values (null, 1, 1), (2, null, null), (3, 3, null), (4, 4, 4), (5, 5, 5), (6, 6, 6), (null, null, null), (7, 7, 7), (8, 8, 8);
+-- result:
+-- !result
+select count(*) from t0 left join t1 on v1 in (select v7 from t2) or v1 < v5;
+-- result:
+65
+-- !result
+select count(*) from t0 left join t1 on v1 in (select v7 from t2 where v2 = v8) or v1 < v5;
+-- result:
+62
+-- !result
+select count(*) from t0 left join t1 on v4 in (select v7 from t2) or v1 < v5;
+-- result:
+63
+-- !result
+select count(*) from t0 left join t1 on v4 in (select v7 from t2 where v5 = v8) or v1 < v5;
+-- result:
+54
+-- !result
+select count(*) from t0 left join t1 on exists (select v7 from t2) or v1 < v5;
+-- result:
+81
+-- !result
+select count(*) from t0 left join t1 on exists (select v7 from t2 where v8 = v1) or v1 < v5;
+-- result:
+62
+-- !result
+select count(*) from t0 left join t1 on exists (select v7 from t2 where v8 = v4) or v1 < v5;
+-- result:
+54
+-- !result
+select count(*) from t0 left join t1 on (select count(*) from t2 where v4 = v7) > 0;
+-- result:
+63
+-- !result
+select count(*) from t0 left join t1 on (select count(*) from t2 where v4 = v7) > 0 or v1 > v4;
+-- result:
+63
+-- !result
+select count(*) from t0 left join t1 on (select count(*) from t2 where v4 = v7) > v1 + v5 or v1 > v4;
+-- result:
+24
+-- !result
+select count(*) from t0 left join t1 on (select count(*) from t2) > 0 or v1 + v4 = v2 + v5;
+-- result:
+81
+-- !result
+select count(*) from t0 left join t1 on (select count(*) from t2) > v1 + v4 or v1 < v4;
+-- result:
+33
+-- !result

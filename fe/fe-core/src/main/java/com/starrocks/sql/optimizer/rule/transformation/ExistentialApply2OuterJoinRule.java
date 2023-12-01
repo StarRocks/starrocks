@@ -257,9 +257,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         // extract join-key
         CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
                 correlationColumnRefs, context);
-        ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
-                Utils.compoundAnd(correlationPredicates), rewriter);
-
+        ScalarOperator newPredicate = rewriter.rewrite(Utils.compoundAnd(correlationPredicates));
         Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
 
         // rootOptExpression
@@ -291,9 +289,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
 
         // filter(UnCorrelation) agg -> project -> un-correlation filter
         if (null != apply.getPredicate()) {
-            OptExpression filterOptExpression =
-                    OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), input.getInputs().get(1));
-
+            OptExpression filterOptExpression = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()));
             rootOptExpression.getInputs().add(filterOptExpression);
             rootOptExpression = filterOptExpression;
         }

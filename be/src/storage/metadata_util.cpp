@@ -195,6 +195,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     if (tablet_schema.__isset.id) {
         schema->set_id(tablet_schema.id);
     }
+    if (tablet_schema.__isset.schema_version) {
+        schema->set_schema_version(tablet_schema.schema_version);
+    }
     schema->set_num_short_key_columns(tablet_schema.short_key_column_count);
     schema->set_num_rows_per_row_block(config::default_num_rows_per_column_file_block);
     switch (tablet_schema.keys_type) {
@@ -236,6 +239,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     // set column information
     uint32_t col_ordinal = 0;
     bool has_bf_columns = false;
+    uint32_t max_col_unique_id = 0;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
         uint32_t col_unique_id;
@@ -244,6 +248,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
         } else {
             col_unique_id = col_ordinal_to_unique_id.at(col_ordinal);
         }
+        max_col_unique_id = col_unique_id > max_col_unique_id ? col_unique_id : max_col_unique_id;
         col_ordinal++;
         ColumnPB* column = schema->add_column();
 
@@ -266,7 +271,16 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     for (const auto idx : tablet_schema.sort_key_idxes) {
         schema->add_sort_key_idxes(idx);
     }
-    schema->set_next_column_unique_id(next_unique_id);
+    for (const auto uid : tablet_schema.sort_key_unique_ids) {
+        schema->add_sort_key_unique_ids(uid);
+    }
+
+    if (max_col_unique_id + 1 > next_unique_id) {
+        schema->set_next_column_unique_id(max_col_unique_id + 1);
+    } else {
+        schema->set_next_column_unique_id(next_unique_id);
+    }
+
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }

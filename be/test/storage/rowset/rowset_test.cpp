@@ -77,7 +77,6 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
@@ -101,7 +100,6 @@ protected:
         ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_seg").ok());
         ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_delete").ok());
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
         i++;
     }
 
@@ -112,7 +110,7 @@ protected:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
-        StoragePageCache::release_global_cache();
+        StoragePageCache::instance()->prune();
         config::storage_root_path = _default_storage_root_path;
     }
 
@@ -221,6 +219,7 @@ protected:
 
     void create_partial_rowset_writer_context(int64_t tablet_id, const std::vector<int32_t>& column_indexes,
                                               const std::shared_ptr<TabletSchema>& partial_schema,
+                                              const TabletSchemaCSPtr& full_schema,
                                               RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -230,8 +229,9 @@ protected:
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/rowset_test";
         rowset_writer_context->rowset_state = VISIBLE;
-        rowset_writer_context->partial_update_tablet_schema = partial_schema;
         rowset_writer_context->tablet_schema = partial_schema;
+        rowset_writer_context->full_tablet_schema = full_schema;
+        rowset_writer_context->is_partial_update = true;
         rowset_writer_context->referenced_column_ids = column_indexes;
         rowset_writer_context->version.first = 0;
         rowset_writer_context->version.second = 0;
@@ -240,7 +240,6 @@ protected:
     void test_final_merge(bool has_merge_condition);
 
 private:
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::string _default_storage_root_path;
 };
 
@@ -634,7 +633,8 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     RowsetWriterContext writer_context;
     std::vector<int32_t> column_indexes = {0, 1, 2, 3};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
-    create_partial_rowset_writer_context(12345, column_indexes, partial_schema, &writer_context);
+    create_partial_rowset_writer_context(12345, column_indexes, partial_schema, tablet->tablet_schema(),
+                                         &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
     writer_context.rowset_path_prefix = tablet->schema_hash_path();
 

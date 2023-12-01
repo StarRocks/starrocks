@@ -23,27 +23,34 @@ namespace starrocks::lake {
 
 class Rowset;
 using RowsetPtr = std::shared_ptr<Rowset>;
-class Tablet;
-using TabletPtr = std::shared_ptr<Tablet>;
 class CompactionPolicy;
 using CompactionPolicyPtr = std::shared_ptr<CompactionPolicy>;
 class TabletMetadataPB;
+class TabletManager;
 
 // Compaction policy for lake tablet
 class CompactionPolicy {
 public:
-    explicit CompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
-    virtual ~CompactionPolicy() = default;
+    virtual ~CompactionPolicy();
 
-    virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) = 0;
+    virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets() = 0;
+
     virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets);
 
-    static StatusOr<CompactionPolicyPtr> create_compaction_policy(TabletPtr tablet);
+    static StatusOr<CompactionPolicyPtr> create(TabletManager* tablet_mgr,
+                                                std::shared_ptr<const TabletMetadataPB> tablet_metadata);
 
 protected:
-    TabletPtr _tablet;
+    explicit CompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
+            : _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(tablet_metadata)) {
+        CHECK(_tablet_mgr != nullptr) << "tablet_mgr is null";
+        CHECK(_tablet_metadata != nullptr) << "tablet metadata is null";
+    }
+
+    TabletManager* _tablet_mgr;
+    std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
 };
 
-double compaction_score(const TabletMetadataPB& metadata);
+double compaction_score(const std::shared_ptr<const TabletMetadataPB>& metadata);
 
 } // namespace starrocks::lake

@@ -36,10 +36,17 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PStructField;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
+import com.starrocks.thrift.TPrimitiveType;
+import com.starrocks.thrift.TTypeNodeType;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class TypeTest {
     @Test
@@ -197,6 +204,42 @@ public class TypeTest {
     }
 
     @Test
+    public void testMysqlDataType() {
+        Object[][] testCases = new Object[][] {
+                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint"},
+                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint unsigned"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal"},
+                {new ArrayType(Type.INT), "array"},
+                {new MapType(Type.INT, Type.INT), "map"},
+                {new StructType(Lists.newArrayList(Type.INT)), "struct"},
+        };
+
+        for (Object[] tc : testCases) {
+            Type type = (Type) tc[0];
+            String name = (String) tc[1];
+            Assert.assertEquals(name, type.toMysqlDataTypeString());
+        }
+    }
+
+    @Test
+    public void testMysqlColumnType() {
+        Object[][] testCases = new Object[][] {
+                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
+                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal64(18, 4)"},
+                {new ArrayType(Type.INT), "array<int(11)>"},
+                {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
+                {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
+        };
+
+        for (Object[] tc : testCases) {
+            Type type = (Type) tc[0];
+            String name = (String) tc[1];
+            Assert.assertEquals(name, type.toMysqlColumnTypeString());
+        }
+    }
+
+    @Test
     public void testMapSerialAndDeser() {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
@@ -232,5 +275,116 @@ public class TypeTest {
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
+    }
+
+    private PTypeDesc buildScalarType(TPrimitiveType tPrimitiveType) {
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildArrayType(TPrimitiveType tPrimitiveType) {
+        // BIGINT
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.ARRAY.getValue();
+        td.types.add(tn);
+
+        // 2nd: BIGINT
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = tPrimitiveType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildMapType(TPrimitiveType keyType, TPrimitiveType valueType) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // 1st: ARRAY
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.MAP.getValue();
+        td.types.add(tn);
+
+        // 2nd: key
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = keyType.getValue();
+        td.types.add(tn);
+
+        // 3nd: value
+        tn = new PTypeNode();
+        tn.type = TTypeNodeType.SCALAR.getValue();
+        tn.scalarType = new PScalarType();
+        tn.scalarType.type = valueType.getValue();
+        td.types.add(tn);
+        return td;
+    }
+
+    private PTypeDesc buildStructType(List<String> fieldNames, List<TPrimitiveType> fieldTypes) {
+        PTypeDesc td = new PTypeDesc();
+        td.types = new ArrayList<>();
+
+        // STRUCT node
+        PTypeNode tn = new PTypeNode();
+        tn.type = TTypeNodeType.STRUCT.getValue();
+        tn.structFields = new ArrayList<>();
+
+        for (String fieldName : fieldNames) {
+            PStructField field = new PStructField();
+            field.name = fieldName;
+            tn.structFields.add(field);
+        }
+        td.types.add(tn);
+
+        // field node
+        for (TPrimitiveType field : fieldTypes) {
+            tn = new PTypeNode();
+            tn.type = TTypeNodeType.SCALAR.getValue();
+            tn.scalarType = new PScalarType();
+            tn.scalarType.type = field.getValue();
+            td.types.add(tn);
+        }
+        return td;
+    }
+
+    @Test
+    public void testPTypeDescFromProtobuf() {
+        PTypeDesc pTypeDesc = buildScalarType(TPrimitiveType.BIGINT);
+        Type tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isBigint());
+
+        pTypeDesc = buildArrayType(TPrimitiveType.BIGINT);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isArrayType());
+
+        pTypeDesc = buildMapType(TPrimitiveType.BIGINT, TPrimitiveType.BOOLEAN);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isMapType());
+
+        ArrayList<String> fieldNames = new ArrayList<>();
+        ArrayList<TPrimitiveType> fieldTypes = new ArrayList<>();
+
+        fieldNames.add("field_bigint");
+        fieldTypes.add(TPrimitiveType.BIGINT);
+
+        fieldNames.add("field_double");
+        fieldTypes.add(TPrimitiveType.DOUBLE);
+
+        pTypeDesc = buildStructType(fieldNames, fieldTypes);
+        tp = Type.fromProtobuf(pTypeDesc);
+        Assert.assertTrue(tp.isStructType());
     }
 }

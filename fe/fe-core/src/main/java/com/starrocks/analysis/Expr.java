@@ -50,6 +50,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -67,6 +68,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -207,6 +209,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     private List<String> hints = Collections.emptyList();
 
+    private RoaringBitmap cachedUsedSlotIds = null;
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -344,6 +348,16 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         isAnalyzed = true;
     }
 
+    public RoaringBitmap getUsedSlotIds() {
+        if (cachedUsedSlotIds == null) {
+            cachedUsedSlotIds = new RoaringBitmap();
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            this.collect(SlotRef.class, slotRefs);
+            slotRefs.stream().map(SlotRef::getSlotId).map(SlotId::asInt).forEach(cachedUsedSlotIds::add);
+        }
+        return cachedUsedSlotIds;
+    }
+
     /**
      * Collects the returns types of the child nodes in an array.
      */
@@ -444,6 +458,32 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         extractConjunctsImpl(cpe.getChild(0), conjuncts);
         extractConjunctsImpl(cpe.getChild(1), conjuncts);
     }
+
+    public static List<Expr> flattenPredicate(Expr root) {
+        List<Expr> children = Lists.newArrayList();
+        if (null == root) {
+            return children;
+        }
+
+        flattenPredicate(root, children);
+        return children;
+    }
+
+    private static void flattenPredicate(Expr root, List<Expr> children) {
+        if (!(root instanceof CompoundPredicate)) {
+            children.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (CompoundPredicate.Operator.AND.equals(cpe.getOp()) || CompoundPredicate.Operator.OR.equals(cpe.getOp())) {
+            extractConjunctsImpl(cpe.getChild(0), children);
+            extractConjunctsImpl(cpe.getChild(1), children);
+        } else {
+            children.add(root);
+        }
+    }
+
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
@@ -752,7 +792,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
-    public String toJDBCSQL(boolean isMySQL) {
+    public String toJDBCSQL() {
         return toSql();
     }
 
@@ -787,8 +827,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
         TExprNode msg = new TExprNode();
 
-        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
-        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
+        Preconditions.checkState(java.util.Objects.equals(type, AnalyzerUtils.replaceNullType2Boolean(type)),
+                "NULL_TYPE is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
@@ -1392,17 +1432,17 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         if (num == 1 && (idx == 0 || idx == children.size() - 1)) {
             if (children.size() <= 1) {
-                throw new SemanticException("Lambda functions need array inputs in high-order functions.");
+                throw new SemanticException("Lambda functions need array/map inputs in high-order functions");
             }
             return true;
         } else if (num > 1) {
             throw new SemanticException("A high-order function should have only 1 lambda function, " +
-                    "but there are " + num + " lambda functions.");
+                    "but there are " + num + " lambda functions");
         } else if (idx > 0 && idx < children.size() - 1) {
             throw new SemanticException(
                     "Lambda functions should only be the first or last argument of any high-order function, " +
                             "or lambda arguments should be in () if there are more than one lambda arguments, " +
-                            "like (x,y)->x+y.");
+                            "like (x,y)->x+y");
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();

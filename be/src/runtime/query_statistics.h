@@ -60,7 +60,7 @@ public:
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
 
     void to_pb(PQueryStatistics* statistics);
-    void to_params(TReportAuditStatisticsParams* params);
+    void to_params(TAuditStatistics* params);
 
     void merge(int sender_id, QueryStatistics& other);
     void merge_pb(const PQueryStatistics& statistics);

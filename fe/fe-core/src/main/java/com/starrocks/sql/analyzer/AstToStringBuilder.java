@@ -121,10 +121,28 @@ import static java.util.stream.Collectors.toList;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return new AST2StringBuilderVisitor().visit(expr);
+        return toString(expr, true);
+    }
+
+    public static String toString(ParseNode expr, boolean addFunctionDbName) {
+        return new AST2StringBuilderVisitor(addFunctionDbName).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+
+        // when you want to get the full string of a functionCallExpr set it true
+        // when you just want to a function name as its alias set it false
+        protected boolean addFunctionDbName;
+
+
+        public AST2StringBuilderVisitor() {
+            this(true);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName) {
+            this.addFunctionDbName = addFunctionDbName;
+        }
+
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
@@ -895,7 +913,7 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
-            if (node.getFnName().getDb() != null) {
+            if (addFunctionDbName && node.getFnName().getDb() != null) {
                 sb.append("`" + node.getFnName().getDb() + "`.");
             }
             String functionName = node.getFnName().getFunction();
@@ -1031,7 +1049,7 @@ public class AstToStringBuilder {
                 sb.append("@@");
                 if (node.getSetType() == SetType.GLOBAL) {
                     sb.append("GLOBAL.");
-                } else {
+                } else if (node.getSetType() != null) {
                     sb.append("SESSION.");
                 }
             }
@@ -1221,8 +1239,10 @@ public class AstToStringBuilder {
             }
             Map<String, String> properties = new HashMap<>(stmt.getProperties());
             StorageVolume.addMaskForCredential(properties);
-            sb.append(" PROPERTIES (").
-                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            if (!stmt.getProperties().isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            }
             return sb.toString();
         }
 

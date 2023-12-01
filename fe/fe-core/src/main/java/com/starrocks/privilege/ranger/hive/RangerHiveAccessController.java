@@ -31,7 +31,7 @@ import static java.util.Locale.ENGLISH;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
-        super(serviceName);
+        super("hive", serviceName);
     }
 
     @Override
@@ -63,8 +63,6 @@ public class RangerHiveAccessController extends RangerAccessController {
                 Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
         hasPermission(resource, currentUser, PrivilegeType.ANY);
     }
-
-
 
     public HiveAccessType convertToAccessType(PrivilegeType privilegeType) {
         if (privilegeType == PrivilegeType.SELECT) {

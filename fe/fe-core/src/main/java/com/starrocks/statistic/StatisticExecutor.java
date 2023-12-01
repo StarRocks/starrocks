@@ -22,6 +22,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -191,6 +192,9 @@ public class StatisticExecutor {
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         ConnectContext context = StatisticUtils.buildConnectContext();
+        // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
+        // prevent collection tasks from occupying a large number of be execution threads and scan threads.
+        context.getSessionVariable().setPipelineDop(1);
         context.setThreadLocalInfo();
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
@@ -258,11 +262,13 @@ public class StatisticExecutor {
         Table table = statsJob.getTable();
 
         try {
+            statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+            statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
@@ -280,6 +286,7 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         // update StatisticsCache
+        statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
@@ -301,8 +308,12 @@ public class StatisticExecutor {
                         refreshAsync);
             } else {
                 // for external table
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(table,
-                        statsJob.getColumns(), refreshAsync);
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
+                        analyzeStatus.getEndTime(), statsJob.getProperties());
+                GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
             }
         }
         return analyzeStatus;

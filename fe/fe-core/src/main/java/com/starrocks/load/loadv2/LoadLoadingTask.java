@@ -170,7 +170,7 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableLoadProfile()) {
+            if (context.getSessionVariable().isEnableProfile()) {
                 RuntimeProfile profile = new RuntimeProfile("Load");
                 RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
                 summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -217,8 +217,8 @@ public class LoadLoadingTask extends LoadTask {
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-                curCoordinator.endProfile();
-                profile.addChild(curCoordinator.buildMergedQueryProfile());
+                curCoordinator.collectProfileSync();
+                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
@@ -245,6 +245,7 @@ public class LoadLoadingTask extends LoadTask {
                     .add("msg", "begin to execute plan")
                     .build());
         }
+        long writeBeginTime = System.currentTimeMillis();
         curCoordinator.exec();
         if (curCoordinator.join(waitSecond)) {
             Status status = curCoordinator.getExecStatus();
@@ -254,7 +255,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getTrackingUrl(),
                         TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
                         TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
-                        curCoordinator.getRejectedRecordPaths());
+                        curCoordinator.getRejectedRecordPaths(),
+                        System.currentTimeMillis() - writeBeginTime);
             } else {
                 throw new LoadException(status.getErrorMsg());
             }

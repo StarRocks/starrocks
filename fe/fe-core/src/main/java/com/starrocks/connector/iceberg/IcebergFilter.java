@@ -49,11 +49,22 @@ public class IcebergFilter {
         return snapshotId == that.snapshotId &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
-                predicate.equals(that.predicate);
+                predicate.equivalent(that.predicate);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(databaseName, tableName, snapshotId);
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("IcebergFilter{");
+        sb.append("databaseName='").append(databaseName).append('\'');
+        sb.append(", tableName='").append(tableName).append('\'');
+        sb.append(", snapshotId=").append(snapshotId);
+        sb.append(", predicate=").append(predicate);
+        sb.append('}');
+        return sb.toString();
     }
 }

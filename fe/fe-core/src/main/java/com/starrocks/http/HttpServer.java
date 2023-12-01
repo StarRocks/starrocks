@@ -85,10 +85,12 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
+import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -168,6 +170,7 @@ public class HttpServer {
         ShowProcAction.registerAction(controller);
         ShowRuntimeInfoAction.registerAction(controller);
         GetLogFileAction.registerAction(controller);
+        TriggerAction.registerAction(controller);
         GetSmallFileAction.registerAction(controller);
         RowCountAction.registerAction(controller);
         CheckDecommissionAction.registerAction(controller);
@@ -183,6 +186,7 @@ public class HttpServer {
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
+        SyncCloudTableMetaAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);

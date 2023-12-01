@@ -42,6 +42,7 @@
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
+#include "testutil/sync_point.h"
 #include "util/cpu_info.h"
 #include "util/scoped_cleanup.h"
 #include "util/thread.h"
@@ -275,6 +276,11 @@ Status ThreadPool::init() {
     return Status::OK();
 }
 
+bool ThreadPool::is_pool_status_ok() {
+    std::unique_lock l(_lock);
+    return _pool_status.ok();
+}
+
 void ThreadPool::shutdown() {
     std::unique_lock l(_lock);
     check_not_pool_thread_unlocked();
@@ -374,7 +380,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
         // dynamic decrease _max_threads
         capacity_remaining = static_cast<int64_t>(_max_queue_size) - _total_queued_tasks;
     }
-
+    TEST_SYNC_POINT_CALLBACK("ThreadPool::do_submit:1", &capacity_remaining);
     if (capacity_remaining < 1) {
         return Status::ServiceUnavailable(strings::Substitute(
                 "Thread pool is at capacity ($0/$1 tasks running, $2/$3 tasks queued)",

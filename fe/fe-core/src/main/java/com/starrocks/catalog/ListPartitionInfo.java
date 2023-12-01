@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -346,15 +347,16 @@ public class ListPartitionInfo extends PartitionInfo {
         return "";
     }
 
-    public void handleNewListPartitionDescs(Map<Partition, PartitionDesc> partitionMap,
+    public void handleNewListPartitionDescs(List<Pair<Partition, PartitionDesc>> partitionList,
                                             Set<String> existPartitionNameSet, boolean isTempPartition)
             throws DdlException {
         try {
-            for (Partition partition : partitionMap.keySet()) {
+            for (Pair<Partition, PartitionDesc> entry : partitionList) {
+                Partition partition = entry.first;
                 String name = partition.getName();
                 if (!existPartitionNameSet.contains(name)) {
                     long partitionId = partition.getId();
-                    PartitionDesc partitionDesc = partitionMap.get(partition);
+                    PartitionDesc partitionDesc = entry.second;
                     Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
                     Preconditions.checkArgument(((SinglePartitionDesc) partitionDesc).isAnalyzed());
                     this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());

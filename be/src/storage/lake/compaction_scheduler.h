@@ -23,6 +23,7 @@
 #include "gutil/macros.h"
 #include "storage/lake/compaction_task.h"
 #include "util/blocking_queue.hpp"
+#include "util/stack_trace_mutex.h"
 
 namespace google::protobuf {
 class RpcController;
@@ -69,7 +70,7 @@ public:
 
 private:
     CompactionScheduler* _scheduler;
-    mutable bthread::Mutex _mtx;
+    mutable StackTraceMutex<bthread::Mutex> _mtx;
     const lake::CompactRequest* _request;
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
@@ -202,7 +203,7 @@ private:
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    bthread::Mutex _contexts_lock;
+    StackTraceMutex<bthread::Mutex> _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;

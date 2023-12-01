@@ -177,8 +177,11 @@ public class WebBaseAction extends BaseAction {
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
-                checkUserOwnsAdminRole(currentUser);
-                Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(currentUser);
+                }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -215,8 +218,11 @@ public class WebBaseAction extends BaseAction {
             boolean authorized = false;
 
             try {
-                checkUserOwnsAdminRole(sessionValue.currentUser);
-                Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
+                try {
+                    Authorizer.checkSystemAction(sessionValue.currentUser, null, PrivilegeType.NODE);
+                } catch (AccessDeniedException e) {
+                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                }
                 authorized = true;
             } catch (AccessDeniedException e) {
                 // ignore
@@ -227,7 +233,7 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getQualifiedUser());
+                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
@@ -374,7 +380,7 @@ public class WebBaseAction extends BaseAction {
                     buff.append("&lt;");
                     break;
                 case '>':
-                    buff.append("&lt;");
+                    buff.append("&gt;");
                     break;
                 case '"':
                     buff.append("&quot;");

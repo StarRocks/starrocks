@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
@@ -34,6 +33,7 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
     protected final ScalarOperator onPredicate;
     protected final String joinHint;
+    protected boolean canLocalShuffle;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
@@ -65,7 +65,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     public String getJoinHint() {
         return joinHint;
     }
-
 
     @Override
     public ColumnRefSet getUsedColumns() {
@@ -132,4 +131,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         }
     }
 
+    public void setCanLocalShuffle(boolean v) {
+        canLocalShuffle = v;
+    }
+
+    public boolean getCanLocalShuffle() {
+        return canLocalShuffle;
+    }
 }

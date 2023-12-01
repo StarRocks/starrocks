@@ -51,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -91,6 +92,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
@@ -137,8 +139,12 @@ public class ScalarOperatorToExpr {
          */
         private static void hackTypeNull(Expr expr) {
             // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
-            Type type = AnalyzerUtils.replaceNullType2Boolean(expr.getType());
-            expr.setType(type);
+            Type previousType = expr.getType();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(previousType);
+            // If actual type of expr is SlotRef, avoid change desc type if no hack happens.
+            if (!Objects.equals(previousType, type)) {
+                expr.setType(type);
+            }
         }
 
         @Override
@@ -157,9 +163,7 @@ public class ScalarOperatorToExpr {
                 return expr;
             }
 
-            if (expr.getType().isNull()) {
-                hackTypeNull(expr);
-            }
+            hackTypeNull(expr);
             return expr;
         }
 
@@ -532,6 +536,7 @@ public class ScalarOperatorToExpr {
             for (ColumnRefOperator ref : operator.getRefColumns()) {
                 SlotRef slot = new SlotRef(new SlotDescriptor(
                         new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
+                slot.setTblName(new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE));
                 hackTypeNull(slot);
                 context.colRefToExpr.put(ref, slot);
                 arguments.add(slot);
@@ -554,8 +559,9 @@ public class ScalarOperatorToExpr {
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
 
-            Expr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
+            LambdaFunctionExpr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
             result.setType(Type.FUNCTION);
+            result.checkValidAfterToExpr();
             return result;
         }
 

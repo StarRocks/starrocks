@@ -179,6 +179,8 @@ public:
 
     ~ThreadPool() noexcept;
 
+    bool is_pool_status_ok();
+
     // Wait for the running tasks to complete and then shutdown the threads.
     // All the other pending tasks in the queue will be removed.
     // NOTE: That the user may implement an external abort logic for the

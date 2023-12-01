@@ -39,10 +39,17 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
                                            int64_t file_length, std::set<int64_t>* need_skip_rowids) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                                   &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
-    std::unique_ptr<IcebergDeleteFileIterator> iter(new IcebergDeleteFileIterator());
+    auto iter = std::make_unique<IcebergDeleteFileIterator>();
     RETURN_IF_ERROR(iter->init(_fs, timezone, delete_file_path, file_length, slot_descriptors, true));
     std::shared_ptr<::arrow::RecordBatch> batch;
-    while (iter->has_next()) {
+
+    Status status;
+    while (true) {
+        status = iter->has_next();
+        if (!status.ok()) {
+            break;
+        }
+
         batch = iter->next();
         ::arrow::StringArray* file_path_array = static_cast<arrow::StringArray*>(batch->column(0).get());
         ::arrow::Int64Array* pos_array = static_cast<arrow::Int64Array*>(batch->column(1).get());
@@ -51,6 +58,12 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
                 need_skip_rowids->emplace(pos_array->Value(row));
             }
         }
+    }
+
+    // eof is expected, otherwise propagate error
+    if (!status.is_end_of_file()) {
+        LOG(WARNING) << status;
+        return status;
     }
     return Status::OK();
 }
@@ -110,11 +123,8 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
         auto* position_col = static_cast<Int64Column*>(chunk->get_column_by_slot_id(k_delete_file_pos.id).get());
         for (auto row = 0; row < chunk_size; row++) {
             if (file_path_col->get_slice(row) != _datafile_path) {
-                DLOG(INFO) << "read path not matched, read " << file_path_col->get_slice(row) << " expect "
-                           << _datafile_path;
                 continue;
             }
-
             need_skip_rowids->emplace(position_col->get_data()[row]);
         }
     }

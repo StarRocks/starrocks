@@ -29,7 +29,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -62,9 +61,9 @@ public class PruneScanColumnRule extends TransformationRule {
                         .collect(Collectors.toSet());
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
         boolean canUseAnyColumn = false;
-        if (outputColumns.size() == 0) {
-            outputColumns.add(Utils.findSmallestColumnRef(
-                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
+        if (outputColumns.isEmpty()) {
+            outputColumns.add(
+                    Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
             canUseAnyColumn = true;
         }
 
@@ -73,7 +72,7 @@ public class PruneScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
-            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
+            scanOperator.getScanOptimzeOption().setCanUseMinMaxCountOpt(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
@@ -84,11 +83,10 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
                         .setColRefToColumnMetaMap(newColumnRefMap).build();
-                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
+                newScanOperator.getScanOptimzeOption().setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
-                scanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 Operator newScanOperator =
                         builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));

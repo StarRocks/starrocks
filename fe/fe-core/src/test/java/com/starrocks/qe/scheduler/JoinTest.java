@@ -56,7 +56,7 @@ public class JoinTest extends SchedulerTestBase {
         Thread joinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
         joinThread.start();
 
-        scheduler.cancel();
+        scheduler.cancel("Cancel by test");
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
 
         Assert.assertTrue(scheduler.isDone());

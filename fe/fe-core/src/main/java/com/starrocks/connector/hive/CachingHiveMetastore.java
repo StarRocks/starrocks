@@ -271,8 +271,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
-        return metastore.partitionExists(dbName, tableName, partitionValues);
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        return metastore.partitionExists(table, partitionValues);
     }
 
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
@@ -452,6 +452,30 @@ public class CachingHiveMetastore implements IHiveMetastore {
         synchronized (lockStr) {
             return refreshTableWithoutSync(hiveDbName, hiveTblName, hiveTableName, onlyCachedPartitions);
         }
+    }
+
+    public boolean refreshView(String hiveDbName, String hiveViewName) {
+        HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveViewName);
+        tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveViewName + "_lock");
+        String lockStr = tableNameLockMap.get(hiveTableName);
+        synchronized (lockStr) {
+            Table updatedTable;
+            try {
+                updatedTable = loadTable(hiveTableName);
+            } catch (StarRocksConnectorException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof InvocationTargetException &&
+                        ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
+                    invalidateTable(hiveDbName, hiveViewName);
+                    throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+                } else {
+                    throw e;
+                }
+            }
+
+            tableCache.put(hiveTableName, updatedTable);
+        }
+        return true;
     }
 
     public List<HivePartitionName> refreshTableWithoutSync(String hiveDbName, String hiveTblName,

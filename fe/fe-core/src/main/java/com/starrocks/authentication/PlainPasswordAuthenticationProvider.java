@@ -107,7 +107,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         UserAuthenticationInfo ret = new UserAuthenticationInfo();
         ret.setPassword(password.getPassword() == null ? MysqlPassword.EMPTY_PASSWORD : password.getPassword());
         ret.setAuthPlugin(PLUGIN_NAME);
-        ret.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+        ret.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
         return ret;
     }

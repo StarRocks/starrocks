@@ -998,13 +998,15 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     auto* child = profile->get_child(child_name);
                     if (child == nullptr) {
                         identical = false;
-                        LOG(INFO) << "find non-isomorphic children, profile_name=" << profile->name()
-                                  << ", required_child_name=" << child_name;
+                        if (require_identical) {
+                            LOG(INFO) << "find non-isomorphic children, profile_name=" << profile->name()
+                                      << ", required_child_name=" << child_name;
+                        }
                         continue;
                     }
                     sub_profiles.push_back(child);
                 }
-                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles);
+                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles, require_identical);
                 merged_profile->add_child(merged_child, prototype_kv.second, nullptr);
             }
             if (require_identical && !identical) {

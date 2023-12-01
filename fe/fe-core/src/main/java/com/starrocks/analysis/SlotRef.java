@@ -278,7 +278,7 @@ public class SlotRef extends Expr {
     @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
-        if (tblName != null) {
+        if (tblName != null && !isFromLambda()) {
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
             return label;
@@ -316,11 +316,11 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public String toJDBCSQL(boolean isMySQL) {
+    public String toJDBCSQL() {
         if (label == null) {
             throw new IllegalArgumentException("should set label for cols in JDBCScanNode. SlotRef: " + debugString());
         }
-        return isMySQL ? "`" + label + "`" : label;
+        return label;
     }
 
     public TableName getTableName() {
@@ -429,6 +429,9 @@ public class SlotRef extends Expr {
     @Override
     public boolean isBoundByTupleIds(List<TupleId> tids) {
         Preconditions.checkState(desc != null);
+        if (isFromLambda()) {
+            return true;
+        }
         for (TupleId tid : tids) {
             if (tid.equals(desc.getParent().getId())) {
                 return true;

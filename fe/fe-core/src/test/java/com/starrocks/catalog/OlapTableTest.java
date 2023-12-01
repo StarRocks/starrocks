@@ -50,10 +50,31 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
+
+    @Test
+    public void testSetIdForRestore() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        final long id = 0;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            long getNextId() {
+                return id;
+            }
+        };
+
+        for (Table table : tables) {
+            if (table.getType() != TableType.OLAP) {
+                continue;
+            }
+            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3);
+        }
+    }
 
     @Test
     public void testTableWithLocalTablet() throws IOException {
@@ -121,5 +142,15 @@ public class OlapTableTest {
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
         Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
         Assert.assertEquals(olapTable, copied);
+    }
+
+    @Test
+    public void testFilePathInfo() {
+        OlapTable olapTable = new OlapTable();
+        Assert.assertNull(olapTable.getDefaultFilePathInfo());
+        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        Assert.assertNull(olapTable.getDefaultFilePathInfo());
+        Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
     }
 }

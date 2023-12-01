@@ -40,6 +40,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PScalarType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -177,12 +179,14 @@ public class ScalarType extends Type implements Cloneable {
     /**
      * Unified decimal is used for parser, which creating default decimal from name
      */
-    public static ScalarType createUnifiedDecimalType() throws AnalysisException {
-        throw decimalParseError("both precision and scale are absent");
+    public static ScalarType createUnifiedDecimalType() {
+        // for mysql compatibility
+        return createUnifiedDecimalType(10, 0);
     }
 
-    public static ScalarType createUnifiedDecimalType(int precision) throws AnalysisException {
-        throw decimalParseError("scale is absent");
+    public static ScalarType createUnifiedDecimalType(int precision) {
+        // for mysql compatibility
+        return createUnifiedDecimalType(precision, 0);
     }
 
     public static ScalarType createUnifiedDecimalType(int precision, int scale) {
@@ -213,11 +217,27 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createDecimalV3Type(PrimitiveType type, int precision, int scale) {
-        Preconditions.checkArgument(0 <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
-                "DECIMAL's precision should range from 1 to 38");
-        Preconditions.checkArgument(0 <= scale && scale <= precision,
-                "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
-
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null ||
+                ctx.getSessionVariable() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType() == null ||
+                ctx.getSessionVariable().getLargeDecimalUnderlyingType().equals(SessionVariableConstants.PANIC)) {
+            Preconditions.checkArgument(0 <= precision &&
+                            precision <= PrimitiveType.getMaxPrecisionOfDecimal(type),
+                    "DECIMAL's precision should range from 1 to 38");
+            Preconditions.checkArgument(0 <= scale && scale <= precision,
+                    "DECIMAL(P[,S]) type P must be greater than or equal to the value of S");
+        }
+        if (precision > maxPrecision) {
+            String underlyingType = ConnectContext.get().getSessionVariable().getLargeDecimalUnderlyingType();
+            if (underlyingType.equals(SessionVariableConstants.DOUBLE)) {
+                return ScalarType.DOUBLE;
+            } else {
+                precision = maxPrecision;
+                type = PrimitiveType.DECIMAL128;
+            }
+        }
         ScalarType scalarType = new ScalarType(type);
         scalarType.precision = Math.max(precision, 1);
         scalarType.scale = scale;
@@ -582,6 +602,7 @@ public class ScalarType extends Type implements Cloneable {
             case DATETIME:
             case HLL:
             case BITMAP:
+            case BINARY:
             case PERCENTILE:
             case JSON:
             case FUNCTION:
@@ -823,6 +844,35 @@ public class ScalarType extends Type implements Cloneable {
             return String.format("DECIMAL(%d,%d)", precision, scale);
         } else {
             return toString();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp to_mysql_data_type_string
+    public String toMysqlDataTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint";
+            case LARGEINT:
+                return "bigint unsigned";
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMALV2:
+                return "decimal";
+            default:
+                return type.toString().toLowerCase();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint(1)";
+            case LARGEINT:
+                return "bigint(20) unsigned";
+            default:
+                return toSql();
         }
     }
 }

@@ -29,4 +29,6 @@ void base64_encode(const std::string& in, std::string* out);
 // Returns true unless the string could not be correctly decoded.
 bool base64_decode(const std::string& in, std::string* out);
 
+std::string url_encode(const std::string& decoded);
+
 } // namespace starrocks

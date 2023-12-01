@@ -16,8 +16,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.mysql.privilege.MockedAuth;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
@@ -26,6 +28,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashSet;
+
 public class ExecuteAsStmtTest {
 
     @Mocked
@@ -33,11 +37,12 @@ public class ExecuteAsStmtTest {
     @Mocked
     private AuthenticationMgr auth;
     @Mocked
+    private AuthorizationMgr authorizationMgr;
+    @Mocked
     private ConnectContext ctx;
 
     @Before
-    public void setUp() {
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
+    public void setUp() throws PrivilegeException {
         new Expectations(globalStateMgr) {
             {
                 GlobalStateMgr.getCurrentState().getAuthenticationMgr();
@@ -47,6 +52,10 @@ public class ExecuteAsStmtTest {
                 globalStateMgr.isUsingNewPrivilege();
                 minTimes = 0;
                 result = false;
+
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
+                minTimes = 0;
+                result = new HashSet<>();
             }
         };
 
@@ -73,10 +82,14 @@ public class ExecuteAsStmtTest {
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("user1", stmt.getToUser().getQualifiedUser());
+        Assert.assertEquals("user1", stmt.getToUser().getUser());
         Assert.assertEquals("%", stmt.getToUser().getHost());
         Assert.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
         Assert.assertFalse(stmt.isAllowRevert());
+
+        ExecuteAsExecutor.execute(stmt, ctx);
+
+        Assert.assertEquals(new UserIdentity("user1", "%"), ctx.getCurrentUserIdentity());
     }
 
     @Test(expected = SemanticException.class)

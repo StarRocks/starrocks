@@ -38,6 +38,8 @@
 
 namespace starrocks {
 
+extern void shutdown_tracer();
+
 int init_test_env(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     if (getenv("STARROCKS_HOME") == nullptr) {
@@ -60,6 +62,7 @@ int init_test_env(int argc, char** argv) {
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
 
+    FLAGS_alsologtostderr = true;
     init_glog("be_test", true);
     CpuInfo::init();
     DiskInfo::init();
@@ -114,6 +117,8 @@ int init_test_env(int argc, char** argv) {
     exec_env->stop();
     exec_env->destroy();
     global_env->stop();
+
+    shutdown_tracer();
 
     shutdown_logging();
 

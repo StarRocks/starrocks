@@ -43,7 +43,7 @@ Status VerticalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] vertical compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] vertical compaction committed");
 
     return Status::OK();
@@ -58,11 +58,12 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
     std::unique_ptr<RowsetWriter> output_rs_writer;
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
-            _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
+                                                                    _task_info.algorithm, _task_info.output_version,
+                                                                    &output_rs_writer, _tablet_schema));
 
     std::vector<std::vector<uint32_t>> column_groups;
-    CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema()->sort_key_idxes(),
+    CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),
                                               config::vertical_compaction_max_columns_per_group, &column_groups);
     _task_info.column_group_size = column_groups.size();
 
@@ -121,9 +122,9 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      const std::vector<uint32_t>& column_group,
                                                      RowsetWriter* output_rs_writer, RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
-    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), column_group);
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
-                        schema, is_key, mask_buffer);
+                        schema, is_key, mask_buffer, _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
@@ -169,11 +170,8 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
         total_num_rows += rowset->num_rows();
         for (auto& segment : rowset->segments()) {
             for (uint32_t column_index : column_group) {
-                if (!segment->is_valid_column(_tablet->tablet_schema()->column(column_index).unique_id())) {
-                    continue;
-                }
-
-                const auto* column_reader = segment->column(column_index);
+                auto uid = _tablet_schema->column(column_index).unique_id();
+                const auto* column_reader = segment->column_with_uid(uid);
                 if (column_reader == nullptr) {
                     continue;
                 }
@@ -221,7 +219,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
             }
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_columns(*chunk, column_group, is_key));
 

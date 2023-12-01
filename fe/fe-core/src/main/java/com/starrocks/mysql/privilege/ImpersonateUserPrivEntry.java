@@ -36,7 +36,7 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
 
     protected ImpersonateUserPrivEntry(
             UserIdentity authorizedUser, PrivBitSet privSet, UserIdentity securedUserIdentity) {
-        super(authorizedUser.getHost(), authorizedUser.getQualifiedUser(), authorizedUser.isDomain(), privSet);
+        super(authorizedUser.getHost(), authorizedUser.getUser(), authorizedUser.isDomain(), privSet);
         this.securedUserIdentity = securedUserIdentity;
     }
 

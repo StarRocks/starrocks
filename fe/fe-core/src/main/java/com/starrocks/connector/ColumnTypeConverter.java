@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
@@ -62,6 +61,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
@@ -216,7 +216,7 @@ public class ColumnTypeConverter {
             throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
                     type, HiveChar.MAX_CHAR_LENGTH);
         } else if (type.isVarchar()) {
-            if (type.getColumnSize() == -1) {
+            if (type.getColumnSize() == -1 || type.getColumnSize() == MAX_VARCHAR_LENGTH) {
                 return stringTypeInfo;
             }
             if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
@@ -321,6 +321,7 @@ public class ColumnTypeConverter {
                 if (!isConvertedFailed) {
                     return new StructType(structFields);
                 }
+                break;
             case MAP:
                 Schema value = avroSchema.getValueType();
                 Type valueType = fromHudiType(value);
@@ -333,6 +334,7 @@ public class ColumnTypeConverter {
                     // Hudi map's key must be string
                     return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
                 }
+                break;
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))

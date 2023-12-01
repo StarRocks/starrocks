@@ -198,7 +198,6 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
             : _operators(operators),
-
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _pipeline(pipeline),
@@ -216,6 +215,7 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
+    void check_operator_close_states(std::string func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -298,7 +298,8 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void start_schedule(int64_t start_count, int64_t start_time);
+    void start_timers();
+    void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
@@ -343,8 +344,9 @@ public:
 
         _all_global_rf_ready_or_timeout =
                 _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(),
-                            [](auto* rf_desc) { return rf_desc->runtime_filter() != nullptr; }); // or ready.
+                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
+                    return rf_desc->is_local() || rf_desc->runtime_filter() != nullptr;
+                }); // or all the remote RFs are ready.
 
         return !_all_global_rf_ready_or_timeout;
     }
@@ -477,7 +479,7 @@ protected:
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(RuntimeState* state, size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_scan_statistics(RuntimeState* state);
-    void _update_overhead_timer();
+    void _update_driver_level_timer();
 
     RuntimeState* _runtime_state = nullptr;
     Operators _operators;

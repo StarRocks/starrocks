@@ -14,7 +14,9 @@
 
 #include "exec/olap_scan_node.h"
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
 #include <thread>
 
 #include "column/column_pool.h"
@@ -66,6 +68,17 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.output_chunk_by_bucket) {
         _output_chunk_by_bucket = tnode.olap_scan_node.output_chunk_by_bucket;
+    }
+
+    // desc hint related optimize only takes effect when there is no order requirement
+    if (!_sorted_by_keys_per_tablet) {
+        if (tnode.olap_scan_node.__isset.output_asc_hint) {
+            _output_asc_hint = tnode.olap_scan_node.output_asc_hint;
+        }
+
+        if (tnode.olap_scan_node.__isset.partition_order_hint) {
+            _partition_order_hint = tnode.olap_scan_node.partition_order_hint;
+        }
     }
 
     if (_olap_scan_node.__isset.bucket_exprs) {
@@ -191,7 +204,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -397,8 +410,21 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
+    if (partition_order_hint().has_value()) {
+        bool asc = partition_order_hint().value();
+        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+            if (asc) {
+                return std::less()(l_partition_id, r_partition_id);
+            } else {
+                return std::greater()(l_partition_id, r_partition_id);
+            }
+        });
+    }
+
     if (output_chunk_by_bucket()) {
-        std::sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
             return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
                    down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
         });
@@ -631,7 +657,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {
@@ -688,7 +714,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

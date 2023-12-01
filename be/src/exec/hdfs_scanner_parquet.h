@@ -17,6 +17,9 @@
 #include "exec/hdfs_scanner.h"
 
 namespace starrocks {
+namespace parquet {
+class FileReader;
+}
 
 class HdfsParquetScanner final : public HdfsScanner {
 public:

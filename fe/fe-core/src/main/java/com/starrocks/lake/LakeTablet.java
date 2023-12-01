@@ -16,6 +16,8 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import javax.validation.constraints.NotNull;
 
 import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
@@ -50,11 +53,14 @@ public class LakeTablet extends Tablet {
 
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
+    private static final String JSON_KEY_DATA_SIZE_UPDATE_TIME = "dataSizeUpdateTime";
 
     @SerializedName(value = JSON_KEY_DATA_SIZE)
-    private long dataSize = 0L;
+    private volatile long dataSize = 0L;
     @SerializedName(value = JSON_KEY_ROW_COUNT)
-    private long rowCount = 0L;
+    private volatile long rowCount = 0L;
+    @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
+    private volatile long dataSizeUpdateTime = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -72,6 +78,14 @@ public class LakeTablet extends Tablet {
 
     public void setDataSize(long dataSize) {
         this.dataSize = dataSize;
+    }
+
+    public void setDataSizeUpdateTime(long dataSizeUpdateTime) {
+        this.dataSizeUpdateTime = dataSizeUpdateTime;
+    }
+
+    public long getDataSizeUpdateTime() {
+        return dataSizeUpdateTime;
     }
 
     // version is not used
@@ -152,5 +166,15 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    @NotNull
+    public ShardInfo getShardInfo() throws StarClientException {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+        return GlobalStateMgr.getCurrentStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }
 }

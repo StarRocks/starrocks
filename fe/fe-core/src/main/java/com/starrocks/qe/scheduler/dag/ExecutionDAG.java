@@ -426,7 +426,7 @@ public class ExecutionDAG {
                     ComputeNode worker = destInstance.getWorker();
                     // NOTE(zc): can be removed in version 4.0
                     dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
+                    dest.setBrpc_server(worker.getBrpcIpAddress());
 
                     multiSink.getDestinations().get(i).add(dest);
                 }
@@ -491,7 +491,7 @@ public class ExecutionDAG {
                     ComputeNode worker = destInstance.getWorker();
                     // NOTE(zc): can be removed in version 4.0
                     dest.setDeprecated_server(worker.getAddress());
-                    dest.setBrpc_server(worker.getBrpcAddress());
+                    dest.setBrpc_server(worker.getBrpcIpAddress());
 
                     int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
                     if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
@@ -509,7 +509,7 @@ public class ExecutionDAG {
                 ComputeNode worker = destInstance.getWorker();
                 // NOTE(zc): can be removed in version 4.0
                 dest.setDeprecated_server(worker.getAddress());
-                dest.setBrpc_server(worker.getBrpcAddress());
+                dest.setBrpc_server(worker.getBrpcIpAddress());
 
                 execFragment.addDestination(dest);
             }

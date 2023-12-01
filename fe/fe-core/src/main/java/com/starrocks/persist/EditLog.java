@@ -101,7 +101,9 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -111,6 +113,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -611,6 +614,12 @@ public class EditLog {
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
+                    break;
+                }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
@@ -813,6 +822,8 @@ public class EditLog {
                         case SCHEMA_CHANGE:
                             globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                             break;
+                        case OPTIMIZE:
+                            globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                         default:
                             break;
                     }
@@ -935,6 +946,16 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
+                case OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB: {
+                    ExternalAnalyzeJob externalAnalyzeJob = (ExternalAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(externalAnalyzeJob);
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB: {
+                    ExternalAnalyzeJob externalAnalyzeJob = (ExternalAnalyzeJob) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(externalAnalyzeJob);
+                    break;
+                }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
@@ -968,6 +989,25 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
+                    ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should refresh cache here.
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
+                                basicStatsMeta.getCatalogName(),
+                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
+                                basicStatsMeta.getColumns(), true);
+                    }
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
+                    ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -1142,7 +1182,8 @@ public class EditLog {
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
                                  GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, submit log is not allowed");
+                "Current node is not leader, but" +
+                GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1626,6 +1667,10 @@ public class EditLog {
         }
     }
 
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
+    }
+
     public void logBackupJob(BackupJob job) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
@@ -1905,12 +1950,16 @@ public class EditLog {
     public void logAddAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
             logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        } else {
+            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         if (job.isNative()) {
             logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, (NativeAnalyzeJob) job);
+        } else {
+            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
         }
     }
 
@@ -1944,6 +1993,14 @@ public class EditLog {
 
     public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
+    }
+
+    public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {

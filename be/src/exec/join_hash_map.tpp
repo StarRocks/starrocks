@@ -370,6 +370,7 @@ void FixedSizeJoinProbeFunc<LT>::_probe_nullable_column(const JoinHashTableItems
             probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
         }
     }
+    probe_state->null_array = &null_columns[0]->get_data();
 
     JoinHashMapHelper::serialize_fixed_size_key_column<LT>(data_columns, probe_state->probe_key_column.get(), 0,
                                                            row_count);
@@ -427,6 +428,14 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
 
         *has_remain = _probe_state->has_remain;
+
+        if (UNLIKELY(!_probe_state->has_remain && !_probe_state->handles.empty())) {
+            std::string msg =
+                    "HashJoin probe haven't remain tuples but have coroutines, likely leaking coroutines, please set "
+                    "global interleaving_group_size = 0 to disable coroutines, rerun this query and report to SR";
+            LOG(ERROR) << "fragment = " << print_id(state->fragment_instance_id()) << " " << msg;
+            throw std::runtime_error(msg);
+        }
     }
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
@@ -718,12 +727,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
-        data_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
-        // but append_selective_shallow_copy() has set item of NullColumn to not null
+        // but append_selective() has set item of NullColumn to not null
         // so NullColumn needs to be set back to null
         auto null_column = NullColumn::create(_probe_state->count, 0);
         size_t end = _probe_state->count;
@@ -736,8 +744,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
-        dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -747,11 +754,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
                                                                         const SlotDescriptor* slot) {
     ColumnPtr dest_column = src_column->clone_empty();
 
-    dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
     // When left outer join is executed,
     // build_index[i] Equal to 0 means it is not found in the hash table,
-    // but append_selective_shallow_copy() has set item of NullColumn to not null
+    // but append_selective() has set item of NullColumn to not null
     // so NullColumn needs to be set back to null
     auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
     size_t end = _probe_state->count;
@@ -819,20 +826,30 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     _probe_state->count = match_count;
 }
 
-#define DO_PROBE(X, Y)                                                                  \
-    if (_probe_state->active_coroutines != 0) {                                         \
-        if constexpr (first_probe) {                                                    \
-            auto group_size = std::abs(state->query_options().interleaving_group_size); \
-            _probe_state->cur_probe_index = 0;                                          \
-            _probe_state->handles.clear();                                              \
-            for (int i = 0; i < group_size; ++i) {                                      \
-                _probe_state->handles.insert(X(state, build_data, data));               \
-            }                                                                           \
-            _probe_state->active_coroutines = group_size;                               \
-        }                                                                               \
-        _probe_coroutine<first_probe, Y>(state, build_data, data);                      \
-    } else {                                                                            \
-        X<first_probe>(state, build_data, data);                                        \
+#define DO_PROBE(X, Y)                                                                                               \
+    if (_probe_state->active_coroutines != 0) {                                                                      \
+        if constexpr (first_probe) {                                                                                 \
+            auto group_size = std::abs(state->query_options().interleaving_group_size);                              \
+            _probe_state->cur_probe_index = 0;                                                                       \
+            if (!_probe_state->handles.empty()) {                                                                    \
+                for (auto& h : _probe_state->handles) {                                                              \
+                    h.destroy();                                                                                     \
+                }                                                                                                    \
+                _probe_state->handles.clear();                                                                       \
+                std::string msg =                                                                                    \
+                        "HashJoin probe leaks coroutines, please set global interleaving_group_size = 0 to disable " \
+                        "coroutines, rerun this query and report to SR";                                             \
+                LOG(ERROR) << "fragment = " + print_id(state->fragment_instance_id()) << " " << msg;                 \
+                throw std::runtime_error(msg);                                                                       \
+            }                                                                                                        \
+            for (int i = 0; i < group_size; ++i) {                                                                   \
+                _probe_state->handles.insert(X(state, build_data, data));                                            \
+            }                                                                                                        \
+            _probe_state->active_coroutines = group_size;                                                            \
+        }                                                                                                            \
+        _probe_coroutine<first_probe, Y>(state, build_data, data);                                                   \
+    } else {                                                                                                         \
+        X<first_probe>(state, build_data, data);                                                                     \
     }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
@@ -1010,6 +1027,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_coroutine(RuntimeState* state
     while (!_probe_state->handles.empty()) {
         for (auto it = _probe_state->handles.begin(); it != _probe_state->handles.end();) {
             if (it->promise().exception != nullptr) {
+                LOG(WARNING) << print_id(state->fragment_instance_id()) << " coroutine rethrow exceptions";
                 std::rethrow_exception(it->promise().exception);
             }
             if (it->done()) {
@@ -1019,7 +1037,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_coroutine(RuntimeState* state
                 it->resume();
                 it++;
             }
-            if (_probe_state->count == state->chunk_size()) {
+            if (_probe_state->count == state->chunk_size() && _probe_state->has_remain) {
                 return;
             }
         }

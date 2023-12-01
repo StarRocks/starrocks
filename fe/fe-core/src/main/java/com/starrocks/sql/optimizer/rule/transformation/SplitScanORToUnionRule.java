@@ -74,8 +74,6 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 && !scan.isFromSplitOR();
     }
 
-
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         try {

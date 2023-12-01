@@ -21,6 +21,7 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsProperties;
 
@@ -35,15 +36,27 @@ public class CloudConfigurationFactory {
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
-            new CloudConfigurationProvider() {
-                @Override
-                public CloudConfiguration build(Map<String, String> properties) {
-                    return new CloudConfiguration();
-                }
-            });
+            (Map<String, String> properties) -> new CloudConfiguration());
+
+    static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
+            new AWSCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            new StrictHDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
 
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
-        for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+        return buildCloudConfigurationForStorage(properties, false);
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties, boolean strictMode) {
+        ImmutableList<CloudConfigurationProvider> factories = cloudConfigurationFactoryChain;
+        if (strictMode) {
+            factories = strictCloudConfigurationFactoryChain;
+        }
+        for (CloudConfigurationProvider factory : factories) {
             CloudConfiguration cloudConfiguration = factory.build(properties);
             if (cloudConfiguration != null) {
                 cloudConfiguration.loadCommonFields(properties);

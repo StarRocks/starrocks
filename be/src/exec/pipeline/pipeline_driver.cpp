@@ -42,6 +42,22 @@ PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
+    check_operator_close_states("deleting pipeline drivers");
+}
+
+void PipelineDriver::check_operator_close_states(std::string func_name) {
+    if (_driver_id == -1) { // in test cases
+        return;
+    }
+    for (auto& op : _operators) {
+        auto& op_state = _operator_stages[op->get_id()];
+        if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
+                                   to_readable_string(), op->get_name(), func_name);
+            LOG(ERROR) << msg;
+            DCHECK(false) << msg;
+        }
+    }
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
@@ -333,7 +349,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
-                            curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+                            next_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
@@ -460,9 +476,12 @@ void PipelineDriver::report_exec_state_if_necessary() {
 }
 
 void PipelineDriver::runtime_report_action() {
-    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
-    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
-    _update_overhead_timer();
+    if (is_finished()) {
+        return;
+    }
+
+    _update_driver_level_timer();
+
     for (auto& op : _operators) {
         COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
                                               op->_finishing_timer->value() + op->_finished_timer->value() +
@@ -484,14 +503,22 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
-    // start timers
+void PipelineDriver::start_timers() {
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
     _input_empty_timer_sw->start();
     _output_full_timer_sw->start();
     _pending_finish_timer_sw->start();
+}
+
+void PipelineDriver::stop_timers() {
+    _total_timer_sw->stop();
+    _pending_timer_sw->stop();
+    _precondition_block_timer_sw->stop();
+    _input_empty_timer_sw->stop();
+    _output_full_timer_sw->stop();
+    _pending_finish_timer_sw->stop();
 }
 
 void PipelineDriver::submit_operators() {
@@ -516,6 +543,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         _mark_operator_closed(op, runtime_state);
     }
+    check_operator_close_states("closing pipeline drivers");
 }
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
@@ -576,6 +604,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
+    stop_timers();
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
@@ -598,9 +627,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
 
     set_driver_state(state);
 
-    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
-    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
-    _update_overhead_timer();
+    _update_driver_level_timer();
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -609,7 +636,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
     QUERY_TRACE_END("finalize", driver_name);
 }
 
-void PipelineDriver::_update_overhead_timer() {
+void PipelineDriver::_update_driver_level_timer() {
+    // Total Time
+    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
+
+    // Schedule Time
+    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+
+    // Overhead Time
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
     std::vector<RuntimeProfile*> operator_profiles;
@@ -632,9 +666,10 @@ void PipelineDriver::_update_overhead_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "query_id=" << print_id(this->query_ctx()->query_id())
-       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << this
-       << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+       << " fragment_id="
+       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
@@ -736,10 +771,12 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
 }
 
 Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+    auto msg = strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
+                                   op->get_name());
     if (_fragment_ctx->is_canceled()) {
-        RETURN_IF_ERROR(_mark_operator_cancelled(op, state));
+        WARN_IF_ERROR(_mark_operator_cancelled(op, state), msg + " is failed to cancel");
     } else {
-        RETURN_IF_ERROR(_mark_operator_finished(op, state));
+        WARN_IF_ERROR(_mark_operator_finished(op, state), msg + " is failed to finish");
     }
 
     auto& op_state = _operator_stages[op->get_id()];
@@ -747,8 +784,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
-                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
+    VLOG_ROW << msg;
     {
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);

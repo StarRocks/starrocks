@@ -40,8 +40,12 @@ MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false), 
 
 Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     if (_children.size() < 2) {
-        return Status::InternalError("map expression's children size should not less than 2.");
+        return Status::InternalError("map expression's children size should not less than 2");
     }
     auto lambda_func = down_cast<LambdaFunction*>(_children[0]);
     auto map_expr = down_cast<MapExpr*>(lambda_func->get_lambda_expr());
@@ -102,7 +106,8 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         auto cur_chunk = std::make_shared<Chunk>();
         // put all arguments into the new chunk
         int argument_num = _arguments_ids.size();
-        DCHECK(argument_num == input_columns.size());
+        DCHECK(argument_num == input_columns.size())
+                << "arg num << " << argument_num << " != input size " << input_columns.size();
         for (int i = 0; i < argument_num; ++i) {
             cur_chunk->append_column(input_columns[i], _arguments_ids[i]); // column ref
         }

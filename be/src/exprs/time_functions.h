@@ -19,6 +19,7 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/datetime_value.h"
 #include "types/logical_type.h"
 #include "util/timezone_hsscan.h"
 namespace starrocks {
@@ -538,21 +539,16 @@ public:
      */
     DEFINE_VECTORIZED_FN(to_days);
 
-    // try to transfer content to date format based on "%Y-%m-%d",
+    // try to transfer content to date format based on "%Y-%m-%d" or "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
+    template <bool isYYYYMMDD>
     static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context, const starrocks::Columns& columns,
                                                             const char* str_format);
 
-    // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
-    // if successful, return result TimestampValue
-    // else take a uncommon approach to process this content.
-    static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
-                                                                const starrocks::Columns& columns,
-                                                                const char* str_format);
-
     // Try to process string content, based on uncommon string format
     static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);
+
     /**
      *
      * cast string to datetime
@@ -568,6 +564,13 @@ public:
      *
      */
     DEFINE_VECTORIZED_FN(str2date);
+
+    /**
+     * Joda Time parse
+     */
+    DEFINE_VECTORIZED_FN(parse_jodatime);
+    static Status parse_joda_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status parse_joda_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);
@@ -809,6 +812,12 @@ public:
         std::string fmt;
         int len;
         FormatType fmt_type;
+    };
+
+    struct ParseJodaState {
+        std::unique_ptr<joda::JodaFormat> joda;
+
+        Status prepare(std::string_view formt);
     };
 
 private:

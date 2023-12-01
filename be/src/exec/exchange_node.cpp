@@ -86,8 +86,8 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr,
-            false, DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, false);
+            config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
+    _stream_recvr->bind_profile(0, _runtime_profile.get());
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
@@ -99,7 +99,8 @@ Status ExchangeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-        RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
+        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(), &_sort_exec_exprs, &_is_asc_order,
+                                                     &_nulls_first));
     }
     return Status::OK();
 }
@@ -249,8 +250,10 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     OpFactories operators;
     if (!_is_merging) {
+        auto* query_ctx = context->runtime_state()->query_ctx();
         auto exchange_source_op = std::make_shared<ExchangeSourceOperatorFactory>(
-                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc);
+                context->next_operator_id(), id(), _texchange_node, _num_senders, _input_row_desc,
+                query_ctx->enable_pipeline_level_shuffle());
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
     } else {

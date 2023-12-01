@@ -70,6 +70,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -80,8 +81,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -99,6 +102,9 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.statistic.AnalyzeMgr;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
@@ -116,9 +122,11 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.sparkproject.guava.collect.Maps;
 
 import java.io.IOException;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1051,9 +1059,8 @@ public class ShowExecutorTest {
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
                 "REFRESH ASYNC\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"SSD\",\n" +
-                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\"\n" +
+                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
+                "\"storage_medium\" = \"SSD\"\n" +
                 ")\n" +
                 "AS select col1, col2 from table1;";
 
@@ -1080,6 +1087,14 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
+    }
+
+    @Test
+    public void testShowAlterTable() throws AnalysisException, DdlException {
+        ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        executor.execute();
     }
 
     @Test
@@ -1208,13 +1223,35 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowBasicStatsMeta() throws Exception {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> map = new HashMap<>();
+                map.put(new AnalyzeMgr.StatsMetaKey("hive0", "testDb", "testTable"),
+                        new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
+                return map;
+            }
+        };
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ShowBasicStatsMetaStmt stmt = new ShowBasicStatsMetaStmt(null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("hive0.testDb", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("testTable", resultSet.getResultRows().get(0).get(1));
+        Assert.assertEquals("ALL", resultSet.getResultRows().get(0).get(2));
+        Assert.assertEquals("FULL", resultSet.getResultRows().get(0).get(3));
+    }
+
+    @Test
     public void testShowGrants() throws Exception {
         ShowGrantsStmt stmt = new ShowGrantsStmt("root");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
+                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +

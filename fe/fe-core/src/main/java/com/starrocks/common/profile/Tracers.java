@@ -72,7 +72,8 @@ public class Tracers {
 
     public static void init(ConnectContext context, Mode mode, String moduleStr) {
         Tracers tracers = THREAD_LOCAL.get();
-        boolean enableProfile = context.getSessionVariable().isEnableProfile();
+        boolean enableProfile =
+                context.getSessionVariable().isEnableProfile() || context.getSessionVariable().isEnableBigQueryProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
 
         Module module = getTraceModule(moduleStr);

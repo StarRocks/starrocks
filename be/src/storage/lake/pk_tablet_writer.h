@@ -48,7 +48,7 @@ public:
     RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
 protected:
-    Status flush_segment_writer() override;
+    Status flush_segment_writer(SegmentPB* segment = nullptr) override;
 
 private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
@@ -63,7 +63,7 @@ public:
 
     DISALLOW_COPY(VerticalPkTabletWriter);
 
-    Status write(const starrocks::Chunk& data) override {
+    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override {
         return Status::NotSupported("VerticalPkTabletWriter write not support");
     }
 

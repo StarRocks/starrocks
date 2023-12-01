@@ -190,6 +190,9 @@ public class Explain {
                                     .collect(Collectors.joining(", ")) + "]"))
                     .append("\n");
 
+            if (scan.getTable().isMaterializedView()) {
+                buildOperatorProperty(sb, "MaterializedView: true", context.step);
+            }
             buildCostEstimate(sb, optExpression, context.step);
 
             int totalTabletsNum = 0;
@@ -749,7 +752,7 @@ public class Explain {
 
         @Override
         public String visit(ScalarOperator scalarOperator, Void context) {
-            return scalarOperator.accept(this, null);
+            return scalarOperator.toString();
         }
 
         @Override

@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -24,11 +25,15 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -50,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -63,6 +69,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+import static com.starrocks.connector.paimon.PaimonMetadata.getRowCount;
 
 public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
@@ -287,8 +294,8 @@ public class OptExternalPartitionPruner {
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         if (table instanceof HiveMetaStoreTable) {
-            ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
@@ -298,6 +305,51 @@ public class OptExternalPartitionPruner {
             }
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (!icebergTable.getSnapshot().isPresent()) {
+                return;
+            }
+
+            ImmutableMap.Builder<Long, PartitionKey> idToPartitionKey = ImmutableMap.builder();
+            if (table.isUnPartitioned()) {
+                idToPartitionKey.put(0L, new PartitionKey());
+            } else {
+                String catalogName = icebergTable.getCatalogName();
+                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
+                List<Long> ids = table.allocatePartitionIdByKey(partitionKeys);
+                for (int i = 0; i < partitionKeys.size(); i++) {
+                    idToPartitionKey.put(ids.get(i), partitionKeys.get(i));
+                }
+            }
+
+            Map<Long, PartitionKey> partitionKeyMap = idToPartitionKey.build();
+            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
+            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
+        } else if (table instanceof PaimonTable) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toList());
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+            if (fileInfos.isEmpty()) {
+                return;
+            }
+
+            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            if (remoteFileDesc == null) {
+                return;
+            }
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            if (splits.isEmpty()) {
+                return;
+            }
+            long rowCount = getRowCount(splits);
+            if (rowCount > 0) {
+                scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
         }
     }
 

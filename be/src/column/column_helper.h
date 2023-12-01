@@ -32,6 +32,7 @@
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
 #include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -79,6 +80,9 @@ public:
 
     // Find the non-null value in reversed order in [start, end), return start if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find first value in range [start, end) that not equal to target
+    static int64_t find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
@@ -507,6 +511,22 @@ struct ChunkSliceTemplate {
     Ptr cutoff(size_t required_rows);
     void reset(Ptr input);
 };
+
+template <LogicalType ltype>
+struct GetContainer {
+    using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+    const auto& get_data(const Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
+};
+
+#define GET_CONTAINER(ltype)                                                            \
+    template <>                                                                         \
+    struct GetContainer<ltype> {                                                        \
+        const auto& get_data(const Column* column) {                                    \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
+        }                                                                               \
+    };
+APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
+#undef GET_CONTAINER
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;

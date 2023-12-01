@@ -46,7 +46,7 @@ public class PrivTableTest {
         // 1. only one entry
         // 1.1 grant
         ResourcePrivEntry entry1 = ResourcePrivEntry.create(
-                user1.getHost(), resource1, user1.getQualifiedUser(), false, resourceUsage);
+                user1.getHost(), resource1, user1.getUser(), false, resourceUsage);
         table.addEntry(entry1, true, false);
         LOG.info("current table: {}", table);
         // 1.2 dump to file
@@ -73,7 +73,7 @@ public class PrivTableTest {
         UserIdentity user2 = UserIdentity.createAnalyzedUserIdentWithIp("user2", "%");
         String resource2 = "resource2";
         ResourcePrivEntry entry2 = ResourcePrivEntry.create(
-                user2.getHost(), resource2, user2.getQualifiedUser(), false, resourceUsage);
+                user2.getHost(), resource2, user2.getUser(), false, resourceUsage);
         table.addEntry(entry2, true, false);
         LOG.info("current table: {}", table);
 

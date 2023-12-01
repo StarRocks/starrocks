@@ -43,10 +43,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -71,9 +74,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
@@ -113,7 +116,7 @@ public class OlapScanNode extends ScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
+    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     // The column names applied dict optimization
     // used for explain
@@ -154,6 +157,9 @@ public class OlapScanNode extends ScanNode {
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
+    private boolean outputAscHint = true;
+    private boolean sortKeyAscHint = true;
+    private Optional<Boolean> partitionKeyAscHint = Optional.empty();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     private List<Expr> bucketExprs = Lists.newArrayList();
@@ -162,6 +168,8 @@ public class OlapScanNode extends ScanNode {
     private Map<Long, List<Long>> partitionToScanTabletMap;
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
 
@@ -198,6 +206,10 @@ public class OlapScanNode extends ScanNode {
     public void disablePhysicalPropertyOptimize() {
         setIsSortedByKeyPerTablet(false);
         setIsOutputChunkByBucket(false);
+    }
+
+    public void setOrderHint(boolean isAsc) {
+        this.outputAscHint = isAsc;
     }
 
     public List<Long> getSelectedPartitionIds() {
@@ -387,11 +399,11 @@ public class OlapScanNode extends ScanNode {
                     expectedVersion, -1, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, expectedVersion, replicaInfos);
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schemaHash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, expectedVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -443,13 +455,14 @@ public class OlapScanNode extends ScanNode {
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
                                       long localBeId) throws UserException {
+        boolean enableQueryTabletAffinity =
+                ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = physicalPartition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        boolean fillDataCache =
-                olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
+        boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
@@ -480,8 +493,6 @@ public class OlapScanNode extends ScanNode {
                 if (tablet instanceof LocalTablet) {
                     replicaInfos = ((LocalTablet) tablet).getReplicaInfos();
                 }
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
                     if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
@@ -492,9 +503,11 @@ public class OlapScanNode extends ScanNode {
                         }
                     }
                 }
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schema_hash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, visibleVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             List<Replica> replicas = null;
@@ -511,8 +524,12 @@ public class OlapScanNode extends ScanNode {
                     continue;
                 }
             }
-
-            Collections.shuffle(replicas);
+    
+            // TODO: Implement a more robust strategy for tablet affinity.
+            if (!enableQueryTabletAffinity) {
+                Collections.shuffle(replicas);
+            }
+    
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
@@ -757,13 +774,21 @@ public class OlapScanNode extends ScanNode {
                 }
             }
 
-            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+            if (!bucketColumns.isEmpty() && FeConstants.showScanNodeLocalShuffleColumnsInExplain) {
                 output.append(prefix).append("LocalShuffleColumns:\n");
                 for (ColumnRefOperator col : bucketColumns) {
                     output.append(prefix).append("- ").append(col.toString()).append("\n");
                 }
             }
             output.append(explainColumnAccessPath(prefix));
+        }
+
+        if (olapTable.isMaterializedView()) {
+            output.append(prefix).append("MaterializedView: true\n");
+        }
+
+        if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
+            output.append(prefix).append("Short Circuit Scan: true\n");
         }
 
         return output.toString();
@@ -774,15 +799,50 @@ public class OlapScanNode extends ScanNode {
         return result.size();
     }
 
+    private void assignOrderByHints(List<String> keyColumnNames) {
+        // assign order by hint
+        for (RuntimeFilterDescription probeRuntimeFilter : probeRuntimeFilters) {
+            if (RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER.equals(
+                    probeRuntimeFilter.runtimeFilterType())) {
+                Expr expr = probeRuntimeFilter.getNodeIdToProbeExpr().get(getId().asInt());
+                if (expr instanceof SlotRef) {
+                    // check key columns
+                    SlotId cid = ((SlotRef) expr).getSlotId();
+                    String columnName = desc.getSlot(cid.asInt()).getColumn().getName();
+                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
+                        sortKeyAscHint = outputAscHint;
+                    }
+                    // check partition column
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
+                        if (!partitionColumns.isEmpty() && partitionColumns.get(0).getName().equals(columnName)) {
+                            partitionKeyAscHint = Optional.of(outputAscHint);
+                        }
+                    }
+                }
+                // we only care the first top-n filter
+                return;
+            }
+        }
+    }
+
     @Override
     protected void toThrift(TPlanNode msg) {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
+        Set<String> bfColumns = olapTable.getBfColumns();
 
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
             if (indexMeta != null) {
+                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                    TColumn tColumn = col.toThrift();
+                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
+                    columnsDesc.add(tColumn);
+                }
                 if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
@@ -791,10 +851,6 @@ public class OlapScanNode extends ScanNode {
                     }
                 } else {
                     for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                        TColumn tColumn = col.toThrift();
-                        col.setIndexFlag(tColumn, olapTable.getIndexes());
-                        columnsDesc.add(tColumn);
-
                         if (!col.isKey()) {
                             continue;
                         }
@@ -805,6 +861,8 @@ public class OlapScanNode extends ScanNode {
                 }
             }
         }
+
+        assignOrderByHints(keyColumnNames);
 
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
@@ -865,6 +923,8 @@ public class OlapScanNode extends ScanNode {
                 msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            msg.olap_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            partitionKeyAscHint.ifPresent(aBoolean -> msg.olap_scan_node.setPartition_order_hint(aBoolean));
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
@@ -1206,5 +1266,20 @@ public class OlapScanNode extends ScanNode {
         LOG.debug("mapTabletsToPartitions. tabletToPartitionMap: {}, partitionToTabletMap: {}",
                 tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
+    }
+
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
+
+    public void computePointScanRangeLocations() {
+        List<String> keyColumns = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
+
+        if (points.isPresent()) {
+            rowStoreKeyLiterals = points.get();
+            return;
+        }
     }
 }

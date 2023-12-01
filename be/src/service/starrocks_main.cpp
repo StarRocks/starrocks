@@ -37,8 +37,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include "block_cache/block_cache.h"
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -191,8 +189,16 @@ int main(int argc, char** argv) {
     // read range of source code for inject errors.
     starrocks::Status::access_directory_of_inject();
 #endif
+    // Initialize libcurl here to avoid concurrent initialization.
+    auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_ret != 0) {
+        LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
+        exit(-1);
+    }
 
     Aws::SDKOptions aws_sdk_options;
+    // it is already initialized beforehead
+    aws_sdk_options.httpOptions.initAndCleanupCurl = false;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         auto level = parse_aws_sdk_log_level(starrocks::config::aws_sdk_logging_trace_level);
         std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
@@ -237,12 +243,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Initilize libcurl here to avoid concurrent initialization.
-    auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
-    if (curl_ret != 0) {
-        LOG(FATAL) << "fail to initialize libcurl, curl_ret=" << curl_ret;
-        exit(-1);
-    }
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 

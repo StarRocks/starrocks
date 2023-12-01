@@ -111,6 +111,39 @@ public class ConstantOperatorTest {
     }
 
     @Test
+    public void testCaseDateToNumber() throws Exception {
+        ConstantOperator date = ConstantOperator.createDate(LocalDateTime.of(2023, 01, 01, 0, 0));
+        ConstantOperator datetime = ConstantOperator.createDatetime(LocalDateTime.of(2023, 01, 01, 0, 0, 0));
+
+        ConstantOperator intNumber = ConstantOperator.createInt(20230101);
+        Assert.assertEquals(intNumber, date.castTo(Type.INT));
+
+        ConstantOperator dateBigintNumber = ConstantOperator.createBigint(20230101L);
+        Assert.assertEquals(dateBigintNumber, date.castTo(Type.BIGINT));
+
+        ConstantOperator datetimeBigintNumber = ConstantOperator.createBigint(20230101000000L);
+        Assert.assertEquals(datetimeBigintNumber, datetime.castTo(Type.BIGINT));
+
+        ConstantOperator dateLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101"));
+        Assert.assertEquals(dateLargeintNumber, date.castTo(Type.LARGEINT));
+
+        ConstantOperator datetimeLargeintNumber = ConstantOperator.createLargeInt(new BigInteger("20230101000000"));
+        Assert.assertEquals(datetimeLargeintNumber, datetime.castTo(Type.LARGEINT));
+
+        ConstantOperator dateFloatNumber = ConstantOperator.createFloat(20230101);
+        Assert.assertEquals(dateFloatNumber, date.castTo(Type.FLOAT));
+
+        ConstantOperator datetimeFloatNumber = ConstantOperator.createFloat(20230101000000L);
+        Assert.assertEquals(datetimeFloatNumber, datetime.castTo(Type.FLOAT));
+
+        ConstantOperator dateDoubleNumber = ConstantOperator.createDouble(20230101);
+        Assert.assertEquals(dateDoubleNumber, date.castTo(Type.DOUBLE));
+
+        ConstantOperator datetimeDoubleNumber = ConstantOperator.createDouble(20230101000000L);
+        Assert.assertEquals(datetimeDoubleNumber, datetime.castTo(Type.DOUBLE));
+    }
+
+    @Test
     public void testDistance() {
         {
             // tinyint

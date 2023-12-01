@@ -17,6 +17,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +28,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMetaScanNode;
@@ -50,12 +52,14 @@ public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, String> columnIdToNames;
     private final OlapTable olapTable;
+    private List<Column> tableSchema = Lists.newArrayList();
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
                         Map<Integer, String> columnIdToNames) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
+        this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
     }
 
@@ -144,6 +148,12 @@ public class MetaScanNode extends ScanNode {
         }
         msg.meta_scan_node = new TMetaScanNode();
         msg.meta_scan_node.setId_to_names(columnIdToNames);
+        List<TColumn> columnsDesc = Lists.newArrayList();
+        for (Column column : tableSchema) {
+            TColumn tColumn = column.toThrift();
+            columnsDesc.add(tColumn);
+        }
+        msg.meta_scan_node.setColumns(columnsDesc);
     }
 
     @Override

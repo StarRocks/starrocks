@@ -47,7 +47,7 @@ AS select k1, v1, v2 from t1
 union all
 select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
-select sleep(2);
+select sleep(15);
 select * from mv1;
 -- name: test_materialized_view_auto_refresh_partitions_limit
 CREATE TABLE `t1` (
@@ -92,5 +92,5 @@ AS select k1, v1, v2 from t1
 union
 select k1, v1, v2 from t2;
 insert into t2 values (202301,1,1),(202305,1,2);
-select sleep(2);
+select sleep(15);
 select * from mv1;

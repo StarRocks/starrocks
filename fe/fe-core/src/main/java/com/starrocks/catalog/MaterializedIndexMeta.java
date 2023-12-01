@@ -44,6 +44,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
@@ -62,6 +63,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private List<Column> schema = Lists.newArrayList();
     @SerializedName(value = "sortKeyIdxes")
     public List<Integer> sortKeyIdxes = Lists.newArrayList();
+    @SerializedName(value = "sortKeyUniqueIds")
+    public List<Integer> sortKeyUniqueIds = Lists.newArrayList();
     @SerializedName(value = "schemaVersion")
     private int schemaVersion;
     @SerializedName(value = "schemaHash")
@@ -81,9 +84,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
 
+    private Expr whereClause;
+
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(schema.size() != 0);
@@ -97,6 +102,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.keysType = keysType;
         this.defineStmt = defineStmt;
         this.sortKeyIdxes = sortKeyIdxes;
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+                                 short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
+        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt,
+                sortKeyIdxes, null);        
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -133,6 +146,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return sortKeyIdxes;
     }
 
+    public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
+        this.sortKeyIdxes = sortKeyIdxes;
+    }
+
+    public List<Integer> getSortKeyUniqueIds() {
+        return sortKeyUniqueIds;
+    }
+
     public int getSchemaHash() {
         return schemaHash;
     }
@@ -158,6 +179,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
+    public void setDefineStmt(OriginStatement stmt) {
+        this.defineStmt = stmt;
+    }
+
+    public OriginStatement getDefineStmt() {
+        return this.defineStmt;
+    }
+
     public long getDbId() {
         return dbId;
     }
@@ -180,6 +209,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public void setColocateMVIndex(boolean colocateMVIndex) {
         isColocateMVIndex = colocateMVIndex;
+    }
+
+    public void setWhereClause(Expr whereClause) {
+        this.whereClause = whereClause;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
@@ -235,6 +272,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.keysType != this.keysType) {
             return false;
         }
+        if (indexMeta.whereClause != null && this.whereClause == null) {
+            return false;
+        } else if (indexMeta.whereClause == null && this.whereClause != null) {
+            return false;
+        } else if (indexMeta.whereClause != null && this.whereClause != null &&
+                !indexMeta.whereClause.equals(this.whereClause)) {
+            return false;
+        }
         return true;
     }
 
@@ -255,6 +300,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return;
         }
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
+        if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
+        }
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
 }

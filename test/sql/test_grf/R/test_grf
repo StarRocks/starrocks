@@ -1,0 +1,36 @@
+-- name: testGlobalRuntimeFilter
+CREATE TABLE left_tbl
+    (c1 int,
+    c2  int)
+    DISTRIBUTED BY HASH(c1) BUCKETS 3
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into left_tbl values
+(1, 1),
+(2, 2),
+(3, 3);
+-- result:
+-- !result
+CREATE TABLE right_tbl
+    (c1 int,
+    c2  int)
+    DISTRIBUTED BY HASH(c1) BUCKETS 3
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into right_tbl values
+(1, 1),
+(2, 2),
+(3, 3);
+-- result:
+-- !result
+set global_runtime_filter_probe_min_size = 0;
+-- result:
+-- !result
+select * from left_tbl join [shuffle]  right_tbl on left_tbl.c1 = right_tbl.c1 where right_tbl.c2 < 4;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+-- !result

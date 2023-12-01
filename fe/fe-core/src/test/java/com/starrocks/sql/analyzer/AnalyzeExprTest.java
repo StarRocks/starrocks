@@ -156,6 +156,7 @@ public class AnalyzeExprTest {
         analyzeFail("select transform(1)");
         analyzeFail("select array_map(x->x+ array_length(array_agg(x)),[2,6]) from tarray");
         analyzeFail("select array_map(x->x >  count(v1), v3) from tarray");
+        analyzeFail("select array_map(array_map(x2->x2+1,[1,2,3]),array_map(x1->x1+x2,[1,2,3]),(x,y)->(x+y))");
     }
 
     @Test

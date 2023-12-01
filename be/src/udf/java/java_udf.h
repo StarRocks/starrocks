@@ -102,7 +102,7 @@ public:
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
-    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
+    [[nodiscard]] Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
 
     // convert int handle to jobject
     // return a local ref
@@ -402,7 +402,7 @@ public:
     // get batch call stub
     StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
 
-    Status init();
+    [[nodiscard]] Status init();
 
 private:
     std::string _path;
@@ -432,11 +432,11 @@ class ClassAnalyzer {
 public:
     ClassAnalyzer() = default;
     ~ClassAnalyzer() = default;
-    Status has_method(jclass clazz, const std::string& method, bool* has);
-    Status get_signature(jclass clazz, const std::string& method, std::string* sign);
-    Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
+    [[nodiscard]] Status has_method(jclass clazz, const std::string& method, bool* has);
+    [[nodiscard]] Status get_signature(jclass clazz, const std::string& method, std::string* sign);
+    [[nodiscard]] Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
     StatusOr<jobject> get_method_object(jclass clazz, const std::string& method_name);
-    Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
+    [[nodiscard]] Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
 };
 
 struct JavaUDFContext {

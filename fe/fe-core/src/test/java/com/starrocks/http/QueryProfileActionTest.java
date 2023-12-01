@@ -44,7 +44,7 @@ public class QueryProfileActionTest {
                 "     - Sql Statement: select count(s_suppkey), count(s_name), count(s_address), count(s_city), " +
                 "count(s_nation), count(s_region), count(s_phone), count(lo_revenue), count(lo_shipmode), " +
                 "count(lo_quantity), count(lo_partkey), count(lo_discount) from lineorder join supplier on " +
-                "lo_suppkey=s_suppkey and lo_partkey<s_suppkey\n" +
+                "lo_suppkey=s_suppkey and lo_partkey<s_suppkey and lo_quantity>100\n" +
                 "     - Variables: parallel_fragment_exec_instance_num=1,max_parallel_scan_instance_num=-1," +
                 "pipeline_dop=0,enable_adaptive_sink_dop=true,enable_runtime_adaptive_dop=false," +
                 "runtime_profile_report_interval=10\n" +
@@ -67,7 +67,7 @@ public class QueryProfileActionTest {
                 "     - Sql Statement: select count(s_suppkey), count(s_name), count(s_address), count(s_city), " +
                 "count(s_nation), count(s_region), count(s_phone), count(lo_revenue), count(lo_shipmode), " +
                 "count(lo_quantity), count(lo_partkey), count(lo_discount) from lineorder join supplier on " +
-                "lo_suppkey=s_suppkey and lo_partkey&lt;s_suppkey\n" +
+                "lo_suppkey=s_suppkey and lo_partkey&lt;s_suppkey and lo_quantity&gt;100\n" +
                 "     - Variables: parallel_fragment_exec_instance_num=1,max_parallel_scan_instance_num=-1," +
                 "pipeline_dop=0,enable_adaptive_sink_dop=true,enable_runtime_adaptive_dop=false," +
                 "runtime_profile_report_interval=10\n" +

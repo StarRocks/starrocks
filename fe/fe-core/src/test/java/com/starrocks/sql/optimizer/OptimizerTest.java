@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
@@ -21,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -94,6 +94,8 @@ public class OptimizerTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     @AfterClass
@@ -142,7 +144,7 @@ public class OptimizerTest {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         QueryStatement query = (QueryStatement) stmt;
 
-        //1. Build Logical plan
+        // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
@@ -210,7 +212,7 @@ public class OptimizerTest {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         QueryStatement query = (QueryStatement) stmt;
 
-        //1. Build Logical plan
+        // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                 .transformWithSelectLimit(query.getQueryRelation());
@@ -255,7 +257,7 @@ public class OptimizerTest {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             QueryStatement query = (QueryStatement) stmt;
 
-            //1. Build Logical plan
+            // 1. Build Logical plan
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transformWithSelectLimit(query.getQueryRelation());
@@ -271,7 +273,7 @@ public class OptimizerTest {
             Pair<Table, Column> partitionTableAndColumn = mv.getBaseTableAndPartitionColumn();
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-            ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
+            ScalarOperator scalarOperator = materializationContext.getMvPartialPartitionPredicate();
             if (scalarOperator != null) {
                 Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
                 Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
@@ -283,9 +285,10 @@ public class OptimizerTest {
             OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
             Assert.assertNotNull(expr2);
-            MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
+            MaterializationContext materializationContext2 =
+                    optimizer2.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-            ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
+            ScalarOperator scalarOperator2 = materializationContext2.getMvPartialPartitionPredicate();
             if (scalarOperator2 != null) {
                 Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
             }
@@ -312,11 +315,12 @@ public class OptimizerTest {
             OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
             Assert.assertNotNull(expr3);
-            MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
+            MaterializationContext materializationContext3 =
+                    optimizer3.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
             List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
             Assert.assertEquals(1, scanExpr3.size());
-            ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
+            ScalarOperator scalarOperator3 = materializationContext3.getMvPartialPartitionPredicate();
             if (scalarOperator3 != null) {
                 Assert.assertNotNull(scalarOperator3);
                 Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);

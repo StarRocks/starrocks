@@ -20,6 +20,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -349,7 +350,14 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
-        } else if (type.isDecimalV2()) {
+        }
+
+        if (ConnectContext.get() != null &&
+                !ConnectContext.get().getSessionVariable().isCboDecimalCastStringStrict()) {
+            return String.valueOf(value);
+        }
+
+        if (type.isDecimalV2()) {
             // remove trailing zero and use plain string, keep same with BE
             return ((BigDecimal) value).stripTrailingZeros().toPlainString();
         } else if (type.isDecimalOfAnyVersion()) {
@@ -484,14 +492,37 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isSmallint()) {
             return ConstantOperator.createSmallInt(Short.parseShort(childString.trim()));
         } else if (desc.isInt()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            }
             return ConstantOperator.createInt(Integer.parseInt(childString.trim()));
         } else if (desc.isBigint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createBigint(Long.parseLong(childString.trim()));
         } else if (desc.isLargeint()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createLargeInt(new BigInteger(childString.trim()));
         } else if (desc.isFloat()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createFloat(Double.parseDouble(childString));
         } else if (desc.isDouble()) {
+            if (Type.DATE.equals(type)) {
+                childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
+            } else if (Type.DATETIME.equals(type)) {
+                childString = DateUtils.convertDateTimeFormaterToSecondFormater(childString);
+            }
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             String dateStr = StringUtils.strip(childString, "\r\n\t ");

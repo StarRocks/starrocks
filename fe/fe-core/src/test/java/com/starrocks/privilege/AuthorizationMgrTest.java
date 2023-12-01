@@ -172,7 +172,7 @@ public class AuthorizationMgrTest {
     @Test
     public void testTable() throws Exception {
         setCurrentUserAndRoles(ctx, testUser);
-        ctx.setQualifiedUser(testUser.getQualifiedUser());
+        ctx.setQualifiedUser(testUser.getUser());
 
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
@@ -337,7 +337,6 @@ public class AuthorizationMgrTest {
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
 
-        AuthenticationMgr authenticationMgr = masterGlobalStateMgr.getAuthenticationMgr();
         AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -361,7 +360,6 @@ public class AuthorizationMgrTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
-        ;
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
@@ -395,6 +393,43 @@ public class AuthorizationMgrTest {
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testWontSavePrivCollForBuiltInRole() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        authorizationMgr.saveV2(emptyImage.getDataOutputStream());
+
+        SRMetaBlockReader reader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        // read the whole first
+        reader.readJson(AuthorizationMgr.class);
+        // read the number of user
+        int numUser = reader.readJson(int.class);
+        // there should be only 2 users: root and test_user
+        Assert.assertEquals(2, numUser);
+
+        // read users and ignore them
+        for (int i = 0; i != numUser; ++i) {
+            // 2 json for each user(kv)
+            reader.readJson(UserIdentity.class);
+            reader.readJson(UserPrivilegeCollectionV2.class);
+        }
+
+        // read the number of roles
+        int numRole = reader.readJson(int.class);
+        for (int i = 0; i != numRole; ++i) {
+            // 2 json for each role(kv)
+            Long roleId = reader.readJson(Long.class);
+            RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+            if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                // built-in role's priv collection should not be saved
+                Assert.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+            }
+        }
     }
 
     @Test
@@ -1756,12 +1791,14 @@ public class AuthorizationMgrTest {
 
     @Test
     public void testUpgradePrivilege(@Mocked HiveMetastore hiveMetastore) throws Exception {
+        ConnectContext connectCtx = new ConnectContext();
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
                 "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
-        ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        connectCtx.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectCtx.setCurrentRoleIds(UserIdentity.ROOT);
         CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
         DDLStmtExecutor.execute(statement, connectCtx);
 
@@ -1777,7 +1814,7 @@ public class AuthorizationMgrTest {
             }
         };
 
-        MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
+        MetadataMgr metadataMgr = connectCtx.getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadataMgr) {
             {
                 metadataMgr.getDb("hive_catalog_1", "db");
@@ -1791,41 +1828,41 @@ public class AuthorizationMgrTest {
             }
         };
 
-        ctx.getGlobalStateMgr().changeCatalog(ctx, "hive_catalog_1");
+        connectCtx.getGlobalStateMgr().changeCatalog(connectCtx, "hive_catalog_1");
 
         MetaContext.get().setStarRocksMetaVersion(3);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv", ctx), ctx);
+                "create user test_upgrade_priv", connectCtx), connectCtx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create database on catalog hive_catalog_1 to test_upgrade_priv", ctx), ctx);
-        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
-        new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                "grant create database on catalog hive_catalog_1 to test_upgrade_priv", connectCtx), connectCtx);
+        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
+        new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(), connectCtx.getCurrentRoleIds(),
                 "hive_catalog_1", PrivilegeType.CREATE_DATABASE);
         Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                        "hive_catalog_1", PrivilegeType.USAGE));
+                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
+                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv_2", ctx), ctx);
+                "create user test_upgrade_priv_2", connectCtx), connectCtx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant create table on database db to test_upgrade_priv_2", ctx), ctx);
-        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
+                "grant create table on database db to test_upgrade_priv_2", connectCtx), connectCtx);
+        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
         Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                        "hive_catalog_1", PrivilegeType.USAGE));
+                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
+                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create user test_upgrade_priv_3", ctx), ctx);
+                "create user test_upgrade_priv_3", connectCtx), connectCtx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "grant select on table db.tbl to test_upgrade_priv_3", ctx), ctx);
-        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
+                "grant select on table db.tbl to test_upgrade_priv_3", connectCtx), connectCtx);
+        setCurrentUserAndRoles(connectCtx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
         Assert.assertThrows(AccessDeniedException.class, () ->
-                new NativeAccessController().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                        "hive_catalog_1", PrivilegeType.USAGE));
+                new NativeAccessController().checkCatalogAction(connectCtx.getCurrentUserIdentity(),
+                        connectCtx.getCurrentRoleIds(), "hive_catalog_1", PrivilegeType.USAGE));
 
 
-        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        GlobalStateMgr masterGlobalStateMgr = connectCtx.getGlobalStateMgr();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, image.getDataOutputStream());

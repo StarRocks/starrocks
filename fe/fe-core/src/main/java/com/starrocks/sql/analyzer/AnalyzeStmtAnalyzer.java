@@ -91,8 +91,9 @@ public class AnalyzeStmtAnalyzer {
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-
             List<String> columnNames = statement.getColumnNames();
+            // The actual column name, avoiding case sensitivity issues
+            List<String> realColumnNames = Lists.newArrayList();
             if (columnNames != null) {
                 for (String colName : columnNames) {
                     Column col = analyzeTable.getColumn(colName);
@@ -102,7 +103,9 @@ public class AnalyzeStmtAnalyzer {
                     if (!mentionedColumns.add(colName)) {
                         throw new SemanticException("Column '%s' specified twice", colName);
                     }
+                    realColumnNames.add(col.getName());
                 }
+                statement.setColumnNames(realColumnNames);
             }
 
             analyzeProperties(statement.getProperties());
@@ -113,11 +116,13 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
-                if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable()) {
+                if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable()) {
                     throw new SemanticException("Analyze external table only support hive and iceberg table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
+            } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                throw new SemanticException("Don't support analyze external table created by resource mapping");
             }
             return null;
         }
@@ -130,13 +135,33 @@ public class AnalyzeStmtAnalyzer {
                 if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
                         CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
                         CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
-                    throw new SemanticException("External Table don't support analyze job");
+                    if (tbl.getTbl() == null) {
+                        throw new SemanticException("External catalog don't support analyze all tables, please give a" +
+                                " specific table");
+                    }
+                    if (statement.isSample()) {
+                        throw new SemanticException("External table %s don't support SAMPLE analyze",
+                                statement.getTableName().toString());
+                    }
+                    String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
+                            session.getCurrentCatalog() : tbl.getCatalog();
+                    tbl.setCatalog(catalogName);
+                    statement.setCatalogName(catalogName);
+                    String dbName = Strings.isNullOrEmpty(tbl.getDb()) ?
+                            session.getDatabase() : tbl.getDb();
+                    tbl.setDb(dbName);
+                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+                    if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable()) {
+                        throw new SemanticException("Analyze external table only support hive and iceberg table",
+                                statement.getTableName().toString());
+                    }
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
                     Database db = MetaUtils.getDatabase(session, tbl);
 
-                    if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
+                    if (statement.isNative() &&
+                            StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
                     }
 
@@ -146,10 +171,16 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
+                    if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                        throw new SemanticException("Don't support analyze external table created by resource mapping");
+                    }
+
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
                     List<String> columnNames = statement.getColumnNames();
+                    // The actual column name, avoiding case sensitivity issues
+                    List<String> realColumnNames = Lists.newArrayList();
                     if (columnNames != null && !columnNames.isEmpty()) {
                         for (String colName : columnNames) {
                             Column col = analyzeTable.getColumn(colName);
@@ -160,11 +191,18 @@ public class AnalyzeStmtAnalyzer {
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
                             }
+                            realColumnNames.add(col.getName());
                         }
+                        statement.setColumnNames(realColumnNames);
                     }
 
                     statement.setDbId(db.getId());
                     statement.setTableId(analyzeTable.getId());
+                }
+            } else {
+                if (CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) {
+                    throw new SemanticException("External catalog %s don't support analyze all databases",
+                            session.getCurrentCatalog());
                 }
             }
             analyzeProperties(statement.getProperties());

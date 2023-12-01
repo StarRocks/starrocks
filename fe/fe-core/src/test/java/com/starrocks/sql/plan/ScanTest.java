@@ -100,9 +100,9 @@ public class ScanTest extends PlanTestBase {
 
         sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall");
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join");
     }
 
     @Test
@@ -325,12 +325,12 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testMergeTwoFilters() throws Exception {
-        String sql = "select v1 from t0 where v2 < null group by v1 HAVING NULL IS NULL;";
+        String sql = "select v1 from t0 where v2 < 3 group by v1 HAVING v1 IS NULL;";
         String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "  1:AGGREGATE (update finalize)\n"
-                + "  |  group by: 1: v1");
+        assertContains(planFragment, "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1");
 
-        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
+        Assert.assertTrue(planFragment.contains("1: v1 IS NULL, 2: v2 < 3"));
     }
 
     @Test
@@ -494,7 +494,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), expexted[i]);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), expexted[i]);
         }
 
         connectContext.getSessionVariable().setEnableCountStarOptimization(false);
@@ -502,7 +502,7 @@ public class ScanTest extends PlanTestBase {
             String sql = sqlString[i];
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), false);
+            Assert.assertEquals(scanNodeList.get(0).getScanOptimzeOption().getCanUseAnyColumn(), false);
         }
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
@@ -526,7 +526,7 @@ public class ScanTest extends PlanTestBase {
             boolean expexted = Boolean.valueOf(sqlString[i + 1]);
             ExecPlan plan = getExecPlan(sql);
             List<ScanNode> scanNodeList = plan.getScanNodes();
-            Assert.assertEquals(expexted, scanNodeList.get(0).getCanUseMinMaxCountOpt());
+            Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
 }

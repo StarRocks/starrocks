@@ -55,6 +55,9 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+    private PhysicalPropertySet outputProperty;
+
+    private Boolean isShortCircuit = false;
 
     public OptExpression(Operator op) {
         this.op = op;
@@ -64,6 +67,13 @@ public class OptExpression {
     public static OptExpression create(Operator op, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
+        return expr;
+    }
+
+    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = Lists.newArrayList(input);
+        expr.setShortCircuit(isShortCircuit);
         return expr;
     }
 
@@ -145,6 +155,14 @@ public class OptExpression {
         return this.requiredProperties;
     }
 
+    public void setOutputProperty(PhysicalPropertySet requiredProperties) {
+        this.outputProperty = requiredProperties;
+    }
+
+    public PhysicalPropertySet getOutputProperty() {
+        return this.outputProperty;
+    }
+
     // This function assume the child expr logical property has been derived
     public void deriveLogicalPropertyItself() {
         ExpressionContext context = new ExpressionContext(this);
@@ -186,6 +204,14 @@ public class OptExpression {
         this.cost = cost;
     }
 
+    public Boolean getShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(Boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
     @Override
     public String toString() {
         return op + " child size " + inputs.size();
@@ -203,7 +229,7 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        if (limitLine <= 0 || inputs.isEmpty()) {
+        if (limitLine <= 0) {
             return sb.toString();
         }
         sb.append('\n');

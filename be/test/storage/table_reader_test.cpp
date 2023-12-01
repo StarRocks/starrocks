@@ -163,6 +163,7 @@ public:
     }
 
     void SetUp() override {
+        StoragePageCache::create_global_cache(&_tracker, 1000000000);
         srand(GetCurrentTimeMicros());
         db_id = 1;
         table_name = "table_reader_test";
@@ -181,6 +182,7 @@ public:
             StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
             tablet.reset();
         }
+        StoragePageCache::release_global_cache();
     }
 
 protected:
@@ -192,6 +194,7 @@ protected:
     ObjectPool _object_pool;
     Schema _key_schema;
     Schema _value_schema;
+    MemTracker _tracker;
 };
 
 void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk& result) {

@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -130,7 +131,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
-        String partitionNamesQuery = "SELECT PARTITION_DESCRIPTION FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
+        String partitionNamesQuery =
+                "SELECT PARTITION_DESCRIPTION as NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
                 "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
@@ -139,7 +141,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
-                    String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
+                    String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
                     for (String partitionName : partitionNames) {
                         list.add(partitionName);
@@ -150,7 +152,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
@@ -174,24 +176,21 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
     }
 
     public List<Partition> getPartitions(Connection connection, Table table) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        String partitionsQuery = "SELECT PARTITION_DESCRIPTION, " +
-                "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
-                "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
-                "AND PARTITION_NAME IS NOT NULL";
-        try (PreparedStatement ps = connection.prepareStatement(partitionsQuery)) {
+        String query = getPartitionQuery(table);
+        try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
-                    String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
+                    String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
                     long createTime = rs.getDate("MODIFIED_TIME").getTime();
                     for (String partitionName : partitionNames) {
@@ -203,7 +202,19 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 return Lists.newArrayList();
             }
         } catch (SQLException | NullPointerException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage(), e);
         }
+    }
+
+    @NotNull
+    private static String getPartitionQuery(Table table) {
+        final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +
+                "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
+                "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+                "AND PARTITION_NAME IS NOT NULL";
+        final String nonPartitionQuery = "SELECT TABLE_NAME AS NAME, " +
+                "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
+                "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ";
+        return table.isUnPartitioned() ? nonPartitionQuery : partitionsQuery;
     }
 }

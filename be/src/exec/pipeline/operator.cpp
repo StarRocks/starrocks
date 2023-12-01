@@ -48,11 +48,14 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
     _unique_metrics = std::make_shared<RuntimeProfile>("UniqueMetrics");
     _runtime_profile->add_child(_unique_metrics.get(), true, nullptr);
-    if (_plan_node_id == s_pseudo_plan_node_id_for_final_sink) {
+    if (!is_subordinate && _plan_node_id == s_pseudo_plan_node_id_for_final_sink) {
         _common_metrics->add_info_string("IsFinalSink");
     }
     if (is_subordinate) {
         _common_metrics->add_info_string("IsSubordinate");
+    }
+    if (is_combinatorial_operator()) {
+        _common_metrics->add_info_string("IsCombinatorial");
     }
 }
 
@@ -75,6 +78,10 @@ Status Operator::prepare(RuntimeState* state) {
     if (state->query_ctx() && state->query_ctx()->spill_manager()) {
         _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
     }
+    for_each_child_operator([&](Operator* child) {
+        child->_common_metrics->add_info_string("IsSubordinate");
+        child->_common_metrics->add_info_string("IsChild");
+    });
     return Status::OK();
 }
 

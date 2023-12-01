@@ -25,4 +25,20 @@ public class SessionVariableConstants {
     public static final String FORCE_PREAGGREGATION = "force_preaggregation";
 
     public static final String LIMITED = "limited";
+
+    public static final String PANIC = "panic";
+
+    public static final String DOUBLE = "double";
+
+    public static final String DECIMAL = "decimal";
+
+    public static final String VARCHAR = "varchar";
+
+    public enum AggregationStage {
+        AUTO,
+        ONE_STAGE,
+        TWO_STAGE,
+        THREE_STAGE,
+        FOUR_STAGE
+    }
 }

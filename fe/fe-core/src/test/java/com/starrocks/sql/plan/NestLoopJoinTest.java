@@ -277,10 +277,10 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertPlanContains(sql, "NESTLOOP JOIN");
 
         assertPlanContains("select * from t0,t1 where 1 in (select 2 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
-                "NESTLOOP JOIN");
+                "0:EMPTYSET");
         assertPlanContains("select * from t0,t1 where 1 in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
-        assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+        assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 6 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains(
                 "select * from t0,t1 where abs(1) - 1 in (select 'abc' from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
@@ -348,31 +348,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "       join t0 c " +
                 "       join t0 d " +
                 ") e on a.v1 < e.v1";
-        assertPlanContains(sql, "  12:NESTLOOP JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 1: v1 < 10: v1\n" +
+        assertPlanContains(sql, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: \n" +
                 "  |  \n" +
-                "  |----11:Project\n" +
-                "  |    |  <slot 10> : 10: v1\n" +
-                "  |    |  \n" +
-                "  |    10:NESTLOOP JOIN\n" +
-                "  |    |  join op: CROSS JOIN\n" +
-                "  |    |  colocate: false, reason: \n" +
-                "  |    |  \n" +
-                "  |    |----9:EXCHANGE\n" +
-                "  |    |    \n" +
-                "  |    7:Project\n" +
-                "  |    |  <slot 19> : 1\n" +
-                "  |    |  \n" +
-                "  |    6:NESTLOOP JOIN\n" +
-                "  |    |  join op: CROSS JOIN\n" +
-                "  |    |  colocate: false, reason: \n" +
-                "  |    |  \n" +
-                "  |    |----5:EXCHANGE\n" +
-                "  |    |    \n" +
-                "  |    2:EMPTYSET\n" +
-                "  |    \n" +
-                "  1:EXCHANGE");
+                "  0:EMPTYSET");
     }
 }

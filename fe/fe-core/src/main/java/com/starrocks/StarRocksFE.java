@@ -117,6 +117,8 @@ public class StarRocksFE {
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
+            // Need to put if before `GlobalStateMgr.getCurrentState().waitForReady()`, because it may access aws service
+            setAWSHttpClient();
 
             // check command line options
             checkCommandLineOptions(cmdLineOpts);
@@ -179,17 +181,6 @@ public class StarRocksFE {
             ThreadPoolManager.registerAllThreadPoolMetric();
 
             addShutdownHook();
-
-            // To resolve: "Multiple HTTP implementations were found on the classpath. To avoid non-deterministic
-            // loading implementations, please explicitly provide an HTTP client via the client builders, set
-            // the software.amazon.awssdk.http.service.impl system property with the FQCN of the HTTP service to
-            // use as the default, or remove all but one HTTP implementation from the classpath"
-            // Currently, there are 2 implements of HTTP client: ApacheHttpClient and UrlConnectionHttpClient
-            // The UrlConnectionHttpClient is introduced by #16602, and it causes the exception.
-            // So we set the default HTTP client to UrlConnectionHttpClient.
-            // TODO: remove this after we remove ApacheHttpClient
-            System.setProperty("software.amazon.awssdk.http.service.impl",
-                    "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
 
             LOG.info("FE started successfully");
 
@@ -327,6 +318,19 @@ public class StarRocksFE {
 
         // helper node is null, means no helper node is specified
         return new CommandLineOptions(false, null);
+    }
+
+    // To resolve: "Multiple HTTP implementations were found on the classpath. To avoid non-deterministic
+    // loading implementations, please explicitly provide an HTTP client via the client builders, set
+    // the software.amazon.awssdk.http.service.impl system property with the FQCN of the HTTP service to
+    // use as the default, or remove all but one HTTP implementation from the classpath"
+    // Currently, there are 2 implements of HTTP client: ApacheHttpClient and UrlConnectionHttpClient
+    // The UrlConnectionHttpClient is introduced by #16602, and it causes the exception.
+    // So we set the default HTTP client to UrlConnectionHttpClient.
+    // TODO: remove this after we remove ApacheHttpClient
+    private static void setAWSHttpClient() {
+        System.setProperty("software.amazon.awssdk.http.service.impl",
+                "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
     }
 
     private static void checkCommandLineOptions(CommandLineOptions cmdLineOpts) {

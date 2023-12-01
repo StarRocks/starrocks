@@ -38,38 +38,16 @@ namespace starrocks {
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _tnode(tnode),
-          _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {
-    TAnalyticWindow window = tnode.analytic_node.window;
-
-    if (!tnode.analytic_node.__isset.window) {
-        _get_next = &AnalyticNode::_get_next_for_unbounded_frame;
-    } else if (window.type == TAnalyticWindowType::RANGE) {
-        // RANGE windows must have UNBOUNDED PRECEDING
-        // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
-        if (!window.__isset.window_end) {
-            _get_next = &AnalyticNode::_get_next_for_unbounded_frame;
-        } else {
-            _get_next = &AnalyticNode::_get_next_for_unbounded_preceding_range_frame;
-        }
-    } else {
-        if (!window.__isset.window_start && !window.__isset.window_end) {
-            _get_next = &AnalyticNode::_get_next_for_unbounded_frame;
-        } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
-            _get_next = &AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_row;
-        } else {
-            _get_next = &AnalyticNode::_get_next_for_sliding_frame;
-        }
-    }
-}
+          _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
 
 Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     _use_hash_based_partition = _tnode.analytic_node.order_by_exprs.empty() &&
                                 _tnode.analytic_node.__isset.use_hash_based_partition &&
                                 _tnode.analytic_node.use_hash_based_partition;
-    if (_use_hash_based_partition) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_hash_partition_exprs, state));
+
+    if (!tnode.analytic_node.partition_exprs.empty()) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_partition_exprs, state));
     }
     DCHECK(_conjunct_ctxs.empty());
 
@@ -97,25 +75,7 @@ Status AnalyticNode::open(RuntimeState* state) {
 }
 
 Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-
-    if (_analytor->reached_limit() || (_analytor->input_eos() && !_analytor->has_output())) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    _analytor->remove_unused_buffer_values(state);
-
-    RETURN_IF_ERROR((this->*_get_next)(state, chunk, eos));
-    if (*eos) {
-        return Status::OK();
-    }
-
-    DCHECK(!(*chunk)->has_const_column());
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
+    return Status::InternalError("should not call get_next() in AnalyticNode");
 }
 
 void AnalyticNode::close(RuntimeState* state) {
@@ -131,202 +91,12 @@ void AnalyticNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->has_output()) {
-        RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
-            return Status::OK();
-        }
-        DCHECK(_analytor->has_output());
-
-        bool is_new_partition = _analytor->is_new_partition();
-        if (is_new_partition) {
-            _analytor->reset_state_for_cur_partition();
-        }
-
-        size_t chunk_size = _analytor->current_chunk_size();
-        _analytor->create_agg_result_columns(chunk_size);
-
-        if (is_new_partition) {
-            _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
-                                           _analytor->partition_start(), _analytor->partition_end());
-        }
-
-        int64_t chunk_first_row_position = _analytor->first_total_position_of_current_chunk();
-        int64_t frame_start =
-                _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
-        int64_t frame_end =
-                std::min<int64_t>(_analytor->current_row_position() + chunk_size, _analytor->partition_end());
-        _analytor->set_window_result_position(
-                std::min<int64_t>((_analytor->get_total_position(frame_end) - chunk_first_row_position), chunk_size));
-
-        _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
-        _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
-
-        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            return _analytor->output_result_chunk(chunk);
-        }
-    }
-    return Status::OK();
-}
-
-Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->has_output()) {
-        RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
-            return Status::OK();
-        }
-
-        bool is_new_partition = _analytor->is_new_partition();
-        if (is_new_partition) {
-            _analytor->reset_state_for_cur_partition();
-        }
-
-        const size_t chunk_size = _analytor->current_chunk_size();
-        _analytor->create_agg_result_columns(chunk_size);
-
-        while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
-                // The condition `partition_start <= current_row_position < partition_end` is satisfied
-                // so `partition_end` must point at the genuine partition boundary, and found_partition_end must equals
-                // to partition_end if current partition haven't finished processing
-                DCHECK_EQ(_analytor->partition_end(), _analytor->found_partition_end().second);
-                // So the found_partition_end also points at genuine partition boundary, then we pass true to the following function
-                _analytor->find_peer_group_end();
-                DCHECK_GE(_analytor->peer_group_end(), _analytor->peer_group_start());
-                _analytor->update_window_batch(_analytor->peer_group_start(), _analytor->peer_group_end(),
-                                               _analytor->peer_group_start(), _analytor->peer_group_end());
-            }
-
-            int64_t chunk_first_row_position = _analytor->first_total_position_of_current_chunk();
-            int64_t frame_start =
-                    _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
-            _analytor->set_window_result_position(std::min<int64_t>(
-                    (_analytor->get_total_position(_analytor->peer_group_end()) - chunk_first_row_position),
-                    chunk_size));
-
-            DCHECK_GE(frame_start, 0);
-            DCHECK_GT(_analytor->window_result_position(), frame_start);
-
-            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
-            _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
-        }
-
-        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            return _analytor->output_result_chunk(chunk);
-        }
-    }
-    return Status::OK();
-}
-
-Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->has_output()) {
-        RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
-            return Status::OK();
-        }
-
-        bool is_new_partition = _analytor->is_new_partition();
-        if (is_new_partition) {
-            _analytor->reset_state_for_cur_partition();
-        }
-
-        const size_t chunk_size = _analytor->current_chunk_size();
-        _analytor->create_agg_result_columns(chunk_size);
-
-        while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            _analytor->reset_window_state();
-            FrameRange range = _analytor->get_sliding_frame_range();
-            _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,
-                                           range.end);
-            _analytor->update_window_result_position(1);
-            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                                  _analytor->first_total_position_of_current_chunk();
-            DCHECK_GE(frame_start, 0);
-            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
-            _analytor->update_current_row_position(1);
-        }
-
-        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
-            return _analytor->output_result_chunk(chunk);
-        }
-    }
-    return Status::OK();
-}
-
-Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_row(RuntimeState* state,
-                                                                                    ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_ERROR(_fetch_next_chunk(state));
-    if (_analytor->input_eos()) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    // reset state for the first partition
-    if (_analytor->current_row_position() == 0) {
-        _analytor->reset_window_state();
-    }
-
-    const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
-    _analytor->create_agg_result_columns(chunk_size);
-
-    do {
-        _analytor->find_partition_end();
-
-        while (_analytor->current_row_position() < _analytor->found_partition_end().second) {
-            _analytor->update_window_batch(_analytor->partition_start(), _analytor->found_partition_end().second,
-                                           _analytor->current_row_position(), _analytor->current_row_position() + 1);
-
-            _analytor->update_window_result_position(1);
-            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                                  _analytor->first_total_position_of_current_chunk();
-
-            DCHECK_GE(frame_start, 0);
-            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
-            _analytor->update_current_row_position(1);
-        }
-
-        if (_analytor->found_partition_end().first) {
-            _analytor->reset_state_for_next_partition();
-        }
-    } while (!_analytor->is_current_chunk_finished_eval(chunk_size));
-
-    return _analytor->output_result_chunk(chunk);
-}
-
-Status AnalyticNode::_try_fetch_next_partition_data(RuntimeState* state) {
-    _analytor->find_partition_end();
-    while (!_analytor->found_partition_end().first) {
-        RETURN_IF_ERROR(state->check_mem_limit("analytic node fetch next partition data"));
-        RETURN_IF_ERROR(_fetch_next_chunk(state));
-        _analytor->find_partition_end();
-    }
-    return Status::OK();
-}
-
-Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
-    ChunkPtr child_chunk;
-    RETURN_IF_CANCELLED(state);
-    do {
-        RETURN_IF_ERROR(_children[0]->get_next(state, &child_chunk, &_analytor->input_eos()));
-    } while (!_analytor->input_eos() && child_chunk->is_empty());
-    if (_analytor->input_eos()) {
-        return Status::OK();
-    }
-
-    return _analytor->add_chunk(child_chunk);
-}
-
 pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto* upstream_source_op = context->source_operator(ops_with_sink);
+    bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
 
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
@@ -338,7 +108,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
 
         // prepend local shuffle to PartitionSortSinkOperator
         ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops_with_sink,
-                                                                          _hash_partition_exprs);
+                                                                          _partition_exprs);
         upstream_source_op = context->source_operator(ops_with_sink);
 
         ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(context->next_operator_id(), id(),
@@ -350,6 +120,10 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
                 context->next_operator_id(), id(), hash_partition_ctx_factory);
         context->inherit_upstream_source_properties(hash_partition_source_op.get(), upstream_source_op);
         ops_with_sink.push_back(std::move(hash_partition_source_op));
+    } else if (is_skewed) {
+        // The former sort will use passthrough exchange, so we need to add ordered partition local exchange here.
+        ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
+                                                                                    ops_with_sink, _partition_exprs);
     }
 
     upstream_source_op = context->source_operator(ops_with_sink);
@@ -367,6 +141,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     OpFactories ops_with_source;
     auto source_op =
             std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
+    source_op->set_skewed(is_skewed);
     this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));

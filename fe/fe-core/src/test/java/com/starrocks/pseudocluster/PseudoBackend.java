@@ -66,6 +66,7 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -615,7 +616,18 @@ public class PseudoBackend {
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
+    private String alterTaskError = null;
+
+    public void injectAlterTaskError(String errMsg) {
+        alterTaskError = errMsg;
+    }
+
     private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
+        if (alterTaskError != null) {
+            String err = alterTaskError;
+            alterTaskError = null;
+            throw new Exception(err);
+        }
         TAlterTabletReqV2 task = request.alter_tablet_req_v2;
         if (task.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             finishTaskRequest.finish_tablet_infos = Lists.newArrayList(
@@ -1083,6 +1095,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 
