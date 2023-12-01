@@ -63,11 +63,12 @@ public class JvmProcDir implements ProcNodeInterface {
         result.addRow(genRow("classes total loaded", jvmStats.getClasses().getTotalLoadedClassCount()));
         result.addRow(genRow("classes unloaded", jvmStats.getClasses().getUnloadedClassCount()));
 
-        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted().getBytes()));
-        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed().getBytes()));
-        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted().getBytes()));
-        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed().getBytes()));
+        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted()));
+        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed()));
+        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted()));
+        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed()));
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/proc/JvmProcDir.java
         Iterator<MemoryPool> memIter = jvmStats.getMem().iterator();
         while (memIter.hasNext()) {
             MemoryPool memPool = memIter.next();
@@ -75,12 +76,20 @@ public class JvmProcDir implements ProcNodeInterface {
             result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax().getBytes()));
             result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed().getBytes()));
             result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax().getBytes()));
+=======
+        for (MemoryPool memPool : jvmStats.getMem()) {
+            result.addRow(genRow("mem pool " + memPool.getName() + " committed", memPool.getCommitted()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " used", memPool.getUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax()));
+>>>>>>> 69c3e3964a ([BugFix] Fix bug metric not using bytes unit (#36221)):fe/fe-core/src/main/java/com/starrocks/common/proc/JvmMonitorProcDir.java
         }
 
         for (BufferPool bp : jvmStats.getBufferPools()) {
             result.addRow(genRow("buffer pool " + bp.getName() + " count", bp.getCount()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed().getBytes()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity().getBytes()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity()));
         }
 
         Iterator<GarbageCollector> gcIter = jvmStats.getGc().iterator();

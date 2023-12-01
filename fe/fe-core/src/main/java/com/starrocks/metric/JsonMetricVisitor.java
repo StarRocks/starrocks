@@ -86,16 +86,16 @@ public class JsonMetricVisitor extends MetricVisitor {
             JvmStats.MemoryPool memPool = memIter.next();
             if (memPool.getName().equalsIgnoreCase(GcNames.PERM)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
                 labels.clear();
                 labels.add(new MetricLabel("type", GcNames.PERM));
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent), labels);
             } else if (memPool.getName().equalsIgnoreCase(GcNames.OLD)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
                 labels.clear();
                 labels.add(new MetricLabel("type", GcNames.OLD));
