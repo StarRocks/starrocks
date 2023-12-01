@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -55,6 +56,10 @@ public class MVActiveChecker extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         // reset if the interval has been changed
         setInterval(Config.mv_active_checker_interval_seconds * 1000L);
+
+        if (!Config.enable_mv_automatic_active_check || FeConstants.runningUnitTest) {
+            return;
+        }
 
         try {
             process();
@@ -112,6 +117,7 @@ public class MVActiveChecker extends FrontendDaemon {
         boolean activeOk = false;
         String mvFullName = new TableName(dbName.get(), mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
+        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}", mvFullName, reason);
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setStatisticsContext(false);
