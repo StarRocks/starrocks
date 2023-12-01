@@ -25,6 +25,7 @@
 #include "exec/spill/spiller.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -87,7 +88,7 @@ public:
     bool add_last_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
         _is_working = true;
-        set_finishing();
+        auto defer = DeferOp([this]() { set_finishing(); });
         return _spill_tasks.put(std::move(task));
     }
 
