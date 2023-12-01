@@ -26,6 +26,7 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "rocksdb/write_batch.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
@@ -881,6 +882,7 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
 }
 
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -1425,6 +1427,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
 }
 
 Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     auto info = (*pinfo).get();
@@ -1613,6 +1616,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
