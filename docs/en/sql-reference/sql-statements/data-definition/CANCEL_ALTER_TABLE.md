@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 Cancels the execution of the following ongoing ALTER TABLE tasks on a given table:
 
-- Modify columns
-- Optimize table structure (since v3.2), including modifying bucketing method and the number of buckets.
-- Create and delete ROLLUP indexes
+- Modify columns.
+- Optimize table structure (from v3.2), including modifying bucketing method and the number of buckets.
+- Create and delete ROLLUP indexes.
 
 > **NOTICE**
 >
