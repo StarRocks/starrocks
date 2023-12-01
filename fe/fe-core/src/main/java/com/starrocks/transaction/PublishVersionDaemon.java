@@ -48,7 +48,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.Utils;
@@ -74,7 +73,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends FrontendDaemon {
@@ -83,7 +83,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private static final long RETRY_INTERVAL_MS = 1000;
 
-    private ThreadPoolExecutor lakeTaskExecutor;
+    private Executor lakeTaskExecutor;
     private Set<Long> publishingLakeTransactions;
 
     private Set<Long> publishingLakeTransactionsBatchTableId;
@@ -156,21 +156,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
+    private @NotNull Executor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
-            // Create a new thread for every task if there is no idle threads available.
-            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
-            lakeTaskExecutor = ThreadPoolManager.newDaemonCacheThreadPool(Config.lake_publish_version_max_threads,
-                    "lake-publish-task", true);
-
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                int newMaxThreads = Config.lake_publish_version_max_threads;
-                if (lakeTaskExecutor != null && newMaxThreads > 0
-                        && lakeTaskExecutor.getMaximumPoolSize() != newMaxThreads) {
-                    lakeTaskExecutor.setMaximumPoolSize(Config.lake_publish_version_max_threads);
-                }
-            });
+            lakeTaskExecutor = Executors.newCachedThreadPool();
         }
         return lakeTaskExecutor;
     }
