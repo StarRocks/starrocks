@@ -684,8 +684,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### allow_system_reserved_names
 
-- **默认值**: FALSE
-- 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 含义：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 默认值: FALSE
+
+##### enable_backup_materialized_view
+
+- 含义：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+##### enable_colocate_mv_index
+
+- 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
 
 ### 配置 FE 静态参数
 
