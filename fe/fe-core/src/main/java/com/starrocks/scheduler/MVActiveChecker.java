@@ -117,6 +117,7 @@ public class MVActiveChecker extends FrontendDaemon {
         boolean activeOk = false;
         String mvFullName = new TableName(dbName.get(), mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
+        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}", mvFullName, reason);
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setStatisticsContext(false);
