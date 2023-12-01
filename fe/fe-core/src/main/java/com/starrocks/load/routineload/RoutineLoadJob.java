@@ -1737,6 +1737,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                timestampProgress = new KafkaProgress();
                 progress.readFields(in);
                 break;
             }
