@@ -50,7 +50,7 @@ public class HDFSBackendSelectorTest {
     private ConnectContext context;
     final int scanNodeId = 0;
     final int computeNodePort = 9030;
-    final String hostFormat = "Host%02d";
+    final String hostFormat = "192.168.1.%02d";
 
     private List<TScanRangeLocations> createScanRanges(long number, long size) {
         List<TScanRangeLocations> ans = new ArrayList<>();
@@ -128,7 +128,7 @@ public class HDFSBackendSelectorTest {
             }
         };
 
-        int scanRangeNumber = 100;
+        int scanRangeNumber = 10000;
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
@@ -144,12 +144,95 @@ public class HDFSBackendSelectorTest {
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
+<<<<<<< HEAD
         int variance = 5 * scanRangeSize;
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
         for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+=======
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+>>>>>>> de3faf1952 ([Enhancement]enlarge default virtual node number be more friendly to cache (#36101))
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
-            Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
+            Assert.assertTrue(entry.getValue() - avg < variance);
         }
+<<<<<<< HEAD
+=======
+
+        // test empty compute nodes
+        workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                true
+        );
+        selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+        try {
+            selector.computeScanRangeAssignment();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testHdfsScanNodeScanRangeReBalance() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        long scanRangeNumber = 10000;
+        long scanRangeSize = 10000;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+        selector.computeScanRangeAssignment();
+
+        long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
+        double variance = 0.2 * avg;
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
+            System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
+            Assert.assertTrue((entry.getValue() - avg) < variance);
+        }
+
+        variance = 0.4 / 100 * scanRangeNumber * scanRangeSize;
+        double actual = 0;
+        for (Map.Entry<ComputeNode, Long> entry : selector.reBalanceBytesPerComputeNode.entrySet()) {
+            System.out.printf("%s -> %d bytes re-balance\n", entry.getKey(), entry.getValue());
+            actual = actual + entry.getValue();
+        }
+        Assert.assertTrue(actual < variance);
+>>>>>>> de3faf1952 ([Enhancement]enlarge default virtual node number be more friendly to cache (#36101))
     }
 
     @Test
