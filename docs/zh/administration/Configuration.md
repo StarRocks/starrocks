@@ -1956,36 +1956,36 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 Store 用以 Flush MemTable 的线程数。
 - 默认值：2
 
-#### block_cache_enable
+#### datacache_enable
 
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### datacache_disk_path  
 
-- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
+- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### datacache_meta_path  
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
 
-#### block_cache_block_size
+#### datacache_block_size
 
 - 含义：单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。
 - 默认值：1048576
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- 含义：内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。
-- 单位：字节
-- 默认值：2147483648
+- 含义：内存缓存数据量的上限，可设为比例上限（如 "10%"）或物理上限（如 "10G", "21474836480"等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 单位：N/A
+- 默认值：10%
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
-- 含义：单个磁盘缓存数据量的上限。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 单位：字节
+- 含义：单个磁盘缓存数据量的上限，可设为比例上限（如 "80%"）或物理上限（如 "2T, "500G"等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 单位：N/A
 - 默认值：0
 
 #### jdbc_connection_pool_size
