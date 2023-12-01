@@ -63,8 +63,10 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
     }
-    DCHECK(is_default_dict_encoding(_reader->column_type()));
-    switch (_reader->column_type())
+    LogicalType column_type = delegate_type(_reader->column_type());
+    DCHECK(is_default_dict_encoding(_reader->column_type())) << strings::Substitute(
+            "dict encoding with unsupported $0 field type", column_type);
+    switch (column_type)
     {
     case TYPE_CHAR:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_CHAR>;
@@ -103,12 +105,13 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;  
         break;
     default:
-        return Status::NotSupported("dict encoding with unsupported field type");
+        return Status::NotSupported(strings::Substitute(
+                "dict encoding with unsupported $0 field type", column_type));
     }
 
     // TODO: The following logic is primarily used for optimizing queries for VARCHAR/CHAR types during
     // dictionary encoding. Can we also optimize queries for non-TYPE_VARCHAR types?
-    if (_reader->column_type() != TYPE_VARCHAR && _reader->column_type() != TYPE_CHAR) {
+    if (column_type != TYPE_VARCHAR && column_type != TYPE_CHAR) {
         return Status::OK();
     }
     if (opts.check_dict_encoding) {
@@ -116,7 +119,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
             _all_dict_encoded = _reader->all_dict_encoded();
             // if _all_dict_encoded is true, load dictionary page into memory for `dict_lookup`.
             RETURN_IF(!_all_dict_encoded, Status::OK());
-            if (_reader->column_type() == TYPE_VARCHAR) {
+            if (column_type == TYPE_VARCHAR) {
                 RETURN_IF_ERROR(_load_dict_page<TYPE_VARCHAR>());
             } else {
                 RETURN_IF_ERROR(_load_dict_page<TYPE_CHAR>());
@@ -131,13 +134,13 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         }
     }
 
-    if (_all_dict_encoded && _reader->column_type() == TYPE_CHAR) {
+    if (_all_dict_encoded && column_type == TYPE_CHAR) {
         _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<TYPE_CHAR>;
         _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<TYPE_CHAR>;
         _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_CHAR>;
         _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<TYPE_CHAR>;
         _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<TYPE_CHAR>;
-    } else if (_all_dict_encoded && _reader->column_type() == TYPE_VARCHAR) {
+    } else if (_all_dict_encoded && column_type == TYPE_VARCHAR) {
         _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<TYPE_VARCHAR>;
         _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<TYPE_VARCHAR>;
         _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<TYPE_VARCHAR>;
