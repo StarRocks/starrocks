@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
-Release date: December 1, 2023
-
 ## 2.5.16
+
+Release date: December 1, 2023
 
 ### Bugfixes
 
