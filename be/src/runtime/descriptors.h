@@ -302,13 +302,11 @@ public:
     const std::string& get_database_name() const;
     const std::string& get_table_name() const;
     const std::string& get_paimon_options() const;
-    const std::string& get_paimon_native_table() const;
 
 private:
     std::string _database_name;
     std::string _table_name;
     std::string _paimon_options;
-    std::string _paimon_native_table;
 };
 
 // ===========================================
