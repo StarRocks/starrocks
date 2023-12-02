@@ -121,6 +121,6 @@ We welcome all kinds of contributions from the community, individuals and partne
 This project is used by the following companies. Learn more about their use cases:
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
+- [Tencent](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
-- [Zepp Health](https://starrocks.io/blog/zeppheath) 
-- [Lenovo](https://starrocks.io/blog/lenovo_en) 
+- [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
