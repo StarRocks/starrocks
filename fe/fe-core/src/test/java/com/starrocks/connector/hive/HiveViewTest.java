@@ -81,10 +81,10 @@ public class HiveViewTest extends PlanTestBase {
                  "    t1b,t1a\n" +
                  "from\n" +
                  "    test_all_type\n" +
-                 "    lateral view explode(split(t1a,',')) t1a");
+                 "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
-        hiveView.getQueryStatementWithSRParser();
+        hiveView.getQueryStatement();
     }
 
     @Test

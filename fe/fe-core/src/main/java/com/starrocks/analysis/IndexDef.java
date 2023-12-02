@@ -40,53 +40,69 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.StarRocksParser.IndexTypeContext;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.TreeSet;
 
 public class IndexDef implements ParseNode {
+
+    private static final int MAX_INDEX_NAME_LENGTH = 64;
+
     private String indexName;
     private List<String> columns;
     private IndexType indexType;
     private String comment;
+    private Map<String, String> properties;
 
     private final NodePosition pos;
 
-    public IndexDef (String indexName, List<String> columns, IndexType indexType, String comment) {
-        this(indexName, columns, indexType, comment, NodePosition.ZERO);
+    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment) {
+        this(indexName, columns, indexType, comment, Collections.emptyMap(), NodePosition.ZERO);
     }
 
-    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment, NodePosition pos) {
+    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment, Map<String, String> properties) {
+        this(indexName, columns, indexType, comment, properties, NodePosition.ZERO);
+    }
+
+    public IndexDef(String indexName, List<String> columns, IndexType indexType, String comment, Map<String, String> properties,
+            NodePosition pos) {
         this.pos = pos;
         this.indexName = indexName;
         this.columns = columns;
-        if (indexType == null) {
-            this.indexType = IndexType.BITMAP;
-        } else {
-            this.indexType = indexType;
-        }
-        if (columns == null) {
-            this.comment = "";
-        } else {
-            this.comment = comment;
-        }
+        this.indexType = Optional.ofNullable(indexType).orElse(IndexType.BITMAP);
+        this.comment = Optional.ofNullable(comment).orElse(StringUtils.EMPTY);
+        this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
     }
 
     public void analyze() {
+        if (columns == null) {
+            throw new SemanticException("Index can not accept null column.");
+        }
+        if (Strings.isNullOrEmpty(indexName)) {
+            throw new SemanticException("index name cannot be blank.");
+        }
+        if (indexName.length() > MAX_INDEX_NAME_LENGTH) {
+            throw new SemanticException("index name too long, the index name length at most is 64.");
+        }
+        TreeSet<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        distinct.addAll(columns);
+        if (columns.size() != distinct.size()) {
+            throw new SemanticException("columns of index has duplicated.");
+        }
+
         if (indexType == IndexDef.IndexType.BITMAP) {
-            if (columns == null || columns.size() != 1) {
+            if (columns.size() != 1) {
                 throw new SemanticException("bitmap index can only apply to a single column.");
             }
-            if (Strings.isNullOrEmpty(indexName)) {
-                throw new SemanticException("index name cannot be blank.");
-            }
-            if (indexName.length() > 64) {
-                throw new SemanticException("index name too long, the index name length at most is 64.");
-            }
-            TreeSet<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-            distinct.addAll(columns);
-            if (columns.size() != distinct.size()) {
-                throw new SemanticException("columns of index has duplicated.");
+        } else if (indexType == IndexDef.IndexType.GIN) {
+            if (columns.size() != 1) {
+                throw new SemanticException("INVERTED index can only apply to a single column for now.");
             }
         }
     }
@@ -119,7 +135,20 @@ public class IndexDef implements ParseNode {
         }
         sb.append(")");
         if (indexType != null) {
-            sb.append(" USING ").append(indexType.toString());
+            sb.append(" USING ").append(indexType);
+        }
+        if (properties != null && properties.size() > 0) {
+            sb.append(" (");
+            first = true;
+            for (Map.Entry<String, String> e : properties.entrySet()) {
+                if (first) {
+                    first = false;
+                } else {
+                    sb.append(", ");
+                }
+                sb.append("\"").append(e.getKey()).append("\"=").append("\"").append(e.getValue()).append("\"");
+            }
+            sb.append(")");
         }
         if (comment != null) {
             sb.append(" COMMENT '" + comment + "'");
@@ -148,6 +177,10 @@ public class IndexDef implements ParseNode {
         return comment;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
     @Deprecated
     public void checkColumn(Column column, KeysType keysType) {
@@ -164,6 +197,8 @@ public class IndexDef implements ParseNode {
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
             }
+        } else if (indexType == IndexType.GIN) {
+            InvertedIndexUtil.checkInvertedIndexValid(column, properties, keysType);
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }
@@ -171,5 +206,30 @@ public class IndexDef implements ParseNode {
 
     public enum IndexType {
         BITMAP,
+        GIN("GIN");
+
+        IndexType(String name) {
+            this.displayName = name;
+        }
+        IndexType() {
+            this.displayName = toString();
+        }
+        private String displayName;
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public static IndexDef.IndexType getIndexType(IndexTypeContext indexTypeContext) {
+            IndexDef.IndexType index;
+            if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+                index = IndexDef.IndexType.BITMAP;
+            } else if (indexTypeContext.GIN() != null) {
+                index = IndexDef.IndexType.GIN;
+            } else {
+                throw new ParsingException("Not specify index type");
+            }
+            return index;
+        }
     }
 }

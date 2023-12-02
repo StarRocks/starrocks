@@ -576,6 +576,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
     jni_scanner_params["nested_fields"] = nested_fields;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+    jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -761,7 +762,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
         // After catching the AWS 404 file not found error and returning it to the FE,
         // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().starts_with("code=404")) {
+        if (st.is_io_error() && st.message().to_string().find("404") != std::string::npos) {
             st = Status::RemoteFileNotFound(st.message());
         }
         return st.clone_and_append(msg);
