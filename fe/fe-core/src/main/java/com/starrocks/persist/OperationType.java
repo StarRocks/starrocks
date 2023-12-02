@@ -227,8 +227,6 @@ public class OperationType {
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
 
-    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 108;
-
     // routine load 110~120
     @Deprecated
     public static final short OP_ROUTINE_LOAD_JOB = 110;
@@ -521,6 +519,9 @@ public class OperationType {
 
     // Replication job
     public static final short OP_REPLICATION_JOB = 13500;
+
+    // Batch publish
+    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 13600;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
