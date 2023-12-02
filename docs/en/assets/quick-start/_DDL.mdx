@@ -1,0 +1,63 @@
+
+### Create a database
+
+Type these two lines in at the `StarRocks > ` prompt and press enter after each:
+
+```sql
+CREATE DATABASE IF NOT EXISTS quickstart;
+
+USE quickstart;
+```
+
+### Create two tables
+
+#### Crashdata
+
+The crash dataset contains many more fields than these, the schema has been trimmed
+down to include only the fields that might be useful to answer questions about the
+impact weather has on driving conditions.
+
+```sql
+CREATE TABLE IF NOT EXISTS crashdata (
+    CRASH_DATE DATETIME,
+    BOROUGH STRING,
+    ZIP_CODE STRING,
+    LATITUDE INT,
+    LONGITUDE INT,
+    LOCATION STRING,
+    ON_STREET_NAME STRING,
+    CROSS_STREET_NAME STRING,
+    OFF_STREET_NAME STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_1 STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_2 STRING,
+    COLLISION_ID INT,
+    VEHICLE_TYPE_CODE_1 STRING,
+    VEHICLE_TYPE_CODE_2 STRING
+);
+```
+
+#### Weatherdata
+
+Similar to the crash data, the weather dataset has many more columns (a total of
+125 columns) and only the ones that are expected to answer the questions are
+included in the database.
+
+```sql
+CREATE TABLE IF NOT EXISTS weatherdata (
+    DATE DATETIME,
+    NAME STRING,
+    HourlyDewPointTemperature STRING,
+    HourlyDryBulbTemperature STRING,
+    HourlyPrecipitation STRING,
+    HourlyPresentWeatherType STRING,
+    HourlyPressureChange STRING,
+    HourlyPressureTendency STRING,
+    HourlyRelativeHumidity STRING,
+    HourlySkyConditions STRING,
+    HourlyVisibility STRING,
+    HourlyWetBulbTemperature STRING,
+    HourlyWindDirection STRING,
+    HourlyWindGustSpeed STRING,
+    HourlyWindSpeed STRING
+);
+```
