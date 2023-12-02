@@ -84,7 +84,7 @@ In order to provide an environment with the three necessary containers StarRocks
 ```bash
 mkdir quickstart
 cd quickstart
-curl -O https://raw.githubusercontent.com/StarRocks/starrocks/update-quickstart/docs/en/quick_start/_data/docker-compose.yml
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
 ```bash
@@ -152,13 +152,13 @@ cd quickstart
 ### New York City crash data
 
 ```bash
-curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/NYPD_Crash_Data.csv
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
 ### Weather data
 
 ```bash
-curl -O https://raw.githubusercontent.com/StarRocks/starrocks/b68318323c544552900ec3ad5517e6ad4a1175d5/docs/en/quick_start/_data/72505394728.csv
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
 
 ---
