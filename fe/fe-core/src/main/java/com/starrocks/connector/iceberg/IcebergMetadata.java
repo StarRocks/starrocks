@@ -446,9 +446,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             icebergScanTasks.add(icebergSplitScanTask);
 
-            if (++loopCount % Config.iceberg_plan_files_defensive_check_divisor == 0) {
+            if (++loopCount >= Config.iceberg_plan_files_defensive_check_threshold) {
                 performIcebergPlanFilesDefensiveCheck(key, icebergScanTasks);
+                loopCount = 0L;
             }
+
 
             String filePath = icebergSplitScanTask.file().path().toString();
             if (!filePaths.contains(filePath)) {

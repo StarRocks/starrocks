@@ -2106,10 +2106,10 @@ public class Config extends ConfigBase {
     public static long iceberg_query_fe_reserved_mem_percentage = 10;
 
     /**
-     * iceberg planFiles method runtime defensive check divisor, default 1000
+     * iceberg planFiles method runtime defensive check threshold, default 1000
      */
     @ConfField(mutable = true)
-    public static long iceberg_plan_files_defensive_check_divisor = 1000;
+    public static long iceberg_plan_files_defensive_check_threshold = 1000;
 
 
     /**
