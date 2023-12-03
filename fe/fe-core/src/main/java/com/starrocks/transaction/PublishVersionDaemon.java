@@ -84,6 +84,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
     private static final long RETRY_INTERVAL_MS = 1000;
+    private static final int DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE = 256;
+    public static final int HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE = 4096;
+    // about 16 (MAX_LAKE_PUBLISH_QUEUE_SIZE/DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE) tasks pending for each thread
+    // under the default configurations
+    private static final int MAX_LAKE_PUBLISH_QUEUE_SIZE = 4096;
 
     private ThreadPoolExecutor lakeTaskExecutor;
     private Set<Long> publishingLakeTransactions;
@@ -154,21 +159,96 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
+    private int getOrFixLakeTaskExecutorThreadPoolSizeConfig() {
+        String configVarName = "lake_publish_version_max_threads";
+        int numThreads = Config.lake_publish_version_max_threads;
+        if (numThreads <= 0) {
+            LOG.warn("Invalid configuration value '{}' for {}, force set to default value:{}",
+                    numThreads, configVarName, DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE);
+            numThreads = DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE;
+            Config.lake_publish_version_max_threads = numThreads;
+        } else if (numThreads > HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE) {
+            LOG.warn(
+                    "Configuration value for item {} exceeds the preset hard limit. Config value:{}," +
+                            " preset hard limit:{}. Force set to default value:{}.",
+                    configVarName, numThreads, HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE,
+                    DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE);
+            numThreads = DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE;
+            Config.lake_publish_version_max_threads = numThreads;
+        }
+        return numThreads;
+    }
+
+    private void adjustLakeTaskExecutor() {
+        if (lakeTaskExecutor == null) {
+            return;
+        }
+
+        // only do update with valid setting
+        int newNumThreads = Config.lake_publish_version_max_threads;
+        if (newNumThreads > HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE || newNumThreads <= 0) {
+            // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
+            return;
+        }
+
+        int oldNumThreads = lakeTaskExecutor.getCorePoolSize();
+        if (oldNumThreads == newNumThreads) {
+            return;
+        }
+
+        int newMaxNumThreads = Integer.min(newNumThreads * 2, HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE);
+        if (newNumThreads < oldNumThreads) { // scale in
+            lakeTaskExecutor.setCorePoolSize(newNumThreads);
+            lakeTaskExecutor.setMaximumPoolSize(newMaxNumThreads);
+        } else { // scale out
+            lakeTaskExecutor.setMaximumPoolSize(newMaxNumThreads);
+            lakeTaskExecutor.setCorePoolSize(newNumThreads);
+        }
+    }
+
+    /**
+     * Create a thread pool executor for LakeTable synchronizing publish.
+     * The thread pool size can be configured by `Config.lake_publish_version_max_threads` and is affected by the
+     * following constant variables
+     * - DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE
+     * - HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE
+     * - MAX_LAKE_PUBLISH_QUEUE_SIZE
+     * <p>
+     * If the initial configuration value is out of range (<=0, or >HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE),
+     * the DEFAULT_LAKE_PUBLISH_THREAD_POOL_SIZE will be used. During the runtime configuration update, if the
+     * configuration value is out of range, the value will be just ignored silently.
+     * <p>
+     * The thread pool is created with the corePoolSize equals to `Config.lake_publish_version_max_threads`, and
+     * maxPoolSize to twice of the `corePoolSize`, or set to HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE in case exceeded.
+     * core threads are also allowed to idle timeout.
+     * <p>
+     * Threads in the thread pool will be created in the following way,
+     * 1) a new thread will be created for a new added task when the total number of core threads is less than `corePoolSize`,
+     * 2) new tasks will be entered the queue once the number of running core threads reaches `corePoolSize` and the
+     * queue is not full yet,
+     * 3) a new thread will be created for the new added task when the queue is full and the total number of threads
+     * is less than `maxPoolSize`,
+     * 4) the new task will be rejected once the total number of threads reaches `maxPoolSize` and the queue is also full.
+     * <p>
+     * worker threads will be idle and timed out if no more tasks for a while (60 seconds by default).
+     * core threads can be idle and timed out as well, so the total number of threads in the pool can be decreased to 0.
+     * @return the thread pool executor
+     */
     private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
-            // Create a new thread for every task if there is no idle threads available.
-            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
-            lakeTaskExecutor = ThreadPoolManager.newDaemonCacheThreadPool(Config.lake_publish_version_max_threads,
-                    "lake-publish-task", true);
+            int numThreads = getOrFixLakeTaskExecutorThreadPoolSizeConfig();
+            // max thread numbers would be twice the core size with upper bound to HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE
+            int maxNumThreads = Integer.min(numThreads * 2, HARD_LIMIT_LAKE_PUBLISH_THREAD_POOL_SIZE);
+            lakeTaskExecutor =
+                    ThreadPoolManager.newDaemonThreadPool(numThreads, maxNumThreads, MAX_LAKE_PUBLISH_QUEUE_SIZE,
+                            "lake-publish-task",
+                            true);
+            // allow core thread timeout as well
+            lakeTaskExecutor.allowCoreThreadTimeOut(true);
 
             // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                int newMaxThreads = Config.lake_publish_version_max_threads;
-                if (lakeTaskExecutor != null && newMaxThreads > 0
-                        && lakeTaskExecutor.getMaximumPoolSize() != newMaxThreads) {
-                    lakeTaskExecutor.setMaximumPoolSize(Config.lake_publish_version_max_threads);
-                }
-            });
+            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
+                    .registerListener(() -> this.adjustLakeTaskExecutor());
         }
         return lakeTaskExecutor;
     }

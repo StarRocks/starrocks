@@ -135,6 +135,14 @@ public class ThreadPoolManager {
                 new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
     }
 
+    // allow specifying maxNumThread
+    public static ThreadPoolExecutor newDaemonThreadPool(int numThread, int maxNumThread, int queueSize,
+                                                         String poolName, boolean needRegisterMetric) {
+        return newDaemonThreadPool(numThread, maxNumThread, KEEP_ALIVE_TIME,
+                TimeUnit.SECONDS, new LinkedBlockingQueue<>(queueSize),
+                new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
+    }
+
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
             String poolName, boolean needRegisterMetric) {
         ThreadFactory threadFactory = namedThreadFactory(poolName);
