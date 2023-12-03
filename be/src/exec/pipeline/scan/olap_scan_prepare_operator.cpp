@@ -94,6 +94,7 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
     DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));

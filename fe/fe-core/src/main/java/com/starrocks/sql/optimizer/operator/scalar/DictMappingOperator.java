@@ -98,6 +98,12 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        dictColumn.getColumnRefs(columns);
+        originScalaOperator.getColumnRefs(columns);
+    }
+
+    @Override
     public ScalarOperator clone() {
         DictMappingOperator clone = (DictMappingOperator) super.clone();
         clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();

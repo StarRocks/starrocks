@@ -59,6 +59,9 @@ public class OptExpression {
 
     private Boolean isShortCircuit = false;
 
+    private OptExpression() {
+    }
+
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -240,5 +243,47 @@ public class OptExpression {
             sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine)).append("\n");
         }
         return sb.toString();
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private OptExpression optExpression = new OptExpression();
+
+        public Builder with(OptExpression other) {
+            optExpression.op = other.op;
+            optExpression.inputs = other.inputs;
+            optExpression.property = other.property;
+            optExpression.statistics = other.statistics;
+            optExpression.cost = other.cost;
+            optExpression.planCount = other.planCount;
+            optExpression.groupExpression = other.groupExpression;
+            optExpression.requiredProperties = other.requiredProperties;
+            optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            return this;
+        }
+
+        public Builder setOp(Operator op) {
+            optExpression.op = op;
+            return this;
+        }
+
+        public Builder setInputs(List<OptExpression> inputs) {
+            optExpression.inputs = inputs;
+            return this;
+        }
+
+        public Builder setLogicalProperty(LogicalProperty property) {
+            optExpression.property = property;
+            return this;
+        }
+
+        public OptExpression build() {
+            OptExpression tmp = optExpression;
+            optExpression = null;
+            return tmp;
+        }
     }
 }

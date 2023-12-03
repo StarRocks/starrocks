@@ -1,0 +1,391 @@
+-- name: test_low_card
+
+CREATE TABLE `s2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int NULL,
+  `v3` varchar(65533) NULL COMMENT "",
+  `v4` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `s1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` varchar(65533) NULL COMMENT "",
+  `v4` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+
+insert into s1 values
+    (16, 499, "Henan", "QH"),
+    (34, 634, "Shandong", "HUB"),
+    (19, 323, "Yunnan", "HEN"),
+    (13, 198, "Beijing", "XJ"),
+    (1, 405, "Hebei", "TJ"),
+    (12, 233, "Hebei", "GS"),
+    (14, 250, "Hubei", "HK"),
+    (12, 951, "Taiwan", NULL),
+    (36, 504, "Guangdong", "MO"),
+    (16, 727, "Macao", "GD"),
+    (49, 248, "Yunnan", "AH"),
+    (25, 637, NULL, "HEN"),
+    (47, 144, "Sichuan", "BJ"),
+    (32, 850, "Guangdong", "LN"),
+    (38, 309, "Hainan", "QH"),
+    (11, 670, "Xinjiang", "XJ"),
+    (0, 613, "Sichuan", "LN"),
+    (9, 218, "Hunan", "AH"),
+    (34, 443, "Jiangxi", "QH"),
+    (42, 132, "Hunan", "HI"),
+    (NULL, 637, NULL, "HI"),
+    (27, 733, "Heilongjiang", "BJ"),
+    (46, 305, "Fujian", NULL),
+    (37, 470, "Guangxi", "HI"),
+    (11, 199, "Shaanxi", "SH"),
+    (31, 843, "Tianjin", "BJ"),
+    (33, 683, "Hong Kong", "SC"),
+    (23, 379, "Hong Kong", "JX"),
+    (1, 858, "Jiangxi", "GS"),
+    (38, 135, "Tibet", "JS"),
+    (34, 957, "Beijing", "XZ"),
+    (9, 884, "Xinjiang", "SH"),
+    (14, 389, "Zhejiang", "ZJ"),
+    (6, 989, NULL, "MO"),
+    (17, 490, "Guangxi", "GZ"),
+    (25, 603, "Qinghai", "NMG"),
+    (50, 608, "Jiangxi", NULL),
+    (22, 429, "Heilongjiang", "SX"),
+    (11, 224, "Shandong", "NX"),
+    (20, 353, NULL, "QH"),
+    (39, 730, NULL, NULL),
+    (34, 140, "Shanghai", "MO"),
+    (46, 324, NULL, "GZ"),
+    (1, 289, "Zhejiang", "SX"),
+    (41, 948, NULL, "GZ"),
+    (40, 386, "Gansu", "SN"),
+    (36, 337, "Guangxi", "TW"),
+    (38, 103, "Hubei", NULL),
+    (36, 100, "Sichuan", "ZJ"),
+    (4, 844, "Liaoning", "HLJ");
+
+
+insert into s2 values
+    (32, 815, "Hebei", "GD"),
+    (8, 247, NULL, NULL),
+    (5, 180, "Guangxi", NULL),
+    (35, 464, "Shaanxi", "HUB"),
+    (44, 473, "Taiwan", "XZ"),
+    (38, 387, "Jiangxi", "JL"),
+    (26, 533, "Shanxi", "TJ"),
+    (16, 271, NULL, "HLJ"),
+    (8, 957, "Jilin", "GS"),
+    (27, 636, "Jilin", "JX"),
+    (9, 109, "Hebei", "HUN"),
+    (17, 775, "Beijing", "HI"),
+    (11, 218, "Shanxi", "HEB"),
+    (12, 474, "Guizhou", "FJ"),
+    (42, 953, NULL, "XZ"),
+    (22, 191, "Qinghai", "JX"),
+    (7, 560, "Hebei", "XJ"),
+    (27, 712, "Jiangxi", "HEB"),
+    (14, 416, "Xinjiang", "HEN"),
+    (27, 951, NULL, "TJ"),
+    (NULL, 743, "Guangdong", "SD"),
+    (36, 875, "Ningxia", "SH"),
+    (29, 810, "Jilin", "GS"),
+    (31, 451, NULL, "JL"),
+    (35, 295, "Guangxi", "MO"),
+    (8, 254, "Taiwan", "ZJ"),
+    (38, 208, "Liaoning", "GZ"),
+    (40, 982, "Liaoning", "SC"),
+    (22, 180, "Shandong", "JX"),
+    (7, 577, "Qinghai", "HLJ"),
+    (34, 435, "Jiangsu", "TW"),
+    (42, 633, "Hunan", "HI"),
+    (7, 838, "Chongqing", "XJ"),
+    (41, 718, "Shandong", "HEN"),
+    (32, 130, "Taiwan", "HUN"),
+    (21, 835, "Shaanxi", NULL),
+    (31, 147, "Liaoning", "HK"),
+    (50, 741, "Chongqing", "HEN"),
+    (12, 544, "Qinghai", "YN"),
+    (30, 953, NULL, "QH"),
+    (43, 716, "Jiangsu", "GZ"),
+    (0, 947, "Fujian", "TW"),
+    (28, 123, "Yunnan", NULL),
+    (35, 799, "Macao", "HUB"),
+    (43, 335, "Henan", "HLJ"),
+    (26, 405, "Guangxi", NULL),
+    (11, 126, "Anhui", "QH"),
+    (49, 720, "Guizhou", "FJ"),
+    (5, 579, "Qinghai", "NMG"),
+    (14, 262, "Shaanxi", "TJ"),
+    (35, 198, "Tibet", "SD"),
+    (34, 340, "Inner Mongolia", "QH"),
+    (37, 805, "Jilin", "QH"),
+    (NULL, 229, "Shandong", "SX"),
+    (21, 909, "Sichuan", "GS"),
+    (42, 577, "Fujian", "TJ"),
+    (15, 771, "Henan", "MO"),
+    (41, 818, "Inner Mongolia", "HEB"),
+    (NULL, 742, "Chongqing", "HUN"),
+    (12, 189, "Heilongjiang", "TJ"),
+    (2, 691, "Xinjiang", "SN"),
+    (14, 213, "Heilongjiang", "JS"),
+    (NULL, 330, "Guangxi", "GX"),
+    (NULL, 482, NULL, "SX"),
+    (48, 601, "Inner Mongolia", "TW"),
+    (29, 550, "Guangxi", "HUB"),
+    (17, 591, "Ningxia", "HEB"),
+    (7, 671, "Zhejiang", "AH"),
+    (15, 228, "Hebei", "NMG"),
+    (14, 835, "Chongqing", "BJ"),
+    (NULL, 200, "Taiwan", "XZ"),
+    (2, 504, "Guizhou", NULL),
+    (32, 948, "Shandong", "YN"),
+    (1, 231, "Tianjin", "SD"),
+    (47, 236, "Fujian", "SH"),
+    (4, 937, "Hebei", "JX"),
+    (21, 516, "Jilin", "HLJ"),
+    (NULL, 504, "Hunan", "QH"),
+    (9, 217, NULL, "HUB"),
+    (39, 470, "Zhejiang", "QH"),
+    (40, 506, "Qinghai", "ZJ"),
+    (11, 359, "Shanghai", "JL"),
+    (NULL, 140, "Jiangsu", NULL),
+    (15, 999, "Jiangxi", "NX"),
+    (25, 488, "Guangxi", "QH"),
+    (33, 903, NULL, NULL),
+    (2, 549, "Hubei", "ZJ"),
+    (17, 495, "Shanghai", "HLJ"),
+    (22, 493, "Hebei", "YN"),
+    (30, 125, NULL, "ZJ"),
+    (50, 389, "Henan", "GX"),
+    (46, 565, "Inner Mongolia", "FJ"),
+    (23, 383, "Guizhou", "AH"),
+    (42, 735, "Inner Mongolia", "SC"),
+    (NULL, 640, "Inner Mongolia", "JS"),
+    (NULL, 684, "Hainan", "JL"),
+    (20, 945, "Beijing", "HI"),
+    (19, 231, "Inner Mongolia", "MO"),
+    (44, 873, "Zhejiang", NULL),
+    (26, 424, "Shaanxi", "JS"),
+    (3, 917, "Tianjin", "AH"),
+    (17, 830, "Henan", "MO"),
+    (22, 770, "Zhejiang", "YN"),
+    (49, 511, "Hainan", "JL"),
+    (NULL, 627, "Heilongjiang", "GD"),
+    (22, 587, "Shaanxi", "NMG"),
+    (7, 250, "Chongqing", "FJ"),
+    (48, 175, "Shaanxi", "NX"),
+    (23, 573, "Inner Mongolia", "FJ"),
+    (44, 725, NULL, "GX"),
+    (11, 678, "Liaoning", "SD"),
+    (NULL, 413, "Zhejiang", "HEN"),
+    (NULL, 100, "Shanghai", "TW"),
+    (33, 779, "Fujian", "NX"),
+    (39, 566, "Inner Mongolia", "ZJ"),
+    (32, 443, "Macao", "SH"),
+    (45, 922, "Shanxi", "QH"),
+    (44, 828, "Gansu", "SD"),
+    (13, 935, "Ningxia", "QH"),
+    (0, 343, "Anhui", "ZJ"),
+    (44, 976, "Shanghai", "HLJ"),
+    (16, 234, "Jilin", NULL),
+    (12, 277, "Liaoning", "NMG"),
+    (25, 591, "Sichuan", "SH"),
+    (50, 823, "Qinghai", "QH"),
+    (36, 717, "Shanxi", "XZ"),
+    (9, 917, "Taiwan", "SC"),
+    (26, 479, "Hunan", "SC"),
+    (0, 314, "Taiwan", "SX"),
+    (9, 561, "Tianjin", "HEB"),
+    (3, 800, "Hainan", "SX"),
+    (23, 180, "Beijing", "HLJ"),
+    (28, 768, "Fujian", "YN"),
+    (47, 300, "Jilin", "HEB"),
+    (11, 462, "Yunnan", "HEB"),
+    (27, 889, "Zhejiang", "HUN"),
+    (35, 347, "Guizhou", "SN"),
+    (49, 826, "Taiwan", "QH"),
+    (46, 839, "Zhejiang", "SN"),
+    (0, 658, "Fujian", "FJ"),
+    (42, 539, "Chongqing", "XJ"),
+    (7, 868, NULL, "HUB"),
+    (32, 822, "Xinjiang", "JX"),
+    (42, 189, "Heilongjiang", "ZJ"),
+    (NULL, 566, "Macao", "JL"),
+    (37, 311, "Xinjiang", "QH"),
+    (37, 284, "Qinghai", "SH"),
+    (NULL, 287, "Hunan", "HI"),
+    (21, 523, "Hainan", "HLJ"),
+    (10, 523, "Sichuan", "JX"),
+    (25, 550, "Anhui", "JX"),
+    (25, 107, "Fujian", "NX"),
+    (26, 941, "Tibet", "GZ"),
+    (47, 572, NULL, "XJ"),
+    (11, 165, "Gansu", "FJ"),
+    (43, 825, "Shandong", "CQ"),
+    (9, 956, "Shanghai", "SC"),
+    (9, 488, "Chongqing", "SX"),
+    (NULL, 733, "Zhejiang", "GX"),
+    (40, 235, "Taiwan", "YN"),
+    (40, 307, "Henan", "HEB"),
+    (30, 521, "Sichuan", "JS"),
+    (29, 641, "Macao", "FJ"),
+    (26, 245, "Jiangxi", "HEN"),
+    (48, 623, "Anhui", "SC"),
+    (21, 991, "Beijing", "HUB"),
+    (38, 668, NULL, "SH"),
+    (15, 198, "Yunnan", "JS"),
+    (9, 508, "Liaoning", NULL),
+    (29, 393, "Chongqing", "GZ"),
+    (6, 420, "Tibet", "CQ"),
+    (34, 319, NULL, "HUN"),
+    (30, 334, "Jiangsu", "ZJ"),
+    (13, 930, "Jilin", "SC"),
+    (48, 953, "Ningxia", NULL),
+    (28, 334, "Yunnan", "HEN"),
+    (14, 842, "Fujian", "HK"),
+    (38, 341, "Fujian", NULL),
+    (23, 428, "Guangdong", "TW"),
+    (10, 396, "Guangdong", "TJ"),
+    (45, 296, "Tibet", "TJ"),
+    (8, 825, "Liaoning", "SN"),
+    (44, 326, "Hainan", "HK"),
+    (23, 380, "Jilin", "HUN"),
+    (NULL, 485, "Hubei", "HEN"),
+    (5, 861, "Liaoning", "MO"),
+    (24, 915, "Hainan", "HEB"),
+    (22, 448, "Inner Mongolia", "HI"),
+    (13, 663, "Heilongjiang", "JS"),
+    (2, 243, "Inner Mongolia", "SN"),
+    (NULL, 817, "Tianjin", "YN"),
+    (19, 187, NULL, "HLJ"),
+    (3, 719, "Sichuan", "NX"),
+    (8, 502, "Hunan", "JX"),
+    (NULL, 620, "Hebei", "TW"),
+    (15, 433, "Shaanxi", NULL),
+    (14, 368, "Jiangxi", "BJ"),
+    (37, 510, "Liaoning", "LN"),
+    (NULL, 863, "Beijing", "JS"),
+    (32, 314, "Guizhou", NULL);
+
+insert into s2 select * from s2;
+insert into s2 select * from s2;
+insert into s2 select * from s2;
+insert into s2 select * from s2;
+insert into s2 select * from s2;
+
+[UC] analyze full table s1;
+[UC] analyze full table s2;
+
+function: wait_global_dict_ready('v3', 's1')
+function: wait_global_dict_ready('v4', 's1')
+function: wait_global_dict_ready('v3', 's2')
+function: wait_global_dict_ready('v4', 's2')
+
+select concat(upper(v2), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v2);
+select concat(upper(v4), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v4);
+
+select count(distinct v3), max(v3), count(distinct v4) as a from s2;
+
+SELECT * FROM (
+SELECT v3, Dense_rank() OVER ( ORDER BY v2) dd FROM s2  
+UNION 
+SELECT v3, Dense_rank() OVER ( ORDER BY v4) dd FROM s2) xxx 
+ORDER BY dd, v3
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ * 
+FROM (SELECT COUNT(DISTINCT v3) c from s2) x
+ORDER BY c
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ * 
+FROM (SELECT COUNT(DISTINCT v3) c from s2) x
+ORDER BY c
+LIMIT 4;
+
+
+SELECT /*+SET_VAR(new_planner_agg_stage=4)*/ * 
+FROM (SELECT COUNT(DISTINCT v3) c from s2) x
+ORDER BY c
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ *
+FROM (SELECT MAX(upper(v3)) c1, MIN(lower(v3)) c2 from s2 group by v2 having c1 = "BEIJING") x
+ORDER BY c1 desc
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ *
+FROM (SELECT MAX(upper(v3)) c1, MIN(lower(v3)) c2 from s2 group by v2 having c1 = "BEIJING") x
+ORDER BY c1 desc
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=3)*/ *
+FROM (SELECT COUNT(DISTINCT v4) c from s2 group by v2) x
+ORDER BY c
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ *
+FROM (SELECT APPROX_COUNT_DISTINCT(v3) c from s2) x
+ORDER BY c
+LIMIT 4;
+
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ *
+FROM (SELECT APPROX_COUNT_DISTINCT(v3) c from s2) x
+ORDER BY c
+LIMIT 4;
+
+select max(cc) from (select if(v4 = "BJ", 1, 2) cc from s2 where v4 = "BJ") x;
+
+select max(cc) from (select v4 = "BJ" cc from s2 where v4 = "BJ") x;
+
+SELECT MAX(x1), MIN(x2), MAX(y1), MIN(y2) FROM 
+(SELECT REVERSE(v3) x1, CONCAT(v4, "1") y1, s2.v1 FROM s2 ) t1
+JOIN[SHUFFLE] 
+(SELECT lower(v3) x2, upper(v4) y2, s2.v1 FROM s2 ) t2
+on t1.v1 = t2.v1
+where x2 = "anhui"
+GROUP BY x1
+HAVING COUNT(y2) > 12280;
+
+SELECT MAX(x1), MIN(x2), MAX(y1), MIN(y2) FROM
+(SELECT REVERSE(v3) x1, CONCAT(v4, "1") y1, s2.v1 FROM s2 ) t1
+JOIN[BROADCAST]
+(SELECT lower(v3) x2, upper(v4) y2, s2.v1 FROM s2 ) t2
+on t1.v1 = t2.v1
+where x2 = "anhui"
+GROUP BY x1
+HAVING COUNT(y2) > 12280;
+
+
+SELECT MAX(x1), MIN(x2), MAX(y1), MIN(y2) FROM
+(SELECT REVERSE(v3) x1, CONCAT(v4, "1") y1, s2.v1 FROM s2 ) t1
+JOIN[SHUFFLE]
+(SELECT lower(v3) x2, upper(v4) y2, s2.v1 FROM s2 ) t2
+on t1.v1 = t2.v1
+where x2 = "anhui"
+GROUP BY x1
+HAVING MAX(y2) = "JX";
+
