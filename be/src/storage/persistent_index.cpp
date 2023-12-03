@@ -648,8 +648,7 @@ Status ImmutableIndexWriter::finish() {
             "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6"
             "compression_type:$7",
             _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
-            _total_kv_bytes, _total_kv_size * 1000 / std::max(_total_kv_bytes, 1UL) / 1000.0,
-            _meta.compression_type());
+            _total_bytes, _total_kv_size * 1000 / std::max(_total_bytes, 1UL) / 1000.0, _meta.compression_type());
     _version.to_pb(_meta.mutable_version());
     _meta.set_size(_total);
     _meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
@@ -2491,7 +2490,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.uncompressed_size = src.uncompressed_size();
         if (idx->_compression_type == CompressionTypePB::NO_COMPRESSION) {
             DCHECK(dest.uncompressed_size == 0) << "compression type: " << idx->_compression_type
-                                               << " uncompressed_size: " << dest.uncompressed_size;
+                                                << " uncompressed_size: " << dest.uncompressed_size;
         }
         // This is for compatibility, we don't add data_size in shard_info in the rc version
         // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
