@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-删除一个自定义函数。函数的名称、参数类型完全一致才能够被删除。
+删除一个自定义函数。函数的名称和参数类型完全一致才能够被删除。
 
 要执行该命令的用户必须是函数的拥有者。
 
@@ -32,5 +32,5 @@ DROP FUNCTION my_add(INT, INT)
 
 ## 相关 SQL
 
-- [SHOW FUNCTIONS](./show-functions.md)
+- [SHOW FUNCTIONS](./SHOW_FUNCTIONS.md)
 - [Java UDF](../../sql-functions/JAVA_UDF.md)

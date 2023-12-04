@@ -293,7 +293,7 @@ Broker Load is an asynchronous loading method. After you submit a load job, Star
 ### Limits
 
 - Currently Broker Load supports loading from a local file system only through a single broker whose version is v2.5 or later.
-- Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
+- Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable in [System variable](../reference/System_variable.md) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
 
 ### Before you begin
 
@@ -504,4 +504,3 @@ This section introduces the second way. Detailed operations are as follows:
    For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 After you submit a job, you can view the load progress or cancel the job as needed. For detailed operations, see "[Check Broker Load progress](#check-broker-load-progress)" and "[Cancel a Broker Load job](#cancel-a-broker-load-job) in this topic.
-
