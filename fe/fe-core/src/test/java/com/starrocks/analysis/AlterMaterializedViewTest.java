@@ -15,8 +15,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
@@ -27,7 +27,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -42,10 +41,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
@@ -101,61 +96,31 @@ public class AlterMaterializedViewTest {
     }
 
     @Test
-    public void testAlterChangeRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
+    public void testAlterRefreshScheme() throws Exception {
+        List<String> refreshSchemes = Lists.newArrayList(
+                "ASYNC START(\"2022-05-23 00:00:00\") EVERY(INTERVAL 1 HOUR)",
+                "ASYNC",
+                "ASYNC START(\"2022-05-23 01:02:03\") EVERY(INTERVAL 1 DAY)",
+                "ASYNC EVERY(INTERVAL 1 DAY)",
+                "ASYNC",
+                "MANUAL",
+                "ASYNC EVERY(INTERVAL 1 DAY)",
+                "MANUAL",
+                "ASYNC START(\"2022-05-23 01:02:03\") EVERY(INTERVAL 1 DAY)"
+        );
 
-        alterMvSql = "alter materialized view mv1 refresh ASYNC";
-        alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
-        MaterializedView mv = (MaterializedView) currentState.getDb("test").getTable("mv1");
-        String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-        Assert.assertFalse(showCreateStmt.contains("EVERY(INTERVAL 1 HOUR)"));
-    }
+        String mvName = "mv1";
+        for (String refresh : refreshSchemes) {
+            // alter
+            String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
+            starRocksAssert.ddl(sql);
 
-    @Test
-    public void testAlterManualRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh manual";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
-        Assert.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.MANUAL);
-    }
-
-    @Test
-    public void testAlterAsyncRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        final RefreshSchemeClause asyncRefreshSchemeDesc = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
-        assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
-        Assert.assertEquals(asyncRefreshSchemeDesc.getType(), MaterializedView.RefreshType.ASYNC);
-        assertNotNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime());
-        assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral()
-                .getValue()).getValue(), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getUnitIdentifier()
-                .getDescription(), "HOUR");
-    }
-
-    @Test
-    public void testAlterAsyncRefreshMonth() {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 MONTH)";
-        Assert.assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
-    }
-
-    @Test
-    public void testAlterAsyncRefreshNormal() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 DAY)";
-        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-    }
-
-    @Test
-    public void testAlterAsyncRefreshLowercase() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 day)";
-        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            // verify
+            MaterializedView mv = starRocksAssert.getMv("test", mvName);
+            String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt),
+                    showCreateStmt.contains(refresh));
+        }
     }
 
     @Test

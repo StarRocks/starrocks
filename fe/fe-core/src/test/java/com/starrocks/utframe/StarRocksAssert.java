@@ -246,6 +246,11 @@ public class StarRocksAssert {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
     }
 
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (statementBase instanceof CreateTableStmt) {
