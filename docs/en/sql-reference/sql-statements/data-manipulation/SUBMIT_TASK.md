@@ -31,7 +31,7 @@ This statement creates a Task, which is a template for storing a task that execu
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
-SELECT * FROM information_schema.tasks WHERE task_name = <task_name>;
+SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 ```
 
 After you run the Task, a TaskRun is generated accordingly. A TaskRun indicates a task that executes the ETL statement. A TaskRun has the following states:
@@ -45,7 +45,7 @@ You can check the state of a TaskRun by querying the metadata view [`task_runs` 
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;
-SELECT * FROM information_schema.task_runs WHERE task_name = <task_name>;
+SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ```
 
 ## Configure via FE configuration items
