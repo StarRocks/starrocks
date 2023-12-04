@@ -123,6 +123,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 引入版本：2.5.5
 
+##### enable_statistics_collect_profile
+
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -678,8 +684,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### allow_system_reserved_names
 
-- **默认值**: FALSE
-- 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 含义：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 默认值: FALSE
+
+##### enable_backup_materialized_view
+
+- 含义：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+##### enable_colocate_mv_index
+
+- 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
 
 ### 配置 FE 静态参数
 
@@ -1620,6 +1636,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### update_compaction_ratio_threshold
+
+- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 默认值：0.5
+
 #### max_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
@@ -1632,7 +1653,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
-#### 配置 BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
@@ -1945,36 +1966,36 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 Store 用以 Flush MemTable 的线程数。
 - 默认值：2
 
-#### block_cache_enable
+#### datacache_enable
 
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### datacache_disk_path  
 
-- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
+- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### datacache_meta_path  
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
 
-#### block_cache_block_size
+#### datacache_block_size
 
 - 含义：单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。
 - 默认值：1048576
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- 含义：内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。
-- 单位：字节
-- 默认值：2147483648
+- 含义：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 单位：N/A
+- 默认值：10%
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
-- 含义：单个磁盘缓存数据量的上限。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 单位：字节
+- 含义：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 单位：N/A
 - 默认值：0
 
 #### jdbc_connection_pool_size
@@ -2003,3 +2024,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
+
+#### lake_service_max_concurrency
+
+- 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
+- 单位：N/A
+- 默认值：0

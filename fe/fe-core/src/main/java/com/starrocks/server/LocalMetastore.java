@@ -82,6 +82,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvJoinFilter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -3181,7 +3182,10 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         // set partitionRefTableExprs
-        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        if (stmt.getPartitionRefTableExpr() != null) {
+            //avoid to get a list of null inside
+            materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        }
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);
@@ -3230,6 +3234,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
                 buildPartitions(db, materializedView, partition.getSubPartitions().stream().collect(Collectors.toList()));
                 materializedView.addPartition(partition);
+            } else {
+                Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
+                Map<Expr, SlotRef> partitionExprMaps = MvJoinFilter.getPartitionJoinMap(partitionExpr, stmt.getQueryStatement());
+                partitionExpr = stmt.getPartitionRefTableExpr();
+                if (!partitionExprMaps.containsKey(partitionExpr)) {
+                    LOG.warn("Failed to get partition expr from multiple base tables: " + stmt.getOrigStmt());
+                    partitionExprMaps.put(partitionExpr, MaterializedView.getMvPartitionSlotRef(partitionExpr));
+                }
+                materializedView.setPartitionExprMaps(partitionExprMaps);
             }
 
             MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
@@ -3431,6 +3444,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
                 setLakeStorageInfo(materializedView, storageVolumeId, properties);
+            }
+
+            // datacache.partition_duration
+            if (materializedView.isCloudNativeMaterializedView()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                    materializedView.setDataCachePartitionDuration(duration);
+                }
             }
 
             // session properties

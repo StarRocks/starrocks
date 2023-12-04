@@ -119,7 +119,7 @@ public class TaskBuilder {
 
         task.setProperties(taskProperties);
         task.setDefinition(
-                "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+                "insert overwrite `" + materializedView.getName() + "` " + materializedView.getViewDefineSql());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;

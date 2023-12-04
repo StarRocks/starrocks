@@ -3828,9 +3828,9 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

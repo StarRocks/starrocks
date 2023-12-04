@@ -6,7 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Returns the 64-bit xxhash3 hash value of the input string.
+Returns the 64-bit xxhash3 hash value of the input string. xx_hash3_64 has better performance than [murmur_hash3_32](./murmur_hash3_32.md) by using AVX2 instruction and has state-of-art hash quality which is broadly integrated with many software.
+
+This function is supported from v3.2.0.
 
 ## Syntax
 
@@ -41,4 +43,4 @@ MySQL > select xx_hash3_64("hello", "world");
 
 ## keyword
 
-XX_HASH3_64,HASH
+XX_HASH3_64,HASH,xxHash3

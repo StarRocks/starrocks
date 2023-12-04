@@ -120,6 +120,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
 
+##### enable_statistics_collect_profile
+
+- **Unit**: N/A
+- **Default**: false
+- **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -763,7 +769,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - **Default**: FALSE
-- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+- **Description**: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feaure, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+
+##### enable_backup_materialized_view
+
+- **Default**: TRUE
+- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+
+##### enable_colocate_mv_index
+
+- **Default**: TRUE
+- **Description**: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views. This item is supported from v3.2.0 onwards.
 
 ### Configure FE static parameters
 
@@ -1652,6 +1668,11 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### update_compaction_ratio_threshold
+
+- **Default:** 0.5
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
 ### Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
@@ -2049,35 +2070,35 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Number of threads that are used for flushing MemTable in each store.
 
-#### block_cache_enable
+#### datacache_enable
 
 - **Default**: false
 - **Unit**: N/A
 - **Description**: Whether to enable Data Cache. TRUE indicates Data Cache is enabled, and FALSE indicates Data Cache is disabled.
 
-#### block_cache_disk_path
+#### datacache_disk_path
 
 - **Default**: N/A
 - **Unit**: N/A
-- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named cachelib_data to cache blocks.
+- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
 
-#### block_cache_meta_path
+#### datacache_meta_path
 
 - **Default**: N/A
 - **Unit**: N/A
 - **Description**: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the $STARROCKS_HOME path.
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- **Default**: 2147483648
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
+- **Default**: 10%
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). The default value is `10%`. We recommend that you set the value of this parameter to at least 10 GB.
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
 - **Default**: 0
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data. Unit: bytes.
 
 #### jdbc_connection_pool_size
 
@@ -2115,6 +2136,12 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
 
+#### lake_service_max_concurrency
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
 | be_service_threads | 64 | N/A | |
@@ -2122,11 +2149,11 @@ BE static parameters are as follows.
 | bitmap_max_filter_items | 30 | N/A | |
 | bitmap_max_filter_ratio | 1000 | N/A | |
 | bitmap_serialize_version | 1 | N/A | |
-| block_cache_block_size | 1048576 | N/A | |
-| block_cache_disk_path |  | N/A | |
-| block_cache_disk_size | 21474836480 | N/A | |
-| block_cache_enable | 0 | N/A | |
-| block_cache_mem_size | 2147483648 | N/A | |
+| datacache_block_size | 1048576 | N/A | |
+| datacache_disk_path |  | N/A | |
+| datacache_disk_size | 21474836480 | N/A | |
+| datacache_enable | 0 | N/A | |
+| datacache_mem_size | 2147483648 | N/A | |
 | broker_write_timeout_seconds | 30 | N/A | |
 | brpc_socket_max_unwritten_bytes | 1073741824 | N/A | |
 | cardinality_of_inject | 10 | N/A | |

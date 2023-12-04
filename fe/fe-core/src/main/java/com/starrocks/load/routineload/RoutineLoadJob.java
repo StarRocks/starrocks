@@ -105,6 +105,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -481,7 +483,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = Strings.nullToEmpty(otherMsg);
+        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + ": " + Strings.nullToEmpty(otherMsg);
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -598,6 +601,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public RoutineLoadProgress getProgress() {
         return progress;
     }
+
+    protected abstract String getSourceProgressString();
 
     public double getMaxFilterRatio() {
         return maxFilterRatio;
@@ -1092,6 +1097,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 }
                 routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
+                setOtherMsg(txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
@@ -1423,6 +1429,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected abstract String getStatistic();
 
+
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;
@@ -1473,6 +1480,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 row.add("");
             }
             row.add(otherMsg);
+            row.add(getSourceProgressString());
             return row;
         } finally {
             readUnlock();

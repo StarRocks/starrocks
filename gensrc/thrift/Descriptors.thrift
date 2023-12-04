@@ -157,12 +157,12 @@ enum TSchemaTableType {
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
-    STARROCKS_OBJECT_DEPENDENCIES,
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
     SCH_PIPES,
-    SCH_FE_METRICS
+    SCH_FE_METRICS,
+    STARROCKS_OBJECT_DEPENDENCIES,
 }
 
 enum THdfsCompression {
@@ -176,7 +176,8 @@ enum THdfsCompression {
 }
 
 enum TIndexType {
-  BITMAP
+  BITMAP,
+  GIN
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -507,6 +508,8 @@ struct THudiTable {
 struct TPaimonTable {
     // paimon table options
     1: optional string paimon_options
+    // paimon table
+    2: optional string paimon_native_table
 }
 
 struct TDeltaLakeTable {

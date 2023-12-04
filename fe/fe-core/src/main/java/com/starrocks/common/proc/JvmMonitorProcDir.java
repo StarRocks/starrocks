@@ -23,17 +23,16 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.monitor.jvm.JvmInfo;
-import com.starrocks.monitor.jvm.JvmService;
+import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 
-import java.util.Iterator;
 import java.util.List;
 
-public class JvmProcDir implements ProcNodeInterface {
+public class JvmMonitorProcDir implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("Value")
             .build();
@@ -43,10 +42,10 @@ public class JvmProcDir implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        JvmService jvmService = new JvmService();
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
 
         // 1. jvm info
-        JvmInfo jvmInfo = jvmService.info();
+        JvmInfo jvmInfo = jvmStatCollector.info();
         result.addRow(genRow("jvm start time", TimeUtils.longToTimeString(jvmInfo.getStartTime())));
         result.addRow(genRow("jvm version info", Joiner.on(" ").join(jvmInfo.getVersion(),
                 jvmInfo.getVmName(),
@@ -58,34 +57,31 @@ public class JvmProcDir implements ProcNodeInterface {
         result.addRow(genRow("frontend pid", jvmInfo.getPid()));
 
         // 2. jvm stats
-        JvmStats jvmStats = jvmService.stats();
+        JvmStats jvmStats = jvmStatCollector.stats();
         result.addRow(genRow("classes loaded", jvmStats.getClasses().getLoadedClassCount()));
         result.addRow(genRow("classes total loaded", jvmStats.getClasses().getTotalLoadedClassCount()));
         result.addRow(genRow("classes unloaded", jvmStats.getClasses().getUnloadedClassCount()));
 
-        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted().getBytes()));
-        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed().getBytes()));
-        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted().getBytes()));
-        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed().getBytes()));
+        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted()));
+        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed()));
+        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted()));
+        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed()));
 
-        Iterator<MemoryPool> memIter = jvmStats.getMem().iterator();
-        while (memIter.hasNext()) {
-            MemoryPool memPool = memIter.next();
-            result.addRow(genRow("mem pool " + memPool.getName() + " used", memPool.getUsed().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax().getBytes()));
+        for (MemoryPool memPool : jvmStats.getMem()) {
+            result.addRow(genRow("mem pool " + memPool.getName() + " committed", memPool.getCommitted()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " used", memPool.getUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax()));
         }
 
         for (BufferPool bp : jvmStats.getBufferPools()) {
             result.addRow(genRow("buffer pool " + bp.getName() + " count", bp.getCount()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed().getBytes()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity().getBytes()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity()));
         }
 
-        Iterator<GarbageCollector> gcIter = jvmStats.getGc().iterator();
-        while (gcIter.hasNext()) {
-            GarbageCollector gc = gcIter.next();
+        for (GarbageCollector gc : jvmStats.getGc()) {
             result.addRow(genRow("gc " + gc.getName() + " collection count", gc.getCollectionCount()));
             result.addRow(genRow("gc " + gc.getName() + " collection time", gc.getCollectionTime().getMillis()));
         }

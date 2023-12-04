@@ -1,0 +1,253 @@
+-- name: test_resource_group_lt_query_mem_limit
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select generate_series FROM TABLE(generate_series(1, 65535));
+-- result:
+-- !result
+insert into t1 select k1 + 65535 from t1;
+-- result:
+-- !result
+insert into t1 select k1 + 65535*2 from t1;
+-- result:
+-- !result
+insert into t1 select k1 + 65535*3 from t1;
+-- result:
+-- !result
+create resource group rg_${uuid0} 
+    to ( user='user_${uuid0}' ) 
+    with ('cpu_core_limit' = '1', 'mem_limit' = '0.0000000000001', 'concurrency_limit'='2');
+-- result:
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+524280
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+524280
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+524280
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+524280
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
+drop resource group rg_${uuid0};
+-- result:
+-- !result

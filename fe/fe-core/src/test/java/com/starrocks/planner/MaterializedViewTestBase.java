@@ -15,12 +15,13 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -29,6 +30,7 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -44,11 +46,24 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+
+    // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
+    private  String traceLogModule = "";
+
+    public void setTracLogModule(String module) {
+        this.traceLogModule = module;
+    }
+
+    public void resetTraceLogModule() {
+        this.traceLogModule = "";
+    }
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -60,6 +75,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -219,6 +236,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private String rewritePlan;
         private Exception exception;
         private String properties;
+        private String traceLog;
 
         public MVRewriteChecker(String query) {
             this.query = query;
@@ -254,11 +272,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                Pair<ExecPlan, String> planAndTrace =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+                this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                this.traceLog = planAndTrace.second;
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(traceLog);
+                }
                 if (mv != null && !mv.isEmpty()) {
                     try {
                         starRocksAssert.dropMaterializedView("mv0");
@@ -268,6 +292,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
             }
             return this;
+        }
+
+        public String getTraceLog() {
+            return this.traceLog;
         }
 
         Exception getException() {
@@ -301,15 +329,35 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        public MVRewriteChecker contains(String expect) {
+        private MVRewriteChecker contains(String expect, boolean isIgnoreColRef) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = this.rewritePlan.contains(expect);
+            boolean contained = false;
+            if (isIgnoreColRef) {
+                expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
+                        .map(str -> str.replaceAll("\\d+", "").trim())
+                        .collect(Collectors.joining("\n"));
+                String actual = Stream.of(this.rewritePlan.split("\n")).filter(s -> !s.contains("tabletList"))
+                        .map(str -> str.replaceAll("\\d+", "").trim())
+                        .collect(Collectors.joining("\n"));
+                contained = actual.contains(expect);
+            } else {
+                contained = this.rewritePlan.contains(expect);
+            }
+
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
             }
             Assert.assertTrue(contained);
             return this;
+        }
+
+        public MVRewriteChecker containsIgnoreColRefs(String expect) {
+            return contains(expect, true);
+        }
+
+        public MVRewriteChecker contains(String expect) {
+            return contains(expect, false);
         }
 
         public MVRewriteChecker notContain(String expect) {

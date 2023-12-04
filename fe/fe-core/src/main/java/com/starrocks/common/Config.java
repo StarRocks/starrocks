@@ -1115,6 +1115,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_backup_materialized_view = true;
 
+    /**
+     * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
+     * to determine which strategy you choose:
+     *  N <0      : always use non lock optimization and no copy related materialized views which
+     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     *  N = 0    : always not use non lock optimization
+     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     */
+    @ConfField(mutable = true)
+    public static int skip_whole_phase_lock_mv_limit = 5;
+
     @ConfField
     public static boolean enable_udf = false;
 
@@ -2112,6 +2123,14 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
+     *  StarRocks-manager pull queries every 1 second
+     *  metrics calculate query latency every 15 second
+     *  do not set cacheTime lower than these time
+     */
+    @ConfField(mutable = true)
+    public static long query_detail_cache_time_nanosecond = 30000000000L;
+
+    /**
      * Min lag of routine load job to show in metrics
      * Only show the routine load job whose lag is larger than min_routine_load_lag_for_metrics
      */
@@ -2567,6 +2586,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
 
     /**
      * Whether analyze the mv after refresh in async mode.
