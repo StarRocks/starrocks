@@ -102,7 +102,7 @@
       "type": "category",
       "label": "Quick Start",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data"]
     },
     {
       "type": "category",
@@ -869,7 +869,12 @@
           "link": {"type": "doc", "id": "cover_pages/shared_nothing_deployment"},
           "items": ["deployment/deploy_manually", "deployment/sr_operator", "deployment/helm"]
         },
-        "deployment/deploy_shared_data",
+        {
+          "type": "category",
+          "label": "存算分离模式部署",
+          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio", "deployment/shared_data/hdfs", "deployment/shared_data/other"]
+        },
         {
           "type": "category",
           "label": "后期管理",
