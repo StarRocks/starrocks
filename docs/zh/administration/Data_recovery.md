@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 数据删除恢复
 
 StarRocks支持对误删除的数据库/表/分区进行数据恢复，在drop table或者 drop database之后，StarRocks不会立刻对数据进行物理删除，而是在Trash中保留一段时间（默认1天），管理员可以通过RECOVER命令对误删除的数据进行恢复

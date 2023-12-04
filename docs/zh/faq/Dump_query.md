@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # QueryDump 接口文档
 
 本文介绍如何使用 StarRocks 的 QueryDump 功能。

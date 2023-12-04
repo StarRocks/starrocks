@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # repeat
 
 ## 功能

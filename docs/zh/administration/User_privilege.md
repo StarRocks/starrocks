@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 用户权限
 
 StarRocks 的权限管理系统参照了 MySQL 的权限管理机制，支持表级别细粒度的权限控制、基于角色的权限访问控制，以及白名单机制。

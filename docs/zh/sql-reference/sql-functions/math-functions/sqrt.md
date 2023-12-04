@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # sqrt, dsqrt
 
 ## 功能

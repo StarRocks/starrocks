@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 内存管理
 
 本章节主要介绍 StarRocks BE 中内存使用分类和内存管理、内存调优方法。

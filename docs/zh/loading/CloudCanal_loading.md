@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CloudCanal数据导入
 
 ## 介绍

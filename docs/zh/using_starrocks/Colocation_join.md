@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Colocate Join
 
 shuffle join 和 broadcast join 中，参与 join 的两张表的数据行，若满足 join 条件，则需要将它们汇合在一个节点上，完成 join。这两种 join 方式，都无法避免节点间数据网络传输带来额外的延迟和其他开销。 而 colocation join 则可避免数据网络传输开销，核心思想是将同一个 Colocation Group 中表，采用一致的分桶键、一致的副本数量和一致副本放置方式，因此如果 join 列为分桶键，则计算节点只需做本地 join 即可，无须从其他节点获取数据。

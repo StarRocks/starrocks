@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # MAX
 
 ## 功能

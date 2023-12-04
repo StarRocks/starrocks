@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Deploy常见问题
 
 ## 在配置文件fe.conf中priority_networks参数如何绑定固定IP

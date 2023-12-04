@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN CHECK TABLET
 
 ## 功能

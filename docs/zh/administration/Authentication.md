@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 认证方式
 
 除“用户名+密码”认证方式外，StarRocks还支持LDAP用户。

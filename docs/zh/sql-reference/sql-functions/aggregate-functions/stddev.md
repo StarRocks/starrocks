@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 
 # STDDEV, STDDEV_POP
 

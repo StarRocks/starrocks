@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Basic Concepts of StarRocks
 
 * FE: The StarRocks frontend node is responsible for metadata management, management of client connectors, query planning, query scheduling, and so on.

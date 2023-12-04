@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Insert Into常见问题
 
 ## 进行数据insert，SQL每插入一条大约耗时50~100ms之间，执行效率有没有什么可以优化的？
