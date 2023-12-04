@@ -107,33 +107,27 @@ public class Utils {
                                       long baseVersion, long newVersion, long commitTimeInSecond,
                                       Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        Map<ComputeNode, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
-                throw new NoAliveBackendException("No alive backend or computeNode for " +
-                        "handle publish version request");
+            ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+            if (node == null) {
+                throw new NoAliveBackendException("No alive node for handle publish version request");
             }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+            beToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
         }
 
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            // TODO: need to refactor after be split into cn + dn
-            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
-            if (node == null) {
-                throw new NoAliveBackendException("Backend or computeNode been " +
-                        "dropped while building publish version request");
-            }
+        for (Map.Entry<ComputeNode, List<Long>> entry : beToTablets.entrySet()) {
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
-            request.tabletIds = entry.getValue();
+            request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
             request.txnIds = txnIds;
             request.commitTime = commitTimeInSecond;
+            request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
 
+            ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
