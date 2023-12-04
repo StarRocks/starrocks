@@ -97,6 +97,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -5181,6 +5182,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String functionName;
         boolean isGroupConcat = false;
+        boolean isLegacyGroupConcat = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5196,6 +5198,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
+            ConnectContext session = ConnectContext.get();
+            if (session != null && session.getSessionVariable() != null) {
+                long sqlMode = session.getSessionVariable().getSqlMode();
+                isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
+            }
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
@@ -5218,10 +5225,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
         if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
-            Expr sepExpr;
-            String sep = ",";
-            sepExpr = new StringLiteral(sep);
-            exprs.add(sepExpr);
+            if (isLegacyGroupConcat) {
+                if (exprs.size() == 1) {
+                    Expr sepExpr;
+                    String sep = ", ";
+                    sepExpr = new StringLiteral(sep);
+                    exprs.add(sepExpr);
+                }
+            } else {
+                Expr sepExpr;
+                String sep = ",";
+                sepExpr = new StringLiteral(sep);
+                exprs.add(sepExpr);
+            }
         }
         if (!orderByElements.isEmpty()) {
             int exprSize = exprs.size();
