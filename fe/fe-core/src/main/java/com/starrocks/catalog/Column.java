@@ -63,12 +63,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
+import static com.starrocks.common.util.DateUtils.DATE_TIME_MS_FORMATTER_UNIX;
 
 /**
  * This class represents the column-related metadata.
@@ -601,10 +603,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             if (ConnectContext.get() != null) {
                 LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return localDateTime.format(DATE_TIME_FORMATTER);
+                return localDateTime.format(DATE_TIME_MS_FORMATTER_UNIX);
             } else {
-                // should not run up here
-                return LocalDateTime.now().format(DATE_TIME_FORMATTER);
+                // some load job (e.g. stream load) will reach this logic,
+                // since function now() is only accurate to milliseconds,
+                // in order to maintain the same behavior as insert into,
+                // we also choose to be accurate only to milliseconds.
+                return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
             }
         }
         return null;
