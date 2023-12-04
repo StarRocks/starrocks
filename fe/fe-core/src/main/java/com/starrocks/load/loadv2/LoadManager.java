@@ -333,13 +333,8 @@ public class LoadManager implements Writable {
     }
 
     public long getLoadJobNum(JobState jobState, EtlJobType jobType) {
-        readLock();
-        try {
-            return idToLoadJob.values().stream().filter(j -> j.getState() == jobState && j.getJobType() == jobType)
-                    .count();
-        } finally {
-            readUnlock();
-        }
+        return idToLoadJob.values().stream().filter(j -> j.getState() == jobState && j.getJobType() == jobType)
+                .count();
     }
 
     private void unprotectedRemoveJobReleatedMeta(LoadJob job) {
