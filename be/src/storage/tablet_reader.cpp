@@ -570,7 +570,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status TabletReader::parse_seek_range(TabletSchemaCSPtr tablet_schema,
+Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                       TabletReaderParams::RangeStartOperation range_start_op,
                                       TabletReaderParams::RangeEndOperation range_end_op,
                                       const std::vector<OlapTuple>& range_start_key,
