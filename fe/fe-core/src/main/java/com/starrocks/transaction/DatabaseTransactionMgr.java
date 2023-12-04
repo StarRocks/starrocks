@@ -1561,7 +1561,7 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = db.getTable(transactionStateBatch.getTableId());
+        Table table = db.getTable(transactionStateBatch.getTableId().get(0));
         if (table == null) {
             return true;
         }

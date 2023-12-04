@@ -422,10 +422,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
     void publishVersionForLakeTableBatch(List<TransactionStateBatch> readyTransactionStatesBatch) {
         Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
         for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
-            long tableId = txnStateBatch.getTableId();
-            if (publishingLakeTransactionsBatchTableId.add(tableId)) {
+            List<Long> tableIds = txnStateBatch.getTableId();
+            if (publishingLakeTransactionsBatchTableId.addAll(tableIds)) {
                 CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
-                future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
+                future.thenRun(() -> publishingLakeTransactionsBatchTableId.removeAll(tableIds));
             }
         }
     }
@@ -570,7 +570,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // only one table,if batch has multi transactionState for now,
             // the batch only has one transactionState for multi table.
             long dbId = txnStateBatch.getDbId();
-            long tableId = txnStateBatch.getTableId();
+            long tableId = txnStateBatch.getTableId().get(0);
             List<TransactionState> states = txnStateBatch.getTransactionStates();
             // partitionId -> txnIdList
             Map<Long, List<Long>> dirtyPartitons = new HashMap<>();

@@ -146,7 +146,14 @@ public class LakePublishBatchTest {
         };
 
         String sql = "create table " + TABLE +
-                " ( pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3" +
+                " (dt date NOT NULL, pk bigint NOT NULL, v0 string not null) primary KEY (dt, pk) " +
+                "PARTITION BY RANGE(`dt`) (\n" +
+                "    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),\n" +
+                "    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),\n" +
+                "    PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),\n" +
+                "    PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))\n" +
+                ")" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
                 "\", \"storage_medium\" = \"SSD\")";
         starRocksAssert.withTable(sql);
@@ -156,13 +163,20 @@ public class LakePublishBatchTest {
     public void testNormal() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
-        List<TabletCommitInfo> transTablets = Lists.newArrayList();
-        for (Partition partition : table.getPartitions()) {
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+
+        for (int i = 0; i < table.getPartitions().size(); i++) {
+            Partition partition = table.getPartition(i);
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
-                    transTablets.add(tabletCommitInfo);
+                    if (i % 2 == 0) {
+                        transTablets1.add(tabletCommitInfo);
+                    } else {
+                        transTablets2.add(tabletCommitInfo);
+                    }
                 }
             }
         }
@@ -174,7 +188,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets1,
                 Lists.newArrayList(), null);
 
         long transactionId2 = globalTransactionMgr.
@@ -183,7 +197,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets2,
                 Lists.newArrayList(), null);
 
         long transactionId3 = globalTransactionMgr.
@@ -192,7 +206,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets,
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets1,
                 Lists.newArrayList(), null);
 
         long transactionId4 = globalTransactionMgr.
@@ -201,7 +215,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter4 = globalTransactionMgr.commitTransaction(db.getId(), transactionId4, transTablets,
+        VisibleStateWaiter waiter4 = globalTransactionMgr.commitTransaction(db.getId(), transactionId4, transTablets2,
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();

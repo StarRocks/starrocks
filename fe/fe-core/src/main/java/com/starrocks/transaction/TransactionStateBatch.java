@@ -94,11 +94,14 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
     }
 
-    public long getTableId() {
-        if (transactionStates.size() != 0) {
-            return transactionStates.get(0).getTableIdList().get(0);
+    // there is only one transactionState in batch when txn involving multi tables,
+    // and getTableId will return a list of tables in the situation,
+    // otherwise the list only contain one table which means all transationState in batch have the same table.
+    public List<Long> getTableId() {
+        if (!transactionStates.isEmpty()) {
+            return transactionStates.get(0).getTableIdList();
         }
-        return -1;
+        return new ArrayList<>();
     }
 
     public long size() {
