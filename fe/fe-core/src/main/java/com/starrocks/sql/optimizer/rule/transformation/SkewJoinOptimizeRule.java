@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
  *
  *     Join[skew|t0.v1(skewValueList)](v1 = v4)              Join (v1 = v4 and rand_col1 = rand_cal2)
  *      /                         \            =>             /                                   \
- *     t0                         t1                    Project(v1, rand_cao1)             Project(v4, rand_col2)
+ *     t0                         t1                    Project(v1, rand_col1)             Project(v4, rand_col2)
  *                                                          |                                       |
  *                                                       t0                              left join(v1 = unnest)
  *                                                                                       /               \
@@ -74,7 +74,8 @@ import java.util.stream.Collectors;
  *
  *
  *
- *  rand_col1 : case when v1 is NULL then round(rand() * 100 when v1 in (1,2,3) then round(rand() * 100) else 0 end)
+ *  rand_col1 : case when v1 is NULL then round(rand() * skewJoinRandRange
+ *              when v1 in (1,2,3) then round(rand() * skewJoinRandRange) else 0 end)
  *  rand_col2 : case when generate_serials is NOT NULL generate_serials else 0 end
  *  skewJoinRandRange is a session variable, default value is 1000
  *  skewValueList is a list of skew values, need to be set by user, e.g. (1,2,3) is a list of skew values
