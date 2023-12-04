@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # JSON_EACH
 
 ## 功能

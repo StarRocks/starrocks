@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理用户权限
 
 本文介绍如何管理 StarRocks 集群中的用户权限。

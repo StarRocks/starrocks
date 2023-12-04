@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE FILE
 
 CREATE FILE 语句用于创建文件。文件创建后会自动上传并持久化在 StarRocks 集群中。只有拥有管理员 (administrator) 权限的用户可以创建文件。当一个文件归属于一个数据库时，对该数据库拥有访问权限的用户都可以使用该文件。

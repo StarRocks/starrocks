@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # [Preview] Resource group
 
 This topic describes the resource group feature of StarRocks.

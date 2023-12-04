@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 从 Apache Flink® 持续导入
 
 ## 功能简介

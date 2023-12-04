@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW CREATE TABLE
 
 Returns the CREATE TABLE statement that was used to create a given table. The SHOW CREATE TABLE statement requires you to have the `SELECT_PRIV` permission on the table. Note that the CREATE TABLE statements of tables managed by an [external catalog](../../../data_source/Manage_data.md) cannot be displayed.

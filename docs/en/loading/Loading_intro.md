@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Overview of data loading
 
 Data loading is the process of cleansing and transforming raw data from various data sources based on your business requirements and loading the resulting data into StarRocks to facilitate blazing-fast data analytics.

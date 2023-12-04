@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # atan2
 
 ## Description

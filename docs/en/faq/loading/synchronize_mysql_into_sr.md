@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Synchronize data from MySQL in real time
 
 ## What do I do if a Flink job reports an error?

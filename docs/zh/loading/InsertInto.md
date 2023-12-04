@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 INSERT INTO 语句导入数据
 
 本文介绍如何使用 INSERT INTO 语句向 StarRocks 导入数据。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理集群
 
 本文介绍如何管理维护 StarRocks 集群，包括启停集群，升级回滚等操作。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Analyze query profile
 
 This topic describes how to check the query profile. A query profile records the execution information of all worker nodes involved in a query. Query profiles help you quickly identify the bottlenecks that affect the query performance of your StarRocks cluster.

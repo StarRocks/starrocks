@@ -148,6 +148,7 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
@@ -364,6 +365,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
 
@@ -531,6 +533,7 @@ public class GlobalStateMgr {
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
         this.loadEtlChecker = new LoadEtlChecker(loadManager);
+        this.lockChecker = new LockChecker();
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
@@ -1053,6 +1056,8 @@ public class GlobalStateMgr {
         }
         // domain resolver
         domainResolver.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonMaster(FrontendNodeType newType) {

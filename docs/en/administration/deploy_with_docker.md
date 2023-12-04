@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks in Docker
 
 This topic describes how to deploy StarRocks in a Docker container.

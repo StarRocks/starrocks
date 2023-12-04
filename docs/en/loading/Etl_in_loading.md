@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Transform data at loading
 
 StarRocks supports data transformation at loading.
