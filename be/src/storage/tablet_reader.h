@@ -60,7 +60,7 @@ public:
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
-    static Status parse_seek_range(const TabletSharedPtr& tablet,
+    static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
                                    TabletReaderParams::RangeEndOperation range_end_op,
                                    const std::vector<OlapTuple>& range_start_key,

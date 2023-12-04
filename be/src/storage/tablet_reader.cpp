@@ -128,7 +128,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 Status TabletReader::_init_collector_for_pk_index_read() {
     DCHECK(_reader_params != nullptr);
     // get pk eq predicates, and convert these predicates to encoded pk column
-    const auto& tablet_schema = _tablet->tablet_schema();
+    const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
@@ -195,7 +195,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_state = _reader_params->runtime_state;
     rs_opts.profile = _reader_params->profile;
     rs_opts.use_page_cache = _reader_params->use_page_cache;
-    rs_opts.tablet_schema = _tablet->tablet_schema();
+    rs_opts.tablet_schema = _tablet_schema;
     rs_opts.global_dictmaps = _reader_params->global_dictmaps;
     rs_opts.unused_output_column_ids = _reader_params->unused_output_column_ids;
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
@@ -254,7 +254,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
-    RETURN_IF_ERROR(parse_seek_range(_tablet, params.range, params.end_range, params.start_key, params.end_key,
+    RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
@@ -570,7 +570,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
+Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                       TabletReaderParams::RangeStartOperation range_start_op,
                                       TabletReaderParams::RangeEndOperation range_end_op,
                                       const std::vector<OlapTuple>& range_start_key,
@@ -592,8 +592,8 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
     for (size_t i = 0; i < n; i++) {
         SeekTuple lower;
         SeekTuple upper;
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
