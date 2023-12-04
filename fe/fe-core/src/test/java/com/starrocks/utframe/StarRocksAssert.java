@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -167,6 +168,15 @@ public class StarRocksAssert {
 
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
