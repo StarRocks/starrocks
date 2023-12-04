@@ -400,7 +400,7 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+        Assert.assertEquals("insert overwrite `mv2` SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
