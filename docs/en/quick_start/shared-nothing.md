@@ -194,6 +194,16 @@ curl --location-trusted -u root             \
 
 ---
 
+## Connecting to open table formats Apache Iceberg, Apache Hudi, Delta Lake and Apache Hive
+
+You can also use the quickstart container to connect to various open table formats.  Please see the following links to learn more. 
+- [Apache Iceberg](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/) and [Apache Iceberg Tutorial](https://github.com/StarRocks/starrocks/discussions/23427)
+- [Apache Hudi](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/) and [Apache Hudi Tutorial](https://github.com/StarRocks/starrocks/discussions/22947)
+- [Delta Lake](https://docs.starrocks.io/docs/data_source/catalog/deltalake_catalog/)
+- [Apache Hive](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/)
+
+---
+
 ## Answer some questions
 
 <SQL />
