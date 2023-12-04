@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
@@ -275,6 +276,8 @@ Status MemTable::flush(SegmentPB* seg_info) {
         return Status::InternalError(
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet_id);
+
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
