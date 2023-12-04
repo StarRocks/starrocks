@@ -77,6 +77,17 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     public AuthorizerStmtVisitorEPack() {
     }
 
+    private void checkWarehouseUsagePrivilege(String warehouseName, ConnectContext context) {
+        try {
+            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+        }
+    }
+
     // ---------------------------------------- Table Statement ---------------------------------------
 
     @Override
@@ -127,14 +138,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         Map<String, String> properties = statement.getProperties();
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            try {
-                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
-            }
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
     }
@@ -453,14 +457,8 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     }
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
-        try {
-            AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName());
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), statement.getWarehouseName());
-        }
+        String warehouseName = statement.getWarehouseName();
+        checkWarehouseUsagePrivilege(warehouseName, context);
         return null;
     }
 
@@ -574,14 +572,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
                 // check warehouse privilege
                 String warehouseName = optHints.get(SessionVariable.WAREHOUSE_NAME);
                 if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
-                    try {
-                        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                                context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
-                    }
+                    checkWarehouseUsagePrivilege(warehouseName, context);
                 }
             }
         }
@@ -597,14 +588,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         Map<String, String> properties = statement.getProperties();
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            try {
-                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
-            }
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
 
         return null;
@@ -618,14 +602,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         Map<String, String> properties = statement.getJobProperties();
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            try {
-                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
-            }
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
     }
@@ -637,14 +614,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         Map<String, String> properties = statement.getJobProperties();
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            try {
-                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
-            }
+            checkWarehouseUsagePrivilege(warehouseName, context);
         }
         return null;
     }
