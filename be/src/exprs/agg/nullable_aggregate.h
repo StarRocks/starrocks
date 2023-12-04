@@ -889,6 +889,7 @@ public:
                         ColumnHelper::unpack_and_duplicate_const_column(i->size(), i).get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
+                    dst_nullable_column->set_has_null(true);
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
                     size_t null_size = SIMD::count_nonzero(src_null_data);
