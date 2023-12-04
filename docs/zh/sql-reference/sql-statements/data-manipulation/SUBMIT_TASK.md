@@ -31,7 +31,7 @@ SUBMIT TASK [task_name] AS <etl_statement>
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
-SELECT * FROM information_schema.tasks WHERE task_name = <task_name>;
+SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 ```
 
 执行 Task 后会对应生成一个 TaskRun，表示一个 ETL 语句执行任务。TaskRun 有以下状态：
@@ -45,7 +45,7 @@ SELECT * FROM information_schema.tasks WHERE task_name = <task_name>;
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;
-SELECT * FROM information_schema.task_runs WHERE task_name = <task_name>;
+SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ```
 
 ## 相关 FE 参数
