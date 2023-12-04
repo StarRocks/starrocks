@@ -217,9 +217,9 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 ## Function, SELECT
 
-- [CREATE FUNCTION](./data-definition/create-function.md)
-- [DROP FUNCTION](./data-definition/drop-function.md)
-- [SHOW FUNCTION](./data-definition/show-functions.md)
+- [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
+- [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
+- [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
 - [SELECT](./data-manipulation/SELECT.md)
 
 ## CBO statistics
