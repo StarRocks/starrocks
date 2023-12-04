@@ -2092,13 +2092,13 @@ BE static parameters are as follows.
 
 - **Default**: 10%
 - **Unit**: N/A
-- **Description**: The maximum amount of data that can be cached in memory. You can set it as a percentage ("10%") or a physical limit ("10G", "21474836480"). The default value is 10%. We recommend that you set the value of this parameter to at least 10GB.
+- **Description**: The maximum amount of data that can be cached in memory. You can set it as a percentage (`10%`) or a physical limit (`10G`, `21474836480`). The default value is `10%`. We recommend that you set the value of this parameter to at least 10 GB.
 
 #### datacache_disk_size
 
 - **Default**: 0
 - **Unit**: N/A
-- **Description**: The maximum amount of data that can be cached on a single disk. You can set it as a percentage ("80%") or a physical limit ("2T", "500G"). For example, if you configure two disk paths for the datacache_disk_path parameter and set the value of the datacache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
+- **Description**: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (`80%`) or a physical limit (`2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data. Unit: bytes.
 
 #### jdbc_connection_pool_size
 
