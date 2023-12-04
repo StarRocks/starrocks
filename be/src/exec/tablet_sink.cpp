@@ -1777,6 +1777,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 }
 
 bool OlapTableSink::is_close_done() {
+<<<<<<< HEAD
     if (!_close_done) {
         bool close_done = true;
         if (_colocate_mv_index) {
@@ -1788,6 +1789,12 @@ bool OlapTableSink::is_close_done() {
     }
 
     return _close_done;
+=======
+    if (_tablet_sink_sender == nullptr) {
+        return true;
+    }
+    return _tablet_sink_sender->is_close_done();
+>>>>>>> 0618253479 ([BugFix] Fix OlapTableSink close crash if it is not prepare success (#36339))
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
@@ -1867,6 +1874,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
 
+<<<<<<< HEAD
         int64_t total_server_rpc_time_us = 0;
         int64_t total_server_wait_memtable_flush_time_us = 0;
         // print log of add batch time of all node, for tracing load performance easily
@@ -1900,6 +1908,12 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     if (_vectorized_partition) {
         _vectorized_partition->close(state);
     }
+=======
+    if (_tablet_sink_sender == nullptr) {
+        return close_status;
+    }
+    Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
+>>>>>>> 0618253479 ([BugFix] Fix OlapTableSink close crash if it is not prepare success (#36339))
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());
     }
