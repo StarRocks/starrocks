@@ -247,6 +247,11 @@ public class StarRocksAssert {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
     }
 
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (statementBase instanceof CreateTableStmt) {
@@ -453,6 +458,10 @@ public class StarRocksAssert {
         Analyzer.analyze(stmt, ctx);
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
         return showExecutor.execute().getResultRows();
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }
 
     public String executeShowResourceUsageSql(String sql) throws DdlException, AnalysisException {
