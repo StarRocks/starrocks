@@ -5225,26 +5225,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
         if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
-<<<<<<< HEAD
-            Expr sepExpr;
-            String sep = ",";
-            sepExpr = new StringLiteral(sep);
-            exprs.add(sepExpr);
-=======
             if (isLegacyGroupConcat) {
                 if (exprs.size() == 1) {
                     Expr sepExpr;
                     String sep = ", ";
-                    sepExpr = new StringLiteral(sep, pos);
+                    sepExpr = new StringLiteral(sep);
                     exprs.add(sepExpr);
                 }
             } else {
                 Expr sepExpr;
                 String sep = ",";
-                sepExpr = new StringLiteral(sep, pos);
+                sepExpr = new StringLiteral(sep);
                 exprs.add(sepExpr);
             }
->>>>>>> 11ece99e58 ([Enhancement] Use sql_mode to be compatible with legacy group_concat (#36150))
         }
         if (!orderByElements.isEmpty()) {
             int exprSize = exprs.size();
