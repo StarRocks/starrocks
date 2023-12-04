@@ -234,7 +234,7 @@ Dataphin 可以基于元数据进行信息的呈现与展示，包括表使用�
 
    参数说明如下：
 
-   - **JDBC URL**：JDBC 连接串，分为两部分填写，可参考 MySQL JDBC URL 格式 `https://dev.mysql.com/doc/connector-j/8.1/en/connector-j-reference-jdbc-url-format.html`。
+   - **JDBC URL**：JDBC 连接串，分为两部分填写。
 
      - 第一部分：格式为 `jdbc:mysql://<Host>:<Port>/`，其中 `Host` 为 StarRocks 集群的 FE 主机 IP 地址，`Port` 为 FE 的查询端口，默认为 9030。
 
