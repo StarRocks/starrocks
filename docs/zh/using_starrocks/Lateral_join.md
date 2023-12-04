@@ -46,7 +46,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 
 您可以使用 Lateral Join 功能配合 Unnest 功能将 STRING 类型数据展开为多行数据。
 
-示例：
+示例
 
 1. 创建测试用表并插入测试数据。
 

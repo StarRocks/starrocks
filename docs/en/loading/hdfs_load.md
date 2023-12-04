@@ -274,7 +274,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
+For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema#loads).
 
 > **NOTE**
 >
@@ -374,7 +374,7 @@ You can query the progress of Broker Load jobs from the `information_schema.load
 SELECT * FROM information_schema.loads;
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md)).
+For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md#loads).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 

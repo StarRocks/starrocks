@@ -274,7 +274,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md#loads)。
 
 > **NOTE**
 >
@@ -374,7 +374,7 @@ PROPERTIES
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md#loads)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
