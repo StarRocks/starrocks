@@ -40,7 +40,7 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing();
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
     });
 
