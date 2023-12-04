@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+unlisted: true
 ---
 
 # Deploy and manage Broker node
