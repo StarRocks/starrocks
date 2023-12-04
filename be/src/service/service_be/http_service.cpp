@@ -180,6 +180,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
     _http_handlers.emplace_back(symbol_action);
 
+    auto* ioprofile_action = new IOProfileAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/ioprofile", ioprofile_action);
+    _http_handlers.emplace_back(ioprofile_action);
+
     // register metrics
     {
         auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
