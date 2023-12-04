@@ -311,9 +311,9 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
                     if (intervalLiteral != null) {
                         final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
                         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                        if (asyncRefreshSchemeDesc.isDefineStartTime()) {
-                            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-                        }
+                        asyncRefreshContext.setStartTime(
+                                Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                        asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
                         asyncRefreshContext.setStep(step.getLongValue());
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {

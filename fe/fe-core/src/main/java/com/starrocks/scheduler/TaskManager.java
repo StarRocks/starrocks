@@ -141,29 +141,19 @@ public class TaskManager {
             if (taskSchedule == null) {
                 continue;
             }
-            long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
-                    taskSchedule.getTimeUnit());
-            LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
-            // Tasks that run automatically have the lowest priority,
-            // but are automatically merged if they are found to be merge-able.
-            ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
-                    true, task.getProperties());
-            ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName(), option), initialDelay,
-                    period, TimeUnit.SECONDS);
-            periodFutureMap.put(task.getId(), future);
+            registerScheduler(task, scheduleTime);
+
             scheduleTime = scheduleTime.plusSeconds(5);
         }
     }
 
     @VisibleForTesting
-    static long getInitialDelayTime(long period, LocalDateTime startTime, LocalDateTime scheduleTime) {
+    static long getInitialDelayTime(long periodSeconds, LocalDateTime startTime, LocalDateTime scheduleTime) {
         Duration duration = Duration.between(scheduleTime, startTime);
         long initialDelay = duration.getSeconds();
         // if startTime < now, start scheduling from the next period
         if (initialDelay < 0) {
-            return ((initialDelay % period) + period) % period;
+            return ((initialDelay % periodSeconds) + periodSeconds) % periodSeconds;
         } else {
             return initialDelay;
         }
@@ -227,7 +217,7 @@ public class TaskManager {
                     if (schedule == null) {
                         throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                     }
-                    registerScheduler(task);
+                    registerScheduler(task, LocalDateTime.now());
                 }
             }
             nameToTaskMap.put(task.getName(), task);
@@ -424,7 +414,7 @@ public class TaskManager {
             TaskSchedule schedule = changedTask.getSchedule();
             currentTask.setSchedule(schedule);
             if (!isReplay) {
-                registerScheduler(currentTask);
+                registerScheduler(currentTask, LocalDateTime.now());
             }
             hasChanged = true;
         }
@@ -437,16 +427,14 @@ public class TaskManager {
         }
     }
 
-    private void registerScheduler(Task task) {
+    private void registerScheduler(Task task, LocalDateTime scheduleTime) {
         TaskSchedule schedule = task.getSchedule();
         LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-        long initialDelay = getInitialDelayTime(schedule.getPeriod(), startTime, LocalDateTime.now());
-        // this operation should only run in master
+        long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
+        long initialDelay = getInitialDelayTime(periodSeconds, startTime, scheduleTime);
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                        executeTask(task.getName(), option), initialDelay,
-                TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
-                TimeUnit.SECONDS);
+                executeTask(task.getName(), option), initialDelay, periodSeconds, TimeUnit.SECONDS);
         periodFutureMap.put(task.getId(), future);
     }
 
