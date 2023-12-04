@@ -14,18 +14,17 @@
 
 #include "storage/rowset/storage_page_decoder.h"
 
+#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 #include "util/coding.h"
-#include "gen_cpp/segment.pb.h"
 
 namespace starrocks {
 
 class BitShuffleDataDecoder : public DataDecoder {
 public:
-    BitShuffleDataDecoder(PageTypePB page_type): _page_type(page_type) {}
+    BitShuffleDataDecoder(PageTypePB page_type) : _page_type(page_type) {}
     ~BitShuffleDataDecoder() override = default;
-
 
     size_t get_null_size(PageFooterPB* footer) {
         if (_page_type == DICTIONARY_PAGE) {
@@ -85,15 +84,14 @@ private:
 
 class DictDictDecoder : public DataDecoder {
 public:
-    DictDictDecoder() {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DICTIONARY_PAGE);
-    }
+    DictDictDecoder() { _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DICTIONARY_PAGE); }
     ~DictDictDecoder() override = default;
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
         return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
     }
+
 private:
     std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
 };
@@ -108,9 +106,9 @@ public:
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
-        // When the dictionary page is not full, the header of the binary dictionary's data 
-        // page is DICT_ENCODING, and bitshuffle decode is needed at this point. When the 
-        // dictionary page is full, the header of the binary dictionary's data page is PLAIN_ENCODING. 
+        // When the dictionary page is not full, the header of the binary dictionary's data
+        // page is DICT_ENCODING, and bitshuffle decode is needed at this point. When the
+        // dictionary page is full, the header of the binary dictionary's data page is PLAIN_ENCODING.
         // For the newly introduced dictionary data page, the header is BIT_SHUFFLE.
         size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
         if (type == DICT_ENCODING || type == BIT_SHUFFLE) {
@@ -152,14 +150,14 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     }
 }
 
-// For dictionary-type data pages, there are two scenarios. One is PLAIN encoding, 
-// and for PLAIN encoding, no additional decompression is required. The other is 
-// BITSHUFFLE, and in this case, pre-decompression of the page data is needed. For 
-// dictionary-type dictionary pages, there used to be only one type of page encoded 
-// with PLAIN, so no additional operation was needed. However, in this PR, we encode 
-// dictionary data pages with BITSHUFFLE, so pre-decompression is needed in this case. 
-// BITSHUFFLE encoding pages for data pages have a reserved header for recording the 
-// encoding type. Still, BITSHUFFLE encoding pages for dictionary pages do not have a 
+// For dictionary-type data pages, there are two scenarios. One is PLAIN encoding,
+// and for PLAIN encoding, no additional decompression is required. The other is
+// BITSHUFFLE, and in this case, pre-decompression of the page data is needed. For
+// dictionary-type dictionary pages, there used to be only one type of page encoded
+// with PLAIN, so no additional operation was needed. However, in this PR, we encode
+// dictionary data pages with BITSHUFFLE, so pre-decompression is needed in this case.
+// BITSHUFFLE encoding pages for data pages have a reserved header for recording the
+// encoding type. Still, BITSHUFFLE encoding pages for dictionary pages do not have a
 // reserved header.
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                                        std::unique_ptr<char[]>* page, Slice* page_slice) {

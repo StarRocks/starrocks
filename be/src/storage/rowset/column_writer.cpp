@@ -254,11 +254,10 @@ private:
     ColumnPtr _buf_column = nullptr;
 };
 
-
 class DictColumnWriter final : public ColumnWriter {
 public:
     DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                       std::unique_ptr<ScalarColumnWriter> column_writer);
+                     std::unique_ptr<ScalarColumnWriter> column_writer);
 
     ~DictColumnWriter() override = default;
 
@@ -871,9 +870,8 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     return Status::OK();
 }
 
-
 DictColumnWriter::DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                                       std::unique_ptr<ScalarColumnWriter> column_writer)
+                                   std::unique_ptr<ScalarColumnWriter> column_writer)
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _scalar_column_writer(std::move(column_writer)) {}
 
@@ -911,45 +909,45 @@ inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& 
     EncodingTypePB detect_encoding;
     LogicalType logicalType = type_info()->type();
     switch (logicalType) {
-        case TYPE_TINYINT:
-            detect_encoding = speculate_encoding<TYPE_TINYINT>(column);
-            break;
-        case TYPE_SMALLINT:
-            detect_encoding = speculate_encoding<TYPE_SMALLINT>(column);
-            break;
-        case TYPE_INT:
-            detect_encoding = speculate_encoding<TYPE_INT>(column);
-            break;
-        case TYPE_BIGINT:
-            detect_encoding = speculate_encoding<TYPE_BIGINT>(column);
-            break;
-        case TYPE_LARGEINT:
-            detect_encoding = speculate_encoding<TYPE_LARGEINT>(column);
-            break;
-        case TYPE_FLOAT:
-            detect_encoding = speculate_encoding<TYPE_FLOAT>(column);
-            break;
-        case TYPE_DOUBLE:
-            detect_encoding = speculate_encoding<TYPE_DOUBLE>(column);
-            break;
-        case TYPE_DATE:
-            detect_encoding = speculate_encoding<TYPE_DATE>(column);
-            break;
-        case TYPE_DATETIME:
-            detect_encoding = speculate_encoding<TYPE_DATETIME>(column);
-            break;
-        case TYPE_DECIMALV2:
-            detect_encoding = speculate_encoding<TYPE_DECIMALV2>(column);
-            break;
-        default:
-            return Status::InternalError(strings::Substitute("$0 type should not use dictionary encoding", logicalType));
+    case TYPE_TINYINT:
+        detect_encoding = speculate_encoding<TYPE_TINYINT>(column);
+        break;
+    case TYPE_SMALLINT:
+        detect_encoding = speculate_encoding<TYPE_SMALLINT>(column);
+        break;
+    case TYPE_INT:
+        detect_encoding = speculate_encoding<TYPE_INT>(column);
+        break;
+    case TYPE_BIGINT:
+        detect_encoding = speculate_encoding<TYPE_BIGINT>(column);
+        break;
+    case TYPE_LARGEINT:
+        detect_encoding = speculate_encoding<TYPE_LARGEINT>(column);
+        break;
+    case TYPE_FLOAT:
+        detect_encoding = speculate_encoding<TYPE_FLOAT>(column);
+        break;
+    case TYPE_DOUBLE:
+        detect_encoding = speculate_encoding<TYPE_DOUBLE>(column);
+        break;
+    case TYPE_DATE:
+        detect_encoding = speculate_encoding<TYPE_DATE>(column);
+        break;
+    case TYPE_DATETIME:
+        detect_encoding = speculate_encoding<TYPE_DATETIME>(column);
+        break;
+    case TYPE_DECIMALV2:
+        detect_encoding = speculate_encoding<TYPE_DECIMALV2>(column);
+        break;
+    default:
+        return Status::InternalError(strings::Substitute("$0 type should not use dictionary encoding", logicalType));
     }
     st = _scalar_column_writer->set_encoding(detect_encoding);
     CHECK(st.ok()) << st;
     return st;
 }
 
-// The detection logic here uses a set to record the distinct values of a sample column. When the number 
+// The detection logic here uses a set to record the distinct values of a sample column. When the number
 // of distinct values exceeds row_count * ratio, dictionary encoding is no longer used.
 // Here, row_count is the number of elements in the sample column, and ratio is set by the user.
 template <LogicalType Type>

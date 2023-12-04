@@ -30,9 +30,9 @@ namespace starrocks {
 
 using strings::Substitute;
 
-// The maximum value of int32 is 2147483647, representing that a dictionary page can store 
-// a maximum of 2147483648 elements. If a dictionary page stores 2147483648 elements, assuming 
-// one element only occupies one byte, the size of the dictionary page will be 2GB, which is 
+// The maximum value of int32 is 2147483647, representing that a dictionary page can store
+// a maximum of 2147483648 elements. If a dictionary page stores 2147483648 elements, assuming
+// one element only occupies one byte, the size of the dictionary page will be 2GB, which is
 // impossible. Therefore, int32 is sufficient to store the index of the dictionary page,
 // and overflow will not occur.
 template <LogicalType field_type>
@@ -259,7 +259,6 @@ Status DictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column
     return _data_page_decoder->next_batch(range, dst);
 }
 
-
 template class DictPageDecoder<TYPE_TINYINT>;
 template class DictPageDecoder<TYPE_SMALLINT>;
 template class DictPageDecoder<TYPE_INT>;
@@ -273,7 +272,6 @@ template class DictPageDecoder<TYPE_DATETIME_V1>;
 template class DictPageDecoder<TYPE_DATETIME>;
 template class DictPageDecoder<TYPE_DECIMAL>;
 template class DictPageDecoder<TYPE_DECIMALV2>;
-
 
 template class DictPageBuilder<TYPE_TINYINT>;
 template class DictPageBuilder<TYPE_SMALLINT>;
@@ -290,4 +288,3 @@ template class DictPageBuilder<TYPE_DECIMAL>;
 template class DictPageBuilder<TYPE_DECIMALV2>;
 
 } // namespace starrocks
-

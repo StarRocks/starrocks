@@ -36,7 +36,6 @@
 
 #include <glog/logging.h>
 #include <sys/types.h>
-#include "common/logging.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -44,6 +43,7 @@
 #include <ostream>
 
 #include "column/fixed_length_column.h"
+#include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
@@ -240,6 +240,7 @@ private:
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
     typedef typename TypeTraits<Type>::CppType CppType;
+
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
 

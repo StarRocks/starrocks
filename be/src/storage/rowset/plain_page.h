@@ -137,6 +137,7 @@ private:
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
     using ValueType = typename CppTypeTraits<Type>::CppType;
+
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 

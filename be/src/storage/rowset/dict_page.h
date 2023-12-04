@@ -24,9 +24,9 @@
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "storage/rowset/plain_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
+#include "storage/rowset/plain_page.h"
 #include "storage/types.h"
 #include "util/phmap/phmap.h"
 
@@ -44,11 +44,11 @@ namespace starrocks {
 // to string plain page automatically.
 
 // DictPageBuilder has two encoders, data-page-builder and dict-builder
-// dict-builder is used to encode the dictionary, data-page-builder is used to encode the 
+// dict-builder is used to encode the dictionary, data-page-builder is used to encode the
 // dictionary's index. data-page-builder and dict-builder use BitshufflePageBuilder for encoding
 // Because when the dictionary page is full, data-page-builder will no longer store the index of the
-// dictionary page, but instead store the data itself, data-page-builder needs to reserve a segment 
-// of space in advance to store the encoding type, indicating whether this page stores the index of 
+// dictionary page, but instead store the data itself, data-page-builder needs to reserve a segment
+// of space in advance to store the encoding type, indicating whether this page stores the index of
 // the dictionary page or the data
 template <LogicalType Type>
 class DictPageBuilder final : public PageBuilder {
@@ -112,16 +112,17 @@ private:
     faststring _first_value;
 };
 
-// DictPageDecoder initially holds a segment of memory, and from the header of this memory segment, 
+// DictPageDecoder initially holds a segment of memory, and from the header of this memory segment,
 // you can determine the encoding method used, whether it's DICT_ENCODING or BIT_SHUFFLE.
-// When initializing DictPageDecoder, it does not load the dictionary page. The dictionary page provides 
-// an additional function set_dict_decoder, which sets the dict-decoder to BitshufflePageBuilder. 
-// When reading data, if the encoding method is BIT_SHUFFLE, you can directly load the data from the 
-// data-page-decoder. If it's not BIT_SHUFFLE, it means that the data-page does not store the actual data 
+// When initializing DictPageDecoder, it does not load the dictionary page. The dictionary page provides
+// an additional function set_dict_decoder, which sets the dict-decoder to BitshufflePageBuilder.
+// When reading data, if the encoding method is BIT_SHUFFLE, you can directly load the data from the
+// data-page-decoder. If it's not BIT_SHUFFLE, it means that the data-page does not store the actual data
 // but rather the index of the data. In this case, you need to load the data from the dictionary.
 template <LogicalType Type>
 class DictPageDecoder final : public PageDecoder {
     using ValueType = typename CppTypeTraits<Type>::CppType;
+
 public:
     DictPageDecoder(Slice data);
 

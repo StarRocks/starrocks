@@ -36,9 +36,9 @@
 
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
-#include "storage/rowset/dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
 #include "util/bitmap.h"
 
@@ -64,10 +64,9 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         return Status::OK();
     }
     LogicalType column_type = delegate_type(_reader->column_type());
-    DCHECK(is_default_dict_encoding(column_type)) << strings::Substitute(
-            "dict encoding with unsupported $0 field type", column_type);
-    switch (column_type)
-    {
+    DCHECK(is_default_dict_encoding(column_type))
+            << strings::Substitute("dict encoding with unsupported $0 field type", column_type);
+    switch (column_type) {
     case TYPE_CHAR:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_CHAR>;
         break;
@@ -102,11 +101,10 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATETIME>;
         break;
     case TYPE_DECIMALV2:
-        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;  
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;
         break;
     default:
-        return Status::NotSupported(strings::Substitute(
-                "dict encoding with unsupported $0 field type", column_type));
+        return Status::NotSupported(strings::Substitute("dict encoding with unsupported $0 field type", column_type));
     }
 
     // TODO: The following logic is primarily used for optimizing queries for VARCHAR/CHAR types during
