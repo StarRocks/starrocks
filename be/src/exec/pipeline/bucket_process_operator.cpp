@@ -148,8 +148,16 @@ BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
     ctx->sink = _factory->create(degree_of_parallelism, driver_sequence);
+<<<<<<< HEAD
     ctx->spill_channel = get_spill_channel(ctx->sink);
     ctx->spill_channel->set_reuseable(true);
+=======
+    auto spill_channel = get_spill_channel(ctx->sink);
+    if (spill_channel != nullptr) {
+        spill_channel->set_reuseable(true);
+    }
+    ctx->spill_channel = std::move(spill_channel);
+>>>>>>> 476923b9c0 ([BugFix] Fix bucket colocate agg error when enable spill (#36346))
     auto bucket_source_operator =
             std::make_shared<BucketProcessSinkOperator>(this, _id, _plan_node_id, driver_sequence, ctx);
     return bucket_source_operator;

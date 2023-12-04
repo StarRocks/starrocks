@@ -63,6 +63,9 @@ public:
     // only the prepare/open phase calls are valid.
     SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
 
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
+
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 

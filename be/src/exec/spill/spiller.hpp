@@ -196,7 +196,11 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         _running_restore_tasks++;
+<<<<<<< HEAD
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream]() {
+=======
+        auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
+>>>>>>> 476923b9c0 ([BugFix] Fix bucket colocate agg error when enable spill (#36346))
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             DEFER_GUARD_END(guard);
