@@ -302,3 +302,28 @@ set group_concat_max_len = 9;
 select group_concat(name,subject order by 1,2) from ss group by id order by 1;
 set group_concat_max_len = 121;
 select group_concat(name,subject order by 1,2) from ss group by id order by 1;
+
+-- name: testLegacyGroupConcat
+CREATE TABLE t1 (
+    id        tinyint(4)      NULL,
+    value   varchar(65533)  NULL
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+INSERT INTO t1 VALUES
+(1,'fruit'),
+(1,'fruit'),
+(1,'fruit'),
+(2,'fruit'),
+(2,'fruit'),
+(2,'fruit');
+
+set group_concat_max_len = 1024;
+set sql_mode = 'GROUP_CONCAT_LEGACY';
+select id, group_concat( value ) from t1 group by id order by id;
+select id, group_concat( value, '-' ) from t1 group by id order by id;
+select group_concat( value ) from t1;
+select group_concat( value, '-' ) from t1;
