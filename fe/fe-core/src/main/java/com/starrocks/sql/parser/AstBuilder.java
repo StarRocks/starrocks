@@ -5691,6 +5691,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        if (functionName.equals(FunctionSet.COMPRESS) || functionName.equals(FunctionSet.UNCOMPRESS)) {
+            if (context.expression().size() == 1) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(
+                        fnName, Lists.newArrayList(e1, new StringLiteral("ZLIB")), pos);
+                return functionCallExpr;
+            }
+        }
+
         if (functionName.equals(FunctionSet.DICT_MAPPING)) {
             List<Expr> params = visit(context.expression(), Expr.class);
             return new DictQueryExpr(params);

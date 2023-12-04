@@ -22,6 +22,8 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 #include "util/url_parser.h"
 
 namespace starrocks {
@@ -55,6 +57,24 @@ struct MatchInfo {
 
 struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
+};
+
+struct CompressState {
+    CompressionTypePB compress_type;
+    const BlockCompressionCodec* compress_codec{nullptr};
+
+    Status get_compress_codec(const std::string& s) {
+        std::string str(s);
+        std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
+        compress_type = CompressionUtils::to_compression_pb(str);
+        if (compress_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+            std::stringstream error;
+            error << "Invalid compress method: " << str;
+            return Status::InvalidArgument(error.str());
+        }
+        RETURN_IF_ERROR(get_block_compression_codec(compress_type, &compress_codec));
+        return Status::OK();
+    }
 };
 
 class StringFunctions {
@@ -486,10 +506,21 @@ public:
      * A function to compress the data,
      *
      * @param: [string_value, string_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: StringColumn
+     * @paramType: [StringColumn, StringColumn]
+     * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(compress);
+    static Status compress_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status compress_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * A function to decompress the data,
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [BinaryColumn, StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(uncompress);
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 

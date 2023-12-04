@@ -113,6 +113,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [ascii](./string-functions/ascii.md) | 返回字符串第一个字符对应的 ASCII 码。  |
 | [char](./string-functions/char.md)| 根据输入的 ASCII 值返回对应的字符。  |
 | [char_length，character_length](./string-functions/char_length.md) | 返回字符串的长度。  |
+| [compress](./string-functions/compress.md) | 使用不同压缩方法压缩字符串。 |
 | [concat](./string-functions/concat.md) |  将多个字符串连接起来。 |
 | [concat_ws](./string-functions/concat_ws.md) | 使用分隔符将两个或以上的字符串拼接成一个新的字符串。  |
 | [ends_with](./string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
@@ -147,6 +148,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [substr, substring](./string-functions/substring.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
 | [trim](./string-functions/trim.md) | 从字符串的左侧和右侧移除连续出现的空格或指定的字符。  |
 | [ucase](./string-functions/ucase.md) | 该函数与 upper 一致，将字符串转换为大写形式。  |
+| [uncompress](./string-functions/uncompress.md) | 将被压缩后的数据解压缩为字符串。 |
 | [unhex](./string-functions/unhex.md) | 将输入的字符串中的两个字符为一组转化为 16 进制的字符，然后拼接成字符串输出。  |
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
 
