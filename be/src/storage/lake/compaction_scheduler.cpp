@@ -41,12 +41,12 @@ CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, c
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
-    _timeout_duetime = butil::gettimeofday_ms() + timeout();
+    _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();
     _contexts.reserve(request->tablet_ids_size());
 }
 
-int64_t CompactionTaskCallback::timeout() const {
-    return _request->has_timeout_ms() ? _request->timeout_ms() : kDefaultTimeout;
+int64_t CompactionTaskCallback::timeout_ms() const {
+    return _request->has_timeout_ms() ? _request->timeout_ms() : kDefaultTimeoutMs;
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
