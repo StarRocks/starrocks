@@ -35,6 +35,52 @@ setup_priority_networks()
     echo "priority_networks = 127.0.0.1/32" >> $SR_HOME/be/conf/be.conf
 }
 
+loginfo()
+{
+    log_stderr "INFO $@"
+}
+
+log_stderr()
+{
+    echo "`date --rfc-3339=seconds` $@" >&2
+}
+
+logerror()
+{
+    log_stderr "ERROR $@"
+}
+
+update_fe_conf_if_run_in_shared_data_mode()
+{
+    if [ ! -f $SR_HOME/fe/meta/image/VERSION ]; then
+        run_mode="${RUN_MODE,,}"
+        if [ "$run_mode" == "shared_data" ]; then # if run mode is shared_data, we need to update fe.conf
+            loginfo "envVar RUN_MODE is set to $RUN_MODE, running in shared_data mode ..."
+            echo "# config for shared_data mode
+run_mode = shared_data
+cloud_native_meta_port = 6090
+# Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+enable_load_volume_from_conf = false" >> $SR_HOME/fe/conf/fe.conf
+        else
+            loginfo "running in shared_nothing mode ..."
+        fi
+    else
+        # If $SR_HOME/fe/meta/image/VERSION file exists, it should have a line like "runMode=shared_nothing" or "runMode=shared_data"
+        previous_run_mode=`cat $SR_HOME/fe/meta/image/VERSION | grep runMode | cut -d '=' -f 2`
+        previous_run_mode=${previous_run_mode,,} # to lower case'
+        if [ -z "$previous_run_mode" ]; then
+          # this can happen in v2.5 release, where we don't have runMode in VERSION file
+          previous_run_mode="shared_nothing"
+        fi
+        run_mode=${RUN_MODE,,} # to lower case
+
+        if [ -n "$run_mode" ] && [ "$previous_run_mode" != "$run_mode" ]; then
+            logerror "Error: runMode=$previous_run_mode in $SR_HOME/fe/meta/image/VERSION and environment RUN_MODE=$RUN_MODE must be the same"
+            return 1
+        fi
+    fi
+}
+
 # print banner
 if [ -f $SR_HOME/../banner.txt ] ; then
     cat $SR_HOME/../banner.txt
@@ -46,6 +92,7 @@ mkdir -p $SR_HOME/{supervisor,fe,be,apache_hdfs_broker,feproxy}/log
 update_feproxy_config
 # use 127.0.0.1 for all the services, include fe/be/broker
 setup_priority_networks
+update_fe_conf_if_run_in_shared_data_mode
 
 # setup supervisor and start
 SUPERVISORD_HOME=$SR_HOME/supervisor
