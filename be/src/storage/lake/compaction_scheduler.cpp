@@ -241,8 +241,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
                 auto cause = context->callback->error();
                 status = Status::Cancelled(fmt::format("Cancelled due to another error: {}", cause.message()));
             } else if (context->callback->timeout_exceeded()) {
-                auto timeout = context->callback->timeout();
-                status = Status::Cancelled(fmt::format("Cancelled due to timeout exceeded: {}", timeout));
+                auto timeout = context->callback->timeout_ms();
+                status = Status::Cancelled(fmt::format("Cancelled due to timeout exceeded: {}ms", timeout));
             }
         }
         LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
