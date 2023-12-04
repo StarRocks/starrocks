@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Queries all the custom (or built-in) functions under a database. If no database is specified, the current database is used by default.
+Queries all the custom (or built-in) functions in a database. If no database is specified, the current database is used by default.
 
 ## Syntax
 

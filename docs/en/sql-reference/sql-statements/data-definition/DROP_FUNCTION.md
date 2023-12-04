@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Deletes a custom function. The function can only be deleted when its name and parameter type are consistent.
+Drops a custom function. The function can only be deleted when its name and parameter type are consistent.
 
 Only the owner of the custom function have the permissions to delete the function.
 

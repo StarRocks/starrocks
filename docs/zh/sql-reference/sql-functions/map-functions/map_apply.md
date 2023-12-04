@@ -34,7 +34,7 @@ MAP map_apply(lambda_func, any_map)
 
 ## 示例
 
-以下示例使用 [map_from_arrays](map_from_arrays.md) 生成 map 值 `{1:"ab",3:"cd"}`。然后使用 Lambda 函数对 map 中的 key 加 1，对 value 计算字符长度，比如 "ab" 的字符长度是 2。
+以下示例使用 [map_from_arrays](./map_from_arrays.md) 生成 map 值 `{1:"ab",3:"cd"}`。然后使用 Lambda 函数对 map 中的 key 加 1，对 value 计算字符长度，比如 "ab" 的字符长度是 2。
 
 ```SQL
 mysql> select map_apply((k,v)->(k+1,length(v)), col_map) from (select map_from_arrays([1,3],["ab","cd"]) as col_map)A;

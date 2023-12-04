@@ -8,10 +8,10 @@ displayed_sidebar: "Chinese"
 
 创建 UDF（用户自定义函数）。当前仅支持创建 Java UDF，即 Java 语言编写的自定义函数，具体包括：
 
-- Scalar UDF：自定义标量函数。
-- UDAF：自定义聚合函数。
-- UDWF：自定义窗口函数。
-- UDTF：自定义表值函数。
+- Scalar UDF：自定义标量函数
+- UDAF：自定义聚合函数
+- UDWF：自定义窗口函数
+- UDTF：自定义表值函数
 
 **更多创建和使用 UDF 的信息，推荐参考 [Java UDF](../../sql-functions/JAVA_UDF.md)。**
 
