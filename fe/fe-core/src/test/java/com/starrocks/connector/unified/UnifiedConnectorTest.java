@@ -19,6 +19,7 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class UnifiedConnectorTest {
 
     @Test
-    public void testCreateUnifiedConnectorFromConnectorFactory() {
+    public void testCreateUnifiedConnectorFromConnectorFactory() throws StarRocksConnectorException {
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "unified");
         properties.put("unified.metastore.type", "hive");
