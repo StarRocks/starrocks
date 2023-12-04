@@ -1115,6 +1115,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_backup_materialized_view = true;
 
+    /**
+     * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
+     * to determine which strategy you choose:
+     *  N <0      : always use non lock optimization and no copy related materialized views which
+     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     *  N = 0    : always not use non lock optimization
+     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     */
+    @ConfField(mutable = true)
+    public static int skip_whole_phase_lock_mv_limit = 5;
+
     @ConfField
     public static boolean enable_udf = false;
 
@@ -2342,9 +2353,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
-    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
-    public static int lake_publish_version_max_threads = 128;
-
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2581,6 +2589,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
 
     /**
      * Whether analyze the mv after refresh in async mode.

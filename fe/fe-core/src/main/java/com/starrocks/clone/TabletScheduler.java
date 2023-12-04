@@ -54,6 +54,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
@@ -718,7 +719,13 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.UNRECOVERABLE, "partition data property not exist");
             }
 
-            MaterializedIndex idx = partition.getIndex(tabletCtx.getIndexId());
+            PhysicalPartition physicalPartition = partition.getSubPartition(tabletCtx.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "physical partition "
+                        + tabletCtx.getPhysicalPartitionId() + "does not exist");
+            }
+
+            MaterializedIndex idx = physicalPartition.getIndex(tabletCtx.getIndexId());
             if (idx == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
@@ -740,10 +747,10 @@ public class TabletScheduler extends FrontendDaemon {
 
                 Set<Long> backendsSet = GlobalStateMgr.getCurrentColocateIndex()
                         .getTabletBackendsByGroup(groupId, tabletOrderIdx);
-                trySkipRelocateSchedAndResetBackendSeq(tabletCtx, partition.getVisibleVersion(),
+                trySkipRelocateSchedAndResetBackendSeq(tabletCtx, physicalPartition.getVisibleVersion(),
                         replicaNum, backendsSet, tablet);
                 TabletStatus st = tablet.getColocateHealthStatus(
-                        partition.getVisibleVersion(),
+                        physicalPartition.getVisibleVersion(),
                         replicaNum,
                         backendsSet);
                 statusPair = Pair.create(st, Priority.HIGH);
@@ -752,7 +759,7 @@ public class TabletScheduler extends FrontendDaemon {
                 List<Long> aliveBeIdsInCluster = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
                         GlobalStateMgr.getCurrentSystemInfo(),
-                        partition.getVisibleVersion(),
+                        physicalPartition.getVisibleVersion(),
                         replicaNum,
                         aliveBeIdsInCluster);
             }
@@ -792,8 +799,8 @@ public class TabletScheduler extends FrontendDaemon {
             // we do not concern priority here.
             // once we take the tablet out of priority queue, priority is meaningless.
             tabletCtx.setTablet(tablet);
-            tabletCtx.setVersionInfo(partition.getVisibleVersion(),
-                    partition.getCommittedVersion(), partition.getVisibleTxnId());
+            tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(),
+                    physicalPartition.getCommittedVersion(), physicalPartition.getVisibleTxnId());
             tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
             if (!Objects.equals(oldStatus, statusPair.first)) {
@@ -1376,7 +1383,7 @@ public class TabletScheduler extends FrontendDaemon {
         List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
         for (TabletSchedCtx schedCtx : alternativeTablets) {
             long dbId = schedCtx.getDbId();
-            long partitionId = schedCtx.getPartitionId();
+            long physicalPartitionId = schedCtx.getPhysicalPartitionId();
             long tableId = schedCtx.getTblId();
             long tabletId = schedCtx.getTabletId();
             long indexId = schedCtx.getIndexId();
@@ -1406,7 +1413,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
 
             OlapTable olaptable = (OlapTable) tbl;
-            if (ReportHandler.migratableTablet(db, olaptable, partitionId, indexId, tabletId)) {
+            if (ReportHandler.migratableTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
                 newAlternativeTablets.add(schedCtx);
             }
         }
@@ -1887,7 +1894,13 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPartitionId() + " dose not exist");
         }
 
-        MaterializedIndex idx = partition.getIndex(ctx.getIndexId());
+        PhysicalPartition physicalPartition = partition.getSubPartition(ctx.getPhysicalPartitionId());
+        if (physicalPartition == null) {
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "physical partition " + ctx.getPhysicalPartitionId() + " dose not exist");
+        }
+
+        MaterializedIndex idx = physicalPartition.getIndex(ctx.getIndexId());
         if (idx == null) {
             throw new SchedException(Status.UNRECOVERABLE, "materialized index " + ctx.getIndexId() + " dose not exist");
         }

@@ -292,6 +292,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_contains](./bitmap-functions/bitmap_contains.md)| 计算输入值是否在 Bitmap 列中。 |
 |  [bitmap_count](./bitmap-functions/bitmap_count.md)| 统计 bitmap 中不重复值的个数。 |
 |  [bitmap_empty](./bitmap-functions/bitmap_empty.md)| 返回一个空 bitmap，主要用于 insert 或 stream load 时填充默认值。|
+|  [bitmap_from_binary](./bitmap-functions/bitmap_from_binary.md)| 将一个特定格式的二进制字符串转化为一个 bitmap。|
 |  [bitmap_from_string](./bitmap-functions/bitmap_from_string.md)| 将一个字符串转化为一个 bitmap，字符串由逗号分隔的一组 UInt32 数字组成。|
 |  [bitmap_hash](./bitmap-functions/bitmap_hash.md)| 对任意类型的输入计算 32 位的哈希值，返回包含该哈希值的 bitmap。|
 |  [bitmap_has_any](./bitmap-functions/bitmap_has_any.md)| 计算两个 Bitmap 列是否存在相交元素。|
@@ -304,6 +305,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
 |  [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)| 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。|
 |  [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)| 将 bitmap 转换为 Base64 字符串。|
+|  [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)| 将 bitmap 转换为特定格式的 binary 字符串。|
 |  [base64_to_bitmap](./bitmap-functions/base64_to_bitmap.md)|将 Base64 编码的字符串转化为 Bitmap。 |
 |  [bitmap_to_string](./bitmap-functions/bitmap_to_string.md)| 将一个 bitmap 转化成一个逗号分隔的字符串。|
 |  [bitmap_union](./bitmap-functions/bitmap_union.md)| 求一组 bitmap 值的并集。 |

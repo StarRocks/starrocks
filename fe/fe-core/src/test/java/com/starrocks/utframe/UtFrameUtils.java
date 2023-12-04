@@ -454,6 +454,28 @@ public class UtFrameUtils {
         }
     }
 
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            try {
+                Tracers.register(connectContext);
+                Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                Tracers.close();
+            }
+        }
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         return buildPlan(connectContext, originStmt,
