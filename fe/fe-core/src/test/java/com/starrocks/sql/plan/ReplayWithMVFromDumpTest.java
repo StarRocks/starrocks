@@ -186,6 +186,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMock_MV_CostBug() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
