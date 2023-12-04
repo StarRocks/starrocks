@@ -2,7 +2,7 @@
 [UC]shell: avro_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/avro_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/6ba76853949b4f359e42a656a07b62be/avro_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/c6174f14d2f1413488cb1f3ddd5bf5bf/avro_format/
 -- !result
 shell: ossutil64 mkdir ${avro_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -61,6 +61,11 @@ select col_tinyint,col_decimal,col_array from test_hive_avro_format;
 1	100.50	["D","E","F"]
 7	57.30	["A","B","C"]
 -- !result
+select col_tinyint,col_timestamp from test_hive_avro_format  order by 1 limit 3;
+-- result:
+1	2023-10-29 10:00:00
+7	2022-01-01 10:00:00
+-- !result
 shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
@@ -70,7 +75,7 @@ shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/nul
 [UC]shell: rcbinary_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rcbinary_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/4c7b700ae19d46cfa0b4776b877d3aee/rcbinary_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/e27775bb1eed4c359beedae1df77b520/rcbinary_format/
 -- !result
 shell: ossutil64 mkdir ${rcbinary_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -118,16 +123,21 @@ PROPERTIES
 -- !result
 select * from test_hive_rcbinary_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 02:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
 -- !result
 select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 02:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
 -- result:
 7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+-- !result
+select col_tinyint,col_timestamp from test_hive_rcbinary_format  order by 1 limit 3;
+-- result:
+1	2023-10-29 10:00:00
+7	2022-01-01 10:00:00
 -- !result
 shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -138,7 +148,7 @@ shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: rctext_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rctext_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/25370a4593f54c50b7aa7412f36288ed/rctext_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/45e80824e4314af89d1eed96ffd9baef/rctext_format/
 -- !result
 shell: ossutil64 mkdir ${rctext_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -194,8 +204,8 @@ select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 -- result:
-7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+7	57.30	["A","B","C"]
 -- !result
 shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -206,7 +216,7 @@ shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 [UC]shell: sequence_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/sequence_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/f54980c495c94ac39dafaf12529089e3/sequence_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/a99c1567ef2b4050b8ee01cd5c453337/sequence_format/
 -- !result
 shell: ossutil64 mkdir ${sequence_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -274,7 +284,7 @@ shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: struct_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/strcut/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/2519b8d04d83440cbe09f5287fab7bf5/strcut/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/a308f9e19fd64f8fbaae5e878fbec846/strcut/
 -- !result
 shell: ossutil64 mkdir ${struct_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
