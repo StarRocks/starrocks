@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.epack.privilege.PrivilegeTypeEPack;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
@@ -1541,6 +1542,8 @@ public class AuthorizationMgrTest {
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkSystemAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.GRANT));
         new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.NODE);
+        new NativeAccessController().checkSystemAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                PrivilegeTypeEPack.CREATE_WAREHOUSE);
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessController().checkDbAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), null, DB_NAME, PrivilegeType.DROP));
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(

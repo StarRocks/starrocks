@@ -195,7 +195,7 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    Collections.singletonList(PrivilegeType.NODE),
+                    Arrays.asList(PrivilegeType.NODE, PrivilegeTypeEPack.CREATE_WAREHOUSE),
                     null,
                     false);
 
