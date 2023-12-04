@@ -42,6 +42,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "storage/compaction.h"
@@ -102,7 +103,7 @@ Status StorageEngine::start_bg_threads() {
 #ifdef USE_STAROS
     _local_pk_index_shard_data_gc_thread =
             std::thread([this] { _local_pk_index_shard_data_gc_thread_callback(nullptr); });
-    Thread::set_thread_name(_local_pk_index_shard_data_gc_thread, " pk_index_shard_data_gc");
+    Thread::set_thread_name(_local_pk_index_shard_data_gc_thread, "pk_index_shard_data_gc");
 #endif
 
     // start thread for check finish publish version
@@ -434,6 +435,10 @@ void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
             std::vector<int64_t> dir_changed_tablet_ids;
             std::vector<int64_t> removed_dir_tablet_ids;
 
+            std::string tablet_pk_path_to_be_evicted;
+            int64_t tablet_id_to_be_evicted = -1;
+            uint64_t min_mtime = std::numeric_limits<uint64_t>::max();
+
             for (const auto& tablet_id : tablet_ids) {
                 auto tablet_pk_path = pk_path + "/" + tablet_id;
                 int64_t id = std::stoll(tablet_id);
@@ -462,6 +467,15 @@ void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
                         lake_update_manager->unlock_pk_index_shard(id);
                     }
                 }
+                auto mtime_or = FileSystem::Default()->get_file_modified_time(tablet_pk_path);
+                if (mtime_or.ok()) {
+                    auto mtime = *mtime_or;
+                    if (mtime < min_mtime) {
+                        min_mtime = mtime;
+                        tablet_pk_path_to_be_evicted = std::move(tablet_pk_path);
+                        tablet_id_to_be_evicted = id;
+                    }
+                }
             }
 
             auto debug_vector_info = [](std::vector<int64_t> vector) -> std::string {
@@ -481,6 +495,19 @@ void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
                       << ", data_dir changed tablet_ids: " << debug_vector_info(dir_changed_tablet_ids)
                       << ", and removed dir successfully, tablet_ids: " << debug_vector_info(removed_dir_tablet_ids)
                       << ", cost:" << t_end - t_start << "ms";
+
+            bool need_evict = false;
+            auto space_info_or = FileSystem::Default()->space(data_dir->path());
+            if (space_info_or.ok()) {
+                auto space_info = *space_info_or;
+                need_evict =
+                        (double)space_info.free < (double)space_info.capacity * config::starlet_cache_evict_low_water;
+            }
+            if (need_evict && tablet_id_to_be_evicted > 0) {
+                if (_clear_persistent_index(data_dir, tablet_id_to_be_evicted, tablet_pk_path_to_be_evicted).ok()) {
+                    LOG(INFO) << "evict tablet persistent index dir: " << tablet_pk_path_to_be_evicted;
+                }
+            }
         }
     }
 
