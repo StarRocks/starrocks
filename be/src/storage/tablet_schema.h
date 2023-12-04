@@ -262,6 +262,7 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     size_t num_columns() const { return _cols.size(); }
@@ -345,8 +346,8 @@ private:
     mutable uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
     std::vector<ColumnId> _sort_key_idxes;
-    std::unordered_set<ColumnId> _sort_key_idxes_set;
     std::vector<ColumnUID> _sort_key_uids;
+    std::unordered_set<ColumnUID> _sort_key_uids_set;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
