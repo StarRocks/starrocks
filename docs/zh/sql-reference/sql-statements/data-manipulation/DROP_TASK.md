@@ -30,9 +30,9 @@ DROP TASK <task_name>
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
-SELECT * FROM information_schema.tasks WHERE task_name = <task_name>;
+SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 SELECT * FROM information_schema.task_runs;
-SELECT * FROM information_schema.task_runs WHERE task_name = <task_name>;
+SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ```
 
 ## 示例
