@@ -158,33 +158,62 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testGetShowInfo() {
-        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
-        ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
-        Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
+    public void testGetShowInfo() throws UserException {
+        {
+            // PAUSE state
+            KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
+            ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
+                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+            Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
-        Map<Integer, Long> partitionOffsets = Maps.newHashMap();
-        partitionOffsets.put(Integer.valueOf(0), Long.valueOf(1234));
-        KafkaProgress kafkaProgress = new KafkaProgress(partitionOffsets);
-        Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
+                    .anyMatch(entity -> entity.equals(errorReason.toString())));
+        }
 
-        Map<Integer, Long> partitionOffsetTimestamps = Maps.newHashMap();
-        partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
-        KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
-        Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
+        {
+            // Progress
+            KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
 
-        routineLoadJob.setPartitionOffset(0, 12345);
+            Map<Integer, Long> partitionOffsets = Maps.newHashMap();
+            partitionOffsets.put(Integer.valueOf(0), Long.valueOf(1234));
+            KafkaProgress kafkaProgress = new KafkaProgress(partitionOffsets);
+            Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
 
-        List<String> showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
-                .anyMatch(entity -> entity.equals(errorReason.toString())));
+            Map<Integer, Long> partitionOffsetTimestamps = Maps.newHashMap();
+            partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
+            KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
+            Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
 
-        Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(20));
-        //The displayed value is the actual value - 1
-        Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
-        Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
+            routineLoadJob.setPartitionOffset(0, 12345);
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(20));
+            //The displayed value is the actual value - 1
+            Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
+            Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
+        }
+
+        {
+            // UNSTABLE substate
+            KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+            Map<Integer, Long> partitionOffsetTimestamps = Maps.newHashMap();
+            partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
+            KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
+            Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
+
+            routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
+            // The job is set unstable.
+            routineLoadJob.updateSubstate();
+
+            List<String> showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals("UNSTABLE", showInfo.get(7));
+            // The lag [xxx] of partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]
+            Assert.assertTrue(showInfo.get(16).contains(
+                    "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
+        }
     }
 
     @Test

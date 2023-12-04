@@ -1276,21 +1276,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
-    public void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
-        writeLock();
-        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                .add("current_job_substate", this.substate)
-                .add("desire_job_substate", substate)
-                .add("msg", reason)
-                .build());
-        try {
-            this.substate = substate;
-            this.stateChangedReason = reason;
-        } finally {
-            writeUnlock();
-        }
-    }
-
     protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws UserException {
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_state", getState())
@@ -1980,5 +1965,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         } finally {
             readUnlock();
         }
+    }
+
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+        writeLock();
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_substate", this.substate)
+                .add("desire_job_substate", substate)
+                .add("msg", reason)
+                .build());
+        try {
+            this.substate = substate;
+            this.stateChangedReason = reason;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void updateSubstateStable() throws UserException {
+        updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    public void updateSubstate() throws UserException {
     }
 }

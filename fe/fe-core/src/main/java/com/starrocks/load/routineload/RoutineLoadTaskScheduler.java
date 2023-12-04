@@ -48,7 +48,6 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
-import com.starrocks.load.routineload.RoutineLoadJob.JobSubstate;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
@@ -60,7 +59,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -171,36 +169,6 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         });
     }
 
-    private void setJobStable(long jobId) throws UserException {
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        if (routineLoadJob != null) {
-            routineLoadJob.updateSubstate(JobSubstate.STABLE, null);
-        }
-    }
-    private void setJobUnstableIfTooSlow(long jobId) throws UserException {
-        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        if (routineLoadJob == null || !(routineLoadJob instanceof KafkaRoutineLoadJob)) {
-            return;
-        }
-
-        KafkaProgress progress = (KafkaProgress) routineLoadJob.getTimestampProgress();
-        Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
-        long now = System.currentTimeMillis();
-
-        for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
-            int partition = entry.getKey();
-            long lag = (now - entry.getValue().longValue()) / 1000;
-            if (lag > Config.routine_load_unstable_threshold_second) {
-                routineLoadJob.updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
-                        String.format("The lag [%d] of partition [%d] exceeds " +
-                                        "Config.routine_load_unstable_threshold_second [%d]",
-                                lag,  partition, Config.routine_load_unstable_threshold_second)));
-                return;
-            }
-        }
-        routineLoadJob.updateSubstate(JobSubstate.STABLE, null);
-    }
-
     private void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
@@ -221,11 +189,13 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                     msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
                 }
-                setJobStable(routineLoadTaskInfo.getJobId());
+                // The job keeps up with source.
+                routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstateStable();
                 delayPutToQueue(routineLoadTaskInfo, msg);
                 return;
             }
-            setJobUnstableIfTooSlow(routineLoadTaskInfo.getJobId());
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
 
         } catch (RoutineLoadPauseException e) {
             String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
