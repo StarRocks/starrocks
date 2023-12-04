@@ -1,8 +1,26 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/pipeline/bucket_process_operator.h"
 
+#include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -35,6 +53,11 @@ bool BucketProcessSinkOperator::is_finished() const {
 }
 
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
+    auto defer = DeferOp([&]() {
+        if (_ctx->spill_channel != nullptr) {
+            _ctx->spill_channel->set_finishing();
+        }
+    });
     _ctx->all_input_finishing = true;
     bool token = _ctx->token;
     if (!token && _ctx->token.compare_exchange_strong(token, true)) {
@@ -105,6 +128,16 @@ StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) 
     return chunk;
 }
 
+// TODO: put the spill channel in operator.
+SpillProcessChannelPtr get_spill_channel(const OperatorPtr& op) {
+    if (auto raw = dynamic_cast<SpillableAggregateBlockingSinkOperator*>(op.get()); raw != nullptr) {
+        return raw->spill_channel();
+    } else if (auto raw = dynamic_cast<SpillableAggregateDistinctBlockingSinkOperator*>(op.get()); raw != nullptr) {
+        return raw->spill_channel();
+    }
+    return nullptr;
+}
+
 BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
         const OperatorFactoryPtr& factory)
@@ -115,6 +148,11 @@ BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
     ctx->sink = _factory->create(degree_of_parallelism, driver_sequence);
+    auto spill_channel = get_spill_channel(ctx->sink);
+    if (spill_channel != nullptr) {
+        spill_channel->set_reuseable(true);
+    }
+    ctx->spill_channel = std::move(spill_channel);
     auto bucket_source_operator =
             std::make_shared<BucketProcessSinkOperator>(this, _id, _plan_node_id, driver_sequence, ctx);
     return bucket_source_operator;

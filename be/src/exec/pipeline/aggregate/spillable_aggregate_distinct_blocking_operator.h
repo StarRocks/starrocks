@@ -24,7 +24,6 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
-// TODO: implements reset_state
 class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
 public:
     template <class... Args>
@@ -59,6 +58,9 @@ public:
     }
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+    // only the prepare/open phase calls are valid.
+    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
 
 private:
     [[nodiscard]] Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
@@ -96,7 +98,6 @@ private:
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
-// TODO: implements reset_state
 class SpillableAggregateDistinctBlockingSourceOperator : public AggregateDistinctBlockingSourceOperator {
 public:
     template <class... Args>
