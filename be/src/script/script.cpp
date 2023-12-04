@@ -18,6 +18,7 @@
 
 #include "common/greplog.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
@@ -125,6 +126,39 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
+<<<<<<< HEAD
+=======
+std::string exec(const std::string& cmd) {
+    std::string ret;
+
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (fp == NULL) {
+        ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
+        return ret;
+    }
+
+    char buff[4096];
+    while (true) {
+        size_t r = fread(buff, 1, 4096, fp);
+        if (r == 0) {
+            break;
+        }
+        ret.append(buff, r);
+    }
+    int status = pclose(fp);
+    if (status == -1) {
+        ret.append(strings::Substitute("pclose failed: $0", strerror(errno)));
+    } else if (status != 0) {
+        ret.append(strings::Substitute("exit: $0", status));
+    }
+    return ret;
+}
+
+static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
+    return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
+}
+
+>>>>>>> 391e6a247c ([Feature] support heap profile using script (#35322) (#36347))
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -164,6 +198,16 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(ExecEnv, compaction_mem_tracker);
         REG_METHOD(ExecEnv, update_mem_tracker);
         REG_METHOD(ExecEnv, clone_mem_tracker);
+    }
+    {
+        auto& cls = m.klass<HeapProf>("HeapProf");
+        REG_STATIC_METHOD(HeapProf, getInstance);
+        REG_METHOD(HeapProf, enable_prof);
+        REG_METHOD(HeapProf, disable_prof);
+        REG_METHOD(HeapProf, has_enable);
+        REG_METHOD(HeapProf, snapshot);
+        REG_METHOD(HeapProf, to_dot_format);
+        REG_METHOD(HeapProf, dump_dot_snapshot);
     }
 }
 
@@ -419,7 +463,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, HeapProf, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {
