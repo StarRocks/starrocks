@@ -88,7 +88,7 @@ public class TabletInvertedIndex {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // tablet id -> tablet meta
-    private final Map<Long, TabletMeta> tabletMetaMap = Maps.newHashMap();
+    private final Map<Long, TabletMeta> tabletMetaMap = Maps.newConcurrentMap();
 
     // replica id -> tablet id
     private final Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
@@ -840,12 +840,7 @@ public class TabletInvertedIndex {
     }
 
     public long getTabletCount() {
-        readLock();
-        try {
-            return this.tabletMetaMap.size();
-        } finally {
-            readUnlock();
-        }
+        return this.tabletMetaMap.size();
     }
 
     public long getReplicaCount() {
