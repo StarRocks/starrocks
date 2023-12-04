@@ -131,15 +131,19 @@ Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_met
         }
     }
 
-    tparquet::FileMetaData t_metadata;
-    // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
-                                                   PARQUET_FOOTER_SIZE - metadata_length,
-                                           &metadata_length, TProtocolType::COMPACT, &t_metadata));
-    int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-    *file_metadata = new FileMetaData();
-    RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
-    *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    // NOTICE: When you need to modify the logic within this scope (including the subfuctions), you should be
+    // particularly careful to ensure that it does not affect the correctness of the footer's memory statistics.
+    {
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        tparquet::FileMetaData t_metadata;
+        // deserialize footer
+        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) +
+                                                       footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
+                                               &metadata_length, TProtocolType::COMPACT, &t_metadata));
+        *file_metadata = new FileMetaData();
+        RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
+        *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    }
 #ifdef BE_TEST
     *file_metadata_size = sizeof(FileMetaData);
 #endif
