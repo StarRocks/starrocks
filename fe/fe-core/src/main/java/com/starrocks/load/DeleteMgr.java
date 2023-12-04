@@ -833,12 +833,7 @@ public class DeleteMgr implements Writable {
     }
 
     public long getDeleteInfoCount() {
-        lock.readLock().lock();
-        try {
-            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

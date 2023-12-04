@@ -14,8 +14,11 @@
 
 #include "storage/tablet_updates.h"
 
+#include <gutil/strings/util.h>
+
 #include <cmath>
 #include <ctime>
+#include <filesystem>
 #include <memory>
 
 #include "common/status.h"
@@ -26,6 +29,7 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "rocksdb/write_batch.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
@@ -881,6 +885,7 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
 }
 
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -1425,6 +1430,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
 }
 
 Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     auto info = (*pinfo).get();
@@ -1613,6 +1619,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
@@ -2437,6 +2444,38 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
     return num_dels;
 }
 
+Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_size) {
+    const std::string tablet_path = _tablet.schema_hash_path();
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
+            if (entry.is_regular_file()) {
+                std::string filename = entry.path().filename().string();
+
+                if (HasPrefixString(filename, "index.l")) {
+                    if (pindex_size != nullptr) {
+                        *pindex_size += std::filesystem::file_size(entry);
+                    }
+                } else if (HasSuffixString(filename, ".cols")) {
+                    // TODO skip the expired cols file
+                    if (col_size != nullptr) {
+                        *col_size += std::filesystem::file_size(entry);
+                    }
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& ex) {
+        std::string err_msg = "Iterate dir " + tablet_path + " Filesystem error: " + ex.what();
+        return Status::InternalError(err_msg);
+    } catch (const std::exception& ex) {
+        std::string err_msg = "Iterate dir " + tablet_path + " Standard error: " + ex.what();
+        return Status::InternalError(err_msg);
+    } catch (...) {
+        std::string err_msg = "Iterate dir " + tablet_path + " Unknown exception occurred.";
+        return Status::InternalError(err_msg);
+    }
+    return Status::OK();
+}
+
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t min_readable_version = 0;
     int64_t max_readable_version = 0;
@@ -2480,13 +2519,22 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
         LOG_EVERY_N(WARNING, 10) << "get_tablet_info_extra() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
+    int64_t pindex_size = 0;
+    int64_t col_size = 0;
+    Status st = _get_extra_file_size(&pindex_size, &col_size);
+    if (!st.ok()) {
+        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
+        // So just print error log and keep going.
+        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                   << " status: " << st;
+    }
     info->__set_version(version);
     info->__set_min_readable_version(min_readable_version);
     info->__set_max_readable_version(max_readable_version);
     info->__set_version_miss(has_pending);
     info->__set_version_count(version_count);
     info->__set_row_count(total_row);
-    info->__set_data_size(total_size);
+    info->__set_data_size(total_size + pindex_size + col_size);
     info->__set_is_error_state(_error);
 }
 
@@ -3468,6 +3516,16 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     if (index_entry != nullptr) {
         info.index_mem = index_entry->size();
         index_cache.release(index_entry);
+    }
+    int64_t pindex_size = 0;
+    auto st = _get_extra_file_size(&pindex_size, nullptr);
+    if (!st.ok()) {
+        // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
+        // So just print error log and keep going.
+        LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
+                   << ", error: " << st.get_error_msg();
+    } else {
+        info.index_disk_usage = pindex_size;
     }
 }
 

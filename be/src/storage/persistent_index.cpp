@@ -21,6 +21,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -1801,6 +1802,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
         size_t snapshot_size = _index_file->size();
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add write stats manually
+        IOProfiler::add_write(snapshot_size);
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -1863,6 +1867,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add read stats manually
+        IOProfiler::add_read(snapshot_size);
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
@@ -2524,6 +2531,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l2_vec.clear();
     }
     if (index_meta.l2_versions_size() > 0) {
+        DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
             auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
                                                      index_meta.l2_versions(i).minor(),
@@ -2669,6 +2677,11 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
     }
+    if (index_meta.l2_versions_size() != index_meta.l2_version_merged_size()) {
+        // Make sure l2 version equal to l2 version merged flag
+        return true;
+    }
+
     return false;
 }
 
@@ -2737,6 +2750,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
                 if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
                         std::string l2_file_name =
@@ -2814,6 +2828,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
     index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     lastest_applied_version.to_pb(index_meta.mutable_version());
@@ -3058,16 +3073,18 @@ class GetFromImmutableIndexTask : public Runnable {
 public:
     GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
                               std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
-                              PersistentIndex* index)
+                              PersistentIndex* index, IOStatEntry* io_stat_entry)
             : _num(num),
               _immu_index(immu_index),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
               _found_keys_info(found_keys_info),
-              _index(index) {}
+              _index(index),
+              _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+        auto scope = IOProfiler::scope(_io_stat_entry);
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
     }
@@ -3080,6 +3097,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
+    IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3120,9 +3138,9 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
     for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
         ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
-        GetFromImmutableIndexTask task(n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                       &keys_info_by_key_size, &_found_keys_info[i], this);
-        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
+        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
+                n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()), &keys_info_by_key_size,
+                &_found_keys_info[i], this, IOProfiler::get_context()));
         auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
         if (!st.ok()) {
             error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
@@ -4000,6 +4018,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // step 1.a
         // move tmp l1 to l1
         std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(new_l1_filename);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
         if (_l0->size() > 0) {
             // check if need to dump snapshot
@@ -4041,6 +4061,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
         LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(l2_file_path);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
         index_meta->add_l2_version_merged(false);
@@ -4072,7 +4094,7 @@ Status PersistentIndex::_merge_compaction() {
     if (_usage != writer->total_kv_size()) {
         _usage = writer->total_kv_size();
     }
-    if (_size != writer->total_kv_num()) {
+    if (_l2_vec.size() == 0 && _size != writer->total_kv_num()) {
         std::string msg =
                 strings::Substitute("inconsistent kv num after merge compaction, actual:$0, expect:$1, index_file:$2",
                                     writer->total_kv_num(), _size, writer->index_file());
@@ -4326,6 +4348,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
@@ -4368,6 +4391,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
@@ -4391,8 +4415,10 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
+        const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+        EditVersion l0_version = l0_meta.snapshot().version();
         RETURN_IF_ERROR(_delete_expired_index_file(
-                _version, _l1_version,
+                l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
     _delete_major_compaction_tmp_index_file();

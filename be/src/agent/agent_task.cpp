@@ -19,6 +19,7 @@
 #include "agent/task_singatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
@@ -289,6 +290,8 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, clone_req.tablet_id);
+
     // Return result to fe
     TStatus task_status;
     TFinishTaskRequest finish_task_request;
@@ -361,6 +364,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateTaskRequest>& agent_task_req,
                                      ExecEnv* exec_env) {
     const TStorageMediumMigrateReq& storage_medium_migrate_req = agent_task_req->task_req;
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, storage_medium_migrate_req.tablet_id);
+
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
     TStatus task_status;
