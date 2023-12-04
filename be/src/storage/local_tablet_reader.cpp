@@ -206,7 +206,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         }
         value_column_ids.push_back(cid);
     }
-    Schema values_schema(tablet->tablet_schema()->schema(), value_column_ids);
+    Schema values_schema(tablet_schema->schema(), value_column_ids);
     auto keys_st = serde::deserialize_chunk_pb_with_schema(key_schema, keys_pb.data());
     if (!keys_st.ok()) {
         return keys_st.status();
