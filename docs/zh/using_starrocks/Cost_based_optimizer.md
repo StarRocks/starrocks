@@ -4,9 +4,9 @@ displayed_sidebar: "Chinese"
 
 # CBO 统计信息
 
-本文介绍 StarRocks CBO（Cost-based Optimizer）优化器的基本概念，以及如何为 CBO 优化器采集统计信息。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
+本文介绍 StarRocks CBO 优化器（Cost-based Optimizer）的基本概念，以及如何为 CBO 优化器采集统计信息来优化查询计划。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
 
-3.2 之前版本支持对 StarRocks 内表收集统计信息。从 3.2 版本起，支持对外部表（Hive，Iceberg，Hudi）收集统计信息。
+3.2 之前版本支持对 StarRocks 内表收集统计信息。从 3.2 版本起，支持对外部表（Hive，Iceberg，Hudi）收集统计信息，无需依赖其他系统。
 
 ## 什么是 CBO 优化器
 
@@ -14,16 +14,7 @@ CBO 优化器是查询优化的关键。一条 SQL 查询到达 StarRocks 后，
 
 StarRocks CBO 优化器采用 Cascades 框架，基于多种统计信息进行代价估算，能够在数万级别的执行计划中，选择代价最低的执行计划，提升复杂查询的效率和性能。StarRocks 1.16.0 版本推出自研的 CBO 优化器。1.19 版本及以上，该特性默认开启。
 
-统计信息是 CBO 优化器的重要组成部分，统计信息的准确与否决定了代价估算是否准确，对于 Optimizer 选择最优Plan 至关重要，进而决定了 CBO 优化器的性能好坏。
-
-## 典型场景
-
-统计信息可以改善 Optimizer 对 Plan 的选择，避免选择出性能较差的 Plan, 下面举两个常见的场景：
-
-- 当用户查询有多表 Join 时，如果发现查询计划中 Join 的顺序不是最优的，比如 Join 节点的左表小于右表，这时就可以收集这几张表的统计信息，来让优化器产生更优的 Plan。
-- 当用户查询包含聚合节点时，统计信息会影响 Optimizer 对不同 Stage 聚合节点的代价估算，不同 Stage 的聚合 Plan, 执行时间可能会差距很大，为了让 Optimizer 选择出代价最小的聚合 Plan，这时就可以收集该表的统计信息。
-
-下文详细介绍统计信息的类型、采集策略、以及如何创建采集任务和查看统计信息。
+统计信息是 CBO 优化器的重要组成部分，统计信息的准确与否决定了代价估算是否准确，对于 CBO 选择最优 Plan 至关重要，进而决定了 CBO 优化器的性能好坏。下文详细介绍统计信息的类型、采集策略、以及如何创建采集任务和查看统计信息。
 
 ## 统计信息数据类型
 
@@ -45,7 +36,7 @@ StarRocks 默认定期采集表和列的如下基础信息：
 
 - max: 列的最大值
 
-全量的统计信息存储在 `_statistics_.column_statistics` 表中，您可以在 `_statistics_` 数据库下查看。查询该表时会返回如下信息：
+全量的统计信息存储在 StarRocks 集群 `_statistics_` 数据库下的 `column_statistics` 表中，您可以在 `_statistics_` 数据库下查看。查询该表时会返回如下信息：
 
 ```sql
 *************************** 1. row ***************************
@@ -71,7 +62,7 @@ StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 buc
 
 **直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
 
-目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 `_statistics_` 数据库的 `histogram_statistics` 表中。查询该表时，会返回如下信息：
+目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询该表时，会返回如下信息：
 
 ```sql
 *************************** 1. row ***************************
@@ -94,40 +85,6 @@ StarRocks 支持全量采集 (full collection) 和抽样采集 (sampled collecti
 |----------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | 全量采集     | 自动或手动    | 扫描全表，采集真实的统计信息值。按照分区（Partition）级别采集，基础统计信息的相应列会按照每个分区采集一条统计信息。如果对应分区无数据更新，则下次自动采集时，不再采集该分区的统计信息，减少资源占用。全量统计信息存储在 `_statistics_.column_statistics` 表中。   | 优点：统计信息准确，有利于优化器更准确地估算执行计划。缺点：消耗大量系统资源，速度较慢。从 2.4.5 版本开始支持用户配置自动采集的时间段，减少资源消耗。 |
 | 抽样采集     | 自动或手动    | 从表的每个分区中均匀抽取 N 行数据，计算统计信息。抽样统计信息按照表级别采集，基础统计信息的每一列会存储一条统计信息。列的基数信息 (ndv) 是按照抽样样本估算的全局基数，和真实的基数信息会存在一定偏差。抽样统计信息存储在 `_statistics_.table_statistic_v1` 表中。 | 优点：消耗较少的系统资源，速度快。 缺点：统计信息存在一定误差，可能会影响优化器评估执行计划的准确性。                              |
-
-### 外表统计信息收集
-
-外表统计信息收集使用和内表相同的语法。**外表统计信息支持手动全量采集和自动全量采集两种方式**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。
-
-查询该表时，会返回如下信息：
-
-```sql
-*************************** 1. row ***************************
-    table_uuid: hive_catalog.tn_test.ex_hive_tbl.1673596430
-partition_name: 
-   column_name: k1
-  catalog_name: hive_catalog
-       db_name: tn_test
-    table_name: ex_hive_tbl
-     row_count: 3
-     data_size: 12
-           ndv: NULL
-    null_count: 0
-           max: 3
-           min: 2
-   update_time: 2023-12-01 14:57:27.137000
-```
-
-#### 使用限制
-
-外表统计信息收集有如下限制：
-
-1. 目前只支持全量收集，不支持抽样采集和直方图采集。
-2. 目前只支持 Hive、Iceberg、Hudi 表。
-3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库，所有表的统计信息。
-4. 对于自动收集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据收集间隔周期性全表采集。
-
-执行采集任务时，外部 Catalog 下的表，引用时可以使用格式 `[catalog_name.][database_name.]<table_name>`。
 
 ## 采集统计信息
 
@@ -158,9 +115,9 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过`statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
 
-对于数据量较大的表，StarRocks按照以下策略限制：
+对于数据量较大的表，StarRocks 按照以下策略限制：
 
-- 默认采集的间隔不低于 12 小时，通过  `statistic_auto_collect_large_table_interval` 配置。
+- 默认采集的间隔不低于 12 小时，通过 `statistic_auto_collect_large_table_interval` 配置。
 
 - 满足采集间隔的条件下，当健康度低于抽样阈采集值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
 
@@ -198,7 +155,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-PROPERTIES (property [,property]);
+[PROPERTIES (property [,property])];
 ```
 
 参数说明：
@@ -251,7 +208,7 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 [WITH SYNC | ASYNC MODE]
 [WITH N BUCKETS]
-PROPERTIES (property [,property]);
+[PROPERTIES (property [,property])];
 ```
 
 参数说明：
@@ -528,6 +485,179 @@ KILL ANALYZE <ID>;
 | histogram_max_sample_row_count              | LONG    | 10000000     | 直方图最大采样行数。                                                                                                        |
 | statistic_manager_sleep_time_sec            | LONG    | 60           | 统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul> |
 | statistic_analyze_status_keep_second        | LONG    | 259200       | 采集任务记录保留时间，默认为 3 天。单位：秒。                                                                                          |
+
+## 外表统计信息收集
+
+外表统计信息收集使用和内表相同的语法。**外表统计信息支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。
+
+查询该表时，会返回如下信息：
+
+```sql
+*************************** 1. row ***************************
+    table_uuid: hive_catalog.tn_test.ex_hive_tbl.1673596430
+partition_name: 
+   column_name: k1
+  catalog_name: hive_catalog
+       db_name: tn_test
+    table_name: ex_hive_tbl
+     row_count: 3
+     data_size: 12
+           ndv: NULL
+    null_count: 0
+           max: 3
+           min: 2
+   update_time: 2023-12-01 14:57:27.137000
+```
+
+### 使用限制
+
+外表统计信息收集有如下限制：
+
+1. 目前只支持全量收集，不支持抽样采集和直方图采集。
+2. 目前只支持收集 Hive、Iceberg、Hudi 表的统计信息。
+3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库、所有表的统计信息。
+4. 对于自动收集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据收集间隔周期性全表采集。
+
+以下示例默认在 External Catalog 指定数据库下收集外表的统计信息。如果是在 default_catalog 下采集外表的统计信息，引用外表时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
+
+### 手动收集
+
+#### 创建手动收集任务
+
+语法：
+
+```sql
+ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+PROPERTIES (property [,property]);
+```
+
+示例：
+
+```sql
+ANALYZE TABLE ex_hive_tbl(k1);
++----------------------------------+---------+----------+----------+
+| Table                            | Op      | Msg_type | Msg_text |
++----------------------------------+---------+----------+----------+
+| hive_catalog.tn_test.ex_hive_tbl | analyze | status   | OK       |
++----------------------------------+---------+----------+----------+
+```
+
+#### 查看 Analyze 任务执行状态
+
+语法：
+
+```sql
+SHOW ANALYZE STATUS [LIKE | WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW ANALYZE STATUS where `table` = 'ex_hive_tbl';
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+| Id    | Database             | Table       | Columns | Type | Schedule | Status  | StartTime           | EndTime             | Properties | Reason |
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+| 16400 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:31:42 | 2023-12-04 16:31:42 | {}         |        |
+| 16465 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:37:35 | 2023-12-04 16:37:35 | {}         |        |
+| 16467 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:37:46 | 2023-12-04 16:37:46 | {}         |        |
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+```
+
+#### 查看统计信息元数据
+
+查看每张表的统计信息元数据。
+
+语法：
+
+```sql
+SHOW STATS META [WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW STATS META where `table` = 'ex_hive_tbl';
++----------------------+-------------+---------+------+---------------------+------------+---------+
+| Database             | Table       | Columns | Type | UpdateTime          | Properties | Healthy |
++----------------------+-------------+---------+------+---------------------+------------+---------+
+| hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | 2023-12-04 16:37:46 | {}         |         |
++----------------------+-------------+---------+------+---------------------+------------+---------+
+```
+
+#### 取消采集任务
+
+取消正在运行中（Running）的统计信息收集任务。
+
+语法：
+
+```sql
+KILL ANALYZE <ID>
+```
+
+任务 ID 可以在 SHOW ANALYZE STATUS 中查看。
+
+### 自动收集
+
+创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务；Hudi目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的参数调整）。
+
+#### 自定义自动收集任务
+
+语法：
+
+```sql
+CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
+[PROPERTIES (property [,property])]
+```
+
+示例：
+
+```sql
+CREATE ANALYZE TABLE ex_hive_tbl (k1)
+PROPERTIES ("statistic_auto_collect_interval" = "5");
+
+Query OK, 0 rows affected (0.01 sec)
+```
+
+示例：
+
+#### 查看 Analyze 任务执行状态
+
+同手动收集。
+
+#### 查看统计信息元数据
+
+同手动收集。
+
+#### 查看自动采集任务
+
+语法：
+
+```sql
+SHOW ANALYZE JOB [WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW ANALYZE JOB WHERE `id` = '17204';
+
+Empty set (0.00 sec)
+```
+
+#### 取消采集任务
+
+同手动收集。
+
+### 验证是否收集了统计信息
+
+检查 `default_catalog._statistics_.external_column_statistics` 表中是否写入了该表的统计信息。
+
+### 删除统计信息
+
+```sql
+DROP STATS tbl_name
+```
 
 ## 系统变量
 
