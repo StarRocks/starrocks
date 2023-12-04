@@ -166,19 +166,20 @@ public class LakePublishBatchTest {
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
         List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
 
-        for (int i = 0; i < table.getPartitions().size(); i++) {
-            Partition partition = table.getPartition(i);
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
-                    if (i % 2 == 0) {
+                    if (num % 2 == 0) {
                         transTablets1.add(tabletCommitInfo);
                     } else {
                         transTablets2.add(tabletCommitInfo);
                     }
                 }
             }
+            num++;
         }
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
