@@ -516,7 +516,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   If you have submitted multiple load jobs, you can filter on the `NAME` associated with the job. Example:
 
   ```SQL
-  SHOW PIPES WHERE NAME = "user_behavior_replica" \G
+  SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
   *************************** 1. row ***************************
   DATABASE_NAME: mydatabase
         PIPE_ID: 10252
