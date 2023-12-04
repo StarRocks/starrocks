@@ -571,9 +571,10 @@ public class AnalyzerUtils {
                 return null;
             }
 
-            // Only support olap tables/materialized views without related mvs for non lock optimization
-            if (!(node.getTable().isOlapTableOrMaterializedView() &&
-                    node.getTable().getRelatedMaterializedViews().isEmpty())) {
+            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+            boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
+                    relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;

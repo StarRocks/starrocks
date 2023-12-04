@@ -229,14 +229,15 @@ public class OptExpression {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        if (limitLine <= 0) {
+        if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
+
         sb.append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
-            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine)).append("\n");
         }
         return sb.toString();
     }

@@ -548,7 +548,6 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
     jni_scanner_params["nested_fields"] = nested_fields;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-    jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));

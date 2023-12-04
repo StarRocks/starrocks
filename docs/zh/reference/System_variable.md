@@ -253,13 +253,13 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。
 
-### enable_scan_block_cache（2.5 及以后）
+### enable_scan_datacache（2.5 及以后）
 
-是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。
+是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 
-### enable_populate_block_cache（2.5 及以后）
+### enable_populate_datacache（2.5 及以后）
 
-StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。
+StarRocks 从外部存储系统读取数据时，是否将数据进行缓存。如果只想读取，不进行缓存，可以将该参数设置为 `false`。默认值为 `true`。在 3.2 之前各版本中，对应变量为 `enable_populate_block_cache`。
 
 ### enable_tablet_internal_parallel
 

@@ -55,12 +55,11 @@ public class OptimizerTraceUtil {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    mvContext.getOptimizerContext().getQueryId(),
                     mvRewriteContext.getRule().type().name(),
                     mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {} {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] {}", args).getMessage();
         });
     }
 
@@ -81,14 +80,14 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
-            sb.append("Original Expression:\n").append(oldExpression.debugString(3));
+            sb.append("Original Expression:\n").append(oldExpression.debugString());
             sb.append("\nNew Expression:");
             if (newExpressions.isEmpty()) {
                 sb.append("Empty");
             } else {
                 sb.append("\n");
                 for (int i = 0; i < newExpressions.size(); i++) {
-                    sb.append(i).append(":").append(newExpressions.get(i).debugString(3));
+                    sb.append(i).append(":").append(newExpressions.get(i).debugString());
                 }
             }
             return sb.toString();
