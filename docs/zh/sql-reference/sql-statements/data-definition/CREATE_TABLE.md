@@ -714,7 +714,7 @@ PROPERTIES (
 
 #### 为 StarRocks 存算分离集群创建云原生表
 
-为了[使用 StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md#使用-starrocks-存算分离集群)，您需要通过以下 PROPERTIES 创建云原生表：
+为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)，您需要通过以下 PROPERTIES 创建云原生表：
 
 ```SQL
 PROPERTIES (
