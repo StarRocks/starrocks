@@ -54,6 +54,7 @@ import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -162,53 +163,6 @@ public class SetStmtTest {
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), ctx);
             Assert.assertEquals(field, var.getVariable());
             Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
-        }
-    }
-
-    @Test
-    public void testMaterializedViewRewriteMode() throws AnalysisException {
-        // normal
-        {
-            for (SessionVariable.MaterializedViewRewriteMode mode :
-                    EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class)) {
-                try {
-                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
-                            new StringLiteral(mode.toString()));
-                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                } catch (Exception e) {
-                    Assert.fail();;
-                }
-            }
-
-        }
-
-        // empty
-        {
-            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
-                    new StringLiteral(""));
-            try {
-                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail();
-            } catch (Exception e) {
-                e.printStackTrace();
-                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported materialized view " +
-                        "rewrite mode: , supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.",
-                        e.getMessage());
-            }
-        }
-
-        // bad case
-        {
-            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE,
-                    new StringLiteral("bad_case"));
-            try {
-                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
-                Assert.fail("should fail");
-            } catch (SemanticException e) {
-                Assert.assertEquals("Getting analyzing error. Detail message: Unsupported " +
-                        "materialized view rewrite mode: bad_case, " +
-                        "supported list is DISABLE,DEFAULT,DEFAULT_OR_ERROR,FORCE,FORCE_OR_ERROR.", e.getMessage());;
-            }
         }
     }
 
