@@ -10,6 +10,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
@@ -28,6 +29,7 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
         auto& writer = this->_writer;
         auto st = Status::OK();
         if (request->has_segment() && cntl->request_attachment().size() > 0) {
+            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
             auto& segment_pb = request->segment();
             st = writer->write_segment(segment_pb, cntl->request_attachment());
         } else if (!request->eos()) {

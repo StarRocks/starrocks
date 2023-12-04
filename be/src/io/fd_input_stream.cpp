@@ -9,6 +9,7 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/io_error.h"
+#include "io_profiler.h"
 
 namespace starrocks::io {
 
@@ -46,6 +47,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
         return io_error("read", _errno);
     }
     _offset += res;
+    IOProfiler::add_read(res);
     return res;
 }
 
