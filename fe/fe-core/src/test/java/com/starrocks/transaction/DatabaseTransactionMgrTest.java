@@ -289,4 +289,91 @@ public class DatabaseTransactionMgrTest {
         assertEquals(3, masterDbTransMgr.getTransactionNum());
         assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCheckRunningTxnExceedLimit() {
+        int maxRunningTxnNumPerDb = Config.max_running_txn_num_per_db;
+        DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+        Deencapsulation.setField(mgr, "runningTxnNums", maxRunningTxnNumPerDb);
+        ExceptionChecker.expectThrowsNoException(
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
+        ExceptionChecker.expectThrowsNoException(
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+        ExceptionChecker.expectThrows(BeginTransactionException.class,
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+    }
+
+    public void testGetReadyToPublishTxnListBatch() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        List<TransactionStateBatch> stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(3, stateBatchesList.get(0).size());
+    }
+
+    @Test
+    public void testFinishTransactionBatch() throws UserException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        TransactionState transactionState6 = masterDbTransMgr.getTransactionState(txnId6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        TransactionState transactionState7 = masterDbTransMgr.getTransactionState(txnId7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionState transactionState8 = masterDbTransMgr.getTransactionState(txnId8);
+        List<TransactionState> states = new ArrayList<>();
+        states.add(transactionState6);
+        states.add(transactionState7);
+        states.add(transactionState8);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(states);
+        masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
+
+        assertEquals(3, masterDbTransMgr.getRunningTxnNums());
+        assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+        assertEquals(TransactionStatus.VISIBLE, transactionState6.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, transactionState7.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, transactionState8.getTransactionStatus());
+
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
+        assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+    }
+
+    @Test
+    public void testPublishVersionMissing() throws UserException {
+        TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // begin transaction
+        long transactionId1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable9,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        // skip replica 3
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
+    }
+>>>>>>> 2d14c81648 ([BugFix] fix update replica version by mistake in txn log applier (#36292))
 }
