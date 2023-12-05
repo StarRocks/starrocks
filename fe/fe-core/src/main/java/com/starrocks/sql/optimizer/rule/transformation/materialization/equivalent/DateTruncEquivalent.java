@@ -15,33 +15,17 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
-public class DateTruncReplaceChecker implements IRewriteEquivalent {
-    public static final DateTruncReplaceChecker INSTANCE = new DateTruncReplaceChecker();
+public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
+    public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
 
-    private CallOperator mvDateTrunc;
-
-    public DateTruncReplaceChecker() {}
-
-    public DateTruncReplaceChecker(CallOperator mvDateTrunc) {
-        this.mvDateTrunc = mvDateTrunc;
-    }
-
-    @Override
-    public boolean isEquivalent(ScalarOperator operator) {
-        if (mvDateTrunc == null) {
-            return false;
-        }
-        if (!operator.isConstantRef()) {
-            return false;
-        }
-        return isEquivalent(mvDateTrunc, (ConstantOperator) operator);
-    }
+    public DateTruncEquivalent() {}
 
     @Override
     public boolean isEquivalent(ScalarOperator op1, ConstantOperator op2) {
@@ -62,5 +46,42 @@ public class DateTruncReplaceChecker implements IRewriteEquivalent {
                 ((ConstantOperator) op1.getChild(0)),
                 op2);
         return sliced.equals(op2);
+    }
+
+    @Override
+    public RewriteEquivalentContext prepare(ScalarOperator input) {
+        if (input == null || !(input instanceof CallOperator)) {
+            return null;
+        }
+        CallOperator func = (CallOperator) input;
+        if (!func.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+            return null;
+        }
+        if (!func.getChild(1).isColumnRef()) {
+            return null;
+        }
+        return new RewriteEquivalentContext(func.getChild(1), input);
+    }
+
+    @Override
+    public ScalarOperator rewrite(RewriteEquivalentContext eqContext,
+                                  EquivalentShuttleContext shuttleContext,
+                                  ColumnRefOperator replace,
+                                  ScalarOperator newInput) {
+        if (!(newInput instanceof BinaryPredicateOperator)) {
+            return null;
+        }
+        ScalarOperator left = newInput.getChild(0);
+        ScalarOperator right = newInput.getChild(1);
+
+        if (!right.isConstantRef() || !left.equals(eqContext.getEquivalent())) {
+            return null;
+        }
+        if (!isEquivalent(eqContext.getInput(), (ConstantOperator) right)) {
+            return null;
+        }
+        BinaryPredicateOperator predicate = (BinaryPredicateOperator) newInput.clone();
+        predicate.setChild(0, replace);
+        return predicate;
     }
 }
