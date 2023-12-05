@@ -539,15 +539,15 @@ DISTRIBUTED BY HASH(site_id,city_code);
           pv BIGINT SUM DEFAULT '0')
       AGGREGATE KEY(site_id, city_code, user_name)
       DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分区中分桶数量
-      ```
-
+      ``` 
     - 随机分桶表
 
       自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
 
       > **说明**
       >
-      > 在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小。
+      > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（4 GB），在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小。
+
 
       建表示例：
 
@@ -559,8 +559,18 @@ DISTRIBUTED BY HASH(site_id,city_code);
           city_code VARCHAR(100),
           user_name VARCHAR(32) DEFAULT '')
       DUPLICATE KEY (event_day,site_id,pv)
-      PROPERTIES("bucket_size"="1073741824")
-      ;--指定单个分桶大小，无需设置分桶数量，并且随机分桶，无需设置分桶键
+      ; -- 该表分区中的分桶数量由 StarRocks 自动设置，单个分桶大小默认为 4 GB 。并且该表使用随机分桶，您无需设置分桶键。
+
+      CREATE TABLE site_access1 (
+          event_day DATE,
+          site_id INT DEFAULT '10', 
+          pv BIGINT DEFAULT '0' ,
+          city_code VARCHAR(100),
+          user_name VARCHAR(32) DEFAULT '')
+      DUPLICATE KEY (event_day,site_id,pv)
+      PROPERTIES("bucket_size"="1073741824") -- 单个分桶的大小指定为 1 GB。
+      ; -- 该表分区中的分桶数量由 StarRocks 自动设置。并且该表使用随机分桶，您无需设置分桶键。
+
       ```
 
     建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
@@ -602,7 +612,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
        自 2.5.7 版本起，新增分区时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持**在创建新分区时**自动设置分区中分桶数量，还支持**在导入数据至分区过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高新增分区易用性的同时，还能提升大数据集的导入性能。
        > **说明**
        >
-       > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在新增分区时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
+       > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（4 GB），在新增分区时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小。
 
     新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为新分区设置的分桶数量。如果是哈希分桶表，新分区的分桶数量**固定**。
 
