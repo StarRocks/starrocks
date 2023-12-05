@@ -61,6 +61,13 @@ public class JDBCMetaResolver implements ConnectorMetadata {
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
     }
 
+    public boolean checkSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            return schemaResolver.checkAndSetSupportPartitionInformation(connection);
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
 
     List<String> refreshCacheForListDbNames() {
         try (Connection connection = getConnection()) {
@@ -89,22 +96,23 @@ public class JDBCMetaResolver implements ConnectorMetadata {
         String dbName = metaInfo.get("dbName");
         String tblName = metaInfo.get("tblName");
         try (Connection connection = getConnection()) {
-            try (ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
-                List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
-                List<Column> partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
-                if (fullSchema.isEmpty()) {
-                    return null;
-                }
-                JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
-                if (JDBCTableIdCache.containsTableId(tableKey)) {
-                    return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
-                            tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
-                } else {
-                    int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
-                    JDBCTableIdCache.putTableId(tableKey, tableId);
-                    return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns,
-                            dbName, catalogName, properties);
-                }
+            ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
+            List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
+            List<Column> partitionColumns = Lists.newArrayList();
+            if (schemaResolver.isSupportPartitionInformation()) {
+                partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+            }
+            if (fullSchema.isEmpty()) {
+                return null;
+            }
+            JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
+            if (JDBCTableIdCache.containsTableId(tableKey)) {
+                return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
+                        tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
+            } else {
+                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                JDBCTableIdCache.putTableId(tableKey, tableId);
+                return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             }
         } catch (SQLException | DdlException e) {
             LOG.warn(e.getMessage());
@@ -122,8 +130,9 @@ public class JDBCMetaResolver implements ConnectorMetadata {
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+        } catch (SQLException  | StarRocksConnectorException e) {
+            LOG.warn(e.getMessage());
+            return Lists.newArrayList();
         }
     }
 
