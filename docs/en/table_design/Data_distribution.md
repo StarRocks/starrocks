@@ -556,10 +556,10 @@ Buckets reflect how data files are actually organized in StarRocks.
 
     - Table configured with random bucketing
 
-      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition **at table creation**. Since v3.2.0, StarRocks further optimizes the logic for automatically setting the number of buckets. In addition to setting the number of buckets in a partition **at table creation**, StarRocks also **dynamically increases** the number of buckets in a partition **during data loading**, based on the cluster capacity and the volume of loaded data. This not only makes partition creation easier but also increases bulk load performance..
+      Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition **at table creation**. Since v3.2.0, StarRocks further optimizes the logic for automatically setting the number of buckets. In addition to setting the number of buckets in a partition **at table creation**, StarRocks also **dynamically increases** the number of buckets in a partition **during data loading**, based on the cluster capacity and the volume of loaded data. This not only makes partition creation easier but also increases bulk load performance.
       > **NOTE**
       >
-      > The bucket size is `1024 * 1024 * 1024 B` (1 GB) by default. When creating a table, you can specify the bucket size in `PROPERTIES ("bucket_size"="xxx")`. The maximum bucket size is 4 GB.
+      > The bucket size is `1024 * 1024 * 1024 B` (4 GB) by default. You can specify the bucket size in `PROPERTIES ("bucket_size"="xxx")` at table creation.
 
       Example:
 
@@ -572,7 +572,17 @@ Buckets reflect how data files are actually organized in StarRocks.
           user_name VARCHAR(32) DEFAULT ''
       )
       DUPLICATE KEY (event_day,site_id,pv)
-      ;-- Do not need to set the number of bucket and the bucketing key
+      ; -- The number of buckets in a partition of this table is automatically set by StarRocks. The bucket size is 4 GB by default. This table is configured with random bucketing, so you do not need to set the bucketing key.
+      
+      CREATE TABLE site_access1 (
+          event_day DATE,
+          site_id INT DEFAULT '10', 
+          pv BIGINT DEFAULT '0' ,
+          city_code VARCHAR(100),
+          user_name VARCHAR(32) DEFAULT '')
+      DUPLICATE KEY (event_day,site_id,pv) 
+      PROPERTIES("bucket_size"="1073741824") -- The bucket size is set to 1 GB.
+      ; -- The number of buckets in a partition of this table is automatically set by StarRocks. This table is configured with random bucketing, so you do not need to set the bucketing key.
       ```
 
     After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is **fixed**.
@@ -615,7 +625,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       Since v2.5.7, StarRocks can automatically set the number of buckets based on machine resources and data volume for a partition during partition creation. Since v3.2.0, StarRocks further optimizes the logic for automatically setting the number of buckets. In addition to setting the number of buckets in a partition during partition creation, StarRocks also **dynamically increases** the number of buckets in a partition **during data loading**, based on cluster capacity and the volume of loaded data. This not only makes table creation easier but also increases bulk load performance.
       > **NOTE**
       >
-      > The bucket size is `1024 * 1024 * 1024 B` (1 GB) by default. When adding a partition, you can specify the bucket size in `PROPERTIES ("bucket_size"="xxx")`. The maximum bucket size is 4 GB.
+      > The bucket size is `1024 * 1024 * 1024 B` (4 GB) by default. You can specify the bucket size in `PROPERTIES ("bucket_size"="xxx")` when adding a partition.
 
     After adding a partition, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for the new partition. As for a table configured with hash bucketing, the number of buckets for the new partition is **fixed**.
     As for a table configured with random bucketing, the number of buckets for the new partition can be **dynamically changed**. So the returned result displays the **current** number of buckets for the new partition.
