@@ -30,7 +30,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica.ReplicaState;
+>>>>>>> e51e5d5d23 ([BugFix] fix replica update version when replica in alter state (#36425))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
@@ -324,13 +329,20 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
             LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
                     tabletId, backend != null ? backend.toString() : "", transactionId);
+            return true;
+        }
+        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
+            // Skip check when replica is ALTER or SCHEMA CHANGE
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+            LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                    tabletId, backend != null ? backend.toString() : "", state);
             return true;
         }
         return this.tabletCommitInfos.contains(info);
