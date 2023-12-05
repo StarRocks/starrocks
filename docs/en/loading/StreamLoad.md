@@ -31,7 +31,7 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 ## Loading from a local file system via Stream Load
 
-Stream Load is an HTTP PUT-based synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
+Stream Load is an HTTP PUT-based synchronous loading method. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
 > **NOTICE**
 >
