@@ -732,7 +732,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
-            if (useSortKeyUniqueId && oneCol.get().getUniqueId() > 0) {
+            if (useSortKeyUniqueId && oneCol.get().getUniqueId() >= 0) {
                 sortKeyUniqueIds.add(oneCol.get().getUniqueId());
             } else {
                 useSortKeyUniqueId = false;
