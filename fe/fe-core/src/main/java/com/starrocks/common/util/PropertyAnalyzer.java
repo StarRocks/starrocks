@@ -367,7 +367,7 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
-            if (bucketSize <= 0) {
+            if (bucketSize < 0) {
                 throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
