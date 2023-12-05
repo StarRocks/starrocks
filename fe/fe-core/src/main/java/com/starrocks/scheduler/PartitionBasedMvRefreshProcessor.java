@@ -1433,7 +1433,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
-        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         ctx.getSessionVariable().setEnableInsertStrict(false);
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
