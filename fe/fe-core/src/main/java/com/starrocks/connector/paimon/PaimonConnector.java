@@ -131,6 +131,6 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), getPaimonOptions());
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog());
     }
 }

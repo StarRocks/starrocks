@@ -116,15 +116,15 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
 
     std::string message = "Initialize a scanner with parameters: ";
     for (const auto& it : _jni_scanner_params) {
-        if (_skipped_log_jni_scanner_params.find(it.first) != _skipped_log_jni_scanner_params.end()) {
-            continue;
-        }
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
-        message.append(it.first);
-        message.append("->");
-        message.append(it.second);
-        message.append(", ");
+        // skip encoded object
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.first);
+            message.append("->");
+            message.append(it.second);
+            message.append(", ");
+        }
 
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
         _jni_env->DeleteLocalRef(key);
