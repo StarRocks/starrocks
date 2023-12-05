@@ -36,7 +36,6 @@
 
 #include <fmt/format.h>
 
-#include <chrono>
 #include <string_view>
 
 #include "agent/master_info.h"
@@ -444,9 +443,6 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
-        using namespace std::chrono;
-        rl_attach.__set_creationTimestampMs(
-                duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;

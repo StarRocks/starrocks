@@ -629,10 +629,8 @@ public class RoutineLoadMgr implements Writable {
         }
         RoutineLoadJob routineLoadJob = getJob(jobId);
         if (routineLoadJob != null && reason != null) {
-            String otherMsg = String.format("The %s task have complained: %s at %s",
-                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()),
-                    reason,
-                    new Date(rLTaskTxnCommitAttachment.getCreationTimestampMs()));
+            String otherMsg = String.format("The %s task failed due to: %s",
+                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()), reason);
             routineLoadJob.setOtherMsg(otherMsg);
         }
     }
