@@ -1130,7 +1130,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean hashJoinInterpolatePassthrough = false;
 
-    @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
+    @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
 
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
