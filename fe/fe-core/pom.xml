@@ -726,6 +726,27 @@ under the License.
             <version>${paimon.version}</version>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-s3-impl</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-oss</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-oss-impl</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+>>>>>>> a4ac4c6605 ([BugFix] Fix the NPE and enable oss fileIO interface while reading paimon (#36264))
         <dependency>
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
