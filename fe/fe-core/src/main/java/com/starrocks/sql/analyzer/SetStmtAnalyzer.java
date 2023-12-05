@@ -57,6 +57,7 @@ import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -208,6 +209,17 @@ public class SetStmtAnalyzer {
                     !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
                 throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
                         "supported list is {varchar, decimal}", baseType));
+            }
+        }
+
+        // follower_query_forward_mode
+        if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
+            String queryFollowerForwardMode = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
+                throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
+                        "supported list is %s", queryFollowerForwardMode, supportedList));
             }
         }
 
