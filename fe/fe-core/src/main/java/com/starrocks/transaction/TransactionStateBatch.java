@@ -28,7 +28,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -84,7 +83,7 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
-    // all transctionState in TransactionStateBatch have the same dbId
+    // all transactionState in TransactionStateBatch have the same dbId
     public long getDbId() {
         if (transactionStates.size() != 0) {
             return transactionStates.get(0).getDbId();
@@ -96,15 +95,11 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
     }
 
-    // there is only one transactionState in batch when txn involving multi tables,
-    // and getTableId will return the smallest tableId of list of tables as tableId,
-    // otherwise all transactionState in batch have the same table and return the tableId.
+    // all transactionState in batch have the same table and return the tableId
     public long getTableId() {
         if (!transactionStates.isEmpty()) {
             List<Long> tableIdList = transactionStates.get(0).getTableIdList();
-            if (tableIdList.size() > 1) {
-                Collections.sort(tableIdList);
-            }
+            assert tableIdList.size() == 1;
             return tableIdList.get(0);
         }
         return -1;
