@@ -21,19 +21,23 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -219,5 +223,46 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+    }
+
+    @Test
+    public void testFollowerProxyQuery() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FrontendNodeType getFeType() {
+                return FrontendNodeType.FOLLOWER;
+            }
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        String sql = "select k1 from test.baseall";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        {
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("default");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
     }
 }
