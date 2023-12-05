@@ -138,7 +138,11 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
         }
 
-        _static_query_mem_limit = parent->limit();
+        MemTracker* p = parent;
+        while (!p->has_limit()) {
+            p = p->parent();
+        }
+        _static_query_mem_limit = p->limit();
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
         }

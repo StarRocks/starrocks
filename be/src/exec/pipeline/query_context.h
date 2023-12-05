@@ -200,6 +200,7 @@ public:
     bool is_prepared() { return _is_prepared; }
 
     int64_t get_static_query_mem_limit() const { return _static_query_mem_limit; }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
