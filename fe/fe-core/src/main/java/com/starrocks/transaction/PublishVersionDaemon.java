@@ -229,7 +229,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
      * 3) the new task will be rejected once the total number of threads reaches `corePoolSize` and the queue is also full.
      * <p>
      * core threads will be idle and timed out if no more tasks for a while (60 seconds by default).
-     *
      * @return the thread pool executor
      */
     private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
