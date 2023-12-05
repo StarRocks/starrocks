@@ -169,7 +169,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
 
-- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。
+- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                | **类型** | **默认值** | **说明**                           |
 |-------------------------------|--------|---------|----------------------------------|
@@ -252,17 +252,17 @@ PROPERTIES(
 
 可以通过 CREATE ANALYZE 语句创建自定义自动采集任务。
 
-创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。 在关闭 `enable_collect_full_statistic=false`后， **StarRocks会自动创建自定义采集任务，默认采集抽样采集所有表。**
+创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。在关闭 `enable_collect_full_statistic=false` 后，**StarRocks 会自动创建自定义采集任务，默认采集所有表。**
 
 ```SQL
 -- 定期采集所有数据库的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property])
 
 -- 定期采集指定数据库下所有表的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property])
 
 -- 定期采集指定表、列的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property])
 ```
 
 参数说明：
@@ -274,7 +274,7 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (p
 
 - `col_name`: 要采集统计信息的列，多列使用逗号 (,)分隔。如果不指定，表示采集整张表的信息。
 
-- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。
+- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                        | **类型** | **默认值** | **说明**                                                                                                                           |
 |---------------------------------------|--------|---------|----------------------------------------------------------------------------------------------------------------------------------|
@@ -511,11 +511,11 @@ partition_name:
 
 ### 使用限制
 
-外表统计信息收集有如下限制：
+外表统计信息采集有如下限制：
 
-1. 目前只支持全量收集，不支持抽样采集和直方图采集。
+1. 目前只支持全量采集，不支持抽样采集和直方图采集。
 2. 目前只支持收集 Hive、Iceberg、Hudi 表的统计信息。
-3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库、所有表的统计信息。
+3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库、数据库下所有表的统计信息。
 4. 对于自动收集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据收集间隔周期性全表采集。
 
 以下示例默认在 External Catalog 指定数据库下收集外表的统计信息。如果是在 default_catalog 下采集外表的统计信息，引用外表时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
@@ -529,7 +529,7 @@ partition_name:
 ```sql
 ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-PROPERTIES (property [,property]);
+[PROPERTIES(property [,property])]
 ```
 
 示例：
@@ -599,9 +599,28 @@ KILL ANALYZE <ID>
 
 ### 自动收集
 
-创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务；Hudi目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的参数调整）。
+创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务；Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的参数调整）。
 
-#### 自定义自动收集任务
+- statistic_collect_interval_sec
+
+  自动定期任务中，检查是否需要收集统计信息的间隔周期，默认 5 分钟。
+
+- statistic_auto_collect_small_table_rows
+
+  自动收集中，用来判断一个表是否为小表的行数门限，默认值为 10000000 行。
+
+- statistic_auto_collect_small_table_interval
+
+  自动收集中小表的收集间隔，默认值为 0，单位：秒。
+
+- statistic_auto_collect_large_table_interval
+
+  自动收集中大表的收集间隔，默认值为 12h，单位：秒。
+
+自动收集线程每间隔 `statistic_collect_interval_sec` 时间就会进行一次任务检查，发现是否有需要执行的任务，当表中行数小于`statistic_auto_collect_small_table_rows` 时，则将收集间隔设置为小表的收集间隔，否则设置为大表的收集间隔。
+如果上次更新时间 + 收集间隔 > 当前时间，则需要更新，否则无需更新，这样可以避免频繁为大表执行 Analyze 任务。
+
+#### 创建自动收集任务
 
 语法：
 
@@ -651,7 +670,7 @@ Empty set (0.00 sec)
 
 ### 验证是否收集了统计信息
 
-检查 `default_catalog._statistics_.external_column_statistics` 表中是否写入了该表的统计信息。
+查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了该表的统计信息。
 
 ### 删除统计信息
 
