@@ -69,6 +69,8 @@ public class HiveScanner extends ConnectorScanner {
     private final String inputFormat;
 
     private RecordReader<Writable, Writable> reader;
+    private Writable key;
+    private Writable value;
     private StructObjectInspector rowInspector;
     private ObjectInspector[] fieldInspectors;
     private StructField[] structFields;
@@ -176,6 +178,8 @@ public class HiveScanner extends ConnectorScanner {
 
         InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
         reader = (RecordReader<Writable, Writable>) inputFormatClass.getRecordReader(fileSplit, jobConf, Reporter.NULL);
+        key = (Writable) reader.createKey();
+        value = (Writable) reader.createValue();
 
         deserializer = getDeserializer(jobConf, properties, serde);
         rowInspector = getTableObjectInspector(deserializer);
@@ -216,8 +220,6 @@ public class HiveScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Writable key = (Writable) reader.createKey();
-            Writable value = (Writable) reader.createValue();
             int numRows = 0;
             for (; numRows < getTableSize(); numRows++) {
                 if (!reader.next(key, value)) {
