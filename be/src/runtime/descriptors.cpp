@@ -320,22 +320,7 @@ const std::string& HudiTableDescriptor::get_serde_lib() const {
 
 PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
-    _database_name = tdesc.dbName;
-    _table_name = tdesc.tableName;
-    _paimon_options = tdesc.paimonTable.paimon_options;
     _paimon_native_table = tdesc.paimonTable.paimon_native_table;
-}
-
-const std::string& PaimonTableDescriptor::get_database_name() const {
-    return _database_name;
-}
-
-const std::string& PaimonTableDescriptor::get_table_name() const {
-    return _table_name;
-}
-
-const std::string& PaimonTableDescriptor::get_paimon_options() const {
-    return _paimon_options;
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
