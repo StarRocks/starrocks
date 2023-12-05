@@ -1,0 +1,62 @@
+-- name: test_push_down_distinct_agg_across_window
+DROP TABLE if exists t0;
+-- result:
+-- !result
+CREATE TABLE if not exists t0
+(
+TIME VARCHAR(30) NOT NULL,
+NUM BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`TIME`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`TIME`) BUCKETS 1
+PROPERTIES(
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "default"
+);
+-- result:
+-- !result
+INSERT INTO t0
+  (TIME, NUM)
+VALUES
+  ('2022-01-02', '1512'),
+  ('2022-01-03', '-322850'),
+  ('2022-01-03', '-9136270383122058721'),
+  ('2022-01-04', '-9223372036854775808'),
+  ('2022-01-01', '-411260301'),
+  ('2022-01-05', '-814552904955694743'),
+  ('2022-01-03', '-14033619422102'),
+  ('2022-01-04', '2719391845278'),
+  ('2022-01-04', '328803617'),
+  ('2022-01-04', '-2757055605405418'),
+  ('2022-01-01', '-17017206034'),
+  ('2022-01-01', '44644742'),
+  ('2022-01-05', '1389488975808660'),
+  ('2022-01-05', '-2'),
+  ('2022-01-04', '-3'),
+  ('2022-01-05', '-9223372036854775808'),
+  ('2022-01-04', '1175288988'),
+  ('2022-01-02', '6990590275516343015'),
+  ('2022-01-05', '-18'),
+  ('2022-01-05', '-380919416214054');
+-- result:
+-- !result
+set cbo_push_down_distinct_below_window='false';
+-- result:
+-- !result
+with temp as ( 
+select TIME, ceil(round(sum(`NUM`) OVER (PARTITION BY `TIME` ))) as N from t0
+) select sum(murmur_hash3_32(TIME) + murmur_hash3_32(N)) as fingerprint from(select distinct TIME, N from temp)t1;
+-- result:
+-5805963690
+-- !result
+set cbo_push_down_distinct_below_window='true';
+-- result:
+-- !result
+with temp as ( 
+select TIME, ceil(round(sum(`NUM`) OVER (PARTITION BY `TIME` ))) as N from t0
+) select sum(murmur_hash3_32(TIME) + murmur_hash3_32(N)) as fingerprint from(select distinct TIME, N from temp)t1;
+-- result:
+-5805963690
+-- !result
