@@ -964,13 +964,8 @@ public class DatabaseTransactionMgr {
                                 if (!errorReplicaIds.contains(replica.getId())
                                         && replica.getLastFailedVersion() < 0) {
                                     // if replica not commit yet, skip it. This may happen when it's just create by clone.
-<<<<<<< HEAD
-                                    if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(), 
-                                            replica.getBackendId())) {
-=======
                                     if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
                                             replica.getBackendId(), replica.getState())) {
->>>>>>> e51e5d5d23 ([BugFix] fix replica update version when replica in alter state (#36425))
                                         continue;
                                     }
                                     // this means the replica is a healthy replica,

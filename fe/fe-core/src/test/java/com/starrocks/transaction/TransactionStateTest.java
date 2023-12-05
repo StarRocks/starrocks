@@ -21,12 +21,9 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-<<<<<<< HEAD
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
-=======
-import com.starrocks.catalog.Replica.ReplicaState;
->>>>>>> e51e5d5d23 ([BugFix] fix replica update version when replica in alter state (#36425))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;

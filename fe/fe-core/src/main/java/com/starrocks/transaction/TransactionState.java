@@ -30,12 +30,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
-=======
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
->>>>>>> e51e5d5d23 ([BugFix] fix replica update version when replica in alter state (#36425))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
