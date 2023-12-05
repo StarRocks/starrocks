@@ -289,4 +289,32 @@ public class DatabaseTransactionMgrTest {
         assertEquals(3, masterDbTransMgr.getTransactionNum());
         assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
     }
+
+    @Test
+    public void testPublishVersionMissing() throws UserException {
+        TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // begin transaction
+        long transactionId1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable9,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        // skip replica 3
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
+    }
 }
