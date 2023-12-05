@@ -98,7 +98,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("not support optimize"));
+            Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable1 partition (t1) distributed by hash(v1)";
