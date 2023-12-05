@@ -54,6 +54,7 @@ public class JDBCMetaResolver implements ConnectorMetadata {
         this.properties = properties;
         this.catalogName = catalogName;
         this.schemaResolver = schemaResolver;
+        checkAndSetSupportPartitionInformation();
     }
 
     public Connection getConnection() throws SQLException {
@@ -61,9 +62,9 @@ public class JDBCMetaResolver implements ConnectorMetadata {
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
     }
 
-    public boolean checkSupportPartitionInformation() {
+    public void checkAndSetSupportPartitionInformation() {
         try (Connection connection = getConnection()) {
-            return schemaResolver.checkAndSetSupportPartitionInformation(connection);
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
