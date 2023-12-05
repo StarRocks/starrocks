@@ -1,0 +1,54 @@
+-- name: test_partition_by_expr_unixtime
+CREATE TABLE partition_unixtime (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime(create_time) as date))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime values(unix_timestamp('2021-01-05'),'1',1.1,1);
+select * from partition_unixtime;
+select * from partition_unixtime PARTITION(p20210105);
+drop table partition_unixtime;
+CREATE TABLE partition_unixtime (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime values(unix_timestamp('2021-01-05'),'1',1.1,1);
+select * from partition_unixtime;
+drop table partition_unixtime;
+CREATE TABLE partition_unixtime (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+drop table partition_unixtime;
+CREATE TABLE partition_unixtime (
+        create_time date,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+CREATE TABLE partition_unixtime (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
