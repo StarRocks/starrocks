@@ -21,6 +21,11 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -374,6 +379,8 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
@@ -885,4 +892,35 @@ public class InsertPlanTest extends PlanTestBase {
                 "         NULL\n";
         Assert.assertEquals(expected, actualRes);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void insertToSql() {
+        String sql = "insert into test_all_type_partition_by_date " +
+                "partition(p1992) (t1a, id_date) SELECT `t1a`, `id_date` FROM `test_all_type_partition_by_date` ";
+        var stmts = SqlParser.parse(sql, new SessionVariable());
+        Assert.assertEquals(1, stmts.size());
+
+        // verify generated SQL
+        String genSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        Assert.assertEquals("INSERT INTO `test_all_type_partition_by_date` " +
+                "PARTITION (p1992) (`t1a`,`id_date`) " +
+                "SELECT `t1a`, `id_date`\n" +
+                "FROM `test_all_type_partition_by_date`", genSql);
+
+        // parse it again
+        var stmts2 = SqlParser.parse(genSql, new SessionVariable());
+        Assert.assertEquals(genSql, AstToSQLBuilder.toSQL(stmts2.get(0)));
+    }
+
+    @Test
+    public void testInsertNotExistTable() {
+        try {
+            getInsertExecPlan("insert into not_exist_table values (1)");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
+        }
+    }
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 }

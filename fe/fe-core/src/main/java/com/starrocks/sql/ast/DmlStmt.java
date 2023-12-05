@@ -19,6 +19,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DmlStmt extends StatementBase {
+<<<<<<< HEAD
+=======
+    private long txnId;
+    private Map<String, String> optHints;
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 
     protected DmlStmt(NodePosition pos) {
         super(pos);
@@ -31,4 +36,22 @@ public abstract class DmlStmt extends StatementBase {
 
     public abstract TableName getTableName();
 
+<<<<<<< HEAD
+=======
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    public Map<String, String> getOptHints() {
+        return optHints;
+    }
+
+    public void setOptHints(Map<String, String> optHints) {
+        this.optHints = optHints;
+    }
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 }

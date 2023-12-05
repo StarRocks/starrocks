@@ -2507,12 +2507,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
 
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
 
+=======
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.

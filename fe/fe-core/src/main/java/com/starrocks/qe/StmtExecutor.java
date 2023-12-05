@@ -93,7 +93,6 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.privilege.PrivilegeException;
@@ -104,7 +103,6 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
@@ -160,7 +158,6 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
@@ -200,11 +197,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
+=======
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
 // second: Do handle function for statement.
@@ -1628,23 +1628,10 @@ public class StmtExecutor {
             return;
         }
 
-        String label = DebugUtil.printId(context.getExecutionId());
-        if (stmt instanceof InsertStmt) {
-            String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
-        } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
-        } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
-        } else {
-            throw unsupportedException(
-                    "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
-        }
-
-        TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        long transactionId = -1;
+        long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
+<<<<<<< HEAD
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
@@ -1688,12 +1675,15 @@ public class StmtExecutor {
             // add table indexes to transaction state
             txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(database.getId(), transactionId);
+=======
+        String label = DebugUtil.printId(context.getExecutionId());
+        if (targetTable instanceof OlapTable) {
+            txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
-            if (targetTable instanceof OlapTable) {
-                txnState.addTableIndexes((OlapTable) targetTable);
-            }
+            label = txnState.getLabel();
         }
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {
@@ -1710,6 +1700,7 @@ public class StmtExecutor {
         boolean insertError = false;
         String trackingSql = "";
         try {
+<<<<<<< HEAD
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 context.getSessionVariable().setPreferComputeNode(false);
@@ -1722,6 +1713,10 @@ public class StmtExecutor {
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift(), TQueryType.LOAD);
+=======
+            coord = getCoordinatorFactory().createInsertScheduler(
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
