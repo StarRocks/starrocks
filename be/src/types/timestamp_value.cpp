@@ -757,6 +757,12 @@ void TimestampValue::to_timestamp(int* year, int* month, int* day, int* hour, in
     timestamp::to_datetime(_timestamp, year, month, day, hour, minute, second, usec);
 }
 
+void TimestampValue::trunc_to_millisecond() {
+    Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
+    uint64_t microseconds = time % USECS_PER_MILLIS;
+    _timestamp -= microseconds;
+}
+
 void TimestampValue::trunc_to_second() {
     Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
     uint64_t microseconds = time % USECS_PER_SEC;

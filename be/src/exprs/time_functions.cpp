@@ -891,7 +891,11 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     if (boundary->type == LogicalType::TYPE_DATETIME) {
         // floor specify START as the result time.
         if (time_base == "floor") {
-            if (period_unit == "second") {
+            if (period_unit == "microsecond") {
+                function = &TimeFunctions::time_slice_datetime_start_microsecond;
+            } else if (period_unit == "millisecond") {
+                function = &TimeFunctions::time_slice_datetime_start_millisecond;
+            } else if (period_unit == "second") {
                 function = &TimeFunctions::time_slice_datetime_start_second;
             } else if (period_unit == "minute") {
                 function = &TimeFunctions::time_slice_datetime_start_minute;
@@ -909,12 +913,17 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
                 function = &TimeFunctions::time_slice_datetime_start_quarter;
             } else {
                 return Status::InternalError(
-                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+                        "period unit must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                        "quarter}");
             }
         } else {
             // ceil specify END as the result time.
             DCHECK_EQ(time_base, "ceil");
-            if (period_unit == "second") {
+            if (period_unit == "microsecond") {
+                function = &TimeFunctions::time_slice_datetime_end_microsecond;
+            } else if (period_unit == "millisecond") {
+                function = &TimeFunctions::time_slice_datetime_end_millisecond;
+            } else if (period_unit == "second") {
                 function = &TimeFunctions::time_slice_datetime_end_second;
             } else if (period_unit == "minute") {
                 function = &TimeFunctions::time_slice_datetime_end_minute;
@@ -932,7 +941,8 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
                 function = &TimeFunctions::time_slice_datetime_end_quarter;
             } else {
                 return Status::InternalError(
-                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+                        "period unit must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                        "quarter}");
             }
         }
     } else {
@@ -1015,6 +1025,12 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     }                                                                                                  \
     DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                 \
     DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
+
+// time_slice_to_second
+DEFINE_TIME_SLICE_FN(microsecond);
+
+// time_slice_to_second
+DEFINE_TIME_SLICE_FN(millisecond);
 
 // time_slice_to_second
 DEFINE_TIME_SLICE_FN(second);
@@ -2453,7 +2469,11 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
                    [](unsigned char c) { return std::tolower(c); });
 
     ScalarFunction function;
-    if (format_value == "second") {
+    if (format_value == "microsecond") {
+        function = &TimeFunctions::datetime_trunc_microsecond;
+    } else if (format_value == "millisecond") {
+        function = &TimeFunctions::datetime_trunc_millisecond;
+    } else if (format_value == "second") {
         function = &TimeFunctions::datetime_trunc_second;
     } else if (format_value == "minute") {
         function = &TimeFunctions::datetime_trunc_minute;
@@ -2470,7 +2490,9 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     } else if (format_value == "quarter") {
         function = &TimeFunctions::datetime_trunc_quarter;
     } else {
-        return Status::InternalError("format value must in {second, minute, hour, day, month, year, week, quarter}");
+        return Status::InternalError(
+                "format value must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                "quarter}");
     }
 
     auto fc = new DateTruncCtx();
@@ -2478,6 +2500,18 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     context->set_function_state(scope, fc);
     return Status::OK();
 }
+
+DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_microsecondImpl, v) {
+    return v;
+}
+DEFINE_TIME_UNARY_FN_EXTEND(datetime_trunc_microsecond, TYPE_DATETIME, TYPE_DATETIME, 1);
+
+DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_millisecondImpl, v) {
+    TimestampValue result = v;
+    result.trunc_to_millisecond();
+    return result;
+}
+DEFINE_TIME_UNARY_FN_EXTEND(datetime_trunc_millisecond, TYPE_DATETIME, TYPE_DATETIME, 1);
 
 DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_secondImpl, v) {
     TimestampValue result = v;
