@@ -1739,8 +1739,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                     "compaction. And this could be the reason of the compaction failure",
                     _tablet.tablet_id());
             LOG(WARNING) << msg << ", compaction status:" << st;
-            return st;
         }
+        return st;
     }
     auto output_rowset = rowset_writer->build();
     if (!output_rowset.ok()) return output_rowset.status();

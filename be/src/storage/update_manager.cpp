@@ -549,7 +549,6 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
             std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
                                                   tablet->tablet_id());
             LOG(WARNING) << msg;
-            return st;
         }
     }
 
