@@ -333,6 +333,7 @@ public class CompactionScheduler extends Daemon {
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
+            request.timeoutMs = LakeService.TIMEOUT_COMPACT;
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
