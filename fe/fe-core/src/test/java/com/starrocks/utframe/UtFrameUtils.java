@@ -43,6 +43,7 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -327,8 +328,59 @@ public class UtFrameUtils {
                 plan.getFragments().size(), visitedFragments.size());
     }
 
+<<<<<<< HEAD
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
+=======
+    /*
+     * Return analyzed statement and execution plan for MV maintenance
+     */
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
+                                                                                    String sql)
+            throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
+
+        try {
+            // update session variable by adding optional hints.
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+                    }
+                    connectContext.setSessionVariable(sessionVariable);
+                }
+            }
+
+            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
+            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
+        } finally {
+            // before returning we have to restore session variable.
+            connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+    private interface GetPlanHook<R> {
+        R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
+    }
+
+    private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
+                                   GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         originStmt = LogUtil.removeLineSeparator(originStmt);
 

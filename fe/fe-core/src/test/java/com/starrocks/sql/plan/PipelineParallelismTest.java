@@ -25,6 +25,8 @@ public class PipelineParallelismTest extends PlanTestBase {
 
     @Before
     public void setUp() {
+        super.setUp();
+
         mockedBackendCoreStat = new MockUp<BackendCoreStat>() {
             @Mock
             public int getAvgNumOfHardwareCoresOfBe() {

@@ -219,6 +219,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             insertStmt =
                     analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
+            // Must set execution id before StatementPlanner.plan
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             execPlan = StatementPlanner.plan(insertStmt, ctx);
         } catch (Throwable e) {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
@@ -954,7 +956,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
+<<<<<<< HEAD
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+=======
+        ctx.getSessionVariable().setEnableInsertStrict(false);
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
         try {
             executor.handleDMLStmt(execPlan, insertStmt);
         } finally {

@@ -9,8 +9,13 @@ import org.junit.Test;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
-    public void setUp() throws DdlException {
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+    public void setUp() {
+        super.setUp();
+        try {
+            GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test

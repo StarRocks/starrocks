@@ -30,8 +30,14 @@ import java.util.regex.Pattern;
 
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
+<<<<<<< HEAD
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
+=======
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");

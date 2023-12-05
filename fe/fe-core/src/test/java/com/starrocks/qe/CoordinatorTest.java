@@ -36,7 +36,8 @@ public class CoordinatorTest {
     Coordinator coordinator;
 
     @Before
-    public void setUp() throws IOException {
+    public void setUp() {
+        super.setUp();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);

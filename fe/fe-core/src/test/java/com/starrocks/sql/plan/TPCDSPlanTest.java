@@ -21,6 +21,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Before
     public void setUp() {
+        super.setUp();
         tpcdsStats = getTPCDSTableStats();
     }
 
