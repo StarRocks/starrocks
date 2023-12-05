@@ -58,13 +58,21 @@ public class BasicStatsMeta implements Writable {
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties) {
+        this(dbId, tableId, columns, type, updateTime, properties, 0);
+    }
+
+    public BasicStatsMeta(long dbId, long tableId, List<String> columns,
+                          StatsConstants.AnalyzeType type,
+                          LocalDateTime updateTime,
+                          Map<String, String> properties,
+                          long updateRows) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.columns = columns;
         this.type = type;
         this.updateTime = updateTime;
         this.properties = properties;
-        this.updateRows = 0;
+        this.updateRows = updateRows;
     }
 
     @Override
@@ -153,6 +161,10 @@ public class BasicStatsMeta implements Writable {
 
     public long getUpdateRows() {
         return updateRows;
+    }
+
+    public void setUpdateRows(Long updateRows) {
+        this.updateRows = updateRows;
     }
 
     public void increaseUpdateRows(Long delta) {
