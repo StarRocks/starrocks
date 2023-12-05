@@ -82,7 +82,7 @@ public class CompactionJob {
     }
 
     public int getNumTabletCompactionTasks() {
-        return tasks.stream().mapToInt(CompactionTask::tabletCount).sum();
+        return tasks.stream().filter(t -> !t.isDone()).mapToInt(CompactionTask::tabletCount).sum();
     }
 
     public long getStartTs() {
