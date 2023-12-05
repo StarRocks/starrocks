@@ -300,7 +300,8 @@ public class StatisticsCollectJobFactory {
             IcebergTable icebergTable = (IcebergTable) table;
             if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
                 updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
-                                statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
+                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        icebergTable.getNativeTable().currentSnapshot()));
             }
         }
         LOG.info("create external full statistics job for table: {}, partitions: {}",
