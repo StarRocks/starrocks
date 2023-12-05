@@ -18,6 +18,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -47,6 +48,8 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
+
+    _local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
 }
 
 UpdateManager::~UpdateManager() {

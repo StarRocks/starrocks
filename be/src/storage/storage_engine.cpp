@@ -619,7 +619,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_pk_index_major_compaction_thread)
 
 #ifdef USE_STAROS
-    JOIN_THREAD(_local_pk_index_shard_data_gc_thread)
+    JOIN_THREAD(_local_pk_index_shard_data_gc_evict_thread)
 #endif
 
     JOIN_THREAD(_fd_cache_clean_thread)
@@ -1517,7 +1517,7 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
     return Status::OK();
 }
 
-Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
+Status StorageEngine::clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
     // remove meta in RocksDB
     WriteBatch wb;
     auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);

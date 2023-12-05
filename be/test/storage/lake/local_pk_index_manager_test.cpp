@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/lake/local_pk_index_manager.h"
+
 #include <gtest/gtest.h>
 
 #include "column/schema.h"
@@ -22,16 +24,15 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
-#include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
-class LocalPkIndexGCTest : public TestBase {
+class LocalPkIndexManagerTest : public TestBase {
 public:
-    LocalPkIndexGCTest() : TestBase(kTestGroupPath) {
+    LocalPkIndexManagerTest() : TestBase(kTestGroupPath) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -89,7 +90,7 @@ protected:
     int64_t _partition_id = next_id();
 };
 
-TEST_F(LocalPkIndexGCTest, test_evict_pk_index) {
+TEST_F(LocalPkIndexManagerTest, test_evict) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -132,18 +133,19 @@ TEST_F(LocalPkIndexGCTest, test_evict_pk_index) {
     ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                  std::to_string(_tablet_metadata->id())));
 
-    auto tmp_gc_interval = config::pindex_shard_data_gc_interval_seconds;
-    config::pindex_shard_data_gc_interval_seconds = 1;
     auto tmp_low_water = config::starlet_cache_evict_low_water;
     config::starlet_cache_evict_low_water = 0.9999999;
-    ASSERT_OK(StorageEngine::instance()->start_bg_threads());
+    auto lake_local_pk_index_unused_threshold = config::lake_local_pk_index_unused_threshold;
+    config::lake_local_pk_index_unused_threshold = 1;
+    sleep(5);
 
-    sleep(2);
+    auto local_pk_index_mgr = std::make_unique<LocalPkIndexManager>();
+    local_pk_index_mgr->evict(ExecEnv::GetInstance()->lake_update_manager());
+
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
-    config::pindex_shard_data_gc_interval_seconds = tmp_gc_interval;
     config::starlet_cache_evict_low_water = tmp_low_water;
-    config::pindex_shard_data_gc_interval_seconds = tmp_gc_interval;
+    config::lake_local_pk_index_unused_threshold = lake_local_pk_index_unused_threshold;
 
     txn_id = next_id();
     ASSIGN_OR_ABORT(writer, tablet.new_writer(kHorizontal, txn_id));
