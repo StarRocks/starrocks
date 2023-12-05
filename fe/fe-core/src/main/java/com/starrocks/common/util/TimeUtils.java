@@ -271,24 +271,7 @@ public class TimeUtils {
     }
 
     public static long convertTimeUnitValueToSecond(long value, TimeUnit unit) {
-        switch (unit) {
-            case DAYS:
-                return value * 60 * 60 * 24;
-            case HOURS:
-                return value * 60 * 60;
-            case MINUTES:
-                return value * 60;
-            case SECONDS:
-                return value;
-            case MILLISECONDS:
-                return value / 1000;
-            case MICROSECONDS:
-                return value / 1000 / 1000;
-            case NANOSECONDS:
-                return value / 1000 / 1000 / 1000;
-            default:
-                return 0;
-        }
+        return TimeUnit.SECONDS.convert(value, unit);
     }
 
     /**
