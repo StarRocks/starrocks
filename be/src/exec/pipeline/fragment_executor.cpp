@@ -39,6 +39,7 @@
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/sink/schema_table_sink_opeartor.h"
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
@@ -58,6 +59,7 @@
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
+#include "runtime/schema_table_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/table_function_table_sink.h"
@@ -1063,8 +1065,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
                     sink_dop);
         }
+    } else if (typeid(*datasink) == typeid(starrocks::SchemaTableSink)) {
+        auto* schema_table_sink = down_cast<starrocks::SchemaTableSink*>(datasink.get());
+        auto output_expr = schema_table_sink->get_output_expr();
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        DCHECK_EQ(dop, 1);
+        OpFactoryPtr op = std::make_shared<SchemaTableSinkOperatorFactory>(context->next_operator_id(), output_expr,
+                                                                           thrift_sink.schema_table_sink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
     }
-
     return Status::OK();
 }
 DIAGNOSTIC_POP

@@ -14,9 +14,8 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace starrocks::lake {

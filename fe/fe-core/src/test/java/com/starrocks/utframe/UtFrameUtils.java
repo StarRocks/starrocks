@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
@@ -483,7 +484,8 @@ public class UtFrameUtils {
                         execPlan));
     }
 
-    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
+    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt)
+            throws Exception {
         return buildPlan(connectContext, originStmt,
                 (context, statementBase, execPlan) -> {
                     DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
@@ -494,7 +496,8 @@ public class UtFrameUtils {
                 });
     }
 
-    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
+    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext,
+                                                                             String originStmt)
             throws Exception {
         return buildPlan(connectContext, originStmt,
                 (context, statementBase, execPlan) -> {
@@ -511,11 +514,12 @@ public class UtFrameUtils {
         return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
     }
 
-    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
+    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase,
+                                                      ExecPlan execPlan) {
         context.setExecutionId(new TUniqueId(1, 2));
         DefaultCoordinator scheduler;
         if (statementBase instanceof DmlStmt) {
-            if (statementBase instanceof InsertStmt) {
+            if (statementBase instanceof InsertStmt || statementBase instanceof UpdateStmt) {
                 scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
                         execPlan.getFragments(), execPlan.getScanNodes(),
                         execPlan.getDescTbl().toThrift());

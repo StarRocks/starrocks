@@ -396,4 +396,16 @@ std::vector<ConfigInfo> list_configs() {
     return infos;
 }
 
+StatusOr<std::string> get_config(const std::string& field) {
+    auto it = Register::_s_field_map->find(field);
+    if (it == Register::_s_field_map->end()) {
+        return Status::NotFound(strings::Substitute("'$0' is not found", field));
+    }
+
+    if (!it->second.valmutable) {
+        return Status::NotSupported(strings::Substitute("'$0' is not support to modify", field));
+    }
+
+    return it->second.value();
+}
 } // namespace starrocks::config

@@ -20,11 +20,14 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.SchemaTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.system.ComputeNode;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -63,6 +66,12 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
             return;
         }
 
+        boolean isUpdateSinkFragment = fragment.getSink() instanceof SchemaTableSink;
+        if (isUpdateSinkFragment) {
+            assignSchemaTableSinkFragmentToWorker(execFragment);
+            return;
+        }
+
         boolean isGatherFragment = fragment.getDataPartition() == DataPartition.UNPARTITIONED;
         if (isGatherFragment) {
             assignGatherFragmentToWorker(execFragment);
@@ -77,6 +86,15 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         for (FragmentInstance childInstance : childFragment.getInstances()) {
             execFragment.addInstance(new FragmentInstance(childInstance.getWorker(), execFragment));
         }
+    }
+
+    private void assignSchemaTableSinkFragmentToWorker(ExecutionFragment execFragment) {
+        Collection<ComputeNode> allWorkers = workerProvider.getAllWorkers();
+        for (ComputeNode worker : allWorkers) {
+            FragmentInstance instance = new FragmentInstance(worker, execFragment);
+            execFragment.addInstance(instance);
+        }
+
     }
 
     private void assignGatherFragmentToWorker(ExecutionFragment execFragment) throws UserException {
