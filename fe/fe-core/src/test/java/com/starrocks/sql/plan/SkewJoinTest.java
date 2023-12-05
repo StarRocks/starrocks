@@ -14,12 +14,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 
 public class SkewJoinTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
@@ -54,6 +59,69 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  <slot 12> : 10");
 
         connectContext.getSessionVariable().setSkewJoinRandRange(oldSkewRange);
+    }
+
+    @Test
+    public void testSkewJoinWithLeftJoin() throws Exception {
+        String sql = "select v2, v5 from t0 left join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, " join op: LEFT OUTER JOIN (PARTITIONED)");
+
+        sql = "select v2 from t0 left semi join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "LEFT SEMI JOIN (PARTITIONED)");
+
+        sql = "select v2 from t0 left anti join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "LEFT ANTI JOIN (PARTITIONED)");
+    }
+
+    @Test
+    public void testSkewJoinWithException1() throws Exception {
+        String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testSkewJoinWithException2() throws Exception {
+        String sql = "select v2, v5 from t0 right semi join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testSkewJoinWithException3() throws Exception {
+        String sql = "select v2, v5 from t0 right anti join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testSkewJoinWithException4() throws Exception {
+        String sql = "select v2, v5 from t0 cross join[skew|t0.v1(1,2)] t1";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testSkewJoinWithException5() throws Exception {
+        String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testSkewJoinWithException6() throws Exception {
+        String sql = "select v2, v5 from t0 left join[skew|abs(t0.v1)(1,2)] t1 on v1 = v4 ";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("Skew join column must be a column reference");
+        getFragmentPlan(sql);
     }
 
     @Test

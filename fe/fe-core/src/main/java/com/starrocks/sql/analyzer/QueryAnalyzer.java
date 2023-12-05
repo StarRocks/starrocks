@@ -618,6 +618,9 @@ public class QueryAnalyzer {
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
                 }
+                if (join.getJoinOp().isRightJoin()) {
+                    throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
+                }
                 if (join.getSkewColumn() != null) {
                     if (!(join.getSkewColumn() instanceof SlotRef)) {
                         throw new SemanticException("Skew join column must be a column reference");
