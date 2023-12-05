@@ -24,30 +24,16 @@
 
 namespace starrocks::lake {
 
-void LocalPkIndexManager::list_tablet_ids(std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids) {
-    for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {
-        auto pk_path = data_dir->get_persistent_index_path();
-        std::set<std::string> tablet_ids;
-        Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
-        if (!ret.ok()) {
-            LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
-            continue;
-        }
-        store_to_tablet_ids[data_dir] = tablet_ids;
-    }
-}
-
-void LocalPkIndexManager::gc(UpdateManager* update_manager) {
+void LocalPkIndexManager::gc(UpdateManager* update_manager,
+                             std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids) {
     auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-    std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
-    list_tablet_ids(store_to_tablet_ids);
     int64_t t_start = MonotonicMillis();
 
     std::vector<int64_t> not_in_worker_tablet_ids;
     std::vector<int64_t> dir_changed_tablet_ids;
     std::vector<int64_t> removed_dir_tablet_ids;
 
-    for (const auto [data_dir, tablet_ids] : store_to_tablet_ids) {
+    for (const auto& [data_dir, tablet_ids] : store_to_tablet_ids) {
         auto pk_path = data_dir->get_persistent_index_path();
         LOG(INFO) << "start to gc local persistent index dir:" << pk_path;
         for (const auto& tablet_id : tablet_ids) {
@@ -88,10 +74,9 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager) {
     }
 }
 
-void LocalPkIndexManager::evict(UpdateManager* update_manager) {
-    std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
-    list_tablet_ids(store_to_tablet_ids);
-    for (const auto [data_dir, tablet_ids] : store_to_tablet_ids) {
+void LocalPkIndexManager::evict(UpdateManager* update_manager,
+                                std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids) {
+    for (const auto& [data_dir, tablet_ids] : store_to_tablet_ids) {
         bool need_evict = false;
         auto space_info_or = FileSystem::Default()->space(data_dir->path());
         if (space_info_or.ok()) {
@@ -125,21 +110,20 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager) {
                 auto index_file_path = tablet_pk_path + "/" + index_file;
                 auto mtime_or = FileSystem::Default()->get_file_modified_time(index_file_path);
                 if (!mtime_or.ok()) {
-                    LOG(INFO) << mtime_or.status();
                     continue;
                 }
-                LOG(INFO) << mtime;
                 mtime = std::min(mtime, *mtime_or);
             }
 
-            LOG(INFO) << now << " " << mtime;
-
             if (now - mtime > config::lake_local_pk_index_unused_threshold) {
                 tablet_ids_to_be_evicted.emplace_back(id);
-                if (update_manager->try_remove_primary_index_cache(id)) {
-                    if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
-                        removed_dir_tablet_ids.push_back(id);
+                if (update_manager->try_lock_pk_index_shard(id)) {
+                    if (update_manager->try_remove_primary_index_cache(id)) {
+                        if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                            removed_dir_tablet_ids.push_back(id);
+                        }
                     }
+                    update_manager->unlock_pk_index_shard(id);
                 }
             }
         }

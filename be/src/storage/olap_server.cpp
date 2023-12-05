@@ -417,8 +417,19 @@ void* StorageEngine::_local_pk_index_shard_data_gc_evict_thread_callback(void* a
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(config::pindex_shard_data_gc_evict_interval_seconds);
-        lake_update_manager->local_pk_index_mgr()->gc(lake_update_manager);
-        lake_update_manager->local_pk_index_mgr()->evict(lake_update_manager);
+        std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
+        for (DataDir* data_dir : get_stores()) {
+            auto pk_path = data_dir->get_persistent_index_path();
+            std::set<std::string> tablet_ids;
+            Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
+            if (!ret.ok()) {
+                LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
+                continue;
+            }
+            store_to_tablet_ids[data_dir] = tablet_ids;
+        }
+        lake_update_manager->local_pk_index_mgr()->gc(lake_update_manager, store_to_tablet_ids);
+        lake_update_manager->local_pk_index_mgr()->evict(lake_update_manager, store_to_tablet_ids);
     }
 
     return nullptr;

@@ -28,12 +28,9 @@ class UpdateManager;
 
 class LocalPkIndexManager {
 public:
-    void gc(UpdateManager* update_manager);
+    void gc(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
 
-    void evict(UpdateManager* update_manager);
-
-private:
-    void list_tablet_ids(std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
+    void evict(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
 };
 
 } // namespace lake
