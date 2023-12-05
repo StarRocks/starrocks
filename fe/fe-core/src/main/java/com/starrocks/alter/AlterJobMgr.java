@@ -690,9 +690,8 @@ public class AlterJobMgr {
                 if (intervalLiteral != null) {
                     final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
                     final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                    if (asyncRefreshSchemeDesc.isDefineStartTime()) {
-                        asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-                    }
+                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                    asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
                     asyncRefreshContext.setStep(step.getLongValue());
                     asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                 } else {
@@ -760,8 +759,7 @@ public class AlterJobMgr {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
-            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
-                    materializedView.getViewDefineSql());
+            currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }

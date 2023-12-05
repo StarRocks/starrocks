@@ -15,27 +15,18 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
-import mockit.Expectations;
-import mockit.Mocked;
+import com.starrocks.catalog.TableProperty;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TaskBuilderTest {
 
     @Test
-    public void testTaskBuilderForMv(@Mocked MaterializedView mv) {
-        new Expectations() {
-            {
-                mv.getViewDefineSql();
-                result = "select * from table1";
-
-                mv.getName();
-                result = "aa.bb.cc";
-
-                mv.getId();
-                result = 1;
-            }
-        };
+    public void testTaskBuilderForMv() {
+        MaterializedView mv = new MaterializedView();
+        mv.setName("aa.bb.cc");
+        mv.setViewDefineSql("select * from table1");
+        mv.setTableProperty(new TableProperty());
         Task task = TaskBuilder.buildMvTask(mv, "test");
         Assert.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
     }

@@ -424,8 +424,16 @@ public class RuleSet {
         return implementRules;
     }
 
-    public List<Rule> getRewriteRulesByType(RuleSetType type) {
+    public static List<Rule> getRewriteRulesByType(RuleSetType type) {
         return REWRITE_RULES.get(type);
+    }
+
+    public static List<Rule> getRewriteRulesByType(List<RuleSetType> types) {
+        List<Rule> allRules = Lists.newArrayList();
+        for (RuleSetType ruleSetType : types) {
+            allRules.addAll(REWRITE_RULES.get(ruleSetType));
+        }
+        return allRules;
     }
 
     public void addRealtimeMVRules() {

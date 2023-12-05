@@ -677,6 +677,10 @@ public class MaterializedViewAnalyzer {
                                           ConnectContext connectContext,
                                           QueryStatement queryStatement) {
             Expr expr = SlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
+            if (expr == null) {
+                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                        partitionColumnExpr.toSql());
+            }
             SlotRef slot;
             if (expr instanceof SlotRef) {
                 slot = (SlotRef) expr;
