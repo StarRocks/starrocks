@@ -77,6 +77,11 @@ public class HiveScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
 
+    // The key buffer used to store the key part(meta data) of the file.
+    private Writable key;
+    // The value buffer used to store the value data.
+    private Writable value;
+
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
@@ -184,6 +189,8 @@ public class HiveScanner extends ConnectorScanner {
             structFields[i] = field;
             fieldInspectors[i] = field.getFieldObjectInspector();
         }
+        key = (Writable) reader.createKey();
+        value = (Writable) reader.createValue();
     }
 
     @Override
@@ -216,8 +223,6 @@ public class HiveScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Writable key = (Writable) reader.createKey();
-            Writable value = (Writable) reader.createValue();
             int numRows = 0;
             for (; numRows < getTableSize(); numRows++) {
                 if (!reader.next(key, value)) {
