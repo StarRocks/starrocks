@@ -502,4 +502,23 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+PARALLEL_TEST(JsonParserTest, test_simdjson_iterate_batch) {
+    config::simdjson_iterate_batch = 8;
+
+    simdjson::ondemand::parser simdjson_parser;
+    // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
+    simdjson::padded_string input = simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/big.json");
+
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+
+    auto st = parser->parse(input.data(), input.size(), input.size() + simdjson::SIMDJSON_PADDING);
+    ASSERT_OK(st);
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    // Data quality error: The document is too big to fit in the parser's window. Please increase the parser's windows size by setting new BE config simdjson_iterate_many
+    ASSERT_TRUE(st.is_data_quality_error());
+}
+
 } // namespace starrocks

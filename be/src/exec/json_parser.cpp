@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exec/json_parser.h"
+#include "common/config.h"
 
 #include <fmt/format.h>
 
@@ -27,7 +28,7 @@ Status JsonDocumentStreamParser::parse(char* data, size_t len, size_t allocated)
         _data = data;
         _len = len;
 
-        _doc_stream = _parser->iterate_many(data, len, len);
+        _doc_stream = _parser->iterate_many(data, len, config::simdjson_iterate_batch);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -61,10 +62,13 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
             // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.
-            err_msg =
-                    "The input payload size is beyond parser limit. Please set strip_outer_array true if you want "
-                    "to "
-                    "load json array";
+            if (config::simdjson_iterate_batch > simdjson::SIMDJSON_MAXSIZE_BYTES) {
+                err_msg = "This parser can't support a document that big";
+            } else {
+                err_msg =
+                        "The document is too big to fit in the parser's window. "
+                        "Please increase the parser's windows size by set new BE config simdjson_iterate_many";
+            }
         } else {
             err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
                                           simdjson::error_message(e.error()));
