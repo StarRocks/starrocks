@@ -539,7 +539,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
           pv BIGINT SUM DEFAULT '0')
       AGGREGATE KEY(site_id, city_code, user_name)
       DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分区中分桶数量
-      ``` 
+      ```
+
     - 随机分桶表
 
       自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
