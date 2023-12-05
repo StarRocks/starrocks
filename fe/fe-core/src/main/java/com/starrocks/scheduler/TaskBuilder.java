@@ -122,8 +122,7 @@ public class TaskBuilder {
                 String.valueOf(materializedView.getWarehouseId()));
 
         task.setProperties(taskProperties);
-        task.setDefinition(
-                "insert overwrite `" + materializedView.getName() + "` " + materializedView.getViewDefineSql());
+        task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
