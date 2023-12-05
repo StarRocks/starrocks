@@ -1561,7 +1561,9 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = db.getTable(transactionStateBatch.getTableId().get(0));
+        // txns in transactionStateBatch do not contain txn with multi-table,
+        // so we just use the first element of tableIdList
+        Table table = db.getTable(transactionStateBatch.getTableIdList().get(0));
         if (table == null) {
             return true;
         }

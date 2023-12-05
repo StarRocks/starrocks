@@ -41,6 +41,7 @@ public class TransactionStateBatch implements Writable {
 
     public TransactionStateBatch() {
     }
+
     public TransactionStateBatch(List<TransactionState> transactionStates) {
         this.transactionStates = transactionStates;
     }
@@ -95,9 +96,9 @@ public class TransactionStateBatch implements Writable {
     }
 
     // there is only one transactionState in batch when txn involving multi tables,
-    // and getTableId will return a list of tables in the situation,
+    // and getTableIdList will return a list of tables in the situation,
     // otherwise the list only contain one table which means all transationState in batch have the same table.
-    public List<Long> getTableId() {
+    public List<Long> getTableIdList() {
         if (!transactionStates.isEmpty()) {
             return transactionStates.get(0).getTableIdList();
         }

@@ -74,7 +74,7 @@ public class TransactionStateBatchTest {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         TransactionStateBatch readTransactionStateBatch = TransactionStateBatch.read(in);
 
-        Assert.assertEquals(readTransactionStateBatch.getTableId().get(0).longValue(), tableId.longValue());
+        Assert.assertEquals(readTransactionStateBatch.getTableIdList().get(0).longValue(), tableId.longValue());
         Assert.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
 
         TransactionState state = readTransactionStateBatch.index(0);
