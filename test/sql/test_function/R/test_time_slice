@@ -301,3 +301,100 @@ select date_slice('2023-12-31 03:12:04',interval -3.2 week);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
 -- !result
+-- name: test_time_slice_2
+select time_slice('2023-10-31 23:59:59',interval 1 millisecond);
+-- result:
+2023-10-31 23:59:59
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1 millisecond, ceil);
+-- result:
+2023-10-31 23:59:59.001000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 17 millisecond);
+-- result:
+2023-10-31 23:59:58.984000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 17 millisecond, ceil);
+-- result:
+2023-10-31 23:59:59.001000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000 millisecond);
+-- result:
+2023-10-31 23:59:59
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000 millisecond, ceil);
+-- result:
+2023-11-01 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1001 millisecond);
+-- result:
+2023-10-31 23:59:58.976000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1001 millisecond, ceil);
+-- result:
+2023-10-31 23:59:59.977000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 86400000 millisecond);
+-- result:
+2023-10-31 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 86400000 millisecond, ceil);
+-- result:
+2023-11-01 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 172800000 millisecond);
+-- result:
+2023-10-30 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 172800000 millisecond, ceil);
+-- result:
+2023-11-01 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1 microsecond);
+-- result:
+2023-10-31 23:59:59
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1 microsecond, ceil);
+-- result:
+2023-10-31 23:59:59.000001
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 17 microsecond);
+-- result:
+2023-10-31 23:59:58.999997
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 17 microsecond, ceil);
+-- result:
+2023-10-31 23:59:59.000014
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000 microsecond);
+-- result:
+2023-10-31 23:59:59
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000 microsecond, ceil);
+-- result:
+2023-10-31 23:59:59.001000
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1001 microsecond);
+-- result:
+2023-10-31 23:59:58.999023
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1001 microsecond, ceil);
+-- result:
+2023-10-31 23:59:59.000024
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000000 microsecond);
+-- result:
+2023-10-31 23:59:59
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000000 microsecond, ceil);
+-- result:
+2023-11-01 00:00:00
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000001 microsecond);
+-- result:
+2023-10-31 23:59:58.329764
+-- !result
+select time_slice('2023-10-31 23:59:59',interval 1000001 microsecond, ceil);
+-- result:
+2023-10-31 23:59:59.329765
+-- !result
