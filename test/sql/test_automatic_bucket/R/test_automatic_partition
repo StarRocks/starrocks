@@ -40,9 +40,8 @@ PROPERTIES (
 );
 -- !result
 -- name: test_invalid_bucket_size
-create table t(k int) properties('bucket_size'='0');
+create table t0(k int) properties('bucket_size'='0');
 -- result:
-E: (1064, 'Unexpected exception: Illegal bucket size: 0')
 -- !result
 create table t(k int) properties('bucket_size'='-1');
 -- result:
@@ -53,7 +52,6 @@ create table t(k int) properties('bucket_size'='1024');
 -- !result
 alter table t set('bucket_size'='0');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: 0.')
 -- !result
 alter table t set('bucket_size'='-1');
 -- result:
