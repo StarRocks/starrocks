@@ -152,6 +152,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     TABLE: part_tbl1\n" +
                     "     PREDICATES: 13: d != '2023-08-01', 13: d != '2023-08-02'");
         }
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -746,6 +747,391 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testStr2DateMVRefreshRewrite_InnerJoin_ExtraCompensate() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(b) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select  t1.d, t2.b, t3.c, count(t1.a) " +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                " group by t1.d, t2.b, t3.c;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+
+        // initial create
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-01') " +
+                "end ('2023-08-02') force with sync mode");
+        List<String> partitions =
+                materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                        .collect(Collectors.toList());
+        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' and t2.b != '' and t2.b is not null " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' and t2.b != '' and t2.b is not null and t2.b in ('xxx') " +
+                    " and t3.c in ('xxx') " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+        starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testStr2DateMVRefreshRewrite_LeftJoin_OnPredicates_ExtraCompensate() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(b) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select  t1.d, t2.b, t3.c, count(t1.a) " +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                " group by t1.d, t2.b, t3.c;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+
+        // initial create
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-01') " +
+                "end ('2023-08-02') force with sync mode");
+        List<String> partitions =
+                materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                        .collect(Collectors.toList());
+        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b is not null " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d in ('2023-08-01', '2023-08-02') " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-02') " +
+                "end ('2023-08-03') force with sync mode");
+        partitions =
+                materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                        .collect(Collectors.toList());
+        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803"), partitions);
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b is not null " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "3:IcebergScanNode\n" +
+                    "     TABLE: part_tbl1\n" +
+                    "     PREDICATES: 22: d >= '2023-08-01'");
+        }
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b is not null " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d in ('2023-08-01', '2023-08-02') " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testStr2DateMVRefreshRewrite_InnerJoin_OnPredicates_ExtraCompensate() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(b) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select  t1.d, t2.b, t3.c, count(t1.a) " +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                " group by t1.d, t2.b, t3.c;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+
+        // initial create
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-01') " +
+                "end ('2023-08-02') force with sync mode");
+        List<String> partitions =
+                materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                        .collect(Collectors.toList());
+        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b is not null " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d and t2.b != '' " +
+                    " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d in ('2023-08-01', '2023-08-02') " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testStr2DateMVRefreshRewrite_LeftJoin_ExtraCompensate() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(b) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select  t1.d, t2.b, t3.c, count(t1.a) " +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                " group by t1.d, t2.b, t3.c;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+
+        // initial create
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-01') " +
+                "end ('2023-08-02') force with sync mode");
+        List<String> partitions =
+                materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                        .collect(Collectors.toList());
+        Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' and t2.b != '' and t2.b is not null " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+
+        {
+            String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
+                    " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                    " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                    " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                    " where t1.d>='2023-08-01' and t2.b != '' and t2.b is not null and t2.b in ('xxx') " +
+                    " and t3.c in ('xxx') " +
+                    " group by t1.d, t2.b, t3.c;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "13:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+        starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
     public void testStr2DateMVRefreshRewriteInnerJoinAggregatePartialRefreshUnion() throws Exception {
         String mvName = "test_mv1";
         starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
@@ -1084,6 +1470,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -1226,5 +1613,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     rollup: test_mv1");
         }
         starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 }
