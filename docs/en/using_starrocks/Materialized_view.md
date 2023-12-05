@@ -309,7 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the execution status of asynchronous materialized view
 
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/information_schema/information_schema.md).
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/overview-pages/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 
