@@ -1,4 +1,4 @@
-# Continuously load data from AutoMQ Kafka.md
+# Continuously load data from AutoMQ Kafka
 
 [AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog) is a cloud-native version of Kafka redesigned for cloud environments.
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.
@@ -114,7 +114,7 @@ Specify the data format as JSON in the "format" = "json" of the PROPERTIES claus
 
 #### Data Extraction and Transformation
 
-To specify the mapping and transformation relationship between the source data and the target table, configure the COLUMNS and jsonpaths parameters. The column names in COLUMNS correspond to the column names of the target table, and their order corresponds to the column order in the source data. The jsonpaths parameter is used to extract the required field data from JSON data, similar to newly generated CSV data. Then the COLUMNS parameter temporarily names the fields in jsonpaths in order. For more explanations on data transformation, please see [Data Transformation during Import](https://docs.starrocks.io/zh/docs/3.0/loading/Etl_in_loading/).
+To specify the mapping and transformation relationship between the source data and the target table, configure the COLUMNS and jsonpaths parameters. The column names in COLUMNS correspond to the column names of the target table, and their order corresponds to the column order in the source data. The jsonpaths parameter is used to extract the required field data from JSON data, similar to newly generated CSV data. Then the COLUMNS parameter temporarily names the fields in jsonpaths in order. For more explanations on data transformation, please see [Data Transformation during Import](https://docs.starrocks.io/docs/3.2/loading/Etl_in_loading/).
 > Note: If each JSON object per line has key names and quantities (order is not required) that correspond to the columns of the target table, there is no need to configure COLUMNS.
 
 ## Verifying Data Import
