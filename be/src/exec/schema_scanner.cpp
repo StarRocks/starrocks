@@ -43,6 +43,7 @@
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/schema_scanner/schema_tables_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
+#include "exec/schema_scanner/schema_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
@@ -177,6 +178,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipeFiles>();
     case TSchemaTableType::SCH_PIPES:
         return std::make_unique<SchemaTablePipes>();
+    case TSchemaTableType::SCH_DATACACHE_METRICS:
+        return std::make_unique<SchemaDataCacheMetricsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
