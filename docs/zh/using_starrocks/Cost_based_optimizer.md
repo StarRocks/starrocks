@@ -155,7 +155,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-[PROPERTIES (property [,property])];
+[PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -208,7 +208,7 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 [WITH SYNC | ASYNC MODE]
 [WITH N BUCKETS]
-[PROPERTIES (property [,property])];
+[PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -226,6 +226,7 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 | statistic_sample_collect_rows  | INT    | 200000   | 最小采样行数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
 | histogram_mcv_size             | INT    | 100      | 直方图 most common value (MCV) 的数量。 |
 | histogram_sample_ratio         | FLOAT  | 0.1      | 直方图采样比例。                         |
+| histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                             |
 | histogram_max_sample_row_count | LONG   | 10000000 | 直方图最大采样行数。                       |
 
 直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
@@ -256,13 +257,13 @@ PROPERTIES(
 
 ```SQL
 -- 定期采集所有数据库的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property])
+CREATE ANALYZE [FULL|SAMPLE] ALL [PROPERTIES (property [,property])]
 
 -- 定期采集指定数据库下所有表的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property])
+CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name [PROPERTIES (property [,property])]
 
 -- 定期采集指定表、列的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property])
+CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) [PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -359,7 +360,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 #### 删除自动采集任务
 
 ```SQL
-DROP ANALYZE <ID>;
+DROP ANALYZE <ID>
 ```
 
 **示例**
@@ -373,7 +374,7 @@ DROP ANALYZE 266030;
 您可以通过 SHOW ANALYZE STATUS 语句查看当前所有采集任务的状态。该语句不支持查看自定义采集任务的状态，如要查看，请使用 SHOW ANALYZE JOB。
 
 ```SQL
-SHOW ANALYZE STATUS [LIKE | WHERE predicate];
+SHOW ANALYZE STATUS [LIKE | WHERE predicate]
 ```
 
 您可以使用 `Like` 或 `Where` 来筛选需要返回的信息。
@@ -399,7 +400,7 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 ### 基础统计信息元数据
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE predicate]
 ```
 
 该语句返回如下列。
@@ -417,7 +418,7 @@ SHOW STATS META [WHERE predicate];
 ### 直方图统计信息元数据
 
 ```SQL
-SHOW HISTOGRAM META [WHERE predicate];
+SHOW HISTOGRAM META [WHERE predicate]
 ```
 
 该语句返回如下列。
@@ -446,7 +447,7 @@ DROP STATS tbl_name
 ### 删除直方图统计信息
 
 ```SQL
-ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
+ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name]
 ```
 
 ## 取消采集任务
@@ -456,19 +457,18 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 手动采集任务的任务 ID 可以在 SHOW ANALYZE STATUS 中查看。自定义自动采集任务的任务 ID 可以在 SHOW ANALYZE JOB 中查看。
 
 ```SQL
-KILL ANALYZE <ID>;
+KILL ANALYZE <ID>
 ```
 
 ## 其他 FE 配置项
 
 | statistic_collect_concurrency               | INT     | 3            | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br />超出的任务处于 PENDING 状态，等待调度。                                              |
-| histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                                         |
 | statistic_manager_sleep_time_sec            | LONG    | 60           | 统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul> |
 | statistic_analyze_status_keep_second        | LONG    | 259200       | 采集任务记录保留时间，默认为 3 天。单位：秒。                                                                                          |
 
 ## 系统变量
 
-`statistic_collect_parallel` 用来调整收集任务时的 SQL 执行的并行度，默认值为 1，可以调大该数值来加快收集任务的执行速度。
+`statistic_collect_parallel` 用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快收集任务的执行速度。
 
 ## 外表统计信息收集
 
