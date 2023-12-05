@@ -10,11 +10,11 @@ displayed_sidebar: "Chinese"
 
 - [修改表名、分区名、索引名](#rename-对名称进行修改)
 - [修改表注释](#修改表的注释31-版本起)
-- [增加或删除分区，修改分区属性](#操作-partition-相关语法)
+- [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
 - [修改列（增删列和修改列顺序）](#修改列增删列和修改列顺序)
-- [创建或删除 rollup index](#操作-rollup-相关语法)
-- [修改 Bitmap 索引](#bitmap-index-修改)
+- [创建或删除 rollup index](#操作-rollup-index-语法)
+- [修改 bitmap index](#bitmap-index-修改)
 - [修改表的属性](#修改表的属性)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
@@ -32,21 +32,22 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap、comment、compact 操作，不同操作的应用场景为：
+其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- swap: 原子替换两张表。
 - comment: 修改已有表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
-- schema change: 增加列，删除列，调整列顺序，修改列类型。
-- rollup: 创建或删除 rollup index。
-- index: 修改索引（目前支持 bitmap 索引）。
-- compact: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
+- bucket：修改分桶方式和分桶数量。
+- column: 增加列，删除列，调整列顺序，修改列类型。
+- rollup index: 创建或删除 rollup index。
+- bitmap index: 修改 bitmap index。
+- swap: 原子替换两张表。
+- compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 
 :::note
 
-- partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-- rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
+- partition、rollup 和 column <!--是否包含修改分桶方式和分桶数量-->这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- rollup、column<!--是否包含修改分桶方式和分桶数量-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
 - partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
 :::
 
@@ -388,7 +389,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 1. 聚合模型如果修改 value 列，需要指定 agg_type。
 2. 非聚合类型如果修改 key 列，需要指定 KEY 关键字。
-3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见样例中 [Schema Change](#schema-change-1) 部分第 8 个例子）。
+3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见示例中 [column](#column) 部分第 8 个例子）。
 4. 分区列不能做任何修改。
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
@@ -460,7 +461,7 @@ DISTRIBUTED BY HASH(order_id);
 ALTER TABLE orders ORDER BY (dt,revenue,state);
 ```
 
-### 操作 rollup 相关语法
+### 操作 rollup index 语法
 
 #### 创建 rollup index (ADD ROLLUP)
 
@@ -542,9 +543,9 @@ ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 
 不能删除 base index。
 
-### Bitmap index 修改
+### bitmap index 修改
 
-#### 创建 Bitmap 索引 (ADD INDEX)
+#### 创建 bitmap index (ADD INDEX)
 
 语法：
 
@@ -555,10 +556,8 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 
 注意：
 
-```plain text
-1. 目前仅支持bitmap 索引。
-2. BITMAP 索引仅在单列上创建。
-```
+1. 目前仅支持修改 bitmap index。
+2. bitmap index 仅在单列上创建。
 
 #### 删除索引 (DROP INDEX)
 
@@ -592,7 +591,7 @@ SET ("key" = "value",...)
   - `bloom_filter_columns`
   - `colocate_with`
 
-注意：修改表的属性也可以合并到 schema change 操作中来修改，见[示例](#示例)部分。
+注意：修改表的属性也可以合并到 schema change <!--这个 schema change除了column相关的alter table还包括啥>操作中来修改，见[示例](#示例)部分。
 
 ### Swap 将两个表原子替换
 
@@ -722,7 +721,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### rollup
+### rollup index
 
 1. 创建 index `example_rollup_index`，基于 base index（k1, k2, k3, v1, v2），列式存储。
 
@@ -755,7 +754,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     DROP ROLLUP example_rollup_index2;
     ```
 
-### Schema Change
+### Column
 
 1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合模型）。
 
@@ -851,7 +850,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     SET ("bloom_filter_columns"="k1,k2,k3");
     ```
 
-    也可以合并到上面的 schema change 操作中（注意多子句的语法有少许区别）
+    也可以合并到上面的修改列操作中（注意多子句的语法有少许区别）
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -859,21 +858,23 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
     ```
 
-13. 修改表的 Colocate 属性。
+### table property
+
+1. 修改表的 Colocate 属性。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("colocate_with" = "t1");
     ```
 
-14. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。
+2. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。<!--历史遗留下来的命令 这个支持吗-->
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("distribution_type" = "hash");
     ```
 
-15. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
+3. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -913,16 +914,16 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### index
+### bitmap index
 
-1. 在 `table1` 上为 `siteid` 创建 `bitmap` 索引。
+1. 在 `table1` 上为 `siteid` 创建 bitmap index。
 
     ```sql
     ALTER TABLE table1
     ADD INDEX index_name (siteid) [USING BITMAP] COMMENT 'balabala';
     ```
 
-2. 删除 `table1` 上的 `siteid` 列的 bitmap 索引。
+2. 删除 `table1` 上的 `siteid` 列的 bitmap index。
 
     ```sql
     ALTER TABLE table1 DROP INDEX index_name;
@@ -936,7 +937,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ALTER TABLE table1 SWAP WITH table2;
 ```
 
-### 手动 Compaction 示例
+### 手动 Compaction
 
 ```sql
 CREATE TABLE compaction_test( 
