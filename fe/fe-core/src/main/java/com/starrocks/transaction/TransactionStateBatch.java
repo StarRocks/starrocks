@@ -28,6 +28,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -96,13 +97,17 @@ public class TransactionStateBatch implements Writable {
     }
 
     // there is only one transactionState in batch when txn involving multi tables,
-    // and getTableIdList will return a list of tables in the situation,
-    // otherwise the list only contain one table which means all transationState in batch have the same table.
-    public List<Long> getTableIdList() {
+    // and getTableId will return the smallest tableId of list of tables as tableId,
+    // otherwise all transactionState in batch have the same table and return the tableId.
+    public long getTableId() {
         if (!transactionStates.isEmpty()) {
-            return transactionStates.get(0).getTableIdList();
+            List<Long> tableIdList = transactionStates.get(0).getTableIdList();
+            if (tableIdList.size() > 1) {
+                Collections.sort(tableIdList);
+            }
+            return tableIdList.get(0);
         }
-        return new ArrayList<>();
+        return -1;
     }
 
     public long size() {

@@ -105,9 +105,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            // txns in transactionStateBatch do not contain txn with multi-table,
-            // so we just use the first element of tableIdList
-            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableIdList().get(0));
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
             applyVisibleLog(txnState, tableCommitInfo, db);
         }
     }
