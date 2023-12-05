@@ -68,7 +68,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
     }
-    
+
     public RLTaskTxnCommitAttachment(TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment) {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
         this.jobId = rlTaskTxnCommitAttachment.getJobId();
