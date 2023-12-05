@@ -412,7 +412,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 throw new AlterCancelException("all partitions rewrite failed");
             }
 
-            if (hasFailedTask && (optimizeClause.getKeysDesc() != null || !optimizeClause.getSortKeys().isEmpty())) {
+            if (hasFailedTask && (optimizeClause.getKeysDesc() != null || optimizeClause.getSortKeys() != null)) {
                 rewriteTasks.forEach(
                         rewriteTask -> targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true));
                 throw new AlterCancelException("optimize keysType or sort keys failed since some partitions rewrite failed");
@@ -486,7 +486,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * We need to clean any possible residual of this job.
      */
     @Override
-    protected boolean cancelImpl(String errMsg) {
+    protected synchronized boolean cancelImpl(String errMsg) {
         if (jobState.isFinalState()) {
             return false;
         }
