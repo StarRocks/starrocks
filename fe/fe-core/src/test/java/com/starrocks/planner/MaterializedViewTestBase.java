@@ -15,7 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -49,6 +49,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
+
+    // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
+    private  String traceLogModule = "";
+
+    public void setTracLogModule(String module) {
+        this.traceLogModule = module;
+    }
+
+    public void resetTraceLogModule() {
+        this.traceLogModule = "";
+    }
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -221,6 +232,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private String rewritePlan;
         private Exception exception;
         private String properties;
+        private String traceLog;
 
         public MVRewriteChecker(String query) {
             this.query = query;
@@ -261,6 +273,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(traceLog);
+                }
                 if (mv != null && !mv.isEmpty()) {
                     try {
                         starRocksAssert.dropMaterializedView("mv0");
@@ -270,6 +285,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
             }
             return this;
+        }
+
+        public String getTraceLog() {
+            return this.traceLog;
         }
 
         Exception getException() {
