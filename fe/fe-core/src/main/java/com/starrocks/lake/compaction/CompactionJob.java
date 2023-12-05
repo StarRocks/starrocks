@@ -23,6 +23,7 @@ import com.starrocks.transaction.VisibleStateWaiter;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
@@ -82,7 +83,7 @@ public class CompactionJob {
     }
 
     public int getNumTabletCompactionTasks() {
-        return tasks.stream().mapToInt(CompactionTask::tabletCount).sum();
+        return tasks.stream().filter(Predicate.not(CompactionTask::isDone)).mapToInt(CompactionTask::tabletCount).sum();
     }
 
     public long getStartTs() {
