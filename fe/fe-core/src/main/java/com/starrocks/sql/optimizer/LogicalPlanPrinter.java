@@ -28,6 +28,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+>>>>>>> 7a0c140fe0 ([BugFix] Pushdown distinct agg across window not support complex expr (#36357))
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -214,6 +219,26 @@ public class LogicalPlanPrinter {
             }
 
             return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
+        }
+
+        @Override
+        public OperatorStr visitLogicalWindow(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            LogicalWindowOperator window = optExpression.getOp().cast();
+            String windowCallStr = window.getWindowCall().entrySet().stream()
+                    .map(e -> String.format("%d: %s", e.getKey().getId(),
+                            scalarOperatorStringFunction.apply(e.getValue())))
+                    .collect(Collectors.joining(", "));
+            String windowDefStr = window.getAnalyticWindow() != null ? window.getAnalyticWindow().toSql() : "NONE";
+            String partitionByStr = window.getPartitionExpressions().stream()
+                    .map(scalarOperatorStringFunction).collect(Collectors.joining(", "));
+            String orderByStr = window.getOrderByElements().stream().map(Ordering::toString)
+                    .collect(Collectors.joining(", "));
+            return new OperatorStr("logical window( calls=[" +
+                    windowCallStr + "], window=" +
+                    windowDefStr + ", partitionBy=" +
+                    partitionByStr + ", orderBy=" + orderByStr + ")", step, Collections.singletonList(child));
         }
 
         @Override
