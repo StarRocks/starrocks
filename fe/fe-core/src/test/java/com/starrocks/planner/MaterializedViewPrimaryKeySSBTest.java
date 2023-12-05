@@ -25,10 +25,14 @@ import org.junit.Test;
 public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
+<<<<<<< HEAD
 
         MaterializedViewTestBase.setUp();
+=======
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 

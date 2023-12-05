@@ -24,8 +24,12 @@ public class MaterializedViewUniqueKeySSBTest extends MaterializedViewTestBase {
     private static final String MATERIALIZED_DB_NAME = "test_mv";
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
+<<<<<<< HEAD
+=======
+        MaterializedViewTestBase.beforeClass();
+>>>>>>> a495825fd5 ([BugFix] Fix insert and schema change concurrency issue (#36225))
 
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);

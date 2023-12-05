@@ -179,6 +179,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Before
     public void setUp() {
+        super.setUp();
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 

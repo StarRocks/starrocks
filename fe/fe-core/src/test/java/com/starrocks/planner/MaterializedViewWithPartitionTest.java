@@ -26,8 +26,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     private static final String MATERIALIZED_DB_NAME = "test_mv";
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 

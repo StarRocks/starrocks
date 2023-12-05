@@ -53,7 +53,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
