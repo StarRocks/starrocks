@@ -907,9 +907,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-        ComputeNode node = getComputeNode(backendId);
+        ComputeNode node = getBackendOrComputeNode(backendId);
         // only backend need to report version
-        if (node instanceof Backend) {
+        if (node != null && (node instanceof Backend)) {
             AtomicLong atomicLong = null;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
