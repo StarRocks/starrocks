@@ -132,7 +132,9 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (query_options.__isset.connector_scan_use_query_mem_ratio) {
         mem_ratio = query_options.connector_scan_use_query_mem_ratio;
     }
-    _mem_limit = runtime_state()->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+    if (runtime_state()->query_ctx() != nullptr) {
+        _mem_limit = runtime_state()->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+    }
     _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
     if (query_options.__isset.connector_io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
