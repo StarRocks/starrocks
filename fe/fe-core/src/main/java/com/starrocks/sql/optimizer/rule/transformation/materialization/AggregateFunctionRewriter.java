@@ -75,6 +75,7 @@ public class AggregateFunctionRewriter {
         if (aggFuncName.equals(FunctionSet.AVG)) {
             return true;
         }
+<<<<<<< HEAD
         // BITMAP
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
             return true;
@@ -82,6 +83,8 @@ public class AggregateFunctionRewriter {
         if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
             return true;
         }
+=======
+>>>>>>> a28bc493f7 ([Enhancement] Support bitmap_hash for count(distinct x) rewrite (#33538))
         // HLL
         if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
                 aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
@@ -96,10 +99,14 @@ public class AggregateFunctionRewriter {
 
     public CallOperator rewriteAggFunction(CallOperator aggFunc) {
         String aggFuncName = aggFunc.getFnName();
+<<<<<<< HEAD
         if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) ||
                 aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
             return rewriteCountDistinct(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.AVG)) {
+=======
+        if (aggFuncName.equals(FunctionSet.AVG)) {
+>>>>>>> a28bc493f7 ([Enhancement] Support bitmap_hash for count(distinct x) rewrite (#33538))
             return rewriteAvg(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
                 aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
@@ -162,6 +169,7 @@ public class AggregateFunctionRewriter {
         return newAvg;
     }
 
+<<<<<<< HEAD
     private CallOperator rewriteCountDistinct(CallOperator aggFunc) {
         // What if bitmap_union aggregate table?
         Type childType = aggFunc.getChild(0).getType();
@@ -200,6 +208,8 @@ public class AggregateFunctionRewriter {
         return bitmapCountOp;
     }
 
+=======
+>>>>>>> a28bc493f7 ([Enhancement] Support bitmap_hash for count(distinct x) rewrite (#33538))
     private CallOperator rewriteApproxCount(CallOperator aggFunc) {
         Type childType = aggFunc.getChild(0).getType();
         List<ScalarOperator> aggChild = aggFunc.getChildren();
