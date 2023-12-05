@@ -12,22 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.scheduler;
+package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.TableProperty;
-import org.junit.Assert;
-import org.junit.Test;
-
-public class TaskBuilderTest {
-
-    @Test
-    public void testTaskBuilderForMv() {
-        MaterializedView mv = new MaterializedView();
-        mv.setName("aa.bb.cc");
-        mv.setViewDefineSql("select * from table1");
-        mv.setTableProperty(new TableProperty());
-        Task task = TaskBuilder.buildMvTask(mv, "test");
-        Assert.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
+public abstract class  IAggregateRewriteEquivalent implements IRewriteEquivalent {
+    public RewriteEquivalentType getRewriteEquivalentType() {
+        return RewriteEquivalentType.AGGREGATE;
     }
 }
