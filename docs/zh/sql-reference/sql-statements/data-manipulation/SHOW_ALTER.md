@@ -10,33 +10,38 @@ displayed_sidebar: "Chinese"
 
 - 修改列
 - 优化表结构（自 3.2 版本起），包括修改分桶方式和分桶数量。
-- 创建和删除 Rollup 索引
+- 创建和删除 rollup index。
 
 ## 语法
 
 - 查询修改列或者优化表结构的任务执行情况。
 
     ```sql
-    SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
+    SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM <db_name>]
+    [WHERE <where_condition> ] [ORDER BY <col_name> [ASC | DESC]] [LIMIT <num>]
     ```
 
-- 查询创建和删除 Rollup 索引的任务执行情况。
+- 查询创建和删除 rollup index 的任务执行情况。
 
     ```sql
-    SHOW ALTER TABLE ROLLUP [FROM db_name]
+    SHOW ALTER TABLE ROLLUP [FROM <db_name>]
     ```
 
 ## 参数说明
 
-- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：从 COLUMN、OPTIMIZE 和 ROLLUP 中必选其中一个。
-  - 如果指定了 `COLUMN`，该语句用于查询修改任务。
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：从 `COLUMN`、`OPTIMIZE` 和 `ROLLUP` 中必选其中一个。
+  - 如果指定了 `COLUMN`，该语句用于查询修改列的任务。
   - 如果指定了 `OPTIMIZE`，该语句用于查询优化表结构任务（修改分桶方式和分桶数量）。
-  - 如果指定了 `ROLLUP`，该语句用于查询创建或删除 ROLLUP 索引的任务。
+  - 如果指定了 `ROLLUP`，该语句用于查询创建或删除 rollup index 的任务。
+- 当指定了 `COLUMN` 或者 `OPTIMIZE` 查询修改列或者优化表结构任务时，支持使用如下子句：
+  - `WHERE <where_condition>`：根据任务的 `TableName`、`CreateTime`、`FinishTime` 和 `State` 过滤出满足条件的任务。
+  - `ORDER BY <col_name> [ASC | DESC]`：根据任务的 `TableName`、`CreateTime`、`FinishTime` 和 `State` 对返回结果中的任务进行排序。
+  - `LIMIT <num>`：返回指定个数的任务。
 - `db_name`：可选。如果不指定，则默认使用当前数据库。
 
 ## 示例
 
-1. 查询当前数据库中所有修改列任务和优化表结构任务，以及创建或删除 ROLLUP 索引任务的执行情况。
+1. 查询当前数据库中所有修改列任务和优化表结构任务，以及创建或删除 rollup index 任务的执行情况。
 
     ```sql
     SHOW ALTER TABLE COLUMN;
@@ -44,7 +49,7 @@ displayed_sidebar: "Chinese"
     SHOW ALTER TABLE ROLLUP;
     ```
 
-2. 查询指定数据库中修改列任务和优化表结构任务，以及创建或删除 ROLLUP 索引任务的执行情况。
+2. 查询指定数据库中修改列任务和优化表结构任务，以及创建或删除 rollup index 任务的执行情况。
 
     ```sql
     SHOW ALTER TABLE COLUMN FROM example_db;

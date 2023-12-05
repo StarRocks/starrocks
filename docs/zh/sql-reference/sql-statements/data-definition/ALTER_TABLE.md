@@ -187,8 +187,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 ### 修改分桶方式和分桶数量（自 3.2 版本起）
 
-修改所有分区的分桶方式和分桶数量，也支持修改指定分区的分桶数量。
-
 语法：
 
 ```SQL
@@ -196,12 +194,12 @@ ALTER TABLE [<db_name>.]<table_name>
 [ partition_names ]
 [ distribution_desc ]
 
+partition_names ::= 
+    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
+
 distribution_desc ::=
     DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
     DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
-
-partition_names ::= 
-    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
 ```
 
 示例：
@@ -221,52 +219,45 @@ PARTITION BY date_trunc('day', event_time)
 DISTRIBUTED BY HASH(user_id);
 
 -- 插入多天的数据
--- 11 月 26 日的数据
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+-- 11 月 26 日的数据
 ('2023-11-26 08:00:00', 1, 101, 12345, 2),
 ('2023-11-26 09:15:00', 2, 102, 54321, 3),
-('2023-11-26 10:30:00', 1, 103, 98765, 1);
-
+('2023-11-26 10:30:00', 1, 103, 98765, 1),
 -- 11 月 27 日的数据
-INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-27 08:30:00', 1, 104, 11111, 2),
 ('2023-11-27 09:45:00', 2, 105, 22222, 3),
-('2023-11-27 11:00:00', 1, 106, 33333, 1);
-
+('2023-11-27 11:00:00', 1, 106, 33333, 1),
 -- 11 月 28 日的数据
-INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-28 08:00:00', 1, 107, 44444, 2),
 ('2023-11-28 09:15:00', 2, 108, 55555, 3),
 ('2023-11-28 10:30:00', 1, 109, 66666, 1);
 ```
 
-#### 修改分桶方式
+#### 仅修改分桶方式
 
-- 修改分桶方式为 Random 分桶并且分桶数量仍然由 StarRocks 自动设置。
+> **注意**
+>
+> - 修改分桶方式针对整个表的所有分区生效，不能仅仅针对某个分区生效。
+> - 虽然仅修改分桶方式，没有修改分桶数量，但是您仍然需要在语句中说明分桶数量 `BUCKETS <num>`，如果不指定，则表示由 StarRocks 自动设置分桶数量。
+
+- 将原先的 Hash 分桶修改为 Random 分桶，并且分桶数量仍然由 StarRocks 自动设置。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- 修改分桶方式为 Random 分桶并且指定分桶数量为 10。
+- 将 Hash 分桶时所使用的分桶键从原先的 `event_time, event_type` 修改为 `user_id, event_time`。并且分桶数量仍然由 StarRocks 自动设置。
 
   ```SQL
-  ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ```
 
-#### 修改 Hash 分桶的分桶键
-
-修改所有分区 Hash 分桶时所使用的分桶键为 `user_id, event_time`。
-
-```SQL
-ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
-```
+#### 仅修改分桶数量
 
 > **注意**
 >
-> 修改哈希分桶键针对整个表的所有分区生效，不能仅仅针对某个分区生效。
-
-#### 修改分桶数量
+> 虽然仅修改分桶数量，没有修改分桶方式，但是您仍然需要在语句中说明分桶方式，例如示例中的 `HASH(user_id)`。
 
 - 修改所有分区的分桶数量为 10。
 
@@ -274,20 +265,33 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
 
-  > **注意**
-  >
-  > - 虽然本示例没有修改分桶方式只修改分桶数量，但是在语句中仍然需要说明分桶方式 `HASH(user_id)`。
-  > - 如果不指定 `BUCKETS <num>`，则表示修改为由 StarRocks 自动设置分桶数量。
-
 - 修改指定分区的分桶数量为 15。
 
   ```SQL
-  ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
+  ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15;
   ```
 
   > **说明**
   >
   > 分区名称可以执行 `SHOW PARTITIONS FROM <table_name>;` 进行查看。
+
+#### 同时修改分桶方式和分桶数量
+
+> **注意**
+>
+> 同时修改分桶方式和分桶数量针对整个表的所有分区生效，不能仅仅针对某个分区生效。
+
+- 分桶方式从原先的 Hash 分桶修改为 Random 分桶，并且修改分桶数量为 10。
+
+   ```SQL
+   ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+   ```
+
+- 修改 Hash 分桶的分桶键的同时，修改分桶数量为 10。
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
+  ```
 
 ### 修改列（增删列和修改列顺序）
 
@@ -307,11 +311,11 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 [PROPERTIES ("key"="value", ...)]
 ```
 
-注意：
+使用说明：
 
-1. 聚合模型如果增加 value 列，需要指定 agg_type。
-2. 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
-3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
+- 聚合模型如果增加 value 列，需要指定 agg_type。
+- 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
+- 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 向指定 index 添加多列
 
@@ -567,17 +571,6 @@ DROP INDEX index_name;
 
 ### 修改表的属性
 
-支持修改如下表属性：
-
-- `replication_num`
-- `default.replication_num`
-- `storage_cooldown_ttl`
-- `storage_cooldown_time`
-- Dynamic partitioning related properties
-- `enable_persistent_index`
-- `bloom_filter_columns`
-- `colocate_with`
-
 语法：
 
 ```sql
@@ -585,7 +578,21 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SET ("key" = "value",...)
 ```
 
-注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
+参数说明：
+
+- `key` 表示表属性的名称，`value` 表示该表属性的配置。
+
+- 支持修改如下表属性：
+  - `replication_num`
+  - `default.replication_num`
+  - `storage_cooldown_ttl`
+  - `storage_cooldown_time`
+  - [动态分区相关属性 properties](../../../table_design/dynamic_partitioning.md)，比如 `dynamic_partition.enable`
+  - `enable_persistent_index`
+  - `bloom_filter_columns`
+  - `colocate_with`
+
+注意：修改表的属性也可以合并到 schema change 操作中来修改，见[示例](#示例)部分。
 
 ### Swap 将两个表原子替换
 
