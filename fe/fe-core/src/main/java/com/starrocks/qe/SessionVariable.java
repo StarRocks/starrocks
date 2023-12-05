@@ -46,6 +46,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -273,6 +275,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
+    public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
@@ -994,6 +997,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
+
+    @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
+    private String queryDebugOptions = "";
 
     @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
     private long optimizerMaterializedViewTimeLimitMillis = 1000;
@@ -2087,6 +2093,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setOptimizerExecuteTimeout(long optimizerExecuteTimeout) {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
+    }
+
+    public QueryDebugOptions getQueryDebugOptions() {
+        if (Strings.isNullOrEmpty(queryDebugOptions)) {
+            return QueryDebugOptions.getInstance();
+        }
+
+        return QueryDebugOptions.read(queryDebugOptions);
+    }
+
+    public void setQueryDebugOptions(String queryDebugOptions) throws SemanticException {
+        if (!Strings.isNullOrEmpty(queryDebugOptions)) {
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException("Invalid planner options: %s", queryDebugOptions);
+            }
+        }
+        this.queryDebugOptions = queryDebugOptions;
     }
 
     public long getOptimizerMaterializedViewTimeLimitMillis() {
