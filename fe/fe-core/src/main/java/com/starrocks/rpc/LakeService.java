@@ -61,7 +61,6 @@ public interface LakeService {
     long TIMEOUT_DELETE_DATA = 5 * MILLIS_PER_MINUTE;
     long TIMEOUT_DROP_TABLE = 5 * MILLIS_PER_MINUTE;
     long TIMEOUT_PUBLISH_LOG_VERSION = MILLIS_PER_MINUTE;
-    long TIMEOUT_PUBLISH_LOG_VERSION_BATCH = MILLIS_PER_MINUTE;
     long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
 
@@ -89,13 +88,6 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
 
-<<<<<<< HEAD
-=======
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch",
-            onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION_BATCH)
-    Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request);
-
->>>>>>> f007f8e685 ([Enhancement] Handle timeouts in compaction (#36257))
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
     Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request);
 
