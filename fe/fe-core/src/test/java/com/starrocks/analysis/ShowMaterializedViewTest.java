@@ -234,8 +234,10 @@ public class ShowMaterializedViewTest {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunManager trm = tm.getTaskRunManager();
 
+        ctx.setQueryId(UUIDUtil.genUUID());
         String insertSql = "insert into tbl6 partition(p1) values('2022-01-02',2,10);";
         new StmtExecutor(ctx, insertSql).execute();
+        ctx.setQueryId(UUIDUtil.genUUID());
         insertSql = "insert into tbl6 partition(p2) values('2022-02-02',2,10);";
         new StmtExecutor(ctx, insertSql).execute();
 
