@@ -42,5 +42,8 @@ PROPERTIES (
 );
 alter table t1 modify column a set masking policy mp2 using (a, b, c);
  explain select * from t1;
+ explain select * from t1 t;
+ explain select t1.a from t1;
+ explain select t.a from t1 t;
 alter table t1 modify column a unset masking policy;
  explain select * from t1;

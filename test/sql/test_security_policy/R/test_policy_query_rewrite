@@ -34,24 +34,11 @@ alter table t0 modify column v2 set masking policy mp using (v2);
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: expr | 5: expr | 3: v3
-  PARTITION: RANDOM
+  PARTITION: UNPARTITIONED
 
   RESULT SINK
 
-  1:Project
-  |  <slot 3> : 3: v3
-  |  <slot 4> : 1: v1 + 1
-  |  <slot 5> : 2: v2 + 1
-  |  
-  0:OlapScanNode
-     TABLE: t0
-     PREAGGREGATION: ON
-     partitions=0/1
-     rollup: t0
-     tabletRatio=0/0
-     tabletList=
-     cardinality=1
-     avgRowSize=5.0
+  0:EMPTYSET
 -- !result
 alter table t0 modify column v1 unset masking policy;
 -- result:
@@ -63,19 +50,11 @@ alter table t0 modify column v2 unset masking policy;
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3
-  PARTITION: RANDOM
+  PARTITION: UNPARTITIONED
 
   RESULT SINK
 
-  0:OlapScanNode
-     TABLE: t0
-     PREAGGREGATION: ON
-     partitions=0/1
-     rollup: t0
-     tabletRatio=0/0
-     tabletList=
-     cardinality=1
-     avgRowSize=3.0
+  0:EMPTYSET
 -- !result
 create masking policy mp2 as ( v1 bigint, v2 bigint, v3 bigint) returns bigint -> if (v1 = 1, v2, v3);
 -- result:
@@ -103,24 +82,41 @@ alter table t1 modify column a set masking policy mp2 using (a, b, c);
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:4: if | 2: b | 3: c
-  PARTITION: RANDOM
+  PARTITION: UNPARTITIONED
 
   RESULT SINK
 
-  1:Project
-  |  <slot 2> : 2: b
-  |  <slot 3> : 3: c
-  |  <slot 4> : if(1: a = 1, 2: b, 3: c)
-  |  
-  0:OlapScanNode
-     TABLE: t1
-     PREAGGREGATION: ON
-     partitions=0/1
-     rollup: t1
-     tabletRatio=0/0
-     tabletList=
-     cardinality=1
-     avgRowSize=4.0
+  0:EMPTYSET
+-- !result
+ explain select * from t1 t;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: if | 2: b | 3: c
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:EMPTYSET
+-- !result
+ explain select t1.a from t1;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: if
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:EMPTYSET
+-- !result
+ explain select t.a from t1 t;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: if
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:EMPTYSET
 -- !result
 alter table t1 modify column a unset masking policy;
 -- result:
@@ -129,17 +125,9 @@ alter table t1 modify column a unset masking policy;
 -- result:
 PLAN FRAGMENT 0
  OUTPUT EXPRS:1: a | 2: b | 3: c
-  PARTITION: RANDOM
+  PARTITION: UNPARTITIONED
 
   RESULT SINK
 
-  0:OlapScanNode
-     TABLE: t1
-     PREAGGREGATION: ON
-     partitions=0/1
-     rollup: t1
-     tabletRatio=0/0
-     tabletList=
-     cardinality=1
-     avgRowSize=3.0
+  0:EMPTYSET
 -- !result
