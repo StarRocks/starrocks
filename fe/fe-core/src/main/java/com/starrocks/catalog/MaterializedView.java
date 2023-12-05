@@ -437,6 +437,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.simpleDefineSql = simple;
     }
 
+    public String getTaskDefinition() {
+        return String.format("insert overwrite `%s` %s", getName(), getViewDefineSql());
+    }
+
     public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
