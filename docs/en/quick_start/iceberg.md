@@ -7,6 +7,42 @@ description: Query Iceberg
 # Query Iceberg
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
+## Launch
+
+- rest
+- mc: MinIO Client
+- minio: MinIO Server
+- spark-iceberg:
+- starrocks-be:
+- starrocks-fe:
+
+```bash
+docker compose up -d
+```
+
+```plaintext
+docker compose up -d
+[+] Building 0.0s (0/0)                     docker:desktop-linux
+[+] Running 6/6
+ ✔ Container iceberg-rest   Started                         0.0s
+ ✔ Container minio          Started                         0.0s
+ ✔ Container starrocks-fe   Started                         0.0s
+ ✔ Container mc             Started                         0.0s
+ ✔ Container spark-iceberg  Started                         0.0s
+ ✔ Container starrocks-be   Started
+```
+
+## Check
+
+```bash
+SERVICE         CREATED         STATUS                   PORTS
+rest            4 minutes ago   Up 4 minutes             0.0.0.0:8181->8181/tcp
+mc              4 minutes ago   Up 4 minutes
+minio           4 minutes ago   Up 4 minutes             0.0.0.0:9000-9001->9000-9001/tcp
+spark-iceberg   4 minutes ago   Up 4 minutes             0.0.0.0:8080->8080/tcp, 0.0.0.0:8888->8888/tcp, 0.0.0.0:10000-10001->10000-10001/tcp
+starrocks-be    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8040->8040/tcp
+starrocks-fe    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
+```
 ## PySpark
 
 ### Green Taxi dataset
@@ -14,7 +50,8 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 Copy the data to the spark-iceberg container:
 
 ```bash
-docker compose cp datasets/green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
+docker compose \
+cp datasets/green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
 ```
 
 ### Launch PySpark
@@ -37,7 +74,7 @@ The Green Taxi data is provided by NYC Taxi and Limousine Commission in Parquet 
 ```python
 parquetFile = spark.read.parquet("/opt/spark/green_tripdata_2023-05.parquet")
 parquetFile.createOrReplaceTempView("parquetFile")
-firsttenrows = spark.sql("SELECT * from parquetFile LIMIT 10")
+firsttenrows = spark.sql("SELECT * from parquetFile LIMIT 4")
 firsttenrows.show()
 ```
 
@@ -49,12 +86,6 @@ firsttenrows.show()
 |       2| 2023-05-01 00:29:49|  2023-05-01 00:50:11|                 N|         1|          33|         100|              1|          6.6|       30.3|  1.0|    0.5|       5.0|         0.0|     NULL|                  1.0|       40.55|           1|        1|                2.75|
 |       2| 2023-05-01 00:25:19|  2023-05-01 00:32:12|                 N|         1|         244|         244|              1|         1.34|        9.3|  1.0|    0.5|      2.36|         0.0|     NULL|                  1.0|       14.16|           1|        1|                 0.0|
 |       2| 2023-05-01 00:07:06|  2023-05-01 00:27:33|                 N|         5|          82|          75|              1|         7.79|      22.73|  0.0|    0.0|      2.29|        6.55|     NULL|                  1.0|       32.57|           1|        1|                 0.0|
-|       2| 2023-05-01 00:43:31|  2023-05-01 00:46:59|                 N|         1|          69|         169|              1|          0.7|        6.5|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|         9.0|           2|        1|                 0.0|
-|       2| 2023-05-01 00:51:54|  2023-05-01 01:00:24|                 N|         1|         169|          69|              1|         1.54|       10.0|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        12.5|           1|        1|                 0.0|
-|       2| 2023-05-01 00:27:46|  2023-05-01 00:49:17|                 N|         1|          75|          80|              1|        10.75|       42.2|  1.0|    0.5|       0.0|        6.55|     NULL|                  1.0|       51.25|           1|        1|                 0.0|
-|       1| 2023-05-01 00:27:14|  2023-05-01 00:41:23|                 N|         1|          41|         244|              1|          4.4|       15.0|  0.5|    1.5|       3.4|         0.0|     NULL|                  1.0|        20.4|           1|        1|                 0.0|
-|       2| 2023-05-01 00:24:14|  2023-05-01 00:35:16|                 N|         1|          74|         151|              1|          2.6|       14.2|  1.0|    0.5|      4.18|         0.0|     NULL|                  1.0|       20.88|           1|        1|                 0.0|
-|       2| 2023-05-01 00:46:55|  2023-05-01 00:59:19|                 N|         1|         166|         244|              1|         2.72|       15.6|  1.0|    0.5|      3.62|         0.0|     NULL|                  1.0|       21.72|           1|        1|                 0.0|
 +--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
 ```
 
@@ -135,16 +166,12 @@ parquetFile.writeTo("demo.nyc.greentaxis").create()
 ## Query with StarRocks
 
 ```bash
-docker compose exec starrocks \
-  mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+docker compose exec starrocks-fe \
+  mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
 ```plaintext
 StarRocks >
-```
-
-```sql
-DROP CATALOG IF EXISTS iceberg;
 ```
 
 ```sql
@@ -164,7 +191,7 @@ PROPERTIES
 ```
 
 ```sql
-StarRocks > SHOW CATALOGS;
+SHOW CATALOGS;
 ```
 
 ```plaintext
@@ -184,6 +211,11 @@ SET CATALOG iceberg;
 ```sql
 SHOW DATABASES;
 ```
+:::tip
+The database that you see was created in your PySpark
+session. When you added the CATALOG `iceberg`, the 
+database `nyc` became visible in StarRocks.
+:::
 
 ```plaintext
 +----------+
@@ -375,7 +407,7 @@ This tutorial covers:
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information at NOAA.
 
-Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 5 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
 
 There is a lot of information in this document, and it is presented with the step by step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
 
@@ -391,7 +423,7 @@ There is a lot of information in this document, and it is presented with the ste
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
-- 10 GB free disk space assigned to Docker
+- 20 GB free disk space assigned to Docker
 
 ### SQL client
 
