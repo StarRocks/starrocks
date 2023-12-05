@@ -17,14 +17,20 @@ package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
+/*
+ * For record the string columns on operator
+ */
 class DecodeNodeInfo {
     public static final DecodeNodeInfo EMPTY = new DecodeNodeInfo();
     OptExpression parent = null;
 
+    // operator's input string columns
     ColumnRefSet inputStringColumns = new ColumnRefSet();
 
+    // operator's required decode string columns
     ColumnRefSet decodeStringColumns = new ColumnRefSet();
 
+    // operator's output string columns
     ColumnRefSet outputStringColumns = new ColumnRefSet();
 
     public DecodeNodeInfo createOutputInfo() {

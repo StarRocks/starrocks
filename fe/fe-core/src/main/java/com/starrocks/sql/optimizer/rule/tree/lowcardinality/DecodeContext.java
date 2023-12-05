@@ -37,6 +37,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/*
+ * DecodeContext is used to store the information needed for decoding
+ * 1. Record the original string column information(Expressions, Define) used for low cardinality
+ * 2. Record the global dictionary
+ * 3. Generate new dictionary column:
+ *  a. Generate corresponding dictionary ref based on the string ref
+ *  b. Generate the define expression of global dictionary column
+ *  b. Rewrite string expressions
+ *  c. Rewrite string aggregate expressions
+ *  e. Generate the global dictionary expression
+ */
 class DecodeContext {
     private final ColumnRefFactory factory;
 
@@ -63,12 +74,14 @@ class DecodeContext {
     // upper(a), lower(a) is relation expression
     Map<Integer, List<ScalarOperator>> stringExprsMap = Maps.newHashMap();
 
+    // all string aggregate expressions
     List<CallOperator> stringAggregateExprs = Lists.newArrayList();
 
+    // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
     Map<Operator, DecodeNodeInfo> operatorDecodeInfo = Maps.newIdentityHashMap();
 
-    // rewrite variables
+    // global dict expressions
     Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
 
     Map<ColumnRefOperator, ColumnRefOperator> stringRefToDictRefMap = Maps.newHashMap();

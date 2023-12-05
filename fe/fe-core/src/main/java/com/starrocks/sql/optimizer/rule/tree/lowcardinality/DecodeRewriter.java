@@ -50,6 +50,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/*
+ * Rewrite the whole plan using the dict column by from bottom-up
+ */
 public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRefSet> {
     private final ColumnRefFactory factory;
 
@@ -70,15 +73,18 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         // compute the fragment used dict expr
         optExpression = rewriteImpl(optExpression, new ColumnRefSet());
         if (!decodeInfo.outputStringColumns.isEmpty()) {
+            // decode the output dict column
             return insertDecodeNode(optExpression, decodeInfo.outputStringColumns, decodeInfo.outputStringColumns);
         }
 
         return optExpression;
     }
 
+    // fragmentUseDictExprs: record the dict columns used in this fragment, to
+    // compute which expressions & dict should save in the fragment
     private OptExpression rewriteImpl(OptExpression optExpression, ColumnRefSet fragmentUsedDictExprs) {
+        // should get DecodeInfo before rewrite operator
         DecodeNodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeNodeInfo.EMPTY);
-
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
@@ -90,6 +96,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             DecodeNodeInfo childDecodeInfo = context.operatorDecodeInfo.getOrDefault(child.getOp(), DecodeNodeInfo.EMPTY);
             child = rewriteImpl(child, childFragmentUsedDictExpr);
             if (decodeInfo.decodeStringColumns.isIntersect(childDecodeInfo.outputStringColumns)) {
+                // if child's output dict column required decode, insert decode node
                 child = insertDecodeNode(child, childDecodeInfo.outputStringColumns, decodeInfo.decodeStringColumns);
             }
             optExpression.setChild(i, child);
@@ -144,6 +151,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
     @Override
     public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        // rewrite multi-stage aggregate
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
         DecodeNodeInfo info = context.operatorDecodeInfo.getOrDefault(aggregate, DecodeNodeInfo.EMPTY);
         ColumnRefSet inputStringRefs = new ColumnRefSet();
@@ -163,6 +171,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 aggregations.put(aggRef, aggFn);
                 continue;
             }
+
+            // merge stage is different from update stage
             if (FunctionSet.MAX.equals(aggFn.getFnName()) || FunctionSet.MIN.equals(aggFn.getFnName())) {
                 ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
                 aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
@@ -188,7 +198,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             return optExpression;
         }
         DecodeNodeInfo info = context.operatorDecodeInfo.get(exchange);
-        // dict
+        // compute the dicts and expressions used by in the fragment
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
         for (int sid : info.inputStringColumns.getColumnIds()) {
             ColumnRefOperator stringRef = factory.getColumnRef(sid);
@@ -200,6 +210,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             if (context.stringRefToDicts.containsKey(sid)) {
                 dictMap.put(dictRef.getId(), context.stringRefToDicts.get(sid));
             } else {
+                // compute expressions depend-on dict
                 for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
                     if (context.stringRefToDicts.containsKey(useRefs.getId())) {
                         dictMap.put(context.stringRefToDictRefMap.get(useRefs).getId(),
@@ -316,6 +327,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (predicate == null) {
             return null;
         }
+
+        // replace string predicate to dict predicate
         ExprReplacer replacer = new ExprReplacer(context.stringExprToDictExprMap, inputs);
         return predicate.accept(replacer, null);
     }
@@ -352,7 +365,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     private OptExpression rewriteOptExpression(OptExpression optExpression, Operator newOp, ColumnRefSet outputs) {
-        // rewrite property
+        // rewrite logical property, update output columns
         LogicalProperty property = optExpression.getLogicalProperty();
         if (outputs.containsAny(property.getOutputColumns())) {
             LogicalProperty newProperty = new LogicalProperty(property);

@@ -59,6 +59,13 @@ import java.util.Set;
 
 import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
+/*
+ * For compute all string columns that can benefit from low-cardinality optimization by bottom-up
+ * 1. collect & check all string columns
+ * 2. collect expressions & aggregations related to string column
+ * 3. compute new string column which one is generated from dict-expression.
+ * 4. compute string column optimize benefit
+ */
 public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, DecodeNodeInfo> {
     private static final Logger LOG = LogManager.getLogger(DecodeCollector.class);
 
@@ -74,6 +81,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
                     FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF);
 
+
+    // These fields are the same as the fields in the DecodeContext,
+    // the difference: these fields store all string information, the
+    // DecodeContext only stores the ones that need to be optimized.
     private final Map<Operator, DecodeNodeInfo> allOperatorDecodeInfo = Maps.newIdentityHashMap();
 
     private final Map<Integer, ColumnDict> globalDicts = Maps.newHashMap();
@@ -96,10 +107,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     }
 
     private void initContext(DecodeContext context) {
-        // check worth string columns
+        // choose the profitable string columns
         for (Integer cid : scanStringColumns) {
             if (expressionStringRefCounter.getOrDefault(cid, 0) > 1) {
                 context.allStringColumns.add(cid);
+                continue;
             }
             List<ScalarOperator> dictExprList = stringExpressions.getOrDefault(cid, Collections.emptyList());
             long allExprNum = dictExprList.size();
@@ -110,7 +122,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
                 context.allStringColumns.add(cid);
             }
         }
-        // resolve depend on relation:
+        // resolve depend-on relation:
         // like: b = upper(a), c = lower(b), if we forbidden a, should forbidden b & c too
         for (Integer cid : stringRefToDefineExprMap.keySet()) {
             if (context.allStringColumns.contains(cid)) {
@@ -124,6 +136,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
             }
         }
 
+        // Save the information of profitable string columns to DecodeContext
         for (Integer cid : context.allStringColumns) {
             if (globalDicts.containsKey(cid)) {
                 context.stringRefToDicts.put(cid, globalDicts.get(cid));
@@ -200,7 +213,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
             return info;
         }
 
-        // update all stringRef counter
+        // update all stringRef usage counter
         info.decodeStringColumns.getStream().forEach(c -> {
             if (expressionStringRefCounter.getOrDefault(c, -1) == 0) {
                 expressionStringRefCounter.remove(c);
@@ -329,6 +342,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
             return DecodeNodeInfo.EMPTY;
         }
         DecodeNodeInfo result = context.createOutputInfo();
+        // join on-predicate don't support low-cardinality optimization, must decode before shuffle
         if (context.parent != null && context.parent.getOp() instanceof PhysicalJoinOperator) {
             return visitPhysicalJoin(context.parent, context);
         }
@@ -352,7 +366,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         // check dict column
         DecodeNodeInfo info = new DecodeNodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-            // Condition 1:
             if (!column.getType().isVarchar()) {
                 continue;
             }
