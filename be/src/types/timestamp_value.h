@@ -118,7 +118,7 @@ public:
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
     void from_unixtime(int64_t second, int64_t microsecond, const cctz::time_zone& ctz);
 
-    void from_unix_second(int64_t second);
+    void from_unix_second(int64_t second, int64_t microsecond = 0);
 
     template <TimeUnit UNIT>
     TimestampValue add(int count) const {

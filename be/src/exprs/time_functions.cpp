@@ -192,8 +192,8 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         int64_t timestamp;
         int64_t offset;
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
-            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second);
-            ts.from_unix_second(ts.to_unix_second() + offset);
+            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
+            ts.from_unix_second(ts.to_unix_second() + offset, usec);
             result.append(ts);
             continue;
         }
@@ -206,14 +206,13 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
 
         DateTimeValue ts_value2;
         if (!ts_value2.from_cctz_timezone(timezone_hsscan, to_format, ctz) ||
-            !ts_value2.from_unixtime(timestamp, ctz)) {
+            !ts_value2.from_unixtime(timestamp, ts_value.microsecond(), ctz)) {
             result.append_null();
             continue;
         }
-
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), 0);
+                          ts_value2.second(), ts_value2.microsecond());
         result.append(ts);
     }
 
@@ -246,14 +245,13 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
         }
         DateTimeValue ts_value2;
         // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, to)) {
+        if (!ts_value2.from_unixtime(timestamp, ts_value.microsecond(), to)) {
             result.append_null();
             continue;
         }
-
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), 0);
+                          ts_value2.second(), ts_value2.microsecond());
         result.append(ts);
     }
 
