@@ -55,16 +55,8 @@ static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
 namespace starrocks::stream_load {
 
-<<<<<<< HEAD
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
-    // restrict the chunk memory usage of send queue
-=======
-namespace stream_load {
-
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental)
-        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental) {
     // restrict the chunk memory usage of send queue & brpc write buffer
->>>>>>> 6961d03738 ([Enhancement] Add memory back pressure mechanism to avoid EOVERCROWDED error during ingestion (#23360))
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
@@ -218,13 +210,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
-<<<<<<< HEAD
+
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
-=======
-    open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
     open_closure->cntl.ignore_eovercrowded();
 
->>>>>>> 6961d03738 ([Enhancement] Add memory back pressure mechanism to avoid EOVERCROWDED error during ingestion (#23360))
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
