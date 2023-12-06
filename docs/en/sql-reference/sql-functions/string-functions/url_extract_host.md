@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# URL_EXTRACT_HOST
+# url_extract_host
 
 ## Description
 
