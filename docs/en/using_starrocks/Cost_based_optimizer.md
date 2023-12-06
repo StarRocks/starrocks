@@ -487,8 +487,8 @@ The following limits apply when you collect statistics for Hive, Iceberg, Hudi t
 
 1. Only full collection is supported. Sampled collection and histogram collection are not supported.
 2. You can collect statistics of only Hive, Iceberg, and Hudi tables.
-3. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in a catalog.
-4. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks  cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
+3. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
+4. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
 
 The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
 
@@ -557,7 +557,7 @@ SHOW STATS META where `table` = 'ex_hive_tbl';
 
 #### Cancel a collection task
 
-Cancels a Running collection task.
+Cancels a running collection task.
 
 Syntax:
 
