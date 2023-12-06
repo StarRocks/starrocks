@@ -7,21 +7,82 @@ description: Query Iceberg
 # Query Iceberg
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
-## Launch
+## Overview
 
+- Deploy an Iceberg warehouse using Docker compose
+- Load New York City Green Taxi data for the month of May 2023 into the Iceberg warehouse
+- Configure StarRocks to access the Iceberg warehouse using an external catalog
+- Query the data with StarRocks where it sits
+
+## Prerequisites
+
+### Docker
+
+- [Docker](https://docs.docker.com/engine/install/)
+- 5 GB RAM assigned to Docker
+- 20 GB free disk space assigned to Docker
+
+### SQL client
+
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+
+### curl
+
+`curl` is used to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+
+---
+
+## Terminology
+
+### FE
+Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
+
+### BE
+Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When using an external catalog (like the Iceberg catalog used in this guide) only local data is stored on the BE node(s).
+
+---
+
+## The environment
+
+To run StarRocks with an Iceberg warehouse using Object Storage we need:
+
+- A frontend node (FE)
+- A backend node (BE)
+- Object Storage
 - rest
 - mc: MinIO Client
 - minio: MinIO Server
 - spark-iceberg:
-- starrocks-be:
-- starrocks-fe:
+
+This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+
+## Download the Docker configuration and NYC Green Taxi data
+
+In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file.  Download the compose file and dataset with curl.
+
+The Docker compose file:
+```bash
+mkdir iceberg
+cd iceberg
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/iceberg/docker-compose.yml
+```
+
+And the dataset:
+```bash
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/iceberg/datasets/green_tripdata_2023-05.parquet
+```
+
+## Start the environment in Docker
+
+:::tip
+Run this command, and any other `docker compose` commands, from the directory containing the `docker-compose.yml` file.
+:::
 
 ```bash
 docker compose up -d
 ```
 
 ```plaintext
-docker compose up -d
 [+] Building 0.0s (0/0)                     docker:desktop-linux
 [+] Running 6/6
  ✔ Container iceberg-rest   Started                         0.0s
@@ -32,7 +93,16 @@ docker compose up -d
  ✔ Container starrocks-be   Started
 ```
 
-## Check
+## Check the status of the environment
+
+Check the progress of the services. It should take around 30 seconds for the FE and BE to become healthy.
+
+Run `docker compose ps` until the FE and BE show a status of `healthy`. The rest of the services do not have
+healthcheck configurations, but you will be interacting with them and will know whether or not they are working:
+
+```bash
+docker compose ps
+```
 
 ```bash
 SERVICE         CREATED         STATUS                   PORTS
@@ -43,18 +113,27 @@ spark-iceberg   4 minutes ago   Up 4 minutes             0.0.0.0:8080->8080/tcp,
 starrocks-be    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8040->8040/tcp
 starrocks-fe    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
 ```
+
+---
+
 ## PySpark
+
+There are several ways to interact with Iceberg, this guide uses PySpark. If you are not familiar
+with PySpark there is documentation linked from the More Information section, but every command
+that you need to run is provided below.
 
 ### Green Taxi dataset
 
-Copy the data to the spark-iceberg container:
+Copy the data to the spark-iceberg container. This command will copy the dataset file to the `/opt/spark/` directory in the `spark-iceberg` service:
 
 ```bash
 docker compose \
-cp datasets/green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
+cp green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
 ```
 
 ### Launch PySpark
+
+This command will connect to the `spark-iceberg` service and run the command `pyspark`:
 
 ```bash
 docker compose exec -it spark-iceberg pyspark
@@ -67,66 +146,16 @@ Spark context available as 'sc' (master = local[*], app id = local-1701792401103
 SparkSession available as 'spark'.
 ```
 
-### Read in the dataset
+### Read the dataset into a dataframe
 
-The Green Taxi data is provided by NYC Taxi and Limousine Commission in Parquet format. Load the file from the `/opt/spark` directory and inspect the first few records by SELECTing from a temporary view.
+The Green Taxi data is provided by NYC Taxi and Limousine Commission in Parquet format. Load the file from the `/opt/spark` directory and inspect the first few records by SELECTing from a temporary view. These commands should be run in the `pyspark` session. The commands:
 
-```python
-parquetFile = spark.read.parquet("/opt/spark/green_tripdata_2023-05.parquet")
-parquetFile.createOrReplaceTempView("parquetFile")
-firsttenrows = spark.sql("SELECT * from parquetFile LIMIT 4")
-firsttenrows.show()
-```
-
-```plaintext
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-|VendorID|lpep_pickup_datetime|lpep_dropoff_datetime|store_and_fwd_flag|RatecodeID|PULocationID|DOLocationID|passenger_count|trip_distance|fare_amount|extra|mta_tax|tip_amount|tolls_amount|ehail_fee|improvement_surcharge|total_amount|payment_type|trip_type|congestion_surcharge|
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-|       2| 2023-05-01 00:52:10|  2023-05-01 01:05:26|                 N|         1|         244|         213|              1|         6.99|       28.9|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        31.4|           1|        1|                 0.0|
-|       2| 2023-05-01 00:29:49|  2023-05-01 00:50:11|                 N|         1|          33|         100|              1|          6.6|       30.3|  1.0|    0.5|       5.0|         0.0|     NULL|                  1.0|       40.55|           1|        1|                2.75|
-|       2| 2023-05-01 00:25:19|  2023-05-01 00:32:12|                 N|         1|         244|         244|              1|         1.34|        9.3|  1.0|    0.5|      2.36|         0.0|     NULL|                  1.0|       14.16|           1|        1|                 0.0|
-|       2| 2023-05-01 00:07:06|  2023-05-01 00:27:33|                 N|         5|          82|          75|              1|         7.79|      22.73|  0.0|    0.0|      2.29|        6.55|     NULL|                  1.0|       32.57|           1|        1|                 0.0|
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-```
-
-### Create a data frame
+- Read the dataset file from disk into a dataframe named `df`
+- Display the schema of the Parquet file
 
 ```python
-df = spark.table("parquetFile").show()
-```
-
-```plaintext
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-|VendorID|lpep_pickup_datetime|lpep_dropoff_datetime|store_and_fwd_flag|RatecodeID|PULocationID|DOLocationID|passenger_count|trip_distance|fare_amount|extra|mta_tax|tip_amount|tolls_amount|ehail_fee|improvement_surcharge|total_amount|payment_type|trip_type|congestion_surcharge|
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-|       2| 2023-05-01 00:52:10|  2023-05-01 01:05:26|                 N|         1|         244|         213|              1|         6.99|       28.9|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        31.4|           1|        1|                 0.0|
-|       2| 2023-05-01 00:29:49|  2023-05-01 00:50:11|                 N|         1|          33|         100|              1|          6.6|       30.3|  1.0|    0.5|       5.0|         0.0|     NULL|                  1.0|       40.55|           1|        1|                2.75|
-|       2| 2023-05-01 00:25:19|  2023-05-01 00:32:12|                 N|         1|         244|         244|              1|         1.34|        9.3|  1.0|    0.5|      2.36|         0.0|     NULL|                  1.0|       14.16|           1|        1|                 0.0|
-|       2| 2023-05-01 00:07:06|  2023-05-01 00:27:33|                 N|         5|          82|          75|              1|         7.79|      22.73|  0.0|    0.0|      2.29|        6.55|     NULL|                  1.0|       32.57|           1|        1|                 0.0|
-|       2| 2023-05-01 00:43:31|  2023-05-01 00:46:59|                 N|         1|          69|         169|              1|          0.7|        6.5|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|         9.0|           2|        1|                 0.0|
-|       2| 2023-05-01 00:51:54|  2023-05-01 01:00:24|                 N|         1|         169|          69|              1|         1.54|       10.0|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        12.5|           1|        1|                 0.0|
-|       2| 2023-05-01 00:27:46|  2023-05-01 00:49:17|                 N|         1|          75|          80|              1|        10.75|       42.2|  1.0|    0.5|       0.0|        6.55|     NULL|                  1.0|       51.25|           1|        1|                 0.0|
-|       1| 2023-05-01 00:27:14|  2023-05-01 00:41:23|                 N|         1|          41|         244|              1|          4.4|       15.0|  0.5|    1.5|       3.4|         0.0|     NULL|                  1.0|        20.4|           1|        1|                 0.0|
-|       2| 2023-05-01 00:24:14|  2023-05-01 00:35:16|                 N|         1|          74|         151|              1|          2.6|       14.2|  1.0|    0.5|      4.18|         0.0|     NULL|                  1.0|       20.88|           1|        1|                 0.0|
-|       2| 2023-05-01 00:46:55|  2023-05-01 00:59:19|                 N|         1|         166|         244|              1|         2.72|       15.6|  1.0|    0.5|      3.62|         0.0|     NULL|                  1.0|       21.72|           1|        1|                 0.0|
-|       2| 2023-05-01 00:47:56|  2023-05-01 01:03:36|                 N|         1|          95|          82|              1|         2.95|       18.4|  1.0|    0.5|       2.0|         0.0|     NULL|                  1.0|        22.9|           1|        1|                 0.0|
-|       2| 2023-05-01 00:01:24|  2023-05-01 00:09:45|                 N|         1|          95|          95|              2|         1.69|       10.0|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        12.5|           2|        1|                 0.0|
-|       2| 2023-05-01 00:11:52|  2023-05-01 01:06:57|                 N|         1|         129|          82|              2|         2.47|       42.2|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        44.7|           2|        1|                 0.0|
-|       2| 2023-05-01 00:43:51|  2023-05-01 01:10:50|                 N|         1|         173|         129|              2|          3.6|       25.4|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        27.9|           2|        1|                 0.0|
-|       2| 2023-05-01 00:55:01|  2023-05-01 01:02:57|                 N|         1|          82|         129|              1|         1.13|        8.6|  1.0|    0.5|      2.22|         0.0|     NULL|                  1.0|       13.32|           1|        1|                 0.0|
-|       2| 2023-05-01 00:55:36|  2023-05-01 01:08:30|                 N|         1|          42|          41|              1|         1.78|       13.5|  1.0|    0.5|       3.2|         0.0|     NULL|                  1.0|        19.2|           1|        1|                 0.0|
-|       2| 2023-05-01 00:22:54|  2023-05-01 00:32:09|                 N|         1|          92|          53|              1|          2.2|       12.8|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        15.3|           2|        1|                 0.0|
-|       2| 2023-05-01 00:22:55|  2023-05-01 00:22:59|                 N|         5|         182|         182|              1|          0.0|       25.0|  0.0|    0.0|       5.2|         0.0|     NULL|                  1.0|        31.2|           1|        2|                 0.0|
-|       2| 2023-05-01 00:22:40|  2023-05-01 00:30:56|                 N|         1|          95|         135|              1|         2.29|       12.1|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        14.6|           2|        1|                 0.0|
-|       2| 2023-05-01 00:53:11|  2023-05-01 01:11:20|                 N|         1|         127|         235|              1|         6.23|       27.5|  1.0|    0.5|       0.0|         0.0|     NULL|                  1.0|        30.0|           2|        1|                 0.0|
-+--------+--------------------+---------------------+------------------+----------+------------+------------+---------------+-------------+-----------+-----+-------+----------+------------+---------+---------------------+------------+------------+---------+--------------------+
-only showing top 20 rows
-```
-
-### Inspect the schema
-
-```python
-spark.table("parquetFile").printSchema(50)
+df = spark.read.parquet("/opt/spark/green_tripdata_2023-05.parquet")
+df.printSchema()
 ```
 
 ```plaintext
@@ -151,19 +180,41 @@ root
  |-- payment_type: long (nullable = true)
  |-- trip_type: long (nullable = true)
  |-- congestion_surcharge: double (nullable = true)
+
+>>>
 ```
 
 ### Write to a table
 
+The table created in this step will be in the catalog that will be made available in StarRocks in the next step.
+
 - Catalog: `demo`
 - Database: `nyc`
-- Table:  `greentaxis`
+- Table: `greentaxis`
 
 ```python
-parquetFile.writeTo("demo.nyc.greentaxis").create()
+df.writeTo("demo.nyc.greentaxis").create()
 ```
 
-## Query with StarRocks
+## Configure StarRocks to access the Iceberg Catalog
+
+### Connect to StarRocks with a SQL client
+
+#### SQL Clients
+
+<Clients />
+
+---
+
+You can now exit the PySpark session and connect to StarRocks.
+
+:::tip
+
+Run this command from the directory containing the `docker-compose.yml` file.
+
+If you are using a client other than the mysql CLI, open that now.
+:::
+
 
 ```bash
 docker compose exec starrocks-fe \
@@ -174,6 +225,12 @@ docker compose exec starrocks-fe \
 StarRocks >
 ```
 
+### Create an external catalog
+
+The external catalog is the configuration that allows StarRocks to operate on
+the Iceberg data as if it was in StarRocks databases and tables. The individual 
+configuration properties will be detailed after the command.
+
 ```sql
 CREATE EXTERNAL CATALOG 'iceberg'
 PROPERTIES
@@ -181,7 +238,7 @@ PROPERTIES
   "type"="iceberg",
   "iceberg.catalog.type"="rest",
   "iceberg.catalog.uri"="http://iceberg-rest:8181",
-  "iceberg.catalog.warehouse"="starrocks",
+  "iceberg.catalog.warehouse"="warehouse",
   "aws.s3.access_key"="admin",
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
@@ -189,6 +246,13 @@ PROPERTIES
   "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"
 );
 ```
+
+#### PROPERTIES
+
+- type: In this example the type is `iceberg`. Other options include Hive, Hudi, Delta Lake, and JDBC.
+- iceberg.catalog.type: In this example `rest` is used. Tabular provides the Docker image used and Tabular uses rest.
+- iceberg.catalog.uri: The rest server endpoint.
+- iceberg.catalog.warehouse: 
 
 ```sql
 SHOW CATALOGS;
@@ -282,18 +346,16 @@ DESCRIBE greentaxis;
 20 rows in set (0.04 sec)
 ```
 
-```sql
-SELECT COUNT(*) FROM greentaxis;
-```
+:::tip
+Some of the SQL in this document, and many other documents in the StarRocks documentation, and with `\G` instead
+of a semicolon. The `\G` causes the mysql CLI to render the query results vertically.
 
-```plaintext
-+----------+
-| count(*) |
-+----------+
-|    69174 |
-+----------+
-1 row in set (0.27 sec)
-```
+Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;`.
+:::
+
+## Query with StarRocks
+
+### Verify pickup datetime format
 
 ```sql
 SELECT lpep_pickup_datetime FROM greentaxis LIMIT 10;
@@ -317,41 +379,10 @@ SELECT lpep_pickup_datetime FROM greentaxis LIMIT 10;
 10 rows in set (0.07 sec)
 ```
 
-```sql
-SELECT DISTINCT hour(lpep_pickup_datetime) FROM greentaxis LIMIT 1000;
-```
+#### Find the busy hours
 
-```plaintext
-+----------------------------+
-| hour(lpep_pickup_datetime) |
-+----------------------------+
-|                          0 |
-|                          1 |
-|                          3 |
-|                         12 |
-|                         13 |
-|                         14 |
-|                         15 |
-|                         20 |
-|                         21 |
-|                         22 |
-|                         23 |
-|                          2 |
-|                          4 |
-|                          5 |
-|                          6 |
-|                          7 |
-|                          8 |
-|                          9 |
-|                         10 |
-|                         11 |
-|                         16 |
-|                         17 |
-|                         18 |
-|                         19 |
-+----------------------------+
-24 rows in set (0.09 sec)
-```
+This query aggregates the trips on the hour of the day and shows that
+the busiest hour of the day is 18:00.
 
 ```sql
 SELECT COUNT(*) AS trips,
@@ -393,225 +424,7 @@ ORDER BY trips DESC;
 24 rows in set (0.08 sec)
 ```
 
-
-In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
-
-This tutorial covers:
-
-- Running StarRocks in Docker containers
-- Using MinIO for Object Storage
-- Configuring StarRocks for shared-data
-- Loading two public datasets
-- Analyzing the data with SELECT and JOIN
-- Basic data transformation (the **T** in ETL)
-
-The data used is provided by NYC OpenData and the National Centers for Environmental Information at NOAA.
-
-Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 5 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
-
-There is a lot of information in this document, and it is presented with the step by step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
-
-1. Allow the reader to load data in a shared-data deployment and analyze that data.
-2. Provide the configuration details for shared-data deployments.
-3. Explain the basics of data transformation during loading.
-
 ---
-
-## Prerequisites
-
-### Docker
-
-- [Docker](https://docs.docker.com/engine/install/)
-- 4 GB RAM assigned to Docker
-- 20 GB free disk space assigned to Docker
-
-### SQL client
-
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
-
-### curl
-
-`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
-
----
-
-## Terminology
-
-### FE
-Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
-
-### CN
-Compute Nodes are responsible for executing query plans in shared-data deployments.
-
-### BE
-Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments.
-
-:::note
-This guide does not use BEs, this information is included here so that you understand the difference between BEs and CNs.
-:::
-
----
-
-## Launch StarRocks
-
-To run StarRocks with shared-data using Object Storage we need:
-
-- A frontend engine (FE)
-- A compute node (CN)
-- Object Storage
-
-This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
-
-In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file. 
-
-```bash
-mkdir quickstart
-cd quickstart
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
-```
-
-```bash
-docker compose up -d
-```
-
-Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
-
-Run `docker compose ps` until the FE and CN show a status of `healthy`:
-
-```bash
-docker compose ps
-```
-
-```plaintext
-SERVICE        CREATED          STATUS                    PORTS
-starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
-starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
-minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
-```
-
----
-
-## Generate MinIO credentials
-
-In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
-
-### Open the MinIO web UI
-
-Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `minioadmin` and `minioadmin`. You should see that there are no access keys yet. Click **Create access key +**.
-
-MinIO will generate a key, click **Create** and download the key.
-
-![Make sure to click create](../assets/quick-start/MinIO-create.png)
-
-:::note
-The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
-:::
-
----
-
-## SQL Clients
-
-<Clients />
-
----
-
-## Download the data
-
-Download these two datasets to your FE container.
-
-### Open a shell on the FE container
-
-Open a shell and create a directory for the downloaded files:
-
-```bash
-docker compose exec starrocks-fe bash
-```
-
-```bash
-mkdir quickstart
-cd quickstart
-```
-
-### New York City crash data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
-```
-
-### Weather data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
-```
-
----
-
-## Configure StarRocks for shared-data
-
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
-
-### Connect to StarRocks with a SQL client
-
-:::tip
-
-Run this command from the directory containing the `docker-compose.yml` file.
-
-If you are using a client other than the mysql CLI, open that now.
-:::
-
-```sql
-docker compose exec starrocks-fe \
-mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
-```
-
-### Create a storage volume
-
-Details for the configuration shown below:
-
-- The MinIO server is available at the URL `http://minio:9000`
-- The bucket created above is named `starrocks`
-- Data written to this volume will be stored in a folder named `shared` within the bucket `starrocks`
-:::tip
-The folder `shared` will be created the first time data is written to the volume
-:::
-- The MinIO server is not using SSL
-- The MinIO key and secret are entered as `aws.s3.access_key` and `aws.s3.secret_key`. Use the access key that you created in the MinIO web UI earlier.
-- The volume `shared` is the default volume
-
-:::tip
-Edit the command before you run it and replace the highlighted access key information with the access key and secret that you created in MinIO.
-:::
-
-```bash
-CREATE STORAGE VOLUME shared
-TYPE = S3
-LOCATIONS = ("s3://starrocks/shared/")
-PROPERTIES
-(
-    "enabled" = "true",
-    "aws.s3.endpoint" = "http://minio:9000",
-    "aws.s3.use_aws_sdk_default_behavior" = "false",
-    "aws.s3.enable_ssl" = "false",
-    "aws.s3.use_instance_profile" = "false",
-    # highlight-start
-    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
-    "aws.s3.secret_key" = "E33cdRM9MfWpP2FiRpc056Zclg6CntXWa3WPBNMy"
-    # highlight-end
-);
-
-SET shared AS DEFAULT STORAGE VOLUME;
-```
-
-```sql
-DESC STORAGE VOLUME shared\G
-```
-
-:::tip
-Some of the SQL in this document, and many other documents in the StarRocks documentation, and with `\G` instead
-of a semicolon. The `\G` causes the mysql CLI to render the query results vertically.
-
-Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;`.
-:::
 
 ```plaintext
 *************************** 1. row ***************************
@@ -626,144 +439,19 @@ IsDefault: true
   Comment:
 1 row in set (0.03 sec)
 ```
-
-:::note
-The folder `shared` will not be visible in the MinIO object list until data is written to the bucket.
-:::
-
----
-
-## Verify that data is stored in MinIO
-
-Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/browser/starrocks/) and verify that you have `data`, `metadata`, and `schema` entries in each of the directories under `starrocks/shared/`
-
-:::tip
-The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
-
-![MinIO object browser](../assets/quick-start/MinIO-data.png)
-:::
-
----
-
-## Answer some questions
-
----
-
-## Configuring StarRocks for shared-data
-
-Now that you have experienced using StarRocks with shared-data it is important to understand the configuration. 
-
-### CN configuration
-
-The CN configuration used here is the default, as the CN is designed for shared-data use. The default configuration is shown below. You do not need to make any changes.
-
-```bash
-sys_log_level = INFO
-
-be_port = 9060
-be_http_port = 8040
-heartbeat_service_port = 9050
-brpc_port = 8060
-```
-
-### FE configuration
-
-The FE configuration is slightly different from the default as the FE must be configured to expect that data is stored in Object Storage rather than on local disks on BE nodes.
-
-The `docker-compose.yml` file generates the FE configuration in the `command`.
-
-```yml
-    command: >
-      bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
-      echo cloud_native_meta_port=6090 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_path=starrocks >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
-      echo cloud_native_storage_type=S3 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_use_aws_sdk_default_behavior=true >> /opt/starrocks/fe/conf/fe.conf &&
-      sh /opt/starrocks/fe/bin/start_fe.sh"
-```
-
-This results in this config file:
-
-```bash title='fe/fe.conf'
-LOG_DIR = ${STARROCKS_HOME}/log
-
-DATE = "$(date +%Y%m%d-%H%M%S)"
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:${LOG_DIR}/fe.gc.log.$DATE -XX:+PrintConcurrentLocks"
-
-JAVA_OPTS_FOR_JDK_11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
-
-sys_log_level = INFO
-
-http_port = 8030
-rpc_port = 9020
-query_port = 9030
-edit_log_port = 9010
-mysql_service_nio_enabled = true
-
-# highlight-start
-run_mode=shared_data
-aws_s3_path=starrocks
-aws_s3_endpoint=minio:9000
-aws_s3_use_instance_profile=false
-cloud_native_storage_type=S3
-aws_s3_use_aws_sdk_default_behavior=true
-# highlight-end
-```
-
-:::note
-This config file contains the default entries and the additions for shared-data. The entries for shared-data are highlighted.
-:::
-
-The non-default FE configuration settings:
-
-:::note
-Many configuration parameters are prefixed with `s3_`. This prefix is used for all Amazon S3 compatible storage types (for example: S3, GCS, and MinIO). When using Azure Blob Storage the prefix is `azure_`.
-:::
-
-#### `run_mode=shared_data`
-
-This enables shared-data use.
-
-#### `aws_s3_path=starrocks`
-
-The bucket name.
-
-#### `aws_s3_endpoint=minio:9000`
-
-The MinIO endpoint, including port number.
-
-#### `aws_s3_use_instance_profile=false`
-
-When using MinIO an access key is used, and so instance profiles are not used with MinIO.
-
-#### `cloud_native_storage_type=S3`
-
-This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
-
-#### `aws_s3_use_aws_sdk_default_behavior=true`
-
-When using MinIO this parameter is always set to true.
-
 ---
 
 ## Summary
 
 In this tutorial you:
 
-- Deployed StarRocks and Minio in Docker
-- Created a MinIO access key
-- Configured a StarRocks Storage Volume that uses MinIO
-- Loaded crash data provided by New York City and weather data provided by NOAA
-- Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
+- Deployed StarRocks and Iceberg in Docker
+- Configured a StarRocks external catalog to provide access to the Iceberg warehouse
+- Loaded taxi data provided by New York City into the Iceberg warehouse
+- Queried the data with SQL in StarRocks without copying the data from the warehouse
 
 ## More information
 
-[StarRocks table design](../table_design/StarRocks_table_design.md)
+[Apache Iceberg documentation](https://iceberg.apache.org/docs/latest/) and [Quickstart](https://iceberg.apache.org/spark-quickstart/)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
-
-The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
+The [Green Taxi Trip Records](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).

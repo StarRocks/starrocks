@@ -102,7 +102,7 @@
       "type": "category",
       "label": "Quick Start",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/shared-nothing", "quick_start/shared-data"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
     },
     {
       "type": "category",
