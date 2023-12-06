@@ -425,7 +425,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (txnStateBatch.size() == 1) {
                 // there are two situations:
                 // 1. the transactionState in txnStateBatch is with multi-tables
-                // 2. only one transactionState committed in the interval of publish.
+                // 2. only one transactionState with the table committed in the interval of publish.
                 TransactionState state = txnStateBatch.transactionStates.get(0);
                 List<Long> tableIdList = state.getTableIdList();
                 if (publishingLakeTransactionsBatchTableId.addAll(tableIdList)) {
