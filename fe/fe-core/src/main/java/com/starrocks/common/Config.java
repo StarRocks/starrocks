@@ -2278,6 +2278,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
+    public static int lake_publish_version_max_threads = 512;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2481,6 +2484,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,

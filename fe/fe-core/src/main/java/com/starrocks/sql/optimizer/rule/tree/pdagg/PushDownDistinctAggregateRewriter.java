@@ -66,6 +66,8 @@ public class PushDownDistinctAggregateRewriter {
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
 
+    private boolean hasRewrite;
+
     private static final Set<String> SUPPORT_WINDOW_FUNC = ImmutableSet.of(FunctionSet.SUM);
 
     public PushDownDistinctAggregateRewriter(TaskContext taskContext) {
@@ -76,7 +78,12 @@ public class PushDownDistinctAggregateRewriter {
     }
 
     public OptExpression rewrite(OptExpression tree) {
-        return process(tree, AggregatePushDownContext.EMPTY).getOp().orElse(tree);
+        Optional<OptExpression> res = process(tree, AggregatePushDownContext.EMPTY).getOp();
+        return res.orElse(tree);
+    }
+
+    public boolean hasRewrite() {
+        return hasRewrite;
     }
 
     // After rewrite, the post-rewrite tree must replace the old slotId with the new one,
@@ -278,7 +285,10 @@ public class PushDownDistinctAggregateRewriter {
             // rewrite
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOp.getColumnRefMap());
             context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
-            context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
+            Set<ColumnRefOperator> groupByUsedCols = context.groupBys.values().stream()
+                    .flatMap(v -> rewriter.rewrite(v).getColumnRefs().stream()).collect(Collectors.toSet());
+            context.groupBys.clear();
+            groupByUsedCols.forEach(col -> context.groupBys.put(col, col));
 
             if (projectOp.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
                 return context;
@@ -487,6 +497,7 @@ public class PushDownDistinctAggregateRewriter {
         if (newContext == AggregatePushDownContext.EMPTY) {
             return Optional.empty();
         } else {
+            hasRewrite = true;
             return Optional.of(newContext);
         }
     }
