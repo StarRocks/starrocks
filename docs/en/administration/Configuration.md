@@ -102,6 +102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_distribution_pruner_recursion_depth  | -    | 100          | The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption. |
 |enable_udf                                |  -   |    FALSE     | Whether to enable UDF .                            |
 
+
 #### Loading and unloading
 
 | Parameter                               | Unit | Default                                         | Description                                                  |
