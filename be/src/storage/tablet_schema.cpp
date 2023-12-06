@@ -287,7 +287,7 @@ void TabletSchema::append_column(TabletColumn column) {
     }
     _unique_id_to_index[column.unique_id()] = _num_columns;
     _cols.push_back(std::move(column));
-    if (_sort_key_idxes_set.count(_num_columns) > 0) {
+    if (_sort_key_uids_set.count(column.unique_id()) > 0) {
         _cols[_num_columns].set_is_sort_key(true);
     }
     _num_columns++;
@@ -298,6 +298,7 @@ void TabletSchema::clear_columns() {
     _num_columns = 0;
     _num_key_columns = 0;
     _cols.clear();
+    _sort_key_idxes.clear();
 }
 
 void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema) {
@@ -432,18 +433,20 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         for (auto uid : schema.sort_key_unique_ids()) {
             _sort_key_uids.emplace_back(uid);
             _sort_key_idxes.emplace_back(_unique_id_to_index.at(uid));
+            _sort_key_uids_set.emplace(uid);
         }
     } else if (!schema.sort_key_idxes().empty()) {
         _sort_key_idxes.reserve(schema.sort_key_idxes_size());
         for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
-            _sort_key_idxes.push_back(schema.sort_key_idxes(i));
-            _sort_key_idxes_set.emplace(schema.sort_key_idxes(i));
+            ColumnId cid = schema.sort_key_idxes(i);
+            _sort_key_idxes.push_back(cid);
+            _sort_key_uids_set.emplace(schema.column(cid).unique_id());
         }
     } else {
         _sort_key_idxes.reserve(_num_key_columns);
         for (auto i = 0; i < _num_key_columns; ++i) {
             _sort_key_idxes.push_back(i);
-            _sort_key_idxes_set.emplace(i);
+            _sort_key_uids_set.emplace(schema.column(i).unique_id());
         }
     }
 
@@ -569,6 +572,21 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
 int32_t TabletSchema::field_index(int32_t col_unique_id) const {
     const auto& found = _unique_id_to_index.find(col_unique_id);
     return (found == _unique_id_to_index.end()) ? -1 : found->second;
+}
+
+void TabletSchema::generate_sort_key_idxes() {
+    if (!_sort_key_idxes.empty()) {
+        return;
+    }
+    if (!_sort_key_uids.empty()) {
+        for (auto uid : _sort_key_uids) {
+            _sort_key_idxes.emplace_back(_unique_id_to_index.at(uid));
+        }
+    } else {
+        for (int32_t i = 0; i < _num_key_columns; i++) {
+            _sort_key_idxes.emplace_back(i);
+        }
+    }
 }
 
 const std::vector<TabletColumn>& TabletSchema::columns() const {

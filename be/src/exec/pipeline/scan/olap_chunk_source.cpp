@@ -314,6 +314,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
             _tablet_schema->append_column(TabletColumn(column_desc));
         }
+        _tablet_schema->generate_sort_key_idxes();
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
