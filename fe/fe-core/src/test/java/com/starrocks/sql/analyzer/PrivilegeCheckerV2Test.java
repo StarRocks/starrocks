@@ -33,19 +33,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
-=======
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
->>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AuthorizationMgr;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
-=======
-import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
->>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
