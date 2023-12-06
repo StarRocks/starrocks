@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# PERCENTILE_APPROX
+# percentile_approx
 
 ## 功能
 
