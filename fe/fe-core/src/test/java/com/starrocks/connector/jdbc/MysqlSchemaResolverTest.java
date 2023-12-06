@@ -133,8 +133,7 @@ public class MysqlSchemaResolverTest {
                 String partitionInfoTable = "partitions";
                 tableResult = new MockResultSet("tables");
                 tableResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
-                connection.getMetaData().getTables(catalogSchema, null, null,
-                        new String[] {"SYSTEM TABLE", "SYSTEM VIEW"});
+                connection.getMetaData().getTables(catalogSchema, null, null, null);
                 result = tableResult;
                 minTimes = 0;
             }

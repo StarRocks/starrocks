@@ -56,9 +56,6 @@ public class JDBCMetaCacheTest {
     @Mocked
     Connection connection;
 
-    @Mocked
-    JDBCTableIdCache jdbcTableIdCache;
-
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
@@ -136,6 +133,7 @@ public class JDBCMetaCacheTest {
     public void testListDatabaseNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
@@ -153,6 +151,7 @@ public class JDBCMetaCacheTest {
     public void testGetDb() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
             Database db2 = jdbcMetadata.getDb("test");
