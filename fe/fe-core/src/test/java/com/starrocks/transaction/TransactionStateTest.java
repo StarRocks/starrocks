@@ -191,9 +191,10 @@ public class TransactionStateTest {
         transactionState.setTabletCommitInfos(infos);
         Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.NORMAL));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001, ReplicaState.NORMAL));
-        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002, ReplicaState.CLONE));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002, ReplicaState.NORMAL));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002, ReplicaState.NORMAL));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.ALTER));
         Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.SCHEMA_CHANGE));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001, ReplicaState.CLONE));
     }
 }
