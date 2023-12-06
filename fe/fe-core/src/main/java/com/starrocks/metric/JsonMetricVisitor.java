@@ -38,7 +38,7 @@ import com.codahale.metrics.Histogram;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class JsonMetricVisitor extends MetricVisitor {
