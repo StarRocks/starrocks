@@ -35,6 +35,11 @@ under the License.
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
+    <properties>
+        <starrocks.home>${basedir}/../../</starrocks.home>
+        <fe_ut_parallel>1</fe_ut_parallel>
+    </properties>
+
     <build>
         <pluginManagement>
             <plugins>
