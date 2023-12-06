@@ -61,7 +61,7 @@ public class AliyunCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        return !this.accessKey.isEmpty() && !this.secretKey.isEmpty() && !this.endpoint.isEmpty();
+        return !this.endpoint.isEmpty();
     }
 
     // reuse aws client logic of BE
