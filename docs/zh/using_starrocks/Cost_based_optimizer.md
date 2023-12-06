@@ -591,7 +591,7 @@ KILL ANALYZE <ID>
 
 - statistic_auto_collect_small_table_rows
 
-  自动收集中，用来判断一个表是否为小表的行数门限，默认值为 10000000 行。
+  自动收集中，用来判断一个外表是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
 
 - statistic_auto_collect_small_table_interval
 

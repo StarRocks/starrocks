@@ -572,9 +572,9 @@ When you create an automatic collection task, StarRocks automatically checks whe
 
   The interval for checking data updates during automatic collection. Unit: seconds. Default: 5 minutes.
 
-- statistic_auto_collect_small_table_rows
+- statistic_auto_collect_small_table_rows (v3.2 and later)
 
-  Threshold to determine whether a table is a small table during automatic collection. Default: 10000000.
+  Threshold to determine whether an external table is a small table during automatic collection. Default: 10000000.
 
 - statistic_auto_collect_small_table_interval
 
