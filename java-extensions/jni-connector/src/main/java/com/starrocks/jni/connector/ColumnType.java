@@ -448,9 +448,8 @@ public class ColumnType {
             String[] ps = type.substring(s + 1, e).split(",");
             precision = Integer.parseInt(ps[0].trim());
             scale = Integer.parseInt(ps[1].trim());
-            if (precision <= MAX_DECIMAL32_PRECISION) {
-                type = "decimal32";
-            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+            // this logic is the same as FE's ScalarType.createUnifiedDecimalType
+            if (precision <= MAX_DECIMAL64_PRECISION) {
                 type = "decimal64";
             } else {
                 type = "decimal128";
