@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -43,10 +44,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Cache<IcebergTableName, Table> tables;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, List<String>> partitionNames = new ConcurrentHashMap<>();
+    private final ExecutorService backgroundExecutor;
 
-    public CachingIcebergCatalog(IcebergCatalog delegate, long ttlSec) {
+    public CachingIcebergCatalog(IcebergCatalog delegate, long ttlSec, ExecutorService executorService) {
         this.delegate = delegate;
         this.tables = CacheBuilder.newBuilder().expireAfterWrite(ttlSec, SECONDS).maximumSize(100000).build();
+        this.backgroundExecutor = executorService;
     }
 
     @Override
@@ -113,12 +116,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (partitionNames.containsKey(icebergTableName)) {
             return partitionNames.get(icebergTableName);
         } else {
-            List<String> partitionNames = delegate.listPartitionNames(dbName, tableName);
+            List<String> partitionNames = delegate.listPartitionNames(dbName, tableName, executorService);
             this.partitionNames.put(icebergTableName, partitionNames);
             return partitionNames;
         }
@@ -130,7 +133,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void refreshTable(String dbName, String tableName) {
+    public void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
             partitionNames.remove(icebergTableName);
@@ -165,7 +168,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
                 tables.put(icebergTableName, updateTable);
-                partitionNames.put(icebergTableName, delegate.listPartitionNames(dbName, tableName));
+                partitionNames.put(icebergTableName, delegate.listPartitionNames(dbName, tableName, executorService));
             }
         }
     }
@@ -179,7 +182,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         List<IcebergTableName> identifiers = Lists.newArrayList(tables.asMap().keySet());
         for (IcebergTableName identifier : identifiers) {
             try {
-                refreshTable(identifier.dbName, identifier.tableName);
+                refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
             }
