@@ -39,6 +39,7 @@
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
+#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {
@@ -129,7 +130,8 @@ public:
 
     Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
         if (!_sem->try_acquire_until(deadline)) {
-            return Status::TimedOut("acquire semaphore timed out");
+            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
         }
         auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
             task();
@@ -217,7 +219,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             if (std::chrono::system_clock::now() < timeout_deadline) {
                 res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
             } else {
-                res = Status::TimedOut("timeout exceeded");
+                auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
+                res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
             }
             if (res.ok()) {
                 auto metadata = std::move(res).value();
