@@ -40,6 +40,8 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("bos_secret_accesskey");
         SENSITIVE_KEY.add("fs.s3a.access.key");
         SENSITIVE_KEY.add("fs.s3a.secret.key");
+        SENSITIVE_KEY.add("aws.s3.access_key");
+        SENSITIVE_KEY.add("aws.s3.secret_key");
         SENSITIVE_KEY.add("fs.oss.accessKeyId");
         SENSITIVE_KEY.add("fs.oss.accessKeySecret");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");
@@ -47,6 +49,13 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("property.sasl.password");
         SENSITIVE_KEY.add("broker.password");
         SENSITIVE_KEY.add("confluent.schema.registry.url");
+        SENSITIVE_KEY.add("gcp.gcs.service_account_private_key_id");
+        SENSITIVE_KEY.add("gcp.gcs.service_account_private_key");
+        SENSITIVE_KEY.add("azure.blob.shared_key");
+        SENSITIVE_KEY.add("azure.blob.sas_token");
+        SENSITIVE_KEY.add("azure.adls1.oauth2_credential");
+        SENSITIVE_KEY.add("azure.adls2.shared_key");
+        SENSITIVE_KEY.add("azure.adls2.oauth2_client_secret");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
