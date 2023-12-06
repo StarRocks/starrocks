@@ -172,5 +172,8 @@ public class DataCachePlanTest extends PlanTestBase {
         String sql = "insert into blackhole() select * from hive0.datacache_db.multi_partition_table " +
                 "where l_shipdate>='1998-01-03'";
         assertPlanContains(sql, "BLACKHOLE TABLE SINK");
+
+        sql = "insert into files (\"path\" = \"s3://path/to/directory/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\") select 1 as k1";
+        assertPlanContains(sql, "");
     }
 }

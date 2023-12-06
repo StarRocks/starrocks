@@ -1965,7 +1965,8 @@ public class StmtExecutor {
                                         trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable()) {
+                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
+                            targetTable.isBlackHoleTable()) {
                         // schema table does not need txn
                     } else {
                         transactionMgr.abortTransaction(

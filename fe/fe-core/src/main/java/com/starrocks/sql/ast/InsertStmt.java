@@ -298,11 +298,19 @@ public class InsertStmt extends DmlStmt {
 
     private List<Column> collectSelectedFieldsFromQueryStatement() {
         QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Column> columns = query.getRelationFields().getAllFields().stream()
+        return query.getRelationFields().getAllFields().stream()
                 .filter(Field::isVisible)
                 .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
                 .collect(Collectors.toList());
+    }
 
+    public Table makeBlackHoleTable() {
+        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+    }
+
+    public Table makeTableFunctionTable() {
+        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());

@@ -357,7 +357,6 @@ public class StatementPlanner {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
         Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
@@ -397,9 +396,10 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable()) {
+                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
+            Database db = MetaUtils.getDatabase(catalogName, dbName);
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
