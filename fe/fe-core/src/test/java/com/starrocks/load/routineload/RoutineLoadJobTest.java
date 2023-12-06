@@ -205,7 +205,7 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
 
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
-            // The job is set unstable.
+            // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -213,6 +213,21 @@ public class RoutineLoadJobTest {
             // The lag [xxx] of partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]
             Assert.assertTrue(showInfo.get(16).contains(
                     "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
+
+            partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(System.currentTimeMillis()));
+            kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
+            Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
+            // The job is set stable due to the progress is kept up.
+            routineLoadJob.updateSubstate();
+            showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals("RUNNING", showInfo.get(7));
+            Assert.assertEquals("", showInfo.get(16));
+
+            // The job is set stable.
+            routineLoadJob.updateSubstateStable();
+            showInfo = routineLoadJob.getShowInfo();
+            Assert.assertEquals("RUNNING", showInfo.get(7));
+            Assert.assertEquals("", showInfo.get(16));
         }
     }
 
