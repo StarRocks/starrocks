@@ -30,6 +30,7 @@ namespace pipeline {
 struct ConnectorScanOperatorIOTasksMemLimiter;
 
 struct ConnectorScanOperatorMemShareArbitrator {
+    static constexpr double kChunkBufferMemRatio = 0.5;
     int64_t query_mem_limit = 0;
     int64_t scan_mem_limit = 0;
     std::atomic<int64_t> total_chunk_source_mem_bytes = 0;

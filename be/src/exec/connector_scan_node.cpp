@@ -29,7 +29,7 @@
 namespace starrocks {
 
 static std::atomic<int32_t> connector_scan_node_open_limit;
-static constexpr double kChunkBufferMemRatio = 0.5;
+static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio;
 static constexpr int64_t ESTIMATED_MEMORY_USAGE_PER_FIELD = 4LL * 1024 * 1024;
 
 // ======================================================

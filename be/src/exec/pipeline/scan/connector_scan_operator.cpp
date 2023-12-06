@@ -43,13 +43,30 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     ConnectorScanOperatorIOTasksMemLimiter(int64_t dop) : dop(dop) {}
 
     int available_chunk_source_count(int driver_sequence) const {
-        int64_t max_count = scan_mem_limit / chunk_source_mem_bytes.load();
+        int64_t scan_mem_limit_value = scan_mem_limit.load();
+        int64_t chunk_source_mem_bytes_value = chunk_source_mem_bytes.load();
+        int64_t max_count = scan_mem_limit_value / chunk_source_mem_bytes_value;
         int64_t running_count = running_chunk_source_count.load();
-        int64_t avail_count = (max_count - running_chunk_source_count) / dop;
-        if (avail_count <= 0 && running_count == 0 && driver_sequence == 0) {
-            avail_count = 1;
+        int64_t avail_count = (max_count - running_count);
+        int64_t per_count = (max_count - running_chunk_source_count) / dop;
+
+        if (per_count == 0 && driver_sequence < avail_count) {
+            per_count += 1;
         }
-        return avail_count;
+        if (per_count < 0) {
+            per_count = 0;
+        }
+
+        auto build_debug_string = [&]() {
+            std::stringstream ss;
+            ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
+               << chunk_source_mem_bytes_value << ")"
+               << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
+               << ", seq = " << driver_sequence << ", per_count = " << per_count;
+            return ss.str();
+        };
+        VLOG_FILE << build_debug_string();
+        return per_count;
     }
 
     void update_running_chunk_source_count(int delta) { running_chunk_source_count.fetch_add(delta); }
@@ -170,7 +187,15 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ConnectorScanOperator::do_close(RuntimeState* state) {}
+void ConnectorScanOperator::do_close(RuntimeState* state) {
+    if (_driver_sequence == 0) {
+        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+        ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
+        ConnectorScanOperatorMemShareArbitrator* arb = factory->_mem_share_arb;
+        arb->update_chunk_source_mem_bytes(L->last_arb_chunk_source_mem_bytes, 0);
+        L->last_arb_chunk_source_mem_bytes = 0;
+    }
+}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
@@ -279,8 +304,8 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
 
-    VLOG_FILE << "end_driver_process. query = " << driver->query_ctx()->query_id() << ", id = " << _driver_sequence
-              << ", rows = " << _op_pull_rows;
+    // VLOG_FILE << "end_driver_process. query = " << driver->query_ctx()->query_id() << ", id = " << _plan_node_id
+    //           << ", seq = " << _driver_sequence << ", rows = " << _op_pull_rows;
 
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
@@ -354,7 +379,12 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
                 arb->update_chunk_source_mem_bytes(L->last_arb_chunk_source_mem_bytes, current_chunk_source_mem_bytes);
         L->last_arb_chunk_source_mem_bytes = current_chunk_source_mem_bytes;
         L->scan_mem_limit.store(new_scan_mem_limit);
-        VLOG_FILE << "adjust_scan_mem_limit. new value = " << new_scan_mem_limit;
+
+        ChunkBufferLimiter* limiter = factory->get_chunk_buffer().limiter();
+        limiter->update_mem_limit(new_scan_mem_limit * ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio);
+
+        VLOG_FILE << "adjust_scan_mem_limit. scan node id = " << _plan_node_id
+                  << ", new value = " << new_scan_mem_limit;
     }
 
     // adjust io tasks according information collected
@@ -432,10 +462,10 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::min(io_tasks, max_io_tasks);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
-    auto build_log = [&]() {
+    auto build_debug_string = [&]() {
         auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
         std::stringstream ss;
-        ss << "available_pickup_morsel_count. id = " << _driver_sequence;
+        ss << "available_pickup_morsel_count. id = " << _plan_node_id << ", seq = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
         ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
         ss << ", op = " << doround(op_speed) << "(" << _op_pull_chunks << "/" << (_op_running_time_ns / 1000) << ")";
@@ -452,7 +482,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         return ss.str();
     };
 
-    VLOG_FILE << build_log();
+    // VLOG_FILE << build_debug_string();
 
     P.last_cs_speed = cs_speed;
     P.last_cs_pull_chunks = cs_pull_chunks;
