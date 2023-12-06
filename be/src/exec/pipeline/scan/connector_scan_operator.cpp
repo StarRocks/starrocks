@@ -59,7 +59,6 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     void update_estimated_mem_usage_per_chunk_source(int64_t value, int64_t return_chunk_mem_bytes) {
         if (value == 0) return;
 
-        VLOG_FILE << "[xxx] update value = " << value << ", chunk = " << return_chunk_mem_bytes;
         std::unique_lock<std::shared_mutex> L(lock);
         double total = estimated_mem_usage_per_chunk_source * estimated_mem_usage_update_count + value +
                        return_chunk_mem_bytes;
