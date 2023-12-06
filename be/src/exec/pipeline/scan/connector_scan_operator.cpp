@@ -71,11 +71,12 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
 
     void update_running_chunk_source_count(int delta) { running_chunk_source_count.fetch_add(delta); }
 
-    void update_chunk_source_mem_bytes(int64_t value) {
+    void update_chunk_source_mem_bytes(int64_t value, int64_t return_chunk_mem_bytes) {
         if (value == 0) return;
 
         std::unique_lock<std::mutex> L(lock);
-        int64_t total = chunk_source_mem_bytes.load() * chunk_source_mem_bytes_update_count + value;
+        int64_t total =
+                chunk_source_mem_bytes.load() * chunk_source_mem_bytes_update_count + value + return_chunk_mem_bytes;
         chunk_source_mem_bytes_update_count += 1;
         chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count);
     }
@@ -540,7 +541,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
 
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(-1);
-    limiter->update_chunk_source_mem_bytes(_data_source->estimated_mem_usage());
+    limiter->update_chunk_source_mem_bytes(_data_source->estimated_mem_usage(),
+                                           avg_chunk_mem_bytes() * state->chunk_size());
 
     _closed = true;
     _data_source->close(state);
@@ -627,7 +629,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         P.cs_total_running_time += total_time_ns;
         P.cs_total_io_time += delta_io_time_ns;
         P.cs_total_scan_bytes += delta_scan_bytes;
-        _rows_read += (*chunk)->num_rows();
+        _chunk_rows_read += (*chunk)->num_rows();
+        _chunk_mem_bytes += (*chunk)->memory_usage();
         _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
     }
@@ -639,6 +642,11 @@ const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_ent
         const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->connector_scan_sched_entity();
+}
+
+uint64_t ConnectorChunkSource::avg_chunk_mem_bytes() const {
+    if (_chunk_rows_read == 0) return 0;
+    return _chunk_mem_bytes / _chunk_rows_read;
 }
 
 } // namespace starrocks::pipeline
