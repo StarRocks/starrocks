@@ -411,8 +411,9 @@ public class TransactionState implements Writable {
                     tabletId, backend != null ? backend.toString() : "", transactionId);
             return true;
         }
-        if (state != ReplicaState.NORMAL && state != ReplicaState.CLONE) {
-            // Skip check when replica is ALTER or SCHEMA CHANGE
+        if (state != ReplicaState.NORMAL) {
+            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
+            // We handle version missing in finishTask when change state to NORMAL
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
                     tabletId, backend != null ? backend.toString() : "", state);
