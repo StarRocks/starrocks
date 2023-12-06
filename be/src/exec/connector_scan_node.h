@@ -59,7 +59,6 @@ public:
 #endif
 
 private:
-    RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
     connector::ConnectorType _connector_type;
 

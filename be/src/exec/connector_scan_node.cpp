@@ -74,7 +74,6 @@ public:
     bool is_open() { return _opened; }
 
     RuntimeState* runtime_state() { return _runtime_state; }
-
     int32_t open_limit() { return connector_scan_node_open_limit.load(std::memory_order_relaxed); }
 
     bool acquire_pending_token(std::atomic_bool* token) {
@@ -118,8 +117,8 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
 }
 
 ConnectorScanNode::~ConnectorScanNode() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
     }
 }
 
@@ -201,7 +200,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                 is_stream_pipeline);
 
     scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes +
-                                        _estimated_scan_row_bytes * _runtime_state->chunk_size());
+                                        _estimated_scan_row_bytes * runtime_state()->chunk_size());
     scan_op->set_scan_mem_limit(_scan_mem_limit);
     scan_op->set_mem_share_arb(_mem_share_arb);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
@@ -222,7 +221,6 @@ Status ConnectorScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(_data_source_provider->prepare(state));
     _init_counter();
-    _runtime_state = state;
     return Status::OK();
 }
 
@@ -372,14 +370,14 @@ static int compute_priority(int32_t num_submitted_tasks) {
 
 bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockable) {
     // submit the streaming load scanner to the dedicated thread pool if needed
-    const TQueryOptions& query_options = _runtime_state->query_options();
+    const TQueryOptions& query_options = runtime_state()->query_options();
     if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
         config::enable_streaming_load_thread_pool) {
         VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
-    auto* thread_pool = _runtime_state->exec_env()->thread_pool();
+    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -406,7 +404,7 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 #ifdef BE_TEST
     _use_stream_load_thread_pool = true;
 #endif
-    ThreadPool* thread_pool = _runtime_state->exec_env()->streaming_load_thread_pool();
+    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
     Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
@@ -499,7 +497,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
         }
     }
 
-    Status status = scanner->open(_runtime_state);
+    Status status = scanner->open(runtime_state());
     scanner->set_keep_priority(false);
 
     bool resubmit = false;
@@ -525,7 +523,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
             chunk = _chunk_pool.pop();
         }
 
-        status = scanner->get_next(_runtime_state, &chunk);
+        status = scanner->get_next(runtime_state(), &chunk);
         if (!status.ok()) {
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(chunk);
@@ -559,7 +557,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
             DCHECK(scanner == nullptr);
         } else if (status.is_end_of_file()) {
             scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
+            scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             std::lock_guard<std::mutex> l(_mtx);
             auto nscanner = _pending_scanners.empty() ? nullptr : _pop_pending_scanner();
@@ -580,7 +578,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
 
 void ConnectorScanNode::_release_scanner(ConnectorScanner* scanner) {
     scanner->release_pending_token(&_pending_token);
-    scanner->close(_runtime_state);
+    scanner->close(runtime_state());
     _closed_scanners.fetch_add(1, std::memory_order_release);
     _close_pending_scanners();
 }
@@ -589,7 +587,7 @@ void ConnectorScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
         auto* scanner = _pop_pending_scanner();
-        scanner->close(_runtime_state);
+        scanner->close(runtime_state());
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
 }
