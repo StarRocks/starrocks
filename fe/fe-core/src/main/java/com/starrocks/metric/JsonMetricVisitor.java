@@ -38,6 +38,7 @@ import com.codahale.metrics.Histogram;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class JsonMetricVisitor extends MetricVisitor {
@@ -52,16 +53,16 @@ public class JsonMetricVisitor extends MetricVisitor {
 
     private void addGcMetric(String metricName, JvmStats.GarbageCollector gc) {
         buildMetric(metricName, "nounit", String.valueOf(gc.getCollectionCount()),
-                List.of(new MetricLabel("type", "count")));
+                Collections.singletonList(new MetricLabel("type", "count")));
         buildMetric(metricName, "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()),
-                List.of(new MetricLabel("type", "time")));
+                Collections.singletonList(new MetricLabel("type", "time")));
     }
 
     private void addMemPoolMetric(String metricName, JvmStats.MemoryPool memPool) {
         buildMetric(metricName, "bytes", String.valueOf(memPool.getCommitted()),
-                List.of(new MetricLabel("type", "committed")));
+                Collections.singletonList(new MetricLabel("type", "committed")));
         buildMetric(metricName, "bytes", String.valueOf(memPool.getUsed()),
-                List.of(new MetricLabel("type", "used")));
+                Collections.singletonList(new MetricLabel("type", "used")));
     }
 
     @Override
@@ -78,11 +79,11 @@ public class JsonMetricVisitor extends MetricVisitor {
         // mem overall
         JvmStats.Mem mem = jvmStats.getMem();
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapMax()),
-                List.of(new MetricLabel("type", "max")));
+                Collections.singletonList(new MetricLabel("type", "max")));
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapCommitted()),
-                List.of(new MetricLabel("type", "committed")));
+                Collections.singletonList(new MetricLabel("type", "committed")));
         buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapUsed()),
-                List.of(new MetricLabel("type", "used")));
+                Collections.singletonList(new MetricLabel("type", "used")));
 
         // mem pool
         for (JvmStats.MemoryPool memPool : jvmStats.getMem()) {
@@ -92,7 +93,7 @@ public class JsonMetricVisitor extends MetricVisitor {
                     percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
                 }
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
-                        List.of(new MetricLabel("type", GcNames.PERM)));
+                        Collections.singletonList(new MetricLabel("type", GcNames.PERM)));
             } else if (memPool.getName().equalsIgnoreCase(GcNames.OLD)) {
                 double percent = 0.0;
                 if (memPool.getCommitted().getBytes() > 0) {
@@ -101,7 +102,7 @@ public class JsonMetricVisitor extends MetricVisitor {
                 // **NOTICE**: We shouldn't use 'jvm_size_percent' as a metric name, it should be a type,
                 // but for compatibility reason, we won't remove it.
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
-                        List.of(new MetricLabel("type", GcNames.OLD)));
+                        Collections.singletonList(new MetricLabel("type", GcNames.OLD)));
 
                 // {"metric":"jvm_old_size_bytes","type":"committed","unit":"bytes"}
                 // {"metric":"jvm_old_size_bytes","type":"used","unit":"bytes"}
@@ -117,9 +118,9 @@ public class JsonMetricVisitor extends MetricVisitor {
         for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
             if (pool.getName().equalsIgnoreCase("direct")) {
                 buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getTotalCapacity()),
-                        List.of(new MetricLabel("type", "capacity")));
+                        Collections.singletonList(new MetricLabel("type", "capacity")));
                 buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getUsed()),
-                        List.of(new MetricLabel("type", "used")));
+                        Collections.singletonList(new MetricLabel("type", "used")));
             }
         }
     }
