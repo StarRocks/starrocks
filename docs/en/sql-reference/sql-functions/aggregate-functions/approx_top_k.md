@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# APPROX_TOP_K
+# approx_top_k
 
 ## Description
 
