@@ -312,6 +312,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
 
+##### statistic_auto_collect_small_table_rows
+
+- Unit: -
+- Default: 10000000
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
+
 ##### enable_local_replica_selection
 
 - Unit: -

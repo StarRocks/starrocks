@@ -429,6 +429,7 @@ You can find a function based on the following categories:
 - [current_role](./utility-functions/current_role.md)
 - [current_version](./utility-functions/current_version.md)
 - [database](./utility-functions/database.md)
+- [get_query_profile](./utility-functions/get_query_profile.md)
 - [host_name](./utility-functions/host_name.md)
 - [isnull](./utility-functions/isnull.md)
 - [isnotnull](./utility-functions/isnotnull.md)
