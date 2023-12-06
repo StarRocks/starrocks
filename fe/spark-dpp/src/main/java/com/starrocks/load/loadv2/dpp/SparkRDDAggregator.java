@@ -18,6 +18,7 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.starrocks.common.SparkDppException;
+import com.starrocks.common.io.BitmapValue;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;

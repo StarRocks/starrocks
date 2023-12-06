@@ -14,6 +14,7 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import com.starrocks.common.io.BitmapValue;
 import org.junit.Assert;
 import org.junit.Test;
 

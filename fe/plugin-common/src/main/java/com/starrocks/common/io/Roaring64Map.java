@@ -15,17 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.load.loadv2.dpp;
+package com.starrocks.common.io;
 
-import com.starrocks.common.Codec;
-import org.roaringbitmap.BitmapDataProvider;
-import org.roaringbitmap.BitmapDataProviderSupplier;
-import org.roaringbitmap.IntConsumer;
-import org.roaringbitmap.IntIterator;
-import org.roaringbitmap.InvalidRoaringFormat;
-import org.roaringbitmap.RoaringBitmap;
-import org.roaringbitmap.RoaringBitmapSupplier;
-import org.roaringbitmap.Util;
+import org.roaringbitmap.*;
 import org.roaringbitmap.buffer.MutableRoaringBitmap;
 import org.roaringbitmap.longlong.ImmutableLongBitmapDataProvider;
 import org.roaringbitmap.longlong.LongConsumer;
@@ -35,16 +27,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.util.AbstractMap;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * forked version 0.8.13
