@@ -535,10 +535,10 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
       ```sql
       CREATE TABLE site_access (
-           site_id INT DEFAULT '10',
-           city_code SMALLINT,
-           user_name VARCHAR(32) DEFAULT '',
-           pv BIGINT SUM DEFAULT '0')
+          site_id INT DEFAULT '10',
+          city_code SMALLINT,
+          user_name VARCHAR(32) DEFAULT '',
+          pv BIGINT SUM DEFAULT '0')
       AGGREGATE KEY(site_id, city_code, user_name)
       DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分区中分桶数量
       ```
@@ -576,7 +576,9 @@ DISTRIBUTED BY HASH(site_id,city_code);
       ```
 
       </TabItem>
+
       <TabItem value="disable" label="默认不开启">
+
       ```sql
       CREATE TABLE site_access1 (
           event_day DATE,
@@ -588,6 +590,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
       -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
       ;
       ```
+
       </TabItem>
       </Tabs>
 
@@ -598,6 +601,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     :::info
 
     对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+
     :::
 
   - 方式二：手动设置分区中分桶数量
