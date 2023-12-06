@@ -46,9 +46,9 @@ alter_clause1[, alter_clause2, ...]
 
 :::note
 
-- partition、rollup 和 column <!--是否包含修改分桶方式和分桶数量-->这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-- rollup、column<!--是否包含修改分桶方式和分桶数量-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
-- partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
+- partition、bucket、column 和 rollup index <!--是否包含compaction-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
+- rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
 :::
 
 ### Rename 对名称进行修改
@@ -591,7 +591,7 @@ SET ("key" = "value",...)
   - `bloom_filter_columns`
   - `colocate_with`
 
-注意：修改表的属性也可以合并到 schema change <!--这个 schema change除了column相关的alter table还包括啥>操作中来修改，见[示例](#示例)部分。
+注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
 
 ### Swap 将两个表原子替换
 
@@ -867,14 +867,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     SET ("colocate_with" = "t1");
     ```
 
-2. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。<!--历史遗留下来的命令 这个支持吗-->
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    SET ("distribution_type" = "hash");
-    ```
-
-3. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
+2. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
 
     ```sql
     ALTER TABLE example_db.my_table
