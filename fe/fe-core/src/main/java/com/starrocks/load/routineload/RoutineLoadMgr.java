@@ -230,7 +230,7 @@ public class RoutineLoadMgr implements Writable {
         int beNum = 0;
         slotLock.lock();
         try {
-            beNum = beTasksNum.size();
+            beNum = getBeTasksNum().size();
         } finally {
             slotLock.unlock();
         }
