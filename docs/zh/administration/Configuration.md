@@ -1508,12 +1508,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：5000
 
-#### txn_commit_rpc_timeout_ms
-
-- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
-- 单位：毫秒
-- 默认值：20000
-
 #### max_consumer_num_per_group
 
 - 含义：Routine load 中，每个consumer group 内最大的 consumer 数量。
