@@ -39,7 +39,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
     if (cached_new_metadata != nullptr) {
-        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" tablet_id
+        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
                   << " base_version=" << base_version << " new_version=" << new_version
                   << " txn_ids=" << JoinInts(txn_ids, ",");
         return std::move(cached_new_metadata);
