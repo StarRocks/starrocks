@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+unlisted: true
 ---
 
 # Load data from \<SOURCE\> TEMPLATE
