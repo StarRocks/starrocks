@@ -414,7 +414,7 @@ public class NodeMgr {
                 }
             }
             getNewImageOnStartup(rightHelperNode, "");
-            if (RunMode.allowCreateLakeTable()) { // get star mgr image
+            if (RunMode.isSharedDataMode()) { // get star mgr image
                 // subdir might not exist
                 String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
                 File dir = new File(subDir);
@@ -440,7 +440,7 @@ public class NodeMgr {
                 runMode = RunMode.name();
                 storage.setRunMode(runMode);
                 isVersionFileChanged = true;
-            } else if (RunMode.allowCreateLakeTable()) {
+            } else if (RunMode.isSharedDataMode()) {
                 LOG.error("Upgrading from a cluster with version less than 3.0 to a cluster with run mode {} of " +
                         "version 3.0 or above is disallowed. will exit", RunMode.name());
                 System.exit(-1);
