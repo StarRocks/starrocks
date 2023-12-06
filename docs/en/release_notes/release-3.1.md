@@ -335,7 +335,7 @@ Fixed the following issues:
 - The default value of the FE configuration item `max_routine_load_task_num_per_be` is changed from `5` to `16`, and error information will be returned if a large number of Routine Load tasks are created.
 - The FE configuration item `quorom_publish_wait_time_ms` is renamed as `quorum_publish_wait_time_ms`, and the FE configuration item `async_load_task_pool_size` is renamed as `max_broker_load_job_concurrency`.
 - The BE configuration item `routine_load_thread_pool_size` is deprecated. Now the routine load thread pool size per BE node is controlled only by the FE configuration item `max_routine_load_task_num_per_be`.
-- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated. Now the `time_out` parameter is used to specify the transaction timeout duration.
+- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated.
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - The CN configuration item `thrift_port` is renamed as `be_port`.
