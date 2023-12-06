@@ -517,7 +517,7 @@ PARALLEL_TEST(JsonParserTest, test_simdjson_iterate_batch) {
     simdjson::ondemand::object row;
 
     st = parser->get_current(&row);
-    // Data quality error: The document is too big to fit in the parser's window. Please increase the parser's windows size by setting new BE config simdjson_iterate_many
+    // Data quality error: The document is too big to fit in the parser's window. Please increase the parser's windows size by setting new BE config simdjson_iterate_batch
     ASSERT_TRUE(st.is_data_quality_error());
 }
 

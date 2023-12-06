@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "exec/json_parser.h"
-#include "common/config.h"
 
 #include <fmt/format.h>
 
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -67,7 +67,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
             } else {
                 err_msg =
                         "The document is too big to fit in the parser's window. "
-                        "Please increase the parser's windows size by set new BE config simdjson_iterate_many";
+                        "Please increase the parser's windows size by set new BE config simdjson_iterate_batch";
             }
         } else {
             err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
