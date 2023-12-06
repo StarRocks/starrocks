@@ -34,20 +34,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
-<<<<<<< HEAD
-import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-=======
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
->>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701))
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
