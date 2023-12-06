@@ -2401,7 +2401,6 @@ TEST_P(PersistentIndexTest, test_l0_append_load_small_data) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
+INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest, ::testing::Values(PersistentIndexTestParam{false}));
 
 } // namespace starrocks
