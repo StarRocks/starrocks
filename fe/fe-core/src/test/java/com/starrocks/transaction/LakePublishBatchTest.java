@@ -244,12 +244,12 @@ public class LakePublishBatchTest {
             }
         }
 
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         // test publish transactionStateBatch which size is one
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         Config.lake_batch_publish_min_version_num = 1;
         long transactionId5 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable5,
+                        GlobalStateMgrTestUtil.testTxnLable9,
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
