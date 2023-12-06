@@ -1036,6 +1036,8 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
+CONF_mBool(enable_stream_load_verbose_log, "false");
+
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 // TOPN RuntimeFilter parameters
