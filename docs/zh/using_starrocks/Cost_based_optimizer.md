@@ -598,11 +598,11 @@ KILL ANALYZE <ID>
 
 - statistic_auto_collect_small_table_interval
 
-  自动收集中小表的收集间隔，默认值为 0，单位：秒。
+  自动收集中小表的收集间隔，单位：秒。默认值：0。
 
 - statistic_auto_collect_large_table_interval
 
-  自动收集中大表的收集间隔，默认值为 12h，单位：秒。
+  自动收集中大表的收集间隔，单位：秒。默认值：43200 (12 小时)。
 
 自动收集线程每间隔 `statistic_collect_interval_sec` 时间就会进行一次任务检查，发现是否有需要执行的任务，当表中行数小于 `statistic_auto_collect_small_table_rows` 时，则将收集间隔设置为小表的收集间隔，否则设置为大表的收集间隔。如果 `上次更新时间 + 收集间隔 > 当前时间`，则需要更新，否则无需更新，这样可以避免频繁为大表执行 Analyze 任务。
 
