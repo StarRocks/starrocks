@@ -590,6 +590,10 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 用于兼容 MySQL 客户端。无实际作用。
 
+### statistic_collect_parallel
+
+用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快采集任务的执行速度。
+
 ### storage_engine
 
 指定系统使用的存储引擎。StarRocks 支持的引擎类型包括：
