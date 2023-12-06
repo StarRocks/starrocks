@@ -34,7 +34,7 @@ By default, StarRocks periodically collects the following basic statistics of ta
 
 - max: maximum value in a column
 
-Full statistics are stored in the `column_statistics` of the `_statistics_` database. You can view this table to query table statistics. Following is an example of querying data from this table.
+Full statistics are stored in the `column_statistics` of the `_statistics_` database. You can view this table to query table statistics. Following is an example of querying statistics data from this table.
 
 ```sql
 SELECT * FROM _statistics_.column_statistics\G
@@ -61,7 +61,7 @@ StarRocks uses equi-height histograms, which are constructed on several buckets.
 
 **Histograms are applicable to columns with highly skewed data and frequent queries.If your table data is uniformly distributed, you do not need to create histograms. Histograms can be created only on columns of numeric, DATE, DATETIME, or string types.**
 
-Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying data from this table:
+Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying statistics data from this table:
 
 ```sql
 SELECT * FROM _statistics_.histogram_statistics\G
