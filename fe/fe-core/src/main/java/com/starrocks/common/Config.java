@@ -2011,7 +2011,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = 64;
+    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool

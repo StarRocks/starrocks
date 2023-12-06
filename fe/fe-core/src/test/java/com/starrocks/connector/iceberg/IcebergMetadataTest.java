@@ -85,6 +85,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.catalog.Type.DATE;
@@ -109,7 +110,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor());
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
@@ -126,7 +128,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         Database expectResult = new Database(0, db);
         Assert.assertEquals(expectResult, metadata.getDb(db));
     }
@@ -143,7 +146,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         Assert.assertNull(metadata.getDb(db));
     }
 
@@ -161,7 +165,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
         Assert.assertEquals(expectResult, metadata.listTableNames(db1));
     }
@@ -178,7 +183,8 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
@@ -198,13 +204,15 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         Assert.assertNull(metadata.getTable("db", "tbl2"));
     }
 
     @Test(expected = AlreadyExistsException.class)
     public void testCreateDuplicatedDb(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws AlreadyExistsException {
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         new Expectations() {
             {
                 icebergHiveCatalog.listAllDatabases();
@@ -219,7 +227,8 @@ public class IcebergMetadataTest extends TableTestBase {
     @Test(expected = IllegalArgumentException.class)
     public void testCreateDbWithErrorConfig() throws AlreadyExistsException {
         IcebergHiveCatalog hiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), new HashMap<>());
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, hiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, hiveCatalog,
+                Executors.newSingleThreadExecutor());
 
         new Expectations(hiveCatalog) {
             {
@@ -238,7 +247,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -263,7 +273,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -289,7 +300,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         List<TableIdentifier> mockTables = new ArrayList<>();
         mockTables.add(TableIdentifier.of("table1"));
         mockTables.add(TableIdentifier.of("table2"));
@@ -317,7 +329,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         List<TableIdentifier> mockTables = new ArrayList<>();
         mockTables.add(TableIdentifier.of("table1"));
         mockTables.add(TableIdentifier.of("table2"));
@@ -399,7 +412,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         Config.hive_meta_store_timeout_s = 1;
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -456,7 +470,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -487,7 +502,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
                 "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
@@ -573,7 +589,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
                 "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
@@ -635,7 +652,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
                 "iceberg_table", columns, mockedNativeTableB, Maps.newHashMap());
 
@@ -673,7 +691,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_1).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
@@ -699,7 +718,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_4).commit();
         mockedNativeTableB.refresh();
@@ -732,7 +752,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableA, Maps.newHashMap());
@@ -764,7 +785,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         mockedNativeTableA.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_1).commit();
         mockedNativeTableA.refresh();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
@@ -784,7 +806,8 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
 
         IcebergMetadata metadata = new IcebergMetadata(
-                RESOURCE_MAPPING_CATALOG_PREFIX + CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+                RESOURCE_MAPPING_CATALOG_PREFIX + CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Assert.assertFalse(icebergTable.getSnapshot().isPresent());
@@ -803,8 +826,10 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 10);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 10,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor());
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db",
                 "table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
@@ -836,7 +861,8 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
         ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
@@ -861,7 +887,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("ts", DATETIME));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableE, Maps.newHashMap());
 
@@ -887,7 +914,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("ts", DATETIME));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableD, Maps.newHashMap());
 
@@ -913,7 +941,8 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("dt", DATE));
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor());
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableF, Maps.newHashMap());
 
@@ -964,8 +993,10 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor());
         List<String> partitionNames = metadata.listPartitionNames("db", "table");
         Assert.assertEquals(partitionNames, Lists.newArrayList("k2=2", "k2=3"));
     }
