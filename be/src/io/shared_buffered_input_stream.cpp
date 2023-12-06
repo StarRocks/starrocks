@@ -16,7 +16,9 @@
 
 #include "common/config.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/current_thread.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename,
@@ -199,6 +201,7 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     ASSIGN_OR_RETURN(auto ret, find_shared_buffer(offset, nbytes));
     SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
+        RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read into shared buffer"));
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
