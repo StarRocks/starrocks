@@ -84,7 +84,9 @@ import java.lang.reflect.Field;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
