@@ -2187,7 +2187,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
-<<<<<<< HEAD
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 12;
 
@@ -2197,10 +2196,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
-    @ConfField(mutable = true)
-=======
     @ConfField
->>>>>>> 6609820042 ([BugFix] make config enable_new_publish_mechanism static (#35338))
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField(mutable = true)
