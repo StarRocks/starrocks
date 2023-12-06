@@ -18,11 +18,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.TableStatistic;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -118,45 +118,21 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
-        long totalPartitionCount = table.getPartitions().size();
-        long updatePartitionRowCount = 0;
-        long updatePartitionCount = 0;
+
+        long tableRowCount = 1L;
+        long cachedTableRowCount = 1L;
         for (Partition partition : table.getPartitions()) {
-            if (!partition.hasData()) {
-                // skip init empty partition
-                continue;
-            }
-
-            LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
-            if (updateTime.isAfter(loadTimes)) {
-                continue;
-            }
-
-            updatePartitionCount++;
-            updatePartitionRowCount += partition.getRowCount();
+           tableRowCount += partition.getRowCount();
+           TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                   .getTableStatistic(table.getId(), partition.getId());
+           if (tableStatistic != null) {
+               cachedTableRowCount += tableStatistic.getRowCount();
+           }
         }
 
-        // promise new partitions row count
-        LocalDateTime updateRowCountTimes = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
-        if (StatisticUtils.getTableLastUpdateTime(table).plusSeconds(Config.tablet_stat_update_interval_second)
-                .isAfter(updateRowCountTimes)) {
-            updatePartitionRowCount += updateRows;
-        }
+        tableRowCount = Math.max(tableRowCount, updateRows);
 
-        double updateRatio;
-        // 1. If none updated partitions, health is 1
-        // 2. If there are few updated partitions, the health only to calculated on rows
-        // 3. If there are many updated partitions, the health needs to be calculated based on partitions
-        if (updatePartitionRowCount == 0 || updatePartitionCount == 0) {
-            return 1;
-        } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
-            updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
-        } else {
-            double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
-            double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
-            updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
-        }
-        return 1 - Math.min(updateRatio, 1.0);
+        return Math.min(1.0D, (cachedTableRowCount * 1.0D) / tableRowCount);
     }
 
     public long getUpdateRows() {
