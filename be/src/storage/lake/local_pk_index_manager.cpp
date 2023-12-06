@@ -16,7 +16,6 @@
 
 #include <chrono>
 
-#include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -39,7 +38,13 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager,
         LOG(INFO) << "start to gc local persistent index dir:" << pk_path;
         for (const auto& tablet_id : tablet_ids) {
             auto tablet_pk_path = pk_path + "/" + tablet_id;
-            int64_t id = std::stoll(tablet_id);
+            int64_t id = 0;
+            try {
+                std::stoll(tablet_id);
+            } catch (std::invalid_argument const& ex) {
+                LOG(ERROR) << "Invalid tablet: " << tablet_id;
+                continue;
+            }
             // judge whether tablet should be in the data_dir or not,
             // for data_dir may change if config:storage_path changed.
             // just remove if not.
@@ -78,6 +83,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager,
 }
 
 bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
+    bool ret = true;
     auto now = time(nullptr);
     auto mtime_or = FileSystem::Default()->get_file_modified_time(tablet_pk_path);
     if (!mtime_or.ok()) {
@@ -85,28 +91,25 @@ bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
     }
     auto mtime = *mtime_or;
     if (now - mtime < config::lake_local_pk_index_unused_threshold_seconds) {
+        ret = false;
+    }
+    TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &ret);
+    if (!ret) {
         return false;
     }
 
-    std::set<std::string> index_files;
-    Status st = fs::list_dirs_files(tablet_pk_path, nullptr, &index_files);
-    if (!st.ok()) {
-        LOG(WARNING) << "fail to walk dir. path=[" + tablet_pk_path << "] error[" << st.to_string() << "]";
-        return false;
-    }
-
-    for (const auto& index_file : index_files) {
-        auto index_file_path = tablet_pk_path + "/" + index_file;
-        auto mtime_or = FileSystem::Default()->get_file_modified_time(index_file_path);
-        if (!mtime_or.ok()) {
-            continue;
-        }
-        mtime = *mtime_or;
-        if (now - mtime < config::lake_local_pk_index_unused_threshold_seconds) {
+    auto st = FileSystem::Default()->iterate_dir2(tablet_pk_path, [&](DirEntry entry) {
+        if (now - entry.mtime.value() < config::lake_local_pk_index_unused_threshold_seconds) {
+            ret = false;
             return false;
         }
+        return true;
+    });
+    if (!st.ok()) {
+        return false;
     }
-    return true;
+    TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:3", &ret);
+    return ret;
 }
 
 void LocalPkIndexManager::evict(UpdateManager* update_manager,
@@ -131,14 +134,18 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager,
         std::vector<int64_t> removed_dir_tablet_ids;
 
         for (const auto& tablet_id : tablet_ids) {
+            int64_t id = 0;
+            try {
+                id = std::stoll(tablet_id);
+            } catch (std::invalid_argument const& ex) {
+                LOG(ERROR) << "Invalid tablet: " << tablet_id;
+                continue;
+            }
             auto tablet_pk_path = pk_path + "/" + tablet_id;
-            bool ret = need_evict_tablet(tablet_pk_path);
-            TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &ret);
-            if (!ret) {
+            if (!need_evict_tablet(tablet_pk_path)) {
                 continue;
             }
 
-            int64_t id = std::stoll(tablet_id);
             tablet_ids_to_be_evicted.emplace_back(id);
             if (!update_manager->try_lock_pk_index_shard(id)) {
                 LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
