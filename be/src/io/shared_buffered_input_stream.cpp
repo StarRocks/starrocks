@@ -263,10 +263,7 @@ void SharedBufferedInputStream::_update_estimated_mem_usage() {
     for (const auto& [_, sb] : _map) {
         mem_usage += sb.size;
     }
-    // in most cases, those data are compressed.
-    // to read it, we need to decompress it, and let's say to add 50% overhead.
-    mem_usage += mem_usage / 2;
-    _estimated_mem_usage = std::max(mem_usage, _estimated_mem_usage);
+    _estimated_mem_usage = std::max(_estimated_mem_usage, mem_usage * 2);
 }
 
 } // namespace starrocks::io

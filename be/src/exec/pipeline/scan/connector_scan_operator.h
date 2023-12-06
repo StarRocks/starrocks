@@ -111,8 +111,10 @@ public:
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
 
+    uint64_t avg_chunk_mem_bytes() const;
+
 protected:
-    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
+    virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
 
     connector::DataSourcePtr _data_source;
@@ -137,7 +139,8 @@ private:
     ChunkPipelineAccumulator _ck_acc;
     bool _opened = false;
     bool _closed = false;
-    uint64_t _rows_read = 0;
+    uint64_t _chunk_rows_read = 0;
+    uint64_t _chunk_mem_bytes = 0;
 };
 
 } // namespace pipeline
