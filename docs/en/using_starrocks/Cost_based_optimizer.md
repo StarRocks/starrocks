@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Gather statistics for CBO
 
-This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics. Since v3.2.0, StarRocks supports collecting statistics of external tables including Hive, Iceberg, and Hudi, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
+This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics. Since v3.2.0, StarRocks supports collecting statistics from Hive, Iceberg, and Hudi tables, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
 
 ## What is CBO
 
@@ -37,6 +37,7 @@ By default, StarRocks periodically collects the following basic statistics of ta
 Full statistics are stored in the `column_statistics` of the `_statistics_` database. You can view this table to query table statistics. Following is an example of querying data from this table.
 
 ```sql
+SELECT * FROM _statistics_.column_statistics\G
 *************************** 1. row ***************************
       table_id: 10174
   partition_id: 10170
@@ -63,6 +64,7 @@ StarRocks uses equi-height histograms, which are constructed on several buckets.
 Currently, StarRocks supports only manual collection of histograms. Histograms are stored in the `histogram_statistics` table of the `_statistics_` database. Following is an example of querying data from this table:
 
 ```sql
+SELECT * FROM _statistics_.histogram_statistics\G
 *************************** 1. row ***************************
    table_id: 10174
 column_name: added
@@ -117,11 +119,11 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
-| statistic_auto_collect_small_table_size     | LONG    | 5368709120   | The threshold for determining whether a table is a small table for automatic full collection. A table whose size is greater than this value is considered a large table, whereas a table whose size is less than or equal to this value is considered a small table. Unit: Byte. Default size: 5 GB.                         |
+| statistic_auto_collect_small_table_size     | LONG    | 5368709120   | The threshold for determining whether a table is a small table for automatic full collection. A table whose size is greater than this value is considered a large table, whereas a table whose size is less than or equal to this value is considered a small table. Unit: Byte. Default value: 5368709120 (5 GB).                         |
 | statistic_auto_collect_small_table_interval | LONG    | 0         | The interval for automatically collecting full statistics of small tables. Unit: seconds.                              |
-| statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default intervalL 12 H.                               |
+| statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default value: 43200 (12 hours).                               |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 100 GB. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific statistics requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
@@ -449,19 +451,20 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | ------------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | statistic_manager_sleep_time_sec     | LONG     | 60                | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:Create tables for storing statistics.Delete statistics that have been deleted.Delete expired statistics. |
-| statistic_analyze_status_keep_second | LONG     | 259200            | The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds. |
+| statistic_analyze_status_keep_second | LONG     | 259200            | The duration to retain the history of collection tasks. Unit: seconds. Default value: 259200 (3 days). |
 
 ## Session variable
 
 `statistic_collect_parallel`: Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
 
-## Collect statistics for external tables
+## Collect statistics of Hive/Iceberg/Hudi tables
 
-Since v3.2.0, StarRocks supports collecting statistics of external tables including Hive, Iceberg, and Hudi. The syntax is similar to collecting StarRocks internal tables. **External tables support only manual and automatic full collection. Sampled collection and histogram collection are not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for an external table.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual and automatic full collection are supported. Sampled collection or histogram collection is not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
-Following is an example of querying data from this table.
+Following is an example of querying statistics data from `external_column_statistics`.
 
 ```sql
+SELECT * FROM _statistics_.external_column_statistics\G
 *************************** 1. row ***************************
     table_uuid: hive_catalog.tn_test.ex_hive_tbl.1673596430
 partition_name: 
@@ -480,14 +483,14 @@ partition_name:
 
 ### Limits
 
-The following limits apply when you collect statistics from external tables:
+The following limits apply when you collect statistics for Hive, Iceberg, Hudi tables:
 
 1. Only full collection is supported. Sampled collection and histogram collection are not supported.
 2. You can collect statistics of only Hive, Iceberg, and Hudi tables.
 3. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in a catalog.
 4. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks  cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
 
-The following examples happen in a database under the Hive external catalog. If you want to collect statistics of an external table in the `default_catalog`, reference the external table in the `[catalog_name.][database_name.]<table_name>` format.
+The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
 
 ### Manual collection
 
@@ -566,7 +569,7 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 ### Automatic collection
 
-When you create an automatic collection task, StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. StarRocks runs a collection task only when data in Hive and Iceberg tables are updated. However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval specified by users. For example:
+When you create an automatic collection task, StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. StarRocks runs a collection task only when data in Hive and Iceberg tables are updated. However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval specified by users. You can use the following FE parameters:
 
 - statistic_collect_interval_sec
 
@@ -574,7 +577,7 @@ When you create an automatic collection task, StarRocks automatically checks whe
 
 - statistic_auto_collect_small_table_rows (v3.2 and later)
 
-  Threshold to determine whether an external table is a small table during automatic collection. Default: 10000000.
+  Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. Default: 10000000.
 
 - statistic_auto_collect_small_table_interval
 
@@ -582,7 +585,7 @@ When you create an automatic collection task, StarRocks automatically checks whe
 
 - statistic_auto_collect_large_table_interval
 
-  The interval for collecting statistics of large tables. Unit: seconds. Default: 12 h.
+  The interval for collecting statistics of large tables. Unit: seconds. Default: 43200 (12 hours).
 
 Automatic collection threads checks data updates at the interval specified by `statistic_collect_interval_sec`. If the number of rows in a table is less than `statistic_auto_collect_small_table_rows`, it collects statistics of such tables based on `statistic_auto_collect_small_table_interval`.
 
@@ -634,7 +637,7 @@ Empty set (0.00 sec)
 
 Same as manual collection.
 
-### Delete statistics of external tables
+### Delete statistics
 
 ```sql
 DROP STATS tbl_name

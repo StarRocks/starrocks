@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 本文介绍 StarRocks CBO 优化器（Cost-based Optimizer）的基本概念，以及如何为 CBO 优化器采集统计信息来优化查询计划。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
 
-3.2 之前版本支持对 StarRocks 内表收集统计信息。从 3.2 版本起，支持对外部表（Hive，Iceberg，Hudi）收集统计信息，无需依赖其他系统。
+3.2 之前版本支持对 StarRocks 内表收集统计信息。从 3.2 版本起，支持收集 Hive，Iceberg，Hudi 表的统计信息，无需依赖其他系统。
 
 ## 什么是 CBO 优化器
 
@@ -36,9 +36,10 @@ StarRocks 默认定期采集表和列的如下基础信息：
 
 - max: 列的最大值
 
-全量的统计信息存储在 StarRocks 集群 `_statistics_` 数据库下的 `column_statistics` 表中，您可以在 `_statistics_` 数据库下查看。查询该表时会返回如下信息：
+全量的统计信息存储在 StarRocks 集群 `_statistics_` 数据库下的 `column_statistics` 表中，您可以在 `_statistics_` 数据库下查看。查询时会返回类似如下信息：
 
 ```sql
+SELECT * FROM _statistics_.column_statistics\G
 *************************** 1. row ***************************
       table_id: 10174
   partition_id: 10170
@@ -62,9 +63,10 @@ StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 buc
 
 **直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
 
-目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询该表时，会返回如下信息：
+目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询时会返回类似如下信息：
 
 ```sql
+SELECT * FROM _statistics_.histogram_statistics\G
 *************************** 1. row ***************************
    table_id: 10174
 column_name: added
@@ -470,13 +472,14 @@ KILL ANALYZE <ID>
 
 `statistic_collect_parallel` 用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快收集任务的执行速度。
 
-## 外表统计信息收集
+## 收集 Hive/Iceberg/Hudi 表的统计信息
 
-从 3.2 版本起，支持采集外表（Hive, Iceberg, Hudi）的统计信息。外表统计信息收集使用和内表相同的语法。**外表统计信息支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息，来验证是否对外表收集了统计信息。
+从 3.2 版本起，支持收集 Hive, Iceberg, Hudi 表的统计信息。**收集的语法和内表相同，但是只支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
-查询该表时，会返回如下信息：
+查询时，会返回如下信息：
 
 ```sql
+SELECT * FROM _statistics_.external_column_statistics\G
 *************************** 1. row ***************************
     table_uuid: hive_catalog.tn_test.ex_hive_tbl.1673596430
 partition_name: 
@@ -495,14 +498,14 @@ partition_name:
 
 ### 使用限制
 
-外表统计信息采集有如下限制：
+对 Hive、Iceberg、Hudi 表收集统计信息时，有如下限制：
 
 1. 目前只支持全量采集，不支持抽样采集和直方图采集。
 2. 目前只支持收集 Hive、Iceberg、Hudi 表的统计信息。
 3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库、数据库下所有表的统计信息。
 4. 对于自动收集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据收集间隔周期性全表采集。
 
-以下示例默认在 External Catalog 指定数据库下收集外表的统计信息。如果是在 `default_catalog` 下采集外表的统计信息，引用外表时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
+以下示例默认在 External Catalog 指定数据库下收集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 
 ### 手动收集
 
@@ -583,7 +586,7 @@ KILL ANALYZE <ID>
 
 ### 自动收集
 
-创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务。Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的参数调整）。
+创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务。Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的 FE 参数调整）。
 
 - statistic_collect_interval_sec
 
@@ -591,7 +594,7 @@ KILL ANALYZE <ID>
 
 - statistic_auto_collect_small_table_rows
 
-  自动收集中，用来判断一个外表是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
+  自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
 
 - statistic_auto_collect_small_table_interval
 
@@ -651,7 +654,7 @@ Empty set (0.00 sec)
 
 同手动收集。
 
-### 删除外表统计信息
+### 删除 Hive/Iceberg/Hudi 表统计信息
 
 ```sql
 DROP STATS tbl_name

@@ -279,7 +279,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### statistic_auto_collect_small_table_rows
 
-- 含义：自动统计信息收集中，用来判断一个外表是否为小表的行数门限。
+- 含义：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
 - 默认值：10000000
 - 引入版本：v3.2
 

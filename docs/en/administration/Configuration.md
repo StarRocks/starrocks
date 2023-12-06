@@ -309,7 +309,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Unit: -
 - Default: 10000000
-- Description: Threshold to determine whether an external table (Hive, Iceberg, or Hudi) is a small table during automatic statistics collection. If an external table has rows less than this value, the table is considered a small table.
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
 
 ##### enable_local_replica_selection
