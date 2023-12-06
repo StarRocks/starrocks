@@ -103,7 +103,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_udf                                |  -   |    FALSE     | Whether to enable UDF .                            |
 
 
-
 #### Loading and unloading
 
 | Parameter                               | Unit | Default                                         | Description                                                  |
