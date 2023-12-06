@@ -266,6 +266,7 @@ private:
         if (_rowset_meta_pb != nullptr) {
             size += static_cast<int64_t>(_rowset_meta_pb->SpaceUsedLong());
         }
+        LOG(INFO) << "rowset_meta_pb memory usage:" << _rowset_meta_pb->SpaceUsedLong() << ", tablet_schema_pb memory usage:" << _rowset_meta_pb->tablet_schema().SpaceUsedLong();
         return size;
     }
 
