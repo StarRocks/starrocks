@@ -90,6 +90,7 @@ class HdfsParquetProfile;
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* rows_return_counter = nullptr;
     RuntimeProfile::Counter* rows_skip_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
 
