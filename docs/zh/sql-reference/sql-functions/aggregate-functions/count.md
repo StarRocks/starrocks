@@ -3,7 +3,7 @@ displayed_sidebar: "Chinese"
 ---
 
 
-# COUNT
+# count
 
 ## 功能
 

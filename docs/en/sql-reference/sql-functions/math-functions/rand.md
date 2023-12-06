@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# RAND, RANDOM
+# rand, random
 
 ## Description
 
