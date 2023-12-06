@@ -543,12 +543,16 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
     - 随机分桶表
 
-      自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
+      自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。
 
-      > **说明**
-      >
-      > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（4 GB），在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小。
+      并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
 
+      :::WARNING
+
+      如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
+      一旦启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+
+      :::
 
       建表示例：
 
@@ -556,12 +560,13 @@ DISTRIBUTED BY HASH(site_id,city_code);
       CREATE TABLE site_access1 (
           event_day DATE,
           site_id INT DEFAULT '10', 
-          pv BIGINT DEFAULT '0' ,
+          pv BIGINT DEFAULT '0',
           city_code VARCHAR(100),
           user_name VARCHAR(32) DEFAULT '')
       DUPLICATE KEY (event_day,site_id,pv)
-      ; -- 该表分区中的分桶数量由 StarRocks 自动设置，单个分桶大小默认为 4 GB 。并且该表使用随机分桶，您无需设置分桶键。
-
+      -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
+      PROPERTIES("bucket_size"="1073741824") --
+      ; 
       CREATE TABLE site_access1 (
           event_day DATE,
           site_id INT DEFAULT '10', 
@@ -569,9 +574,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
           city_code VARCHAR(100),
           user_name VARCHAR(32) DEFAULT '')
       DUPLICATE KEY (event_day,site_id,pv)
-      PROPERTIES("bucket_size"="1073741824") -- 单个分桶的大小指定为 1 GB。
-      ; -- 该表分区中的分桶数量由 StarRocks 自动设置。并且该表使用随机分桶，您无需设置分桶键。
-
+      -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
+      ; 
       ```
 
     建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
