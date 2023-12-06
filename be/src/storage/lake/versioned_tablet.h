@@ -22,7 +22,7 @@
 namespace starrocks {
 class TabletSchema;
 class Schema;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 
