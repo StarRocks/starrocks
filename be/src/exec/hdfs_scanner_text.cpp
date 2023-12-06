@@ -497,7 +497,7 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
 }
 
 int64_t HdfsTextScanner::estimated_mem_usage() const {
-    return _reader->buff_capacity() * 2;
+    return _reader->buff_capacity() * 3 / 2;
 }
 
 } // namespace starrocks
