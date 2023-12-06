@@ -79,18 +79,27 @@ public:
 
     // Returns the Schema of the result.
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
-    const Schema& encoded_schema() const { return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema; }
+    virtual const Schema& encoded_schema() const { return _schema; }
 
     [[nodiscard]] virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
-        _encoded_schema.reserve(schema().num_fields());
+        if (dict_maps.empty()) {
+            return Status::OK();
+        }
+
+        Schema tmp;
+        tmp.reserve(schema().num_fields());
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
             if (dict_maps.count(cid)) {
-                _encoded_schema.append(Field::convert_to_dict_field(*field));
+                tmp.append(Field::convert_to_dict_field(*field));
             } else {
-                _encoded_schema.append(field);
+                tmp.append(field);
             }
         }
+        for (const auto& cid : schema().sort_key_idxes()) {
+            tmp.append_sort_key_idx(cid);
+        }
+        _schema = tmp;
         return Status::OK();
     }
 
@@ -133,7 +142,6 @@ protected:
     }
 
     Schema _schema;
-    Schema _encoded_schema;
     Schema _output_schema;
     bool _is_init_output_schema = false;
 

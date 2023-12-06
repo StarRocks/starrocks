@@ -51,6 +51,7 @@ protected:
 private:
     void build_index_map(const Schema& output, const Schema& input);
 
+private:
     ChunkIteratorPtr _child;
     // mapping from index of column in output chunk to index of column in input chunk.
     std::vector<size_t> _index_map;
