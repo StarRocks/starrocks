@@ -200,7 +200,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
                                 is_stream_pipeline);
 
-    scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes);
+    scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes +
+                                        _estimated_scan_row_bytes * _runtime_state->chunk_size());
     scan_op->set_scan_mem_limit(_scan_mem_limit);
     scan_op->set_mem_share_arb(_mem_share_arb);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));

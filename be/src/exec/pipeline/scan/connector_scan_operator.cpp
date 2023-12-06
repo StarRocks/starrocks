@@ -113,7 +113,7 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 }
 
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
-    _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
+    _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value, 0);
     _io_tasks_mem_limiter->last_arb_chunk_source_mem_bytes = value;
 }
 
