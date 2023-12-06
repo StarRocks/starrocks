@@ -223,16 +223,6 @@ public class RoutineLoadMgr implements Writable {
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
-<<<<<<< HEAD
-=======
-        int beNum = 0;
-        slotLock.lock();
-        try {
-            beNum = getBeTasksNum().size();
-        } finally {
-            slotLock.unlock();
-        }
->>>>>>> 916b6f941a ([BugFix] Fix priv check failure when resource mapping catalog table not found (#35701))
         writeLock();
         try {
             // check if db.routineLoadName has been used
