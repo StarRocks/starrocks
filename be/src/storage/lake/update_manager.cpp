@@ -18,6 +18,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
@@ -98,21 +99,30 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
     return index_entry;
 }
 
-Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet) {
+Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet, MetaFileBuilder* builder,
+                                           int64_t base_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (index_entry != nullptr) {
         auto& index = index_entry->value();
         if (index.enable_persistent_index()) {
-            // only take affect in local persistent index
-            PersistentIndexMetaPB index_meta;
-            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
-            RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
-            RETURN_IF_ERROR(index.commit(&index_meta));
-            RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
-            // Call `on_commited` here, which will remove old files is safe.
-            // Because if publish version fail after `on_commited`, index will be rebuild.
-            RETURN_IF_ERROR(index.on_commited());
-            TRACE("commit primary index");
+            ASSIGN_OR_RETURN(auto index_type, tablet->get_persistent_index_type(base_version));
+            if (index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+                auto lake_persistent_index = dynamic_cast<LakePersistentIndex*>(index.get_persistent_index());
+                auto pindex_sstable = std::make_shared<PersistentIndexSStablePB>();
+                lake_persistent_index->commit(pindex_sstable.get());
+                builder->set_pindex_sstable(pindex_sstable);
+            } else {
+                // only take affect in local persistent index
+                PersistentIndexMetaPB index_meta;
+                DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
+                RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
+                RETURN_IF_ERROR(index.commit(&index_meta));
+                RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
+                // Call `on_commited` here, which will remove old files is safe.
+                // Because if publish version fail after `on_commited`, index will be rebuild.
+                RETURN_IF_ERROR(index.on_commited());
+                TRACE("commit primary index");
+            }
         }
     }
 

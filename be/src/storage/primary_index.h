@@ -138,6 +138,7 @@ public:
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
+    PersistentIndex* get_persistent_index() { return _persistent_index.get(); }
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 

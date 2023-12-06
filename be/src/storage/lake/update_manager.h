@@ -135,8 +135,9 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
-    // commit primary index, only take affect when it is local persistent index
-    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
+    // commit primary index, only take affect when it is persistent index
+    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet, MetaFileBuilder* builder,
+                                int64_t base_version);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
