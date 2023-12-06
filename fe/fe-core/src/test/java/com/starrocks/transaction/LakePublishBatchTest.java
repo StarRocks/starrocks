@@ -247,18 +247,18 @@ public class LakePublishBatchTest {
         // test publish transactionStateBatch which size is one
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         Config.lake_batch_publish_min_version_num = 1;
-        long transactionId5 = globalTransactionMgr.
+        long transactionId9 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
                         GlobalStateMgrTestUtil.testTxnLable9,
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter5 = globalTransactionMgr.commitTransaction(db.getId(), transactionId5, transTablets,
+        VisibleStateWaiter waiter9 = globalTransactionMgr.commitTransaction(db.getId(), transactionId9, transTablets,
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-        Assert.assertTrue(waiter5.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
     }
 
     @Test
