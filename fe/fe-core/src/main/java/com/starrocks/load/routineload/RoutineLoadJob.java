@@ -999,6 +999,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
                         entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
                 if (!routineLoadTaskInfoOptional.isPresent()) {
+                    //  The task of the timed-out transaction will be detected by the transaction checker thread
+                    //  and subsequently aborted. Here, we need to update the abortedTaskNum.
+                    ++abortedTaskNum;
                     // task will not be update when task has been aborted by fe
                     return;
                 }

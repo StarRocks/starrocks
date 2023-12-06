@@ -63,6 +63,12 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
+>>>>>>> 5055555b8b ([Enhancement] Add additional information when Avro scanner parsing timeout (#35799))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -1261,6 +1267,15 @@ public class DatabaseTransactionMgr {
         abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
+    private void processNotFoundTxn(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (txnCommitAttachment == null) {
+            return;
+        }
+        if (txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().setRoutineLoadJobOtherMsg(reason, txnCommitAttachment);
+        }
+    }
+
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
                                  TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
             throws UserException {
@@ -1277,7 +1292,14 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         if (transactionState == null) {
+<<<<<<< HEAD
             throw new TransactionNotFoundException("transaction not found", transactionId);
+=======
+            // If the transaction state does not exist, this task might have been aborted by
+            // the txntimeoutchecker thread. We need to perform some additional work.
+            processNotFoundTxn(transactionId, reason, txnCommitAttachment);
+            throw new TransactionNotFoundException(transactionId);
+>>>>>>> 5055555b8b ([Enhancement] Add additional information when Avro scanner parsing timeout (#35799))
         }
 
         // update transaction state extra if exists
