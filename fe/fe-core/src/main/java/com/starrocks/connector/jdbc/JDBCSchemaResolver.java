@@ -99,7 +99,7 @@ public abstract class JDBCSchemaResolver {
         throw new SQLException("should not arrival here");
     }
 
-    public boolean checkSupportPartitionInformation(Connection connection) {
+    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
         return false;
 
     }
@@ -108,7 +108,4 @@ public abstract class JDBCSchemaResolver {
         return supportPartitionInformation;
     }
 
-    public boolean setSupportPartitionInformation(boolean supportPartitionInformation) {
-        return this.supportPartitionInformation = supportPartitionInformation;
-    }
 }

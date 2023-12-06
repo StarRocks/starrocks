@@ -67,7 +67,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
-        checkSupportPartitionInformation();
+        checkAndSetSupportPartitionInformation();
     }
 
     public Connection getConnection() throws SQLException {
@@ -75,10 +75,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
     }
 
-    public boolean checkSupportPartitionInformation() {
+    public void checkAndSetSupportPartitionInformation() {
         try (Connection connection = getConnection()) {
-            return schemaResolver.setSupportPartitionInformation(
-                    schemaResolver.checkSupportPartitionInformation(connection));
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }

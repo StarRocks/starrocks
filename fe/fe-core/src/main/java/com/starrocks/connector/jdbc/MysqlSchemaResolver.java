@@ -61,19 +61,18 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public boolean checkSupportPartitionInformation(Connection connection) {
+    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
         String catalogSchema = "information_schema";
         String partitionInfoTable = "partitions";
         try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
             while (catalogSet.next()) {
                 String schemaName = catalogSet.getString("TABLE_CAT");
                 if (schemaName.equalsIgnoreCase(catalogSchema)) {
-                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null,
-                            new String[] {"SYSTEM TABLE", "SYSTEM VIEW"})) {
+                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
                         while (tableSet.next()) {
                             String tableName = tableSet.getString("TABLE_NAME");
                             if (tableName.equalsIgnoreCase(partitionInfoTable)) {
-                                return true;
+                                return this.supportPartitionInformation = true;
                             }
                         }
                     }
@@ -82,7 +81,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
-        return false;
+        return this.supportPartitionInformation = false;
     }
 
     @Override

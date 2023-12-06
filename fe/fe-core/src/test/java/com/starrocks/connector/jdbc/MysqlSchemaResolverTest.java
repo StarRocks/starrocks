@@ -92,7 +92,7 @@ public class MysqlSchemaResolverTest {
     public void testCheckPartitionWithoutPartitionsTable() {
         try {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
-            Assert.assertFalse(schemaResolver.checkSupportPartitionInformation(connection));
+            Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -123,7 +123,7 @@ public class MysqlSchemaResolverTest {
         };
         try {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
-            Assert.assertTrue(schemaResolver.checkSupportPartitionInformation(connection));
+            Assert.assertTrue(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
