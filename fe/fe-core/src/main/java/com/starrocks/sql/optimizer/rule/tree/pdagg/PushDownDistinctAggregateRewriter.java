@@ -66,6 +66,8 @@ public class PushDownDistinctAggregateRewriter {
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
 
+    private boolean hasRewrite;
+
     private static final Set<String> SUPPORT_WINDOW_FUNC = ImmutableSet.of(FunctionSet.SUM);
 
     public PushDownDistinctAggregateRewriter(TaskContext taskContext) {
@@ -76,7 +78,12 @@ public class PushDownDistinctAggregateRewriter {
     }
 
     public OptExpression rewrite(OptExpression tree) {
-        return process(tree, AggregatePushDownContext.EMPTY).getOp().orElse(tree);
+        Optional<OptExpression> res = process(tree, AggregatePushDownContext.EMPTY).getOp();
+        return res.orElse(tree);
+    }
+
+    public boolean hasRewrite() {
+        return hasRewrite;
     }
 
     // After rewrite, the post-rewrite tree must replace the old slotId with the new one,
@@ -487,6 +494,7 @@ public class PushDownDistinctAggregateRewriter {
         if (newContext == AggregatePushDownContext.EMPTY) {
             return Optional.empty();
         } else {
+            hasRewrite = true;
             return Optional.of(newContext);
         }
     }
