@@ -31,6 +31,9 @@ public:
     void gc(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
 
     void evict(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
+
+private:
+    bool need_evict_tablet(const std::string& tablet_pk_path);
 };
 
 } // namespace lake

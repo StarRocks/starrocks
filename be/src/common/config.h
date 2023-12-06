@@ -1132,6 +1132,6 @@ CONF_mInt32(desc_hint_split_range, "10");
 
 // If local pk index is unused time interval is larger than this threshold
 // it may be evicted if the disk usage is full
-CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "36000"); // 1 day
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 } // namespace starrocks::config
