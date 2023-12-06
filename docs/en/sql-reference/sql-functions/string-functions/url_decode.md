@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# URL_DECODE
+# url_decode
 
 ## Description
 

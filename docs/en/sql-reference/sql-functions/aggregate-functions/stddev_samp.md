@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# STDDEV_SAMP
+# stddev_samp
 
 ## Description
 

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# COVAR_POP
+# covar_pop
 
 ## 功能
 

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# MIN
+# min
 
 ## 功能
 

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# AVG
+# avg
 
 ## 功能
 

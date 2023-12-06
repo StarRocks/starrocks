@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# STD
+# std
 
 ## 功能
 

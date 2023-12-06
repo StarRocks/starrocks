@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# VAR_SAMP,VARIANCE_SAMP
+# var_samp,variance_samp
 
 ## Description
 

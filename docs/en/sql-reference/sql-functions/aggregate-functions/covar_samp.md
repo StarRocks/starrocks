@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# COVAR_SAMP
+# covar_samp
 
 ## Description
 

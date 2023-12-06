@@ -162,6 +162,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
 - 默认值：TRUE
 
+##### http_slow_request_threshold_ms
+
+- 含义：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 单位：毫秒
+- 默认值：5000
+- 引入版本：2.5.15，3.1.5
+
 ##### max_partitions_in_one_batch
 
 - 含义：批量创建分区时，分区数目的最大值。

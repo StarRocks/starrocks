@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# VARIANCE,VAR_POP,VARIANCE_POP
+# variance,var_pop,variance_pop
 
 ## Description
 
