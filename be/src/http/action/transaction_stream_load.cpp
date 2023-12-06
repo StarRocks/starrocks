@@ -77,6 +77,9 @@ TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_en
 TransactionManagerAction::~TransactionManagerAction() = default;
 
 static void _send_reply(HttpRequest* req, const std::string& str) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "transaction streaming load response: " << str;
+    }
     HttpChannel::send_reply(req, str);
 }
 
@@ -164,10 +167,15 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
 
     auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
     ctx->lock.unlock();
+
     _send_reply(req, resp);
 }
 
 int TransactionStreamLoadAction::on_header(HttpRequest* req) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "transaction streaming load request: " << req->debug_string();
+    }
+
     const auto& label = req->header(HTTP_LABEL_KEY);
     if (label.empty()) {
         _send_error_reply(req, Status::InvalidArgument(fmt::format("Invalid label {}", req->header(HTTP_LABEL_KEY))));
