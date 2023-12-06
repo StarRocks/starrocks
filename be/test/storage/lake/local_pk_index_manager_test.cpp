@@ -177,6 +177,9 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
 }
 
 TEST_F(LocalPkIndexManagerTest, test_evict) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:1", [](void* arg) { *(bool*)arg = true; });
+    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:2", [](void* arg) { *(bool*)arg = true; });
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -219,12 +222,6 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                  std::to_string(_tablet_metadata->id())));
 
-    auto tmp_low_water = config::starlet_cache_evict_low_water;
-    config::starlet_cache_evict_low_water = 0.9999999;
-    auto lake_local_pk_index_unused_threshold = config::lake_local_pk_index_unused_threshold;
-    config::lake_local_pk_index_unused_threshold = 1;
-    sleep(5);
-
     std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
     for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {
         auto pk_path = data_dir->get_persistent_index_path();
@@ -237,8 +234,9 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
-    config::starlet_cache_evict_low_water = tmp_low_water;
-    config::lake_local_pk_index_unused_threshold = lake_local_pk_index_unused_threshold;
+    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::evict:1");
+    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::evict:2");
+    SyncPoint::GetInstance()->DisableProcessing();
 
     txn_id = next_id();
     ASSIGN_OR_ABORT(writer, tablet.new_writer(kHorizontal, txn_id));

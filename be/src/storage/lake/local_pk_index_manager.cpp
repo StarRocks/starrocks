@@ -21,6 +21,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
@@ -49,20 +50,22 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager,
                 }
             } else if (!tablet_manager->is_tablet_in_worker(id)) {
                 // the shard may be scheduled to other nodes
-                if (update_manager->try_lock_pk_index_shard(id)) {
-                    not_in_worker_tablet_ids.emplace_back(id);
-                    // judge whether tablet is scheduled again,
-                    // and pk_index_shard write_lock has been hold, so no process will build the persistent index.
-                    if (!tablet_manager->is_tablet_in_worker(id)) {
-                        // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
-                        if (update_manager->try_remove_primary_index_cache(id)) {
-                            if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
-                                removed_dir_tablet_ids.push_back(id);
-                            }
+                if (!update_manager->try_lock_pk_index_shard(id)) {
+                    LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
+                    continue;
+                }
+                not_in_worker_tablet_ids.emplace_back(id);
+                // judge whether tablet is scheduled again,
+                // and pk_index_shard write_lock has been hold, so no process will build the persistent index.
+                if (!tablet_manager->is_tablet_in_worker(id)) {
+                    // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
+                    if (update_manager->try_remove_primary_index_cache(id)) {
+                        if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                            removed_dir_tablet_ids.push_back(id);
                         }
                     }
-                    update_manager->unlock_pk_index_shard(id);
                 }
+                update_manager->unlock_pk_index_shard(id);
             }
         }
         int64_t t_end = MonotonicMillis();
@@ -83,6 +86,7 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager,
             auto space_info = *space_info_or;
             need_evict = (double)space_info.free < (double)space_info.capacity * config::starlet_cache_evict_low_water;
         }
+        TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:1", &need_evict);
         if (!need_evict) {
             continue;
         }
@@ -105,27 +109,33 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager,
             }
 
             auto now = time(nullptr);
-            auto mtime = (uint64_t)now;
+            auto mtime = (uint64_t)0;
             for (const auto& index_file : index_files) {
                 auto index_file_path = tablet_pk_path + "/" + index_file;
                 auto mtime_or = FileSystem::Default()->get_file_modified_time(index_file_path);
                 if (!mtime_or.ok()) {
                     continue;
                 }
-                mtime = std::min(mtime, *mtime_or);
+                mtime = std::max(mtime, *mtime_or);
             }
 
-            if (now - mtime > config::lake_local_pk_index_unused_threshold) {
-                tablet_ids_to_be_evicted.emplace_back(id);
-                if (update_manager->try_lock_pk_index_shard(id)) {
-                    if (update_manager->try_remove_primary_index_cache(id)) {
-                        if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
-                            removed_dir_tablet_ids.push_back(id);
-                        }
-                    }
-                    update_manager->unlock_pk_index_shard(id);
+            bool need_evict_tablet = now - mtime > config::lake_local_pk_index_unused_threshold_seconds;
+            TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &need_evict_tablet);
+            if (!need_evict_tablet) {
+                continue;
+            }
+
+            tablet_ids_to_be_evicted.emplace_back(id);
+            if (!update_manager->try_lock_pk_index_shard(id)) {
+                LOG(WARNING) << "Fail to lock pk index, tablet id: " << id;
+                continue;
+            }
+            if (update_manager->try_remove_primary_index_cache(id)) {
+                if (StorageEngine::instance()->clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                    removed_dir_tablet_ids.push_back(id);
                 }
             }
+            update_manager->unlock_pk_index_shard(id);
         }
 
         int64_t t_end = MonotonicMillis();
