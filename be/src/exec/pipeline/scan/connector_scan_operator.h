@@ -29,6 +29,26 @@ namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
 
+struct ConnectorScanOperatorMemShareArbitrator {
+    int64_t query_mem_limit = 0;
+    int64_t scan_mem_limit = 0;
+    std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
+
+    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit)
+            : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
+
+    int64_t set_scan_mem_ratio(double mem_ratio) {
+        scan_mem_limit = query_mem_limit * mem_ratio;
+        return scan_mem_limit;
+    }
+
+    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
+        int64_t diff = new_value - old_value;
+        int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
+        return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
+    }
+};
+
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -49,8 +69,9 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
-    void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
-    void set_scan_mem_limit(int64_t mem_limit);
+    void set_chunk_source_mem_bytes(int64_t mem_bytes);
+    void set_scan_mem_limit(int64_t scan_mem_limit);
+    void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
@@ -58,7 +79,8 @@ private:
     ActiveInputSet _active_inputs;
 
 public:
-    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
+    ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
 };
 
 struct ConnectorScanOperatorAdaptiveProcessor;

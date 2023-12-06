@@ -35,6 +35,7 @@ namespace starrocks::pipeline {
 using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
+ConnectorScanOperatorMemShareArbitrator* create_connector_scan_operator_mem_share_arbitrator(int64_t query_mem_limit);
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
@@ -146,6 +147,11 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
         }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+        _connector_scan_operator_mem_share_arbitrator =
+                _object_pool.add(create_connector_scan_operator_mem_share_arbitrator(_static_query_mem_limit));
     });
 }
 

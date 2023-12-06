@@ -45,6 +45,8 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
+class ConnectorScanOperatorMemShareArbitrator;
+
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
@@ -200,6 +202,9 @@ public:
     bool is_prepared() { return _is_prepared; }
 
     int64_t get_static_query_mem_limit() const { return _static_query_mem_limit; }
+    ConnectorScanOperatorMemShareArbitrator* connector_scan_operator_mem_share_arbitrator() const {
+        return _connector_scan_operator_mem_share_arbitrator;
+    }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -267,6 +272,7 @@ private:
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
 
     int64_t _static_query_mem_limit = 0;
+    ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 };
 
 class QueryContextManager {

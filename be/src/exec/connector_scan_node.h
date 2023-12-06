@@ -26,6 +26,10 @@ namespace starrocks {
 
 class ConnectorScanner;
 
+namespace pipeline {
+class ConnectorScanOperatorMemShareArbitrator;
+}
+
 class ConnectorScanNode final : public starrocks::ScanNode {
 public:
     ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -129,14 +133,15 @@ private:
     Profile _profile;
 
     void _estimate_scan_row_bytes();
-    void _estimate_mem_usage_per_chunk_source();
+    void _estimate_chunk_source_mem_bytes();
     int _estimated_max_concurrent_chunks() const;
-    int64_t _mem_limit = 0;
+    int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
-    size_t _estimated_mem_usage_per_chunk_source = 0;
+    size_t _estimated_chunk_source_mem_bytes = 0;
 
 #ifdef BE_TEST
     std::atomic_bool _use_stream_load_thread_pool = false;
 #endif
+    pipeline::ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
 };
 } // namespace starrocks
