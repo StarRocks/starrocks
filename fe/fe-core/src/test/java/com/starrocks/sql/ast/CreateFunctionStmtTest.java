@@ -71,10 +71,10 @@ public class CreateFunctionStmtTest {
             FunctionName mock = FunctionName.createFnName("mock");
             new Expectations(AnalyzerUtils.class) {
                 {
-                    AnalyzerUtils.getDBUdfFunction(ctx, mock, new Type[0]);
+                    AnalyzerUtils.getDBUdfFunction(ctx, mock, new Type[0], new Object[0]);
                 }
             };
-            AnalyzerUtils.getUdfFunction(ctx, mock, new Type[0]);
+            AnalyzerUtils.getUdfFunction(ctx, mock, new Type[0], new Object[0]);
 
         } finally {
             Config.enable_udf = val;

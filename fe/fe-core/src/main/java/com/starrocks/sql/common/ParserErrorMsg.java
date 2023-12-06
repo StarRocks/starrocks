@@ -64,6 +64,9 @@ public interface ParserErrorMsg {
     @BaseMessage("Invalid UDF function name ''{0}''")
     String invalidUDFName(String a0);
 
+    @BaseMessage("Missing return type for UDAF or UDTF function ''{0}''")
+    String missingFunctionReturnType(String a0);
+
     @BaseMessage("Unsupported type specification: ''{0}''")
     String unsupportedType(String a0);
 

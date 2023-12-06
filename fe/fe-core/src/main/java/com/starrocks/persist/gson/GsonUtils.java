@@ -79,6 +79,7 @@ import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DynamicScalarFunction;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -365,6 +366,7 @@ public class GsonUtils {
     public static final RuntimeTypeAdapterFactory<Function> FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(Function.class, "clazz")
                     .registerSubtype(ScalarFunction.class, "ScalarFunction")
+                    .registerSubtype(DynamicScalarFunction.class, "DynamicScalarFunction")
                     .registerSubtype(AggregateFunction.class, "AggregateFunction")
                     .registerSubtype(TableFunction.class, "TableFunction");
 
