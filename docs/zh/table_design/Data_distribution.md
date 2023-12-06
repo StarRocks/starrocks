@@ -548,10 +548,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
       并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
 
       :::WARNING
-
-      如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
-      一旦启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
-
+      - 如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
+      - 一旦启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
       :::
 
       建表示例：
@@ -567,6 +565,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
       -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
       PROPERTIES("bucket_size"="1073741824") --
       ; 
+      
       CREATE TABLE site_access1 (
           event_day DATE,
           site_id INT DEFAULT '10', 
@@ -578,12 +577,13 @@ DISTRIBUTED BY HASH(site_id,city_code);
       ; 
       ```
 
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。
 
-    如果是随机分桶表，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示分区**当前**的分桶数量。
-    > **注意**
-    >
-    > 对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+    如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
+
+    :::NOTICE
+    对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+    :::
 
   - 方式二：手动设置分区中分桶数量
 
