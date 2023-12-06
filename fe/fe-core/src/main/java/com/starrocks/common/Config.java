@@ -1713,10 +1713,10 @@ public class Config extends ConfigBase {
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
     /**
-     * Num of thread to handle statistic collect
+     * Num of thread to handle statistic collect(analyze command)
      */
     @ConfField(mutable = true)
-    public static int statistic_collect_concurrency = 3;
+    public static int statistic_analyze_task_pool_size = 3;
 
     /**
      * statistic collect query timeout
@@ -2630,9 +2630,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
-
-    @ConfField(mutable = true)
-    public static boolean replan_on_insert = false;
 
     /**
      * Checking the connectivity of port opened by FE,

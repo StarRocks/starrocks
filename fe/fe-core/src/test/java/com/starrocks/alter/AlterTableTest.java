@@ -54,6 +54,34 @@ public class AlterTableTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
     }
 
+    @Test(expected = AnalysisException.class)
+    public void testAlterTableBucketSize() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_bucket_size (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES(\n" +
+                "\t\"replication_num\" = \"1\",\n" +
+                "    \"storage_medium\" = \"SSD\",\n" +
+                "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
     @Test
     public void testAlterTableStorageCoolDownTTL() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl (\n" +

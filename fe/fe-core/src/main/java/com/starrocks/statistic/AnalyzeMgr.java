@@ -79,7 +79,7 @@ public class AnalyzeMgr implements Writable {
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     // only first load of table will trigger analyze, so we don't need limit thread pool queue size
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
-            Config.statistic_collect_concurrency, Integer.MAX_VALUE,
+            Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
             "analyze-task-concurrency-pool", true);
 
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
