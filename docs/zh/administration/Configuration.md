@@ -66,6 +66,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Query engine
 
+<<<<<<< HEAD
 |配置项|默认值|描述|
 |---|---|---|
 |max_allowed_in_element_num_of_delete|10000|DELETE 语句中 IN 谓词最多允许的元素数量。|
@@ -98,6 +99,175 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_local_replica_selection|FALSE|是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。默认为 false。|
 |max_distribution_pruner_recursion_depth|100|分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。|
 |enable_udf                  | FALSE | 是否开启 UDF。                             |
+=======
+##### max_allowed_in_element_num_of_delete
+
+- 含义：DELETE 语句中 IN 谓词最多允许的元素数量。
+- 默认值：10000
+
+##### enable_materialized_view
+
+- 含义：是否允许创建物化视图。
+- 默认值：TRUE
+
+##### enable_decimal_v3
+
+- 含义：是否开启 Decimal V3。
+- 默认值：TRUE
+
+##### enable_sql_blacklist
+
+- 含义：是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。
+- 默认值：FALSE
+
+##### dynamic_partition_check_interval_seconds
+
+- 含义：动态分区检查的时间周期。如果有新数据生成，会自动生成分区。
+- 单位：秒
+- 默认值：600
+
+##### dynamic_partition_enable
+
+- 含义：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
+- 默认值：TRUE
+
+##### http_slow_request_threshold_ms
+
+- 含义：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 单位：毫秒
+- 默认值：5000
+- 引入版本：2.5.15，3.1.5
+
+##### max_partitions_in_one_batch
+
+- 含义：批量创建分区时，分区数目的最大值。
+- 默认值：4096
+
+##### max_query_retry_time
+
+- 含义：FE 上查询重试的最大次数。
+- 默认值：2
+
+##### max_create_table_timeout_second
+
+- 含义：建表的最大超时时间。
+- 单位：秒
+- 默认值：600
+
+##### max_running_rollup_job_num_per_table
+
+- 含义：每个 Table 执行 Rollup 任务的最大并发度。
+- 默认值：1
+
+##### max_planner_scalar_rewrite_num
+
+- 含义：优化器重写 ScalarOperator 允许的最大次数。
+- 默认值：100000
+
+##### enable_statistic_collect
+
+- 含义：是否采集统计信息，该开关默认打开。
+- 默认值：TRUE
+
+##### enable_collect_full_statistic
+
+- 含义：是否开启自动全量统计信息采集，该开关默认打开。
+- 默认值：TRUE
+
+##### statistic_auto_collect_ratio
+
+- 含义：自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。
+- 默认值：0.8
+
+##### statistic_max_full_collect_data_size
+
+- 含义：自动统计信息采集的最大分区大小。<br />如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
+- 单位：GB
+- 默认值：100
+
+##### statistic_collect_interval_sec
+
+- 含义：自动定期采集任务中，检测数据更新的间隔时间，默认为 5 分钟。
+- 单位：秒
+- 默认值：300
+
+##### statistic_auto_analyze_start_time
+
+- 含义：用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。
+- 类型：STRING
+- 默认值：00:00:00
+- 引入版本：2.5.0
+
+##### statistic_auto_analyze_end_time
+
+- 含义：用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。
+- 类型：STRING
+- 默认值：23:59:59
+- 引入版本：2.5.0
+
+##### statistic_sample_collect_rows
+
+- 含义：最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br />如果参数取值超过了实际的表行数，默认进行全量采集。
+- 默认值：200000
+
+##### histogram_buckets_size
+
+- 含义：直方图默认分桶数。
+- 默认值：64
+
+##### histogram_mcv_size
+
+- 含义：直方图默认 most common value 的数量。
+- 默认值：100
+
+##### histogram_sample_ratio
+
+- 含义：直方图默认采样比例。
+- 默认值：0.1
+
+##### histogram_max_sample_row_count
+
+- 含义：直方图最大采样行数。
+- 默认值：10000000
+
+##### statistics_manager_sleep_time_sec
+
+- 含义：统计信息相关元数据调度间隔周期。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul>
+- 单位：秒
+- 默认值：60
+
+##### statistic_update_interval_sec
+
+- 含义：统计信息内存 Cache 失效时间。
+- 单位：秒
+- 默认值：24 \* 60 \* 60
+
+##### statistic_analyze_status_keep_second
+
+- 含义：统计信息采集任务的记录保留时间，默认为 3 天。
+- 单位：秒
+- 默认值：259200
+
+##### statistic_collect_concurrency
+
+- 含义：手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。
+- 默认值：3
+
+##### enable_local_replica_selection
+
+- 含义：是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。
+- 默认值：FALSE
+
+##### max_distribution_pruner_recursion_depth
+
+- 含义：分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。
+- 默认值：100
+
+##### enable_udf
+
+- 含义：是否开启 UDF。
+- 默认值：FALSE
+>>>>>>> 4b0d8bf4a0 ([Doc] add config for http_slow_request_threshold (backport #36455) (backport #36502) (#36510))
 
 #### 导入和导出
 
