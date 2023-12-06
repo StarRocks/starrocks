@@ -54,6 +54,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TCsvOptions;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TParquetOptions;
@@ -417,10 +418,12 @@ public class OutFileClause implements ParseNode {
     public TResultFileSinkOptions toSinkOptions(List<String> columnOutputNames) {
         TResultFileSinkOptions sinkOptions = new TResultFileSinkOptions(filePath, fileFormatType);
         if (isCsvFormat()) {
-            sinkOptions.setCsv_header(csvHeader);
+            TCsvOptions csvOptions = new TCsvOptions();
+            csvOptions.setColumn_separator(columnSeparator);
+            csvOptions.setRow_delimiter(rowDelimiter);
+            csvOptions.setPrint_header(csvHeader);
+            sinkOptions.setCsv_options(csvOptions);
             sinkOptions.setFile_column_names(columnOutputNames);
-            sinkOptions.setColumn_separator(columnSeparator);
-            sinkOptions.setRow_delimiter(rowDelimiter);
         } else if (isParquetFormat()) {
             TParquetOptions parquetOptions = new TParquetOptions();
             parquetOptions.setCompression_type(compressionType);

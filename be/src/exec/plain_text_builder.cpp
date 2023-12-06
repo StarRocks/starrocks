@@ -38,7 +38,7 @@ Status PlainTextBuilder::init() {
         _converters.emplace_back(std::move(conv));
     }
 
-    if (_options.csv_header)
+    if (_options.print_header)
     {
         const std::string& row_delimiter = _options.line_terminated_by;
         const std::string& column_delimiter = _options.column_terminated_by;
@@ -46,7 +46,7 @@ Status PlainTextBuilder::init() {
         size_t i = 0;
         auto* os = _output_stream.get();
         for (auto & column_name: _options.column_names) {
-            os->write(column_name);
+            RETURN_IF_ERROR(os->write(column_name));
             RETURN_IF_ERROR(os->write((++i == size) ? row_delimiter : column_delimiter));
         }
     }

@@ -36,7 +36,7 @@ struct PlainTextBuilderOptions {
     std::string column_terminated_by;
     std::string line_terminated_by;
     std::vector<std::string> column_names;
-    bool csv_header;
+    bool print_header;
 };
 
 class PlainTextBuilder final : public FileBuilder {
