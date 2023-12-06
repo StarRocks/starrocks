@@ -199,6 +199,8 @@ public:
     void mark_prepared() { _is_prepared = true; }
     bool is_prepared() { return _is_prepared; }
 
+    int64_t get_static_query_mem_limit() const { return _static_query_mem_limit; }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -263,6 +265,8 @@ private:
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
+
+    int64_t _static_query_mem_limit = 0;
 };
 
 class QueryContextManager {

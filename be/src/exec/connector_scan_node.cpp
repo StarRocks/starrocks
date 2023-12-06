@@ -132,7 +132,9 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (query_options.__isset.connector_scan_use_query_mem_ratio) {
         mem_ratio = query_options.connector_scan_use_query_mem_ratio;
     }
-    _mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio;
+    if (runtime_state()->query_ctx() != nullptr) {
+        _mem_limit = runtime_state()->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+    }
     _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
     if (query_options.__isset.connector_io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
@@ -193,7 +195,6 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
 
     scan_op->set_estimated_mem_usage_per_chunk_source(_estimated_mem_usage_per_chunk_source);
     scan_op->set_scan_mem_limit(_mem_limit);
-
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
