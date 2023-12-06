@@ -110,16 +110,28 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager,
 
             auto now = time(nullptr);
             auto mtime = (uint64_t)0;
-            for (const auto& index_file : index_files) {
-                auto index_file_path = tablet_pk_path + "/" + index_file;
-                auto mtime_or = FileSystem::Default()->get_file_modified_time(index_file_path);
-                if (!mtime_or.ok()) {
-                    continue;
-                }
-                mtime = std::max(mtime, *mtime_or);
+            auto mtime_or = FileSystem::Default()->get_file_modified_time(tablet_pk_path);
+            if (mtime_or.ok()) {
+                mtime = *mtime_or;
             }
 
             bool need_evict_tablet = now - mtime > config::lake_local_pk_index_unused_threshold_seconds;
+            // Check whether mtime of index files is larger than the threshold.
+            if (!need_evict_tablet) {
+                for (const auto& index_file : index_files) {
+                    auto index_file_path = tablet_pk_path + "/" + index_file;
+                    auto mtime_or = FileSystem::Default()->get_file_modified_time(index_file_path);
+                    if (!mtime_or.ok()) {
+                        continue;
+                    }
+                    mtime = std::max(mtime, *mtime_or);
+                    need_evict_tablet = now - mtime > config::lake_local_pk_index_unused_threshold_seconds;
+                    if (need_evict_tablet) {
+                        break;
+                    }
+                }
+            }
+
             TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &need_evict_tablet);
             if (!need_evict_tablet) {
                 continue;
