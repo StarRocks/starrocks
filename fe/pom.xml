@@ -29,6 +29,7 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
+        <module>plugin-common</module>
         <module>fe-common</module>
         <module>spark-dpp</module>
         <module>fe-core</module>
@@ -151,6 +152,12 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>plugin-common</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-common</artifactId>
