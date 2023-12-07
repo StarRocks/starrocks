@@ -60,6 +60,7 @@ public class JDBCMetadataTest {
     @Mocked
     PreparedStatement preparedStatement;
     private MockResultSet partitionsResult;
+    MockResultSet partitionsInfoTablesResult;
 
     @Before
     public void setUp() throws SQLException {
@@ -133,6 +134,7 @@ public class JDBCMetadataTest {
     public void testListDatabaseNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
@@ -145,6 +147,7 @@ public class JDBCMetadataTest {
     public void testGetDb() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
@@ -192,13 +195,10 @@ public class JDBCMetadataTest {
                 result = partitionsResult;
                 minTimes = 0;
 
-                String catalogSchema = "information_schema";
-                String partitionInfoTable = "partitions";
-                MockResultSet piResult = new MockResultSet(partitionInfoTable);
-                piResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
-                connection.getMetaData().getTables(catalogSchema, null, null,
-                        new String[] {"SYSTEM TABLE", "SYSTEM VIEW"});
-                result = piResult;
+                partitionsInfoTablesResult = new MockResultSet("partitions");
+                partitionsInfoTablesResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
+                connection.getMetaData().getTables(anyString, null, null, null);
+                result = partitionsInfoTablesResult;
                 minTimes = 0;
             }
         };

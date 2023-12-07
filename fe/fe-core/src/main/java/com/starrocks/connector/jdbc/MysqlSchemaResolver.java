@@ -41,9 +41,6 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
-            // In unit testing, there is always a situation where the next method is false,
-            // and the beforefirst method needs to be called first
-            resultSet.beforeFirst();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
                 // skip internal schemas
@@ -64,6 +61,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public boolean checkAndSetSupportPartitionInformation(Connection connection) {
         String catalogSchema = "information_schema";
         String partitionInfoTable = "partitions";
+        // Different types of MySQL protocol databases have different case names for schema and table names,
+        // which need to be converted to lowercase for comparison
         try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
             while (catalogSet.next()) {
                 String schemaName = catalogSet.getString("TABLE_CAT");

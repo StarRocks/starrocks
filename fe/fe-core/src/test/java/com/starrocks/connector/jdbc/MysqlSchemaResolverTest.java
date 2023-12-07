@@ -112,12 +112,10 @@ public class MysqlSchemaResolverTest {
                 result = dbResult;
                 minTimes = 0;
 
-                String partitionInfoTable = "partitions";
-                tableResult = new MockResultSet("tables");
-                tableResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
-                connection.getMetaData().getTables(catalogSchema, null, null,
-                        new String[] {"SYSTEM TABLE", "SYSTEM VIEW"});
-                result = tableResult;
+                MockResultSet piResult = new MockResultSet("partitions");
+                piResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
+                connection.getMetaData().getTables(anyString, null, null, null);
+                result = piResult;
                 minTimes = 0;
             }
         };
