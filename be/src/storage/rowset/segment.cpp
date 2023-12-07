@@ -82,9 +82,14 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
 }
 
 Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     const FooterPointerPB* partial_rowset_footer) {
+                                     const FooterPointerPB* partial_rowset_footer, uint64_t segment_size) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+    uint64_t file_size;
+    if (segment_size != 0) {
+        file_size = segment_size;
+    } else {
+        ASSIGN_OR_RETURN(file_size, read_file->get_size());
+    }
 
     if (file_size < 12) {
         return Status::Corruption(
@@ -172,9 +177,10 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
 }
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
-                 lake::TabletManager* tablet_manager)
+                 lake::TabletManager* tablet_manager, uint64_t segment_size)
         : _fs(std::move(fs)),
           _fname(std::move(path)),
+          _segment_size(segment_size),
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
@@ -207,8 +213,16 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
                       bool skip_fill_local_cache) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+
+    std::unique_ptr<RandomAccessFile> read_file;
+    if (_segment_size != 0) {
+        FileInfo file_info{.path = _fname, .size = _segment_size};
+        ASSIGN_OR_RETURN(read_file, _fs->new_random_access_file(opts, file_info));
+    } else {
+        ASSIGN_OR_RETURN(read_file, _fs->new_random_access_file(opts, _fname));
+    }
+    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer,
+                                                  _segment_size));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());

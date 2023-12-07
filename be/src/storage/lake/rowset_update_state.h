@@ -62,7 +62,8 @@ public:
                 const MetaFileBuilder* builder, bool need_check_conflict, bool need_lock);
 
     Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                           std::map<int, std::string>* replace_segments, std::vector<std::string>* orphan_files);
+                           std::map<int, std::string>* replace_segments, std::vector<std::string>* orphan_files,
+                           std::map<std::string, uint64_t>* segments_size);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }

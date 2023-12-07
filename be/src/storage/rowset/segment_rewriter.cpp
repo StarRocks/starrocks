@@ -23,7 +23,7 @@ SegmentRewriter::SegmentRewriter() = default;
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path,
                                 const std::shared_ptr<const TabletSchema>& tschema, std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
-                                const FooterPointerPB& partial_rowset_footer) {
+                                const FooterPointerPB& partial_rowset_footer, uint64_t* file_size) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
@@ -63,6 +63,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
+
+    if (file_size != nullptr) {
+        *file_size = segment_file_size;
+    }
 
     return Status::OK();
 }
@@ -163,7 +167,8 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
                                 const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
-                                const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
+                                const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet,
+                                uint64_t* file_size) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -246,6 +251,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
+
+    if (file_size != nullptr) {
+        *file_size = segment_file_size;
+    }
 
     return Status::OK();
 }

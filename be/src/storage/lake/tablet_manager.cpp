@@ -571,11 +571,13 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const std::string& segment_path, int segment_id,
                                                  size_t* footer_size_hint, bool fill_data_cache,
-                                                 bool fill_metadata_cache, TabletSchemaPtr tablet_schema) {
+                                                 bool fill_metadata_cache, TabletSchemaPtr tablet_schema,
+                                                 uint64_t segment_size) {
     auto segment = metacache()->lookup_segment(segment_path);
     if (segment == nullptr) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
-        segment = std::make_shared<Segment>(std::move(fs), segment_path, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<Segment>(std::move(fs), segment_path, segment_id, std::move(tablet_schema), this,
+                                            segment_size);
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists

@@ -128,8 +128,14 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
+<<<<<<< HEAD
+=======
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
+>>>>>>> 9e7e247b40 (reduce head object)
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
 
     writer->close();
 
@@ -214,6 +220,9 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
 

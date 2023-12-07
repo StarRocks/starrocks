@@ -233,10 +233,25 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
+
+    // RowsetMetaData upgrade from old version may not have the field of segment_size
+    bool has_segment_size = metadata().segment_size_size() != 0;
+    if (has_segment_size) {
+        DCHECK(metadata().segments_size() == metadata().segment_size_size());
+    }
+    auto files_to_size = metadata().segment_size();
+    int index = 0;
+
     for (const auto& seg_name : metadata().segments()) {
+        uint64_t segment_size = 0;
+        if (LIKELY(has_segment_size)) {
+            segment_size = files_to_size.Get(index);
+        }
+        index++;
+
         auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
         auto segment_or = _tablet_mgr->load_segment(segment_path, seg_id++, &footer_size_hint, fill_data_cache,
-                                                    fill_metadata_cache, _tablet_schema);
+                                                    fill_metadata_cache, _tablet_schema, segment_size);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {

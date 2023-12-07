@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "gutil/macros.h"
 
 namespace starrocks {

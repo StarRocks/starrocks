@@ -110,6 +110,14 @@ public:
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
 protected:
+    // the pattern of segment_path is like this xxx/table_id/partition_id/data/segment_file_name
+    void set_segment_size(std::string segment_path, uint64_t segment_size) {
+        auto pos = segment_path.find_last_of("/");
+        FileInfo file_info{.path = segment_path.substr(pos + 1), .size = segment_size};
+        _files.emplace_back(file_info);
+    }
+
+protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     TabletSchemaCSPtr _schema;

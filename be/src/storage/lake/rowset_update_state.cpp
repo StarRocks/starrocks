@@ -456,7 +456,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet, std::map<int, std::string>* replace_segments,
-                                          std::vector<std::string>* orphan_files) {
+                                          std::vector<std::string>* orphan_files,
+                                          std::map<std::string, uint64_t>* segments_size) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = op_write.rowset();
     auto root_path = tablet->metadata_root_location();
@@ -494,17 +495,25 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         int64_t t_rewrite_start = MonotonicMillis();
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
             !_auto_increment_partial_update_states[i].skip_rewrite) {
+            uint64_t segment_size = 0;
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     tablet->segment_location(src_path), tablet->segment_location(dest_path), tablet_schema,
                     _auto_increment_partial_update_states[i], read_column_ids,
                     _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr, op_write,
-                    tablet));
+                    tablet, &segment_size));
+            if (segments_size != nullptr) {
+                (*segments_size)[dest_path] = segment_size;
+            }
         } else if (_partial_update_states.size() != 0) {
             const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(i);
+            uint64_t segment_size = 0;
             // if rewrite fail, let segment gc to clean dest segment file
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     tablet->segment_location(src_path), tablet->segment_location(dest_path), tablet_schema,
-                    read_column_ids, _partial_update_states[i].write_columns, i, partial_rowset_footer));
+                    read_column_ids, _partial_update_states[i].write_columns, i, partial_rowset_footer, &segment_size));
+            if (segments_size != nullptr) {
+                (*segments_size)[dest_path] = segment_size;
+            }
         } else {
             need_rename[i] = false;
         }

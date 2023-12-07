@@ -94,7 +94,9 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
     }
     for (auto& file : writer->files()) {
         op_compaction->mutable_output_rowset()->add_segments(file.path);
+        op_compaction->mutable_output_rowset()->add_segment_size(file_info.size.value());
     }
+
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
