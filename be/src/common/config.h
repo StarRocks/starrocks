@@ -984,6 +984,9 @@ CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
+// enable persistent index compression
+CONF_mBool(enable_pindex_compression, "false");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
