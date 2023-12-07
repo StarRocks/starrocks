@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -58,6 +59,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -335,6 +337,17 @@ public class MvRewriteTestBase {
         String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
         return s;
+    }
+
+    public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> result =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+        String traceLog = result.first;
+        Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        if (!Strings.isNullOrEmpty(traceLog)) {
+            System.out.println(traceLog);
+        }
+        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
     }
 
     public static Table getTable(String dbName, String mvName) {
