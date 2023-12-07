@@ -180,7 +180,6 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
                                      Map<Long, LinkedList<Column>> indexSchemaMap,
                                      IntSupplier colUniqueIdSupplier) throws DdlException {
-        LOG.info("process add column");
         Column column = alterClause.getColumn();
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -217,7 +216,6 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap,
                                       IntSupplier colUniqueIdSupplier) throws DdlException {
-        LOG.info("process add columns");
         List<Column> columns = alterClause.getColumns();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -271,8 +269,6 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private boolean processDropColumn(DropColumnClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes) throws DdlException {
-
-        LOG.info("process drop column");
         boolean fastSchemaEvolution = 
                 (olapTable.getUseFastSchemaEvolution() == null) ? false : olapTable.getUseFastSchemaEvolution();
         String dropColName = alterClause.getColName();
