@@ -984,6 +984,14 @@ CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
+<<<<<<< HEAD
+=======
+// control the local persistent index in shared_data gc interval
+CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+// enable persistent index compression
+CONF_mBool(enable_pindex_compression, "false");
+
+>>>>>>> 5aa7baa91e ([Enhancement] Add crc32c checksum to persistent index's l0 & persistent index compression (backport #30841) (backport #32112) (#36308))
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
