@@ -3546,4 +3546,21 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns1;
+    Columns columns2;
+    auto str1 = BinaryColumn::create();
+    auto str2 = BinaryColumn::create();
+    str1->append("starrocks");
+    str2->append("STARROCKS");
+
+    columns1.emplace_back(str1);
+    columns2.emplace_back(str2);
+
+    ASSERT_EQ(2312449062, StringFunctions::crc32(ctx.get(), columns1));
+    ASSERT_EQ(3440849609, StringFunctions::crc32(ctx.get(), columns2));
+
+}
+
 } // namespace starrocks

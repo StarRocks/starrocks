@@ -4179,6 +4179,6 @@ DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
+    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
 } // namespace starrocks
