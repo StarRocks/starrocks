@@ -1183,7 +1183,7 @@ public class SystemInfoService implements GsonPostProcessable {
             cluster.removeBackend(backend.getId());
 
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;
