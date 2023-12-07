@@ -4,6 +4,9 @@ displayed_sidebar: "Chinese"
 
 # 数据分布
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 建表时，您可以通过设置合理的分区和分桶，实现数据均匀分布和查询性能提升。数据均匀分布是指数据按照一定规则划分为子集，并且均衡地分布在不同节点上。查询时能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 
 > **说明**
@@ -16,8 +19,6 @@ displayed_sidebar: "Chinese"
 ### 常见的数据分布方式
 
 现代分布式数据库中，常见的数据分布方式有如下几种：Round-Robin、Range、List 和 Hash。如下图所示：
-
-![数据分布方式](../assets/3.3.2-1.png)
 
 - Round-Robin：以轮询的方式把数据逐个放置在相邻节点上。
 
@@ -32,6 +33,7 @@ displayed_sidebar: "Chinese"
 ### StarRocks 的数据分布方式
 
 StarRocks 支持单独和组合使用数据分布方式。
+
 > **说明**
 >
 > 除了常见的分布方式外， StarRocks 还支持了 Random 分布，可以简化分桶设置。
@@ -55,107 +57,107 @@ StarRocks 支持单独和组合使用数据分布方式。
   建表时不设置分区和分桶方式，则默认使用 Random 分布
 
     ```SQL
-    CREATE TABLE site_access1 (
-        event_day DATE,
-        site_id INT DEFAULT '10', 
-        pv BIGINT DEFAULT '0' ,
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT ''
-    )
-    DUPLICATE KEY (event_day,site_id,pv);
-    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
+  CREATE TABLE site_access1 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT ''
+  )
+  DUPLICATE KEY (event_day,site_id,pv);
+  -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
     ```
 
 - Hash 分布
 
-    ```SQL
-    CREATE TABLE site_access2 (
-        event_day DATE,
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        pv BIGINT SUM DEFAULT '0'
-    )
-    AGGREGATE KEY (event_day, site_id, city_code, user_name)
-    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
-    DISTRIBUTED BY HASH(event_day,site_id); 
-    ```
+  ```SQL
+  CREATE TABLE site_access2 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      pv BIGINT SUM DEFAULT '0'
+  )
+  AGGREGATE KEY (event_day, site_id, city_code, user_name)
+  -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+  DISTRIBUTED BY HASH(event_day,site_id); 
+  ```
 
 - Range + Random 分布
 
-    ```SQL
-    CREATE TABLE site_access3 (
-        event_day DATE,
-        site_id INT DEFAULT '10', 
-        pv BIGINT DEFAULT '0' ,
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT ''
-    )
-    DUPLICATE KEY(event_day,site_id,pv)
-    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
-    PARTITION BY date_trunc('day', event_day);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
-    ```
+  ```SQL
+  CREATE TABLE site_access3 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT ''
+  )
+  DUPLICATE KEY(event_day,site_id,pv)
+  -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+  PARTITION BY date_trunc('day', event_day);
+  -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+  ```
 
 - Range + Hash 分布
 
-    ```SQL
-    CREATE TABLE site_access4 (
-        event_day DATE,
-        site_id INT DEFAULT '10',
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT '',
-        pv BIGINT SUM DEFAULT '0'
-    )
-    AGGREGATE KEY(event_day, site_id, city_code, user_name)
-    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
-    PARTITION BY date_trunc('day', event_day)
-    -- 设置分桶方式为哈希分桶，必须指定分桶键
-    DISTRIBUTED BY HASH(event_day, site_id);
-    ```
+  ```SQL
+  CREATE TABLE site_access4 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '',
+      pv BIGINT SUM DEFAULT '0'
+  )
+  AGGREGATE KEY(event_day, site_id, city_code, user_name)
+  -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+  PARTITION BY date_trunc('day', event_day)
+  -- 设置分桶方式为哈希分桶，必须指定分桶键
+  DISTRIBUTED BY HASH(event_day, site_id);
+  ```
 
 - List + Random 分布
 
-    ```SQL
-    CREATE TABLE t_recharge_detail1 (
-        id bigint,
-        user_id bigint,
-        recharge_money decimal(32,2), 
-        city varchar(20) not null,
-        dt date not null
-    )
-    DUPLICATE KEY(id)
-    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
-    PARTITION BY (city);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
-    ```
+  ```SQL
+  CREATE TABLE t_recharge_detail1 (
+      id bigint,
+      user_id bigint,
+      recharge_money decimal(32,2), 
+      city varchar(20) not null,
+      dt date not null
+  )
+  DUPLICATE KEY(id)
+  -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+  PARTITION BY (city);
+  -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+  ```
 
 - List + Hash 分布
 
-    ```SQL
-    CREATE TABLE t_recharge_detail2 (
-        id bigint,
-        user_id bigint,
-        recharge_money decimal(32,2), 
-        city varchar(20) not null,
-        dt date not null
-    )
-    DUPLICATE KEY(id)
-    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
-    PARTITION BY (city)
-    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
-    DISTRIBUTED BY HASH(city,id); 
-    ```
+  ```SQL
+  CREATE TABLE t_recharge_detail2 (
+      id bigint,
+      user_id bigint,
+      recharge_money decimal(32,2), 
+      city varchar(20) not null,
+      dt date not null
+  )
+  DUPLICATE KEY(id)
+  -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+  PARTITION BY (city)
+  -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+  DISTRIBUTED BY HASH(city,id); 
+  ```
 
 #### 分区
 
 分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如分桶数、冷热策略、存储介质、副本数等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
 
-| **分区方式**       | **适用场景**                                                     | **分区创建方式**                                  |
-| ------------------ | ------------------------------------------------------------ | --------------------------------------------- |
-| 表达式分区（推荐） | 原称自动创建分区，适用大多数场景，并且灵活易用。适用于按照连续日期范围或者枚举值来查询和管理数据。 | 导入时自动创建                                |
+| **分区方式**       | **适用场景**                                                 | **分区创建方式**       |
+| ------------------ | ------------------------------------------------------------ | ---------------------- |
+| 表达式分区（推荐） | 原称自动创建分区，适用大多数场景，并且灵活易用。适用于按照连续日期范围或者枚举值来查询和管理数据。 | 导入时自动创建         |
 | Range 分区         | 典型的场景是数据简单有序，并且通常按照连续日期/数值范围来查询和管理数据。再如一些特殊场景，比如历史数据需要按月划分分区，而最近数据需要按天划分分区。 | 动态、批量或者手动创建 |
-| List  分区         | 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建                              |
+| List  分区         | 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建               |
 
 **选择分区列和分区粒度**
 
@@ -229,128 +231,128 @@ DISTRIBUTED BY HASH(site_id);
 
 - **建表时批量创建日期分区**
 
-    当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
+  当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
 
-    如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
+  如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
 
-    ```SQL
-    CREATE TABLE site_access (
-        datekey DATE,
-        site_id INT,
-        city_code SMALLINT,
-        user_name VARCHAR(32),
-        pv BIGINT DEFAULT '0'
-    )
-    ENGINE=olap
-    DUPLICATE KEY(datekey, site_id, city_code, user_name)
-    PARTITION BY RANGE (datekey) (
-        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
-    )
-    DISTRIBUTED BY HASH(site_id)
-    PROPERTIES (
-        "replication_num" = "3" 
-    );
-    ```
+  ```SQL
+  CREATE TABLE site_access (
+      datekey DATE,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (
+      START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES (
+      "replication_num" = "3" 
+  );
+  ```
 
-    则相当于在建表语句中使用如下 PARTITION BY 子句：
+  则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-    ```SQL
-    PARTITION BY RANGE (datekey) (
-        PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-        PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-        PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-    )
-    ```
+  ```SQL
+  PARTITION BY RANGE (datekey) (
+      PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+      PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+      PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+  )
+  ```
 
 - **建表时批量创建不同日期间隔的日期分区**
 
-    建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
+  建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
 
-    ```SQL
-    CREATE TABLE site_access (
-        datekey DATE,
-        site_id INT,
-        city_code SMALLINT,
-        user_name VARCHAR(32),
-        pv BIGINT DEFAULT '0'
-    )
-    ENGINE=olap
-    DUPLICATE KEY(datekey, site_id, city_code, user_name)
-    PARTITION BY RANGE (datekey) (
-        START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
-        START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
-        START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
-    )
-    DISTRIBUTED BY HASH(site_id)
-    PROPERTIES (
-        "replication_num" = "3"
-    );
-    ```
+  ```SQL
+  CREATE TABLE site_access (
+      datekey DATE,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (
+      START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
+      START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
+      START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES (
+      "replication_num" = "3"
+  );
+  ```
 
-    则相当于在建表语句中使用如下 PARTITION BY 子句：
+  则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-    ```SQL
-    PARTITION BY RANGE (datekey) (
-        PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-        PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-        PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-        PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-        PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-        PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-        PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-        PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-        PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-    )
-    ```
+  ```SQL
+  PARTITION BY RANGE (datekey) (
+      PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+      PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+      PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+      PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+      PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+      PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+      PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+      PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+      PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+  )
+  ```
 
 - **建表时批量创建数字分区**
 
-    当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
+  当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
 
-    > **说明**
-    >
-    > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+  > **说明**
+  >
+  > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 
-    如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
+  如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
 
-    ```SQL
-    CREATE TABLE site_access (
-        datekey INT,
-        site_id INT,
-        city_code SMALLINT,
-        user_name VARCHAR(32),
-        pv BIGINT DEFAULT '0'
-    )
-    ENGINE=olap
-    DUPLICATE KEY(datekey, site_id, city_code, user_name)
-    PARTITION BY RANGE (datekey) (
-        START ("1") END ("5") EVERY (1)
-    )
-    DISTRIBUTED BY HASH(site_id)
-    PROPERTIES (
-        "replication_num" = "3"
-    );
-    ```
+  ```SQL
+  CREATE TABLE site_access (
+      datekey INT,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (
+      START ("1") END ("5") EVERY (1)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES (
+      "replication_num" = "3"
+  );
+  ```
 
-    则相当于在建表语句中使用如下 PARTITION BY 子句：
+  则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-    ```SQL
-    PARTITION BY RANGE (datekey) (
-        PARTITION p1 VALUES [("1"), ("2")),
-        PARTITION p2 VALUES [("2"), ("3")),
-        PARTITION p3 VALUES [("3"), ("4")),
-        PARTITION p4 VALUES [("4"), ("5"))
-    )
-    ```
+  ```SQL
+  PARTITION BY RANGE (datekey) (
+      PARTITION p1 VALUES [("1"), ("2")),
+      PARTITION p2 VALUES [("2"), ("3")),
+      PARTITION p3 VALUES [("3"), ("4")),
+      PARTITION p4 VALUES [("4"), ("5"))
+  )
+  ```
 
 - **建表后批量创建分区**
 
-    建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
+  建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
 
-    ```SQL
-    ALTER TABLE site_access 
-    ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
-    ```
+  ```SQL
+  ALTER TABLE site_access 
+  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+  ```
 
 #### List 分区（自 v3.1）
 
@@ -514,7 +516,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 >
 > - 长查询是指扫描数据量大、多机并行扫描能显著提升性能的查询。
 
-### 设置分区中分桶数量
+### 设置分桶数量
 
 在 StarRocks 中，分桶是实际物理文件组织的单元。
 
@@ -522,7 +524,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 - 自动设置（推荐）
 
-  自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。
+  自 2.5.7 版本起，StarRocks 支持根据机器资源和数据量自动设置分区中分桶数量。
 
   :::info
 
@@ -530,59 +532,64 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   :::
 
-  - 哈希分桶表
+  建表示例：
 
-    建表示例：
+  <Tabs groupId="automaticexamples1">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-    ```sql
-    CREATE TABLE site_access (
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        event_day DATE,
-        pv BIGINT SUM DEFAULT '0')
-    AGGREGATE KEY(site_id, city_code, user_name,event_day)
-    PARTITION BY date_trunc('day', event_day)
-    DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分区中分桶数量
-    ```
+  ```sql
+  CREATE TABLE site_access (
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT SUM DEFAULT '0')
+  AGGREGATE KEY(site_id, city_code, user_name,event_day)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY HASH(site_id,city_code); -- 无需手动设置分区中分桶数量
+  ```
 
-  - 随机分桶表
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
 
-    针对随机分桶表，StarRocks 在支持**创建分区时**自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
+  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
 
-    :::warning
+  :::warning
 
-    - 如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
-    - 一旦启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。 
 
-    :::
+  :::
 
-    建表示例：
+  建表示例：
 
-    ```sql
-    CREATE TABLE details1 (
-        event_day DATE,
-        site_id INT DEFAULT '10', 
-        pv BIGINT DEFAULT '0',
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT '')
-    DUPLICATE KEY (event_day,site_id,pv)
-    PARTITION BY date_trunc('day', event_day)
-    -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
-    PROPERTIES("bucket_size"="1073741824")
-    ;
+  ```sql
+  CREATE TABLE details1 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0',
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
+  PROPERTIES("bucket_size"="1073741824")
+  ;
+  
+  CREATE TABLE details2 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
+  ;
+  ```
 
-    CREATE TABLE details2 (
-        event_day DATE,
-        site_id INT DEFAULT '10',
-        pv BIGINT DEFAULT '0' ,
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT '')
-    DUPLICATE KEY (event_day,site_id,pv)
-    PARTITION BY date_trunc('day', event_day)
-    -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
-    ;
-    ```
+  </TabItem>
+  </Tabs>
 
 - 手动设置
 
@@ -590,151 +597,158 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 
-  - 哈希分桶表
+  <Tabs groupId="manualexamples1">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-    建表示例：
+  ```sql
+  CREATE TABLE site_access (
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT SUM DEFAULT '0')
+  AGGREGATE KEY(site_id, city_code, user_name,event_day)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
+  ```
 
-    ```sql
-    CREATE TABLE site_access (
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        event_day DATE,
-        pv BIGINT SUM DEFAULT '0')
-    AGGREGATE KEY(site_id, city_code, user_name,event_day)
-    PARTITION BY date_trunc('day', event_day)
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
-    ```
-
-  - 随机分桶表
-
-    建表示例：
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
 
     ```sql
-    CREATE TABLE details (
-        site_id INT DEFAULT '10', 
-        city_code VARCHAR(100),
-        user_name VARCHAR(32) DEFAULT '',
-        event_day DATE,
-        pv BIGINT DEFAULT '0'
-    )
-    DUPLICATE KEY (site_id,city_code)
-    PARTITION BY date_trunc('day', event_day)
-    DISTRIBUTED BY RANDOM BUCKETS 30
-    ; 
+  CREATE TABLE details (
+      site_id INT DEFAULT '10', 
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT DEFAULT '0'
+  )
+  DUPLICATE KEY (site_id,city_code)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM BUCKETS 30
+  ; 
     ```
+
+    </TabItem>
+    </Tabs>
 
 #### 建表后
 
 - 自动设置（推荐）
 
-  自 2.5.7 版本起，新增分区时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。
+  自 2.5.7 版本起，StarRocks 支持根据机器资源和数据量自动设置分区中分桶数量。
 
   :::tip
 
-  如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。 :::
+  如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。 
 
-  - 哈希分桶表
+  :::
 
-    ```sql
-    -- 自动设置分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
-    ALTER TABLE site_access DISTRIBUTED BY HASH(site_id,city_code);
+  <Tabs groupId="automaticexamples2">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-    -- 自动设置指定分区的分桶数量
-    ALTER TABLE site_access PARTITIONS (p20230101, p20230102)
-    DISTRIBUTED BY HASH(site_id,city_code);
-
-    -- 自动设置新增分区中分桶数量
-    ALTER TABLE site_access ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
-    DISTRIBUTED BY HASH(site_id,city_code);
-    ```
-
-  - 随机分桶表
-
-    针对随机分桶表，起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。
-
-    :::warning
-
-    - 如果需要启用按需动态增加分桶数量，您需要修改表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
-    - 一旦启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
-
-    :::
+  
 
     ```sql
-    -- 系统自动设置分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
-    ALTER TABLE details DISTRIBUTED BY RANDOM;
-    -- 系统自动设置分桶数量，并且开启按需动态增加分桶数量。
-    ALTER TABLE details SET("bucket_size"="1073741824");
-
-    -- 自动设置指定分区的分桶数量
-    ALTER TABLE details PARTITIONS (p20230103, p20230104)
-    DISTRIBUTED BY RANDOM;
-
-    -- 自动设置新增分区中分桶数量
-    ALTER TABLE details ADD PARTITION  p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
-    DISTRIBUTED BY RANDOM;
+  -- 自动设置所有分区的分桶数量
+  ALTER TABLE site_access DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置指定分区的分桶数量
+  ALTER TABLE site_access PARTITIONS (p20230101, p20230102)
+  DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置新增分区中分桶数量
+  ALTER TABLE site_access ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
-    建表后设置分区中的分桶数量成功后，您可以执行 [SHOW PARTITIONS](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。
+    </TabItem>
+    <TabItem value="example2" label="随机分桶表">
 
-    如果是随机分桶表并且开启按需动态增加分桶数量，在导入数据至新分区的过程中，新分区的分桶数量会**动态增加**，返回结果显示新分区**当前**的分桶数量。
+  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
 
-    > **注意**
-    >
-    > 对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+  :::warning
+
+  - 如果需要启用按需动态增加分桶数量，您需要修改表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+
+  :::
+
+    ```sql
+  -- 系统自动设置分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  -- 系统自动设置分桶数量，并且开启按需动态增加分桶数量。
+  ALTER TABLE details SET("bucket_size"="1073741824");
+  
+  -- 自动设置指定分区的分桶数量
+  ALTER TABLE details PARTITIONS (p20230103, p20230104)
+  DISTRIBUTED BY RANDOM;
+  
+  -- 自动设置新增分区中分桶数量
+  ALTER TABLE details ADD PARTITION  p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM;
+    ```
+
+    </TabItem>
+    </Tabs>
 
 - 手动设置
 
-  手动指定分区中分桶数量。分区的分桶数量的计算方式可以参考如上建表时手动设置分区中分桶数量。
+  手动指定分区中分桶数量。分区的分桶数量的计算方式可以参考如上[建表时手动设置分区中分桶数量](#建表时)。
 
-  - 哈希分桶表
+  <Tabs groupId="manualexamples2">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-    ```sql
-    -- 手动指定所有分区中分桶数量
-    ALTER TABLE site_access
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
-    -- 手动指定部分分区中分桶数量
-    ALTER TABLE site_access
-    partitions p20230104
-    DISTRIBUTED BY HASH(site_id,city_code)  BUCKETS 30;
-    -- 手动指定新增分区中分桶数量
-    ALTER TABLE site_access
-    ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
-    ```
+  ```sql
+  -- 手动指定所有分区中分桶数量
+  ALTER TABLE site_access
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  -- 手动指定部分分区中分桶数量
+  ALTER TABLE site_access
+  partitions p20230104
+  DISTRIBUTED BY HASH(site_id,city_code)  BUCKETS 30;
+  -- 手动指定新增分区中分桶数量
+  ALTER TABLE site_access
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  ```
 
-  - 随机分桶表
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
 
-    ```sql
-    -- 手动指定所有分区中分桶数量
-    ALTER TABLE details
-    DISTRIBUTED BY RANDOM BUCKETS 30;
-    -- 手动指定部分分区中分桶数量
-    ALTER TABLE details
-    partitions p20230104
-    DISTRIBUTED BY RANDOM BUCKETS 30;
-    -- 手动指定新增分区中分桶数量
-    ALTER TABLE details
-    ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
-    DISTRIBUTED BY RANDOM BUCKETS 30;
-    ```
+  ```sql
+  -- 手动指定所有分区中分桶数量
+  ALTER TABLE details
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- 手动指定部分分区中分桶数量
+  ALTER TABLE details
+  partitions p20230104
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- 手动指定新增分区中分桶数量
+  ALTER TABLE details
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  ```
 
-    手动设置动态分区的默认分桶数量。
+  手动设置动态分区的默认分桶数量。
 
-    ```sql
-    ALTER TABLE details_dynamic
-    SET ("dynamic_partition.buckets"="xxx");
-    ```
+  ```sql
+  ALTER TABLE details_dynamic
+  SET ("dynamic_partition.buckets"="xxx");
+  ```
 
-#### 查看分桶数量
+  </TabItem>
+  </Tabs>
+
+#### **查看分桶数量**
 
 如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)。
 
-如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
-
 :::info
 
-对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+- 如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
+
+- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
 
 :::
 
@@ -743,15 +757,15 @@ DISTRIBUTED BY HASH(site_id,city_code);
 对于 StarRocks 而言，分区和分桶的选择是非常关键的。在建表时选择合理的分区键和分桶键，可以有效提高集群整体性能。因此建议在选择分区键和分桶键时，根据业务情况进行调整。
 
 - **数据倾斜**
-  
+
   如果业务场景中单独采用倾斜度大的列做分桶，很大程度会导致访问数据倾斜，那么建议采用多列组合的方式进行数据分桶。
 
 - **高并发**
-  
+
   分区和分桶应该尽量覆盖查询语句所带的条件，这样可以有效减少扫描数据，提高并发。
 
 - **高吞吐**
-  
+
   尽量把数据打散，让集群以更高的并发扫描数据，完成相应计算。
 
 - **元数据管理**
