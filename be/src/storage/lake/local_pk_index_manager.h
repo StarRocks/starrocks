@@ -18,6 +18,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "common/status.h"
+
 namespace starrocks {
 
 class DataDir;
@@ -28,12 +30,15 @@ class UpdateManager;
 
 class LocalPkIndexManager {
 public:
-    void gc(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
+    static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
-    void evict(UpdateManager* update_manager, std::unordered_map<DataDir*, std::set<std::string>>& store_to_tablet_ids);
+    static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
 private:
-    bool need_evict_tablet(const std::string& tablet_pk_path);
+    static bool need_evict_tablet(const std::string& tablet_pk_path);
+
+    // remove pk index meta first, and if success then remove dir.
+    static Status clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir);
 };
 
 } // namespace lake

@@ -285,9 +285,6 @@ public:
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
-    // remove pk index meta first, and if success then remove dir.
-    Status clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir);
-
 protected:
     static StorageEngine* _s_instance;
 
@@ -343,8 +340,8 @@ private:
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
 #ifdef USE_STAROS
-    // local pk index of SHARD_DATA gc/evict function
-    void* _local_pk_index_shard_data_gc_evict_thread_callback(void* arg);
+    // local pk index of SHARED_DATA gc/evict function
+    void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
 #endif
 
     bool _check_and_run_manual_compaction_task();
@@ -416,7 +413,7 @@ private:
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
     // thread to gc/evict local pk index in sharded_data
-    std::thread _local_pk_index_shard_data_gc_evict_thread;
+    std::thread _local_pk_index_shared_data_gc_evict_thread;
 
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;

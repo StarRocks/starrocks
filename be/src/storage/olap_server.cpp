@@ -101,9 +101,9 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
 #ifdef USE_STAROS
-    _local_pk_index_shard_data_gc_evict_thread =
-            std::thread([this] { _local_pk_index_shard_data_gc_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_local_pk_index_shard_data_gc_evict_thread, "pk_index_shard_data_gc_evict");
+    _local_pk_index_shared_data_gc_evict_thread =
+            std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
+    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pk_index_shared_data_gc_evict");
 #endif
 
     // start thread for check finish publish version
@@ -406,7 +406,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
 }
 
 #ifdef USE_STAROS
-void* StorageEngine::_local_pk_index_shard_data_gc_evict_thread_callback(void* arg) {
+void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
     if (is_as_cn()) {
         return nullptr;
     }
@@ -416,18 +416,18 @@ void* StorageEngine::_local_pk_index_shard_data_gc_evict_thread_callback(void* a
     auto lake_update_manager = ExecEnv::GetInstance()->lake_update_manager();
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::pindex_shard_data_gc_evict_interval_seconds);
-        std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
+        SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
         for (DataDir* data_dir : get_stores()) {
             auto pk_path = data_dir->get_persistent_index_path();
-            Status ret = fs::list_dirs_files(pk_path, &store_to_tablet_ids[data_dir], nullptr);
+            std::set<std::string> tablet_ids;
+            Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
             if (!ret.ok()) {
                 LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
                 continue;
             }
+            lake::LocalPkIndexManager::gc(lake_update_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::evict(lake_update_manager, data_dir, tablet_ids);
         }
-        lake_update_manager->local_pk_index_mgr()->gc(lake_update_manager, store_to_tablet_ids);
-        lake_update_manager->local_pk_index_mgr()->evict(lake_update_manager, store_to_tablet_ids);
     }
 
     return nullptr;

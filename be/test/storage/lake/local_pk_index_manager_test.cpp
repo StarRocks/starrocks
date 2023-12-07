@@ -136,15 +136,11 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                  std::to_string(_tablet_metadata->id())));
 
-    std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
-    for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {
-        auto pk_path = data_dir->get_persistent_index_path();
-        std::set<std::string> tablet_ids;
-        ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-        store_to_tablet_ids[data_dir] = tablet_ids;
-    }
-    auto local_pk_index_mgr = std::make_unique<LocalPkIndexManager>();
-    local_pk_index_mgr->gc(ExecEnv::GetInstance()->lake_update_manager(), store_to_tablet_ids);
+    auto* data_dir = stores[0];
+    auto pk_path = data_dir->get_persistent_index_path();
+    std::set<std::string> tablet_ids;
+    ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
+    LocalPkIndexManager::gc(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
@@ -180,7 +176,6 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:1", [](void* arg) { *(bool*)arg = true; });
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:2", [](void* arg) { *(bool*)arg = true; });
-    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:3", [](void* arg) { *(bool*)arg = true; });
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -223,21 +218,16 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                  std::to_string(_tablet_metadata->id())));
 
-    std::unordered_map<DataDir*, std::set<std::string>> store_to_tablet_ids;
-    for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {
-        auto pk_path = data_dir->get_persistent_index_path();
-        std::set<std::string> tablet_ids;
-        ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
-        store_to_tablet_ids[data_dir] = tablet_ids;
-    }
-    auto local_pk_index_mgr = std::make_unique<LocalPkIndexManager>();
-    local_pk_index_mgr->evict(ExecEnv::GetInstance()->lake_update_manager(), store_to_tablet_ids);
+    auto* data_dir = stores[0];
+    auto pk_path = data_dir->get_persistent_index_path();
+    std::set<std::string> tablet_ids;
+    ASSERT_OK(fs::list_dirs_files(pk_path, &tablet_ids, nullptr));
+    LocalPkIndexManager::evict(ExecEnv::GetInstance()->lake_update_manager(), data_dir, tablet_ids);
 
     ASSERT_ERROR(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
                                                     std::to_string(_tablet_metadata->id())));
     SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::evict:1");
     SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::evict:2");
-    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::evict:3");
     SyncPoint::GetInstance()->DisableProcessing();
 
     txn_id = next_id();

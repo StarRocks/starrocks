@@ -39,7 +39,6 @@ class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
-class LocalPkIndexManager;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -150,8 +149,6 @@ public:
 
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
 
-    LocalPkIndexManager* local_pk_index_mgr() const { return _local_pk_index_manager.get(); }
-
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -199,8 +196,6 @@ private:
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
-
-    std::unique_ptr<LocalPkIndexManager> _local_pk_index_manager;
 };
 
 } // namespace lake
