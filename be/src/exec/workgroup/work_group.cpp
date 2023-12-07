@@ -163,6 +163,9 @@ void WorkGroup::init() {
                                   : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
     _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+            MemTracker::RESOURCE_GROUP, _memory_limit_bytes * config::connector_scan_use_query_mem_ratio,
+            _name + "/connector_scan", GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());

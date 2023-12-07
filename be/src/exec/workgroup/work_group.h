@@ -135,6 +135,8 @@ public:
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
+    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
+
     int64_t id() const { return _id; }
     int64_t version() const { return _version; }
     const std::string& name() const { return _name; }
@@ -233,6 +235,7 @@ private:
     int64_t _big_query_cpu_nanos_limit = 0;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<starrocks::MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;

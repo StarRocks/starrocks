@@ -138,7 +138,7 @@ public:
 
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
-    Status _open_data_source(RuntimeState* state);
+    Status _open_data_source(RuntimeState* state, bool* mem_alloc_failed);
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
@@ -164,6 +164,8 @@ private:
     bool _closed = false;
     uint64_t _chunk_rows_read = 0;
     uint64_t _chunk_mem_bytes = 0;
+    int64_t _request_mem_tracker_bytes = 0;
+    UniqueId _unique_id;
 };
 
 } // namespace pipeline

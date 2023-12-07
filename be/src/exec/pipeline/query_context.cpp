@@ -69,6 +69,9 @@ QueryContext::~QueryContext() noexcept {
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
+
+    // Make sure all bytes are released back to parent trackers.
+    _connector_scan_mem_tracker->release_without_root();
 }
 
 void QueryContext::count_down_fragments() {
@@ -152,6 +155,16 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         }
         _connector_scan_operator_mem_share_arbitrator =
                 _object_pool.add(create_connector_scan_operator_mem_share_arbitrator(_static_query_mem_limit));
+
+        {
+            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            if (wg != nullptr) {
+                connector_scan_parent = wg->connector_scan_mem_tracker();
+            }
+            _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+                    MemTracker::QUERY, _static_query_mem_limit * config::connector_scan_use_query_mem_ratio,
+                    _profile->name() + "/connector_scan", connector_scan_parent);
+        }
     });
 }
 

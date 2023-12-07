@@ -57,15 +57,10 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
             per_count = 0;
         }
 
-        auto build_debug_string = [&]() {
-            std::stringstream ss;
-            ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
-               << chunk_source_mem_bytes_value << ")"
-               << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
-               << ", seq = " << driver_sequence << ", per_count = " << per_count;
-            return ss.str();
-        };
-        VLOG_FILE << build_debug_string();
+        VLOG_OPERATOR << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
+                      << chunk_source_mem_bytes_value << ")"
+                      << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
+                      << ", seq = " << driver_sequence << ", per_count = " << per_count;
         return per_count;
     }
 
@@ -305,8 +300,8 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
 
-    // VLOG_FILE << "end_driver_process. query = " << driver->query_ctx()->query_id() << ", id = " << _plan_node_id
-    //           << ", seq = " << _driver_sequence << ", rows = " << _op_pull_rows;
+    VLOG_OPERATOR << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
+                  << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
 
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
@@ -384,8 +379,8 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         ChunkBufferLimiter* limiter = factory->get_chunk_buffer().limiter();
         limiter->update_mem_limit(new_scan_mem_limit * ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio);
 
-        VLOG_FILE << "adjust_scan_mem_limit. scan node id = " << _plan_node_id
-                  << ", new value = " << new_scan_mem_limit;
+        VLOG_OPERATOR << "adjust_scan_mem_limit. scan node id = " << _plan_node_id
+                      << ", new value = " << new_scan_mem_limit;
     }
 
     // adjust io tasks according information collected
@@ -463,8 +458,8 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::min(io_tasks, max_io_tasks);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
-    auto build_debug_string = [&]() {
-        auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
+    [[maybe_unused]] auto build_debug_string = [&]() {
+        auto doround = [](double x) { return round(x * 100.0) / 100.0; };
         std::stringstream ss;
         ss << "available_pickup_morsel_count. id = " << _plan_node_id << ", seq = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
@@ -483,7 +478,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         return ss.str();
     };
 
-    // VLOG_FILE << build_debug_string();
+    VLOG_OPERATOR << build_debug_string();
 
     P.last_cs_speed = cs_speed;
     P.last_cs_pull_chunks = cs_pull_chunks;
@@ -512,6 +507,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    _unique_id = UniqueId::gen_uid();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -539,6 +535,13 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
+    MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+    mem_tracker->release(_request_mem_tracker_bytes);
+
+    VLOG_OPERATOR << "try_mem_tracker. query_id = " << print_id(state->query_id())
+                  << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+                  << ", release. uid = " << _unique_id.to_string() << ", value = " << _request_mem_tracker_bytes;
+
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(-1);
     limiter->update_chunk_source_mem_bytes(_data_source->estimated_mem_usage(),
@@ -548,10 +551,32 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
-Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
+Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_alloc_failed) {
     if (_opened) {
         return Status::OK();
     }
+
+    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+    _request_mem_tracker_bytes = limiter->chunk_source_mem_bytes.load();
+
+    [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
+        std::stringstream ss;
+        ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
+           << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", " << action
+           << ". uid = " << _unique_id.to_string() << ", value = " << _request_mem_tracker_bytes;
+        return ss.str();
+    };
+
+    *mem_alloc_failed = false;
+    MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+    if (mem_tracker->try_consume(_request_mem_tracker_bytes) != nullptr) {
+        _request_mem_tracker_bytes = 0;
+        VLOG_OPERATOR << build_debug_string("alloc failed");
+        *mem_alloc_failed = true;
+        return Status::OK();
+    }
+
+    VLOG_OPERATOR << build_debug_string("consume");
 
     RETURN_IF_ERROR(_data_source->open(state));
     if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
@@ -560,7 +585,6 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
         _ck_acc.set_max_size(state->chunk_size());
     }
 
-    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(1);
 
     _opened = true;
@@ -582,7 +606,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         int64_t prev_io_time_ns = get_io_time_spent();
         int64_t prev_scan_bytes = get_scan_bytes();
 
-        RETURN_IF_ERROR(_open_data_source(state));
+        bool mem_alloc_failed = false;
+        RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
+        if (mem_alloc_failed) {
+            return Status::OK();
+        }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
         }

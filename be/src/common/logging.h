@@ -75,6 +75,7 @@
 #define VLOG_RPC VLOG(8)
 #define VLOG_QUERY VLOG(1)
 #define VLOG_FILE VLOG(2)
+#define VLOG_OPERATOR VLOG(3)
 #define VLOG_ROW VLOG(10)
 #define VLOG_PROGRESS VLOG(2)
 
