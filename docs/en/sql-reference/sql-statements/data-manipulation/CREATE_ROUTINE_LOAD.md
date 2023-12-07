@@ -422,6 +422,7 @@ PROPERTIES
 (
 "max_batch_rows" = "100000",-- The value of max_batch_rows multiplied by 10 equals the error detection window.
 "max_error_number" = "100" -- The maximum number of error data rows allowed within an error detection window.
+)
 FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
