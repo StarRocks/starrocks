@@ -505,7 +505,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.skip_read_rows += chunk_size_ori;
+            _app_stats.late_materialize_skip_rows += chunk_size_ori;
             continue;
         }
         {
