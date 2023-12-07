@@ -33,6 +33,7 @@ import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +41,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -59,7 +61,6 @@ public class LakePublishBatchTest {
 
     private static final String DB = "db_for_test";
     private static final String TABLE = "table_for_test";
-
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
@@ -329,8 +330,9 @@ public class LakePublishBatchTest {
     public void testPublishLogVersion() throws Exception {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 10001L;
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                PseudoBackend pseudoBackend = cluster.getBackends().stream().findAny().get();
+                return new ComputeNode(pseudoBackend.getId(), pseudoBackend.getHost(), 9055);
             }
         };
 
