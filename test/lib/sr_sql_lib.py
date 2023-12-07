@@ -984,7 +984,7 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is found" % (mv_name))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
