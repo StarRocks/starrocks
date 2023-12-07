@@ -328,6 +328,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1499,6 +1501,40 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
+    public String getHiveTempStagingDir() {
+        return hiveTempStagingDir;
+    }
+
+    public boolean enableWriteHiveExternalTable() {
+        return enableWriteHiveExternalTable;
+    }
+
+    public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
+        this.hiveTempStagingDir = hiveTempStagingDir;
+        return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
+    private boolean enableReadIcebergPuffinNdv = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
+
+>>>>>>> 92a3d3df26 ([Enhancement] Optimize shuffle join with skew data (#34854))
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -2957,6 +2993,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
+<<<<<<< HEAD
     public boolean isEnableStrictOrderBy() {
         return enableStrictOrderBy;
     }
@@ -2967,6 +3004,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
         return  enableArrayDistinctAfterAggOpt;
+=======
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
+>>>>>>> 92a3d3df26 ([Enhancement] Optimize shuffle join with skew data (#34854))
     }
 
     // Serialize to thrift object

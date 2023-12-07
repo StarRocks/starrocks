@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTER
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
@@ -339,7 +340,11 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
+<<<<<<< HEAD
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
+=======
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
+>>>>>>> 92a3d3df26 ([Enhancement] Optimize shuffle join with skew data (#34854))
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
