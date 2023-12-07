@@ -686,8 +686,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             Table baseTable = snapshotInfo.getBaseTable();
             if (baseTable.isIcebergTable()) {
-                IcebergTable icebergTable = (IcebergTable) baseTable;
-                icebergTable.setRefreshSnapshotTime(snapshotInfo.getRefreshSnapshotTime());
                 // iceberg table use ALL as partition name, so we don't need to remove partition info
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
                         (!partitionNames.contains(partitionName) && !partitionName.equals(ICEBERG_ALL_PARTITION)));

@@ -427,7 +427,7 @@ public abstract class ConnectorPartitionTraits {
         @Override
         public Optional<Long> maxPartitionRefreshTs() {
             IcebergTable icebergTable = (IcebergTable) table;
-            return Optional.of(icebergTable.getRefreshSnapshotTime());
+            return icebergTable.getSnapshot().map(Snapshot::timestampMillis);
         }
 
         @Override
