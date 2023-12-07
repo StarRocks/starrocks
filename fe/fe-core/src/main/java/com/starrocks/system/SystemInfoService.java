@@ -317,6 +317,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // remove from BackendCoreStat
         BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
 
+<<<<<<< HEAD
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -328,6 +329,15 @@ public class SystemInfoService implements GsonPostProcessable {
                     String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
                     GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
                 }
+=======
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            long starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+>>>>>>> 8b4590fafd ([Refactor]Refactor run mode (#36624))
             }
 
             cluster.removeComputeNode(dropComputeNode.getId());
@@ -432,6 +442,7 @@ public class SystemInfoService implements GsonPostProcessable {
         // remove from BackendCoreStat
         BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
 
+<<<<<<< HEAD
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -443,6 +454,15 @@ public class SystemInfoService implements GsonPostProcessable {
                     String workerAddr = droppedBackend.getHost() + ":" + starletPort;
                     GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
                 }
+=======
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            long starletPort = droppedBackend.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+>>>>>>> 8b4590fafd ([Refactor]Refactor run mode (#36624))
             }
 
             cluster.removeBackend(droppedBackend.getId());
@@ -1143,6 +1163,7 @@ public class SystemInfoService implements GsonPostProcessable {
             BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
         }
 
+<<<<<<< HEAD
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -1155,6 +1176,13 @@ public class SystemInfoService implements GsonPostProcessable {
                 }
                 String workerAddr = cn.getHost() + ":" + starletPort;
                 GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+=======
+        // clear map in starosAgent
+        if (RunMode.isSharedDataMode()) {
+            long starletPort = cn.getStarletPort();
+            if (starletPort == 0) {
+                return;
+>>>>>>> 8b4590fafd ([Refactor]Refactor run mode (#36624))
             }
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
@@ -1177,6 +1205,7 @@ public class SystemInfoService implements GsonPostProcessable {
             BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
         }
 
+<<<<<<< HEAD
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -1190,6 +1219,13 @@ public class SystemInfoService implements GsonPostProcessable {
                 }
                 String workerAddr = backend.getHost() + ":" + starletPort;
                 GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+=======
+        // clear map in starosAgent
+        if (RunMode.isSharedDataMode()) {
+            long starletPort = backend.getStarletPort();
+            if (starletPort == 0) {
+                return;
+>>>>>>> 8b4590fafd ([Refactor]Refactor run mode (#36624))
             }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);

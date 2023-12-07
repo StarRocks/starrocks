@@ -114,6 +114,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return;
             }
 
+<<<<<<< HEAD
             if (!RunMode.allowCreateLakeTable()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
@@ -132,6 +133,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 } else {
                     olapTransactions.add(txnState);
                 }
+=======
+            if (RunMode.isSharedNothingMode()) { // share_nothing mode
+                publishVersionForOlapTable(readyTransactionStates);
+            } else { // share_data mode
+                publishVersionForLakeTable(readyTransactionStates);
+>>>>>>> 8b4590fafd ([Refactor]Refactor run mode (#36624))
             }
 
             if (!olapTransactions.isEmpty()) {
