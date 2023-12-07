@@ -95,6 +95,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -122,14 +123,17 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
 
-    // FileScanTaskSchema -> Pair<schemaId, specId>
+    // FileScanTaskSchema -> Pair<schema_string, partition_string>
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
+    private final ExecutorService executorService;
 
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog) {
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService executorService) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
+        this.executorService = executorService;
     }
 
     @Override
@@ -235,7 +239,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        return icebergCatalog.listPartitionNames(dbName, tblName);
+        return icebergCatalog.listPartitionNames(dbName, tblName, executorService);
     }
 
     @Override
@@ -371,6 +375,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (enableCollectColumnStatistics()) {
             scan = scan.includeColumnStats();
         }
+
+        scan = scan.planWith(executorService);
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
             scan = scan.filter(icebergPredicate);
@@ -540,7 +546,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getRemoteDbName();
             String tableName = icebergTable.getRemoteTableName();
-            icebergCatalog.refreshTable(dbName, tableName);
+            icebergCatalog.refreshTable(dbName, tableName, executorService);
         }
     }
 

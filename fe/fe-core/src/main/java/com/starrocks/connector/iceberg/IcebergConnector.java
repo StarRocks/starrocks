@@ -34,8 +34,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -50,6 +52,7 @@ public class IcebergConnector implements Connector {
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
+    private ExecutorService icebergJobPlanningExecutor;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -94,7 +97,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog());
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(), buildIcebergJobPlanningExecutor());
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -106,7 +109,7 @@ public class IcebergConnector implements Connector {
                     properties.getOrDefault("enable_iceberg_metadata_cache", "true"));
             if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
                 long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
-                nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl);
+                nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl, buildBackgroundJobPlanningExecutor());
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerCachingIcebergCatalog(catalogName, nativeCatalog);
             }
@@ -115,8 +118,28 @@ public class IcebergConnector implements Connector {
         return icebergNativeCatalog;
     }
 
+    private ExecutorService buildIcebergJobPlanningExecutor() {
+        if (icebergJobPlanningExecutor == null) {
+            int poolSize = Math.max(2, Integer.parseInt(properties.getOrDefault("iceberg_job_planning_thread_num",
+                    String.valueOf(Config.iceberg_worker_num_threads))));
+            icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool", poolSize);
+        }
+
+        return icebergJobPlanningExecutor;
+    }
+
+    private ExecutorService buildBackgroundJobPlanningExecutor() {
+        int defaultPoolSize = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
+        int backgroundIcebergJobPlanningThreadPoolSize = Integer.parseInt(properties.getOrDefault(
+                "background_iceberg_job_planning_thread_num", String.valueOf(defaultPoolSize)));
+        return newWorkerPool(catalogName + "-background-iceberg-worker-pool", backgroundIcebergJobPlanningThreadPoolSize);
+    }
+
     @Override
     public void shutdown() {
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCachingIcebergCatalog(catalogName);
+        if (icebergJobPlanningExecutor != null) {
+            icebergJobPlanningExecutor.shutdown();
+        }
     }
 }
