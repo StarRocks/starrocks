@@ -50,8 +50,8 @@ public:
     // Inserts a new TabletSchemaPB into the container constructed with the given arg if there is no TabletSchemaPB with
     // the id and version in the container.
     //
-    // The `id` and `version` of the schema_pb will be compared to determine whether the schema already exist. 
-    // Actually, only `id` is enough to determine the TabletShemaPB right now. But we also use schema verison to 
+    // The `id` and `version` of the schema_pb will be compared to determine whether the schema already exist.
+    // Actually, only `id` is enough to determine the TabletShemaPB right now. But we also use schema verison to
     //
     // REQUIRE: schema_pb.id() != TabletSchema::invalid_id()
     //
@@ -60,7 +60,7 @@ public:
     // [thread-safe]
     std::pair<TabletSchemaPBPtr, bool> emplace(const TabletSchemaPB& schema_pb);
 
-    // Removes the TabletSchemaPB (if one exists) with the id equivalent to id and version 
+    // Removes the TabletSchemaPB (if one exists) with the id equivalent to id and version
     // equivalent to version.
     //
     // Returns number of elements removed (0 or 1).
