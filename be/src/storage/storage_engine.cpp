@@ -957,7 +957,6 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
-        return res;
     }
     return Status::OK();
 }
