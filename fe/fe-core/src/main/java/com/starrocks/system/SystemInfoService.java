@@ -321,7 +321,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = dropComputeNode.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -436,7 +436,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -1148,7 +1148,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (null != cluster) {
             cluster.removeComputeNode(computeNodeId);
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = cn.getStarletPort();
                 if (starletPort == 0) {
                     return;
