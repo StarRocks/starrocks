@@ -176,6 +176,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(tablet_cumulative_max_compaction_score);
     REGISTER_STARROCKS_METRIC(tablet_base_max_compaction_score);
     REGISTER_STARROCKS_METRIC(tablet_update_max_compaction_score);
+    REGISTER_STARROCKS_METRIC(max_tablet_rowset_num);
     REGISTER_STARROCKS_METRIC(wait_cumulative_compaction_task_num);
     REGISTER_STARROCKS_METRIC(wait_base_compaction_task_num);
     REGISTER_STARROCKS_METRIC(running_cumulative_compaction_task_num);
