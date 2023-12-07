@@ -42,6 +42,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -146,6 +147,26 @@ public class FunctionParams implements Writable {
 
     public List<Expr> exprs() {
         return exprs;
+    }
+
+    public void reorderNamedArg(String[] names) {
+        String[] newNames = new String[exprsNames.size()];
+        Expr[] newExprs = new Expr[exprs.size()];
+        for (int i = 0; i < exprsNames.size(); i++) {
+            if (exprsNames.get(i).equals("")) {
+                newNames[i] = exprsNames.get(i);
+                newExprs[i] = exprs.get(i);
+            } else {
+                for (int j = 0; j < names.length; j++) {
+                    if (exprsNames.get(i).equals(names[j])) {
+                        newNames[j] = exprsNames.get(i);
+                        newExprs[j] = exprs.get(i);
+                    }
+                }
+            }
+        }
+        exprs = Arrays.asList(newExprs);
+        exprsNames = Arrays.asList(newNames);
     }
 
     public void setIsDistinct(boolean v) {

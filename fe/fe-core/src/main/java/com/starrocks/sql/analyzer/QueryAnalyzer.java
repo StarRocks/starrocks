@@ -864,7 +864,7 @@ public class QueryAnalyzer {
             }
             List<String> names = node.getFunctionParams().getExprsNames();
             String[] namesArray = null;
-            if (!names.isEmpty()) {
+            if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
             }
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
@@ -875,8 +875,13 @@ public class QueryAnalyzer {
             }
 
             if (fn == null) {
-                throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
-                        Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+                throw new SemanticException("Unknown table function '%s(%s)' '%s'", node.getFunctionName().getFunction(),
+                        Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")),
+                        namesArray == null ? "" : ", or it doesn't support named arguments");
+            }
+            if (namesArray != null) {
+                Preconditions.checkState(fn.hasNamedArg());
+                node.getFunctionParams().reorderNamedArg(fn.getArgNames());
             }
 
             if (!(fn instanceof TableFunction)) {

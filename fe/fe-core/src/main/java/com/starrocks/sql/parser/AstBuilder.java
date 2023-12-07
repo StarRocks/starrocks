@@ -4580,7 +4580,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitNamedArgument(StarRocksParser.NamedArgumentContext context) {
-        String name = ((StringLiteral) visitString(context.string())).getStringValue();
+        String name = ((Identifier) visit(context.identifier())).getValue();
         if (name.isEmpty() || name.equals(" ")) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
         }

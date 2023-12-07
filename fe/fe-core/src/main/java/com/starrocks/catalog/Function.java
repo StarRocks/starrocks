@@ -106,7 +106,7 @@ public class Function implements Writable {
     private Type[] argTypes;
 
     @SerializedName(value = "argNames")
-    private String[] argNames;
+    protected String[] argNames;
 
     // If true, this function has variable arguments.
     // TODO: we don't currently support varargs with no fixed types. i.e. fn(...)
@@ -472,14 +472,19 @@ public class Function implements Writable {
             return false;
         }
         if (o.hasNamedArg()) {
+            if (!this.hasNamedArg()) {
+                return false;
+            }
+            Boolean[] mask = new Boolean[o.argTypes.length];
             for (int i = 0; i < this.argTypes.length; ++i) {
                 boolean found = false;
                 for (int j = 0; j < o.getNumArgs(); j++) {
-                    if (this.argNames[i] == o.argNames[j]) {
+                    if (!mask[j] && this.argNames[i] == o.argNames[j]) {
                         if (!o.argTypes[j].matchesType(this.argTypes[i])) {
                             return false;
                         }
                         found = true;
+                        mask[j] = true;
                     }
                 }
                 if (!found) {
