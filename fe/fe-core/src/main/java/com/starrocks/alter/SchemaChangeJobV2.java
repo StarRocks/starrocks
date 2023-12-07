@@ -745,13 +745,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         // Mark schema changed tablet not to move to trash.
-<<<<<<< HEAD
-                        long baseTabletId = partitionIndexTabletMap.get(
-                                                    partitionId, shadowIdxId).get(shadowTablet.getId());
-=======
                         long baseTabletId = physicalPartitionIndexTabletMap.get(
                                 partitionId, shadowIdxId).get(shadowTablet.getId());
->>>>>>> 9c5bded70c ([BugFix] Fix alter with physical partition (#35561))
+
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
                         GlobalStateMgr.getCurrentInvertedIndex().
                                     markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
