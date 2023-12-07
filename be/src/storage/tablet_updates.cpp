@@ -2393,18 +2393,14 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
             break;
         }
     }
-    if (total_valid_rowsets - info->inputs.size() <= 3) {
-        // give 10s time gitter, so same table's compaction don't start at same time
-        _last_compaction_time_ms = UnixMillis() + rand() % 10000;
-    }
+    // give 10s time gitter, so same table's compaction don't start at same time
+    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
     if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
-    // else there are still many(>3) rowset's need's to be compacted,
-    // do not reset _last_compaction_time_ms so we can continue doing compaction
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " score:" << total_score
               << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
