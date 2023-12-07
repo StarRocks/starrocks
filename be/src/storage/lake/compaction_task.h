@@ -20,7 +20,7 @@
 
 #include "common/status.h"
 #include "runtime/mem_tracker.h"
-#include "storage/lake/tablet.h"
+#include "storage/lake/versioned_tablet.h"
 
 namespace starrocks::lake {
 
@@ -42,8 +42,7 @@ public:
     // should be cancelled.
     using CancelFunc = std::function<bool()>;
 
-    explicit CompactionTask(int64_t txn_id, int64_t version, Tablet tablet,
-                            std::vector<std::shared_ptr<Rowset>> input_rowsets);
+    explicit CompactionTask(int64_t txn_id, VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets);
     virtual ~CompactionTask() = default;
 
     virtual Status execute(Progress* stats, CancelFunc cancel_func) = 0;
@@ -53,8 +52,7 @@ public:
 
 protected:
     int64_t _txn_id;
-    int64_t _version;
-    Tablet _tablet;
+    VersionedTablet _tablet;
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 };
