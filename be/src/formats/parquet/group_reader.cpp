@@ -150,7 +150,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
+        _param.stats->late_materialize_skip_rows += count;
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
@@ -216,7 +216,7 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
             has_filter = true;
             ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
             if (hit_count == 0) {
-                _param.stats->skip_read_rows += count;
+                _param.stats->late_materialize_skip_rows += count;
                 continue;
             }
             active_chunk->filter_range(chunk_filter, 0, count);
