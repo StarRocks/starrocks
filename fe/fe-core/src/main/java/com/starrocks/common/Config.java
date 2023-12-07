@@ -1076,6 +1076,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
+    /**
+     * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
+     * to determine which strategy you choose:
+     *  N <0      : always use non lock optimization and no copy related materialized views which
+     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     *  N = 0    : always not use non lock optimization
+     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     */
+    @ConfField(mutable = true)
+    public static int skip_whole_phase_lock_mv_limit = 5;
+
     @ConfField
     public static boolean enable_udf = false;
 

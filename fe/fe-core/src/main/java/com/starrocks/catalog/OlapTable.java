@@ -336,6 +336,11 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+
+        // Shallow copy shared data to check whether the copied table has changed or not.
+        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
+        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
     }
 
     public BinlogConfig getCurBinlogConfig() {
