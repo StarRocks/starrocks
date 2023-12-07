@@ -153,21 +153,6 @@ public:
 
     void set_empty(bool empty) { _rowset_meta_pb->set_empty(empty); }
 
-    /*
-    void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { 
-        *rs_meta_pb = *_rowset_meta_pb; 
-        rs_meta_pb->clear_tablet_schema();
-        TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-        DCHECK(_schema != nullptr);
-        _schema->to_schema_pb(ts_pb);
-    }
-
-    RowsetMetaPB to_rowset_pb() const {
-        RowsetMetaPB meta_pb;
-        to_rowset_pb(&meta_pb);
-        return meta_pb;
-    }
-*/
     bool is_singleton_delta() const {
         return has_version() && _rowset_meta_pb->start_version() == _rowset_meta_pb->end_version();
     }
@@ -240,20 +225,17 @@ public:
     // new rowset.
     // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
-    /*
-    const RowsetMetaPB get_full_meta_pb() {
-        RowsetMetaPB meta_pb;
-        to_rowset_pb(&meta_pb);
-        return meta_pb;
-    }
-    */
-
     void get_full_meta_pb(RowsetMetaPB* rs_meta_pb) const {
         *rs_meta_pb = *_rowset_meta_pb;
         rs_meta_pb->clear_tablet_schema();
         TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
         DCHECK(_schema != nullptr);
         _schema->to_schema_pb(ts_pb);
+    }
+
+    void get_tablet_schema_pb(TabletSchemaPB* tablet_schema_pb) {
+        DCHECK(_schema != nullptr);
+        _schema->to_schema_pb(tablet_schema_pb);
     }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
@@ -284,7 +266,6 @@ private:
     }
 
     void _init() {
-        LOG(INFO) << "rowset_meta_pb memory usage before clear:" << _rowset_meta_pb->SpaceUsedLong();
         if (_rowset_meta_pb->deprecated_rowset_id() > 0) {
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
@@ -304,7 +285,6 @@ private:
         _rowset_meta_pb->clear_tablet_schema();
         RowsetMetaPB meta_pb = *_rowset_meta_pb;
         _rowset_meta_pb = std::move(std::make_unique<RowsetMetaPB>(meta_pb));
-        LOG(INFO) << "rowset_meta_pb memory usage after clear:" << _rowset_meta_pb->SpaceUsedLong();
     }
 
     int64_t _calc_mem_usage() const {
@@ -312,8 +292,6 @@ private:
         if (_rowset_meta_pb != nullptr) {
             size += static_cast<int64_t>(_rowset_meta_pb->SpaceUsedLong());
         }
-        LOG(INFO) << "rowset_meta_pb memory usage:" << _rowset_meta_pb->SpaceUsedLong()
-                  << ", rowset_meta_pb has table_schema:" << _rowset_meta_pb->has_tablet_schema();
         return size;
     }
 
