@@ -246,7 +246,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_difference](./array-functions/array_difference.md)| 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。 |
 |  [array_distinct](./array-functions/array_distinct.md)| 数组元素去重。 |
 |  [array_filter](./array-functions/array_filter.md)| 根据设定的过滤条件返回数组中匹配的元素。 |
-|  [array_generate](./array-functions/array_generate.md)| 生成一个包含数值元素的数组，数值范围在 start 和 end 之间，步长为 step。 |
 |  [array_intersect](./array-functions/array_intersect.md)| 对于多个同类型数组，返回交集。 |
 |  [array_join](./array-functions/array_join.md)| 将数组中的所有元素连接生成一个字符串。 |
 |  [array_length](./array-functions/array_length.md)| 计算数组中的元素个数。 |

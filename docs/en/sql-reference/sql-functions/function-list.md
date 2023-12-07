@@ -79,7 +79,6 @@ You can find a function based on the following categories:
 - [array_difference](../sql-functions/array-functions/array_difference.md)
 - [array_distinct](../sql-functions/array-functions/array_distinct.md)
 - [array_filter](../sql-functions/array-functions/array_filter.md)
-- [array_generate](../sql-functions/array-functions/array_generate.md)
 - [array_intersect](../sql-functions/array-functions/array_intersect.md)
 - [array_join](../sql-functions/array-functions/array_join.md)
 - [array_length](../sql-functions/array-functions/array_length.md)
