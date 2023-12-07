@@ -349,8 +349,11 @@ public class StatementPlanner {
         if (stmt.isExplain()) {
             return;
         }
-        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).useTableFunctionAsTargetTable()) {
-            return;
+        if (stmt instanceof InsertStmt) {
+            if (((InsertStmt) stmt).useTableFunctionAsTargetTable() ||
+                    ((InsertStmt) stmt).useBlackHoleTableAsTargetTable()) {
+                return;
+            }
         }
 
         MetaUtils.normalizationTableName(session, stmt.getTableName());
