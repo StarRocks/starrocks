@@ -135,7 +135,8 @@ public class StatementPlanner {
             } else if (stmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) stmt;
                 boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect;
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect &&
+                        !session.getSessionVariable().isCboUseDBLock();
                 if (useOptimisticLock) {
                     unLock(locker, dbs);
                     needWholePhaseLock = false;
@@ -312,7 +313,8 @@ public class StatementPlanner {
         }
     }
 
-    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs,
+                                             ConnectContext session) {
         Locker locker = new Locker();
         try {
             lock(locker, dbs);
@@ -411,7 +413,8 @@ public class StatementPlanner {
         } else if (stmt instanceof DeleteStmt) {
             label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
-            throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
+            throw UnsupportedException.unsupportedException(
+                    "Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
@@ -440,7 +443,6 @@ public class StatementPlanner {
                     tbl.getSourceTableHost(),
                     tbl.getSourceTablePort(),
                     authenticateParams);
-
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
