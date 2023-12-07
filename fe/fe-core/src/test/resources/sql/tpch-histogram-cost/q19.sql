@@ -60,7 +60,7 @@ OutPut Exchange Id: 06
 |  28 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [7: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 0
 |  column statistics:
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 3805.9126998620504] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 22735.940088981562] ESTIMATE
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -71,15 +71,15 @@ OutPut Exchange Id: 06
 |  output columns: 6, 7
 |  cardinality: 0
 |  column statistics:
-|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 3805.9126998620504] ESTIMATE
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 22735.940088981562] ESTIMATE
 |  * L_QUANTITY-->[NaN, NaN, 0.0, 8.0, 50.0] ESTIMATE
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 3805.9126998620504] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 22735.940088981562] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 3805.9126998620504] ESTIMATE
-|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 1.0] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 22735.940088981562] ESTIMATE
+|  * P_BRAND-->[-Infinity, Infinity, 0.0, 10.0, 3.0] ESTIMATE
 |  * P_SIZE-->[NaN, NaN, 0.0, 4.0, 50.0] ESTIMATE
-|  * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 4.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 3805.9126998620504] ESTIMATE
+|  * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 12.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 22735.940088981562] ESTIMATE
 |
 |----3:EXCHANGE
 |       cardinality: 6051300
@@ -102,6 +102,7 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, 15: L_SHIPMODE IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
 partitionsRatio=1/1, tabletsRatio=20/20
+tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
 actualRows=0, avgRowSize=67.0
 cardinality: 26568218
 probe runtime filters:
@@ -125,6 +126,7 @@ table: part, rollup: part
 preAggregation: on
 Predicates: 21: P_BRAND IN ('Brand#45', 'Brand#11', 'Brand#21'), [23: P_SIZE, INT, false] <= 15, 24: P_CONTAINER IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG', 'MED BAG', 'MED BOX', 'MED PKG', 'MED PACK', 'LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'), [23: P_SIZE, INT, false] >= 1
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10266,10268,10270,10272,10274,10276,10278,10280,10282,10284
 actualRows=0, avgRowSize=32.0
 cardinality: 6051300
 column statistics:
@@ -133,4 +135,3 @@ column statistics:
 * P_SIZE-->[NaN, NaN, 0.0, 4.0, 50.0] ESTIMATE
 * P_CONTAINER-->[-Infinity, Infinity, 0.0, 10.0, 40.0] ESTIMATE
 [end]
-
