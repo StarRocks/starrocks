@@ -2252,14 +2252,8 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         DCHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
-<<<<<<< HEAD
-=======
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
-    if (stat != nullptr) {
-        stat->read_io_bytes += shard_info.bytes;
-    }
->>>>>>> 5aa7baa91e ([Enhancement] Add crc32c checksum to persistent index's l0 & persistent index compression (backport #30841) (backport #32112) (#36308))
     if (shard_info.key_size != 0) {
         return _get_in_fixlen_shard(shard_idx, n, keys, keys_info, values, found_keys_info, &shard);
     } else {

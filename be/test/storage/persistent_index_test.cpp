@@ -1651,14 +1651,8 @@ TEST_P(PersistentIndexTest, test_get_move_buckets) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-<<<<<<< HEAD
-PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
-    config::l0_max_mem_usage = 1048576;
-=======
 TEST_P(PersistentIndexTest, test_flush_l1_advance) {
-    config::l0_max_mem_usage = 10240;
-    config::max_tmp_l1_num = 10;
->>>>>>> 5aa7baa91e ([Enhancement] Add crc32c checksum to persistent index's l0 & persistent index compression (backport #30841) (backport #32112) (#36308))
+    config::l0_max_mem_usage = 1048576;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l1_advance";
     const std::string kIndexFile = "./PersistentIndexTest_test_flush_l1_advance/index.l0.0.0";
