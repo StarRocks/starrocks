@@ -904,4 +904,29 @@ public class InsertPlanTest extends PlanTestBase {
             Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
         }
     }
+
+    @Test
+    public void testInsertFiles() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\") " +
+                "select 1 as k1");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: []\n" +
+                "    SINGLE: false\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actual);
+    }
 }

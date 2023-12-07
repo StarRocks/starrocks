@@ -336,20 +336,24 @@ public class StatementPlanner {
 
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+        // not need begin transaction here
+        // 1. explain
+        // 2. insert into files
+        // 3. old delete
+        // 4. insert overwrite
+        if (stmt.isExplain()) {
+            return;
+        }
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).useTableFunctionAsTargetTable()) {
+            return;
+        }
+
         MetaUtils.normalizationTableName(session, stmt.getTableName());
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database db = MetaUtils.getDatabase(catalogName, dbName);
         Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
-
-        // not need begin transaction here
-        // 1. explain
-        // 2. old delete
-        // 3. insert overwrite
-        if (stmt.isExplain()) {
-            return;
-        }
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
             return;
