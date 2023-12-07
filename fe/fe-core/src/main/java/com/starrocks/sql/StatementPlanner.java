@@ -136,6 +136,7 @@ public class StatementPlanner {
             if (needWholePhaseLock) {
                 unLock(locker, dbs);
             }
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
         return null;
