@@ -52,11 +52,15 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -308,46 +312,67 @@ public class ExportJob implements Writable, GsonPostProcessable {
             scanNodes.add(scanNode);
             fragments.add(fragment);
         } else {
-            for (TScanRangeLocations tablet : tabletLocations) {
-                List<TScanRangeLocation> locations = tablet.getLocations();
-                Collections.shuffle(locations);
-                tablet.setLocations(locations.subList(0, 1));
-            }
-
-            long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-            List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
-            int taskIdx = 0;
-            while (!copyTabletLocations.isEmpty()) {
-                Map<Long, Long> bytesPerBe = Maps.newHashMap();
-                List<TScanRangeLocations> taskTabletLocations = Lists.newArrayList();
-                Iterator<TScanRangeLocations> iter = copyTabletLocations.iterator();
-                while (iter.hasNext()) {
-                    TScanRangeLocations scanRangeLocations = iter.next();
-                    long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
-                    long backendId = scanRangeLocations.getLocations().get(0).getBackend_id();
-                    Replica replica = invertedIndex.getReplica(tabletId, backendId);
-                    long dataSize = replica != null ? replica.getDataSize() : 0L;
-
-                    Long assignedBytes = bytesPerBe.get(backendId);
-                    if (assignedBytes == null || assignedBytes < maxBytesPerBe) {
-                        taskTabletLocations.add(scanRangeLocations);
-                        bytesPerBe.put(backendId, assignedBytes != null ? assignedBytes + dataSize : dataSize);
-                        iter.remove();
-                    }
-                }
-
-                OlapScanNode taskScanNode = genOlapScanNodeByLocation(taskTabletLocations);
-                scanNodes.add(taskScanNode);
-                PlanFragment fragment = genPlanFragment(exportTable.getType(), taskScanNode, taskIdx++);
-                fragments.add(fragment);
-            }
-
-            LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
-                    tabletLocations.size(), id, fragments.size());
+            genTaskFragments(fragments, scanNodes);
         }
 
         genCoordinators(stmt, fragments, scanNodes);
+    }
+
+    private void genTaskFragments(List<PlanFragment> fragments, List<ScanNode> scanNodes) throws UserException {
+        Preconditions.checkNotNull(tabletLocations);
+
+        for (TScanRangeLocations tablet : tabletLocations) {
+            List<TScanRangeLocation> locations = tablet.getLocations();
+            Collections.shuffle(locations);
+            tablet.setLocations(locations.subList(0, 1));
+        }
+
+        long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
+        int taskIdx = 0;
+        while (!copyTabletLocations.isEmpty()) {
+            Map<Long, Long> bytesPerBe = Maps.newHashMap();
+            List<TScanRangeLocations> taskTabletLocations = Lists.newArrayList();
+            Iterator<TScanRangeLocations> iter = copyTabletLocations.iterator();
+            while (iter.hasNext()) {
+                TScanRangeLocations scanRangeLocations = iter.next();
+                long backendId = scanRangeLocations.getLocations().get(0).getBackend_id();
+                long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dataSize = 0L;
+                if (tabletMeta.isLakeTablet()) {
+                    Partition partition = exportTable.getPartition(tabletMeta.getPartitionId());
+                    if (partition != null) {
+                        MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                        if (index != null) {
+                            Tablet tablet = index.getTablet(tabletId);
+                            if (tablet != null) {
+                                dataSize = tablet.getDataSize(true);
+                            }
+                        }
+                    }
+                } else {
+                    Replica replica = invertedIndex.getReplica(tabletId, backendId);
+                    dataSize = replica != null ? replica.getDataSize() : 0L;
+                }
+
+                Long assignedBytes = bytesPerBe.get(backendId);
+                if (assignedBytes == null || assignedBytes < maxBytesPerBe) {
+                    taskTabletLocations.add(scanRangeLocations);
+                    bytesPerBe.put(backendId, assignedBytes != null ? assignedBytes + dataSize : dataSize);
+                    iter.remove();
+                }
+            }
+
+            OlapScanNode taskScanNode = genOlapScanNodeByLocation(taskTabletLocations);
+            scanNodes.add(taskScanNode);
+            PlanFragment fragment = genPlanFragment(exportTable.getType(), taskScanNode, taskIdx++);
+            fragments.add(fragment);
+        }
+
+        LOG.info("total {} tablets of export job {}, and assign them to {} coordinators",
+                tabletLocations.size(), id, fragments.size());
     }
 
     private ScanNode genScanNode() throws UserException {
@@ -446,7 +471,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
         }
-        LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
+        LOG.info("create {} coordinators for export job: {}", coordList.size(), id);
     }
 
     // For olap table, it may have multiple replica, 
