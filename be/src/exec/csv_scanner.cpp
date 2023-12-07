@@ -429,13 +429,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
         if (fields.size() != _num_fields_in_csv) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
+                std::string error_msg =
+                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
                 _report_error(record, error_msg);
             }
             if (_state->enable_log_rejected_record()) {
-                std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
-                                                                                    row.columns.size(), _parse_options);
+                std::string error_msg =
+                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
                 _report_rejected_record(record, error_msg);
             }
             continue;
