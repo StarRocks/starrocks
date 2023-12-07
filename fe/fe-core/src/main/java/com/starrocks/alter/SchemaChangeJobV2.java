@@ -1048,6 +1048,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 MaterializedIndex shadowIndex = cell.getValue();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
 
+                if (partition == null) {
+                    LOG.warn("partition {} does not exist when replaying job {}", partitionId, jobId);
+                    continue;
+                }
                 TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId,
                         indexSchemaVersionAndHashMap.get(shadowIndexId).schemaHash, medium);
