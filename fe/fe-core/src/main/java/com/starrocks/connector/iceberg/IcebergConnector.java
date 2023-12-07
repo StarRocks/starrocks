@@ -137,7 +137,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public void shutdown() {
-        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCachingIcebergCatalog(catalogName);
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }
