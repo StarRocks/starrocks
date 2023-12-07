@@ -477,7 +477,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.isSharedDataMode() ? "default" : "local");
         return this;
     }
 
