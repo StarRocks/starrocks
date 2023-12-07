@@ -26,6 +26,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -465,5 +466,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         String tableName = matcher.group(1);
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
+    }
+
+    public void runFileUnitTestWithNormalizedResult(String fileName) {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableNormalizePredicateAfterMVRewrite(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        runFileUnitTest(fileName);
+        connectContext.getSessionVariable().setQueryDebugOptions("");
     }
 }
