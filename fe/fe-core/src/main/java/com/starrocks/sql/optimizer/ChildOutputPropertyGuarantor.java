@@ -341,7 +341,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             HashDistributionDesc rightDistributionDesc = rightDistributionSpec.getHashDistributionDesc();
 
             // 2.1 respect the hint
-            if (JoinOperator.HINT_SHUFFLE.equals(hint)) {
+            if (JoinOperator.HINT_SHUFFLE.equals(hint) || JoinOperator.HINT_SKEW.equals(hint)) {
                 if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
