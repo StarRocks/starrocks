@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/result_sink_operator.h"
 
-#include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/http_result_writer.h"
