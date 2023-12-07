@@ -283,8 +283,9 @@ private:
         _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
 
         _rowset_meta_pb->clear_tablet_schema();
-        RowsetMetaPB meta_pb = *_rowset_meta_pb;
-        _rowset_meta_pb = std::move(std::make_unique<RowsetMetaPB>(meta_pb));
+        RowsetMetaPB* meta_pb = new RowsetMetaPB();
+        *meta_pb = *_rowset_meta_pb;
+        _rowset_meta_pb = std::move(std::make_unique<RowsetMetaPB>(*meta_pb));
     }
 
     int64_t _calc_mem_usage() const {
