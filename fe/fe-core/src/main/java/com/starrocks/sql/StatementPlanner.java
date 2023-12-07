@@ -350,8 +350,11 @@ public class StatementPlanner {
         if (stmt.isExplain()) {
             return;
         }
-        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).useTableFunctionAsTargetTable()) {
-            return;
+        if (stmt instanceof InsertStmt) {
+            if (((InsertStmt) stmt).useTableFunctionAsTargetTable() ||
+                    ((InsertStmt) stmt).useBlackHoleTableAsTargetTable()) {
+                return;
+            }
         }
 
         MetaUtils.normalizationTableName(session, stmt.getTableName());
@@ -398,7 +401,7 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable()) {
+                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
             long dbId = db.getId();
