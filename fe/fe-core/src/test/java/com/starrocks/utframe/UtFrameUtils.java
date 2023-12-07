@@ -417,6 +417,7 @@ public class UtFrameUtils {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.setThreadLocalInfo();
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
