@@ -48,9 +48,9 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -134,7 +134,7 @@ public class StatementPlanner {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) stmt;
-                boolean isSelect = insertStmt.getQueryStatement().getQueryRelation() instanceof SelectRelation;
+                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
                 boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect;
                 if (useOptimisticLock) {
                     unLock(locker, dbs);
