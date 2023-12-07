@@ -1917,13 +1917,15 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
             }
 
-            MaterializedIndex baseIndex = partition.getBaseIndex();
-            int schemaHash = olapTable.getSchemaHashByIndexId(baseIndex.getId());
-            for (Tablet tablet : baseIndex.getTablets()) {
-                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                    Set<Pair<Long, Integer>> tabletIdWithHash =
-                            beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
-                    tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                int schemaHash = olapTable.getSchemaHashByIndexId(baseIndex.getId());
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        Set<Pair<Long, Integer>> tabletIdWithHash =
+                                beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                        tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+                    }
                 }
             }
 

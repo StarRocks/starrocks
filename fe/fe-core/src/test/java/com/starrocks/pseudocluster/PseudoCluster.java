@@ -29,7 +29,7 @@ import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
@@ -294,7 +294,7 @@ public class PseudoCluster {
             }
             OlapTable olapTable = (OlapTable) table;
             List<Long> ret = Lists.newArrayList();
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 for (MaterializedIndex index : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
