@@ -215,19 +215,15 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
-<<<<<<< HEAD
-            auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
-                                             commit_time);
-=======
 
             StatusOr<lake::TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
-                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
+                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
+                                            commit_time);
             } else {
                 auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                 res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
             }
->>>>>>> de49f59f31 ([Enhancement] Introduced a timeout parameter for lake::PublishVersionRequest (#36388))
             if (res.ok()) {
                 auto metadata = std::move(res).value();
                 auto score = compaction_score(*metadata);

@@ -112,24 +112,10 @@ public class Utils {
             }
             nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
         }
-<<<<<<< HEAD
         List<Long> txnIds = Lists.newArrayList(txnId);
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            // TODO: need to refactor after be split into cn + dn
-            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
-            if (node == null) {
-                throw new NoAliveBackendException("Backend or computeNode been " +
-                        "dropped while building publish version request");
-            }
-=======
-
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         List<ComputeNode> backendList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
->>>>>>> de49f59f31 ([Enhancement] Introduced a timeout parameter for lake::PublishVersionRequest (#36388))
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
@@ -162,35 +148,18 @@ public class Utils {
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
             throws NoAliveBackendException, RpcException {
-<<<<<<< HEAD
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
-=======
-        List<Long> txnIds = new ArrayList<>();
-        txnIds.add(txnId);
-        List<Long> versions = new ArrayList<>();
-        versions.add(version);
-        publishLogVersionBatch(tablets, txnIds, versions);
-    }
-
-    public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds, List<Long> versions)
-            throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
->>>>>>> de49f59f31 ([Enhancement] Introduced a timeout parameter for lake::PublishVersionRequest (#36388))
         for (Tablet tablet : tablets) {
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
             if (node == null) {
                 throw new NoAliveBackendException("No alive node for handle publish version request");
             }
-<<<<<<< HEAD
-            PublishLogVersionRequest request = new PublishLogVersionRequest();
-=======
             nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
         }
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
-            PublishLogVersionBatchRequest request = new PublishLogVersionBatchRequest();
->>>>>>> de49f59f31 ([Enhancement] Introduced a timeout parameter for lake::PublishVersionRequest (#36388))
+            PublishLogVersionRequest request = new PublishLogVersionRequest();
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = version;

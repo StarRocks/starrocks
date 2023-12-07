@@ -92,17 +92,8 @@ public:
                      ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
-<<<<<<< HEAD
-    static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L; // 5 minutes
-=======
-    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
-                                          const int64_t* log_versions, size_t txn_size,
-                                          ::starrocks::lake::PublishLogVersionResponse* response);
-
-private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
     static constexpr int64_t kDefaultTimeoutForPublishVersion = 1 * 60 * 1000L; // 1 minute
->>>>>>> de49f59f31 ([Enhancement] Introduced a timeout parameter for lake::PublishVersionRequest (#36388))
 
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
