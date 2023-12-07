@@ -414,6 +414,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         _curr_reader->split_record(record, &fields);
 
         if (fields.size() != _num_fields_in_csv) {
+<<<<<<< HEAD
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
@@ -429,6 +430,17 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                           << "Column delimiter: " << string_2_asc(_parse_options.column_delimiter) << ","
                           << "Row delimiter: " << string_2_asc(_parse_options.row_delimiter) << ".";
                 _state->append_rejected_record_to_file(record.to_string(), error_msg.str(), _curr_reader->filename());
+=======
+            if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                std::string error_msg =
+                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
+                _report_error(record, error_msg);
+            }
+            if (_state->enable_log_rejected_record()) {
+                std::string error_msg =
+                        make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
+                _report_rejected_record(record, error_msg);
+>>>>>>> ebc6440961 ([BugFix] Fix actual fields size in csv scanner (#36478))
             }
             continue;
         }
