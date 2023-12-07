@@ -17,6 +17,7 @@
 namespace starrocks::pipeline {
 
 Status BlackHoleTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    state->update_num_rows_load_sink(chunk->num_rows());
     return Status::OK();
 }
 
