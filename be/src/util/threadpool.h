@@ -241,6 +241,8 @@ public:
         return _active_threads;
     }
 
+    int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
