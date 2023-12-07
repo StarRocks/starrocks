@@ -4,9 +4,6 @@ displayed_sidebar: "Chinese"
 
 # 数据分布
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 建表时，您可以通过设置合理的分区和分桶，实现数据均匀分布和查询性能提升。数据均匀分布是指数据按照一定规则划分为子集，并且均衡地分布在不同节点上。查询时能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 
 > **说明**
@@ -19,6 +16,8 @@ import TabItem from '@theme/TabItem';
 ### 常见的数据分布方式
 
 现代分布式数据库中，常见的数据分布方式有如下几种：Round-Robin、Range、List 和 Hash。如下图所示：
+
+![数据分布方式](../assets/3.3.2-1.png)
 
 - Round-Robin：以轮询的方式把数据逐个放置在相邻节点上。
 
@@ -33,7 +32,6 @@ import TabItem from '@theme/TabItem';
 ### StarRocks 的数据分布方式
 
 StarRocks 支持单独和组合使用数据分布方式。
-
 > **说明**
 >
 > 除了常见的分布方式外， StarRocks 还支持了 Random 分布，可以简化分桶设置。
@@ -57,107 +55,107 @@ StarRocks 支持单独和组合使用数据分布方式。
   建表时不设置分区和分桶方式，则默认使用 Random 分布
 
     ```SQL
-  CREATE TABLE site_access1 (
-      event_day DATE,
-      site_id INT DEFAULT '10', 
-      pv BIGINT DEFAULT '0' ,
-      city_code VARCHAR(100),
-      user_name VARCHAR(32) DEFAULT ''
-  )
-  DUPLICATE KEY (event_day,site_id,pv);
-  -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
+    CREATE TABLE site_access1 (
+        event_day DATE,
+        site_id INT DEFAULT '10', 
+        pv BIGINT DEFAULT '0' ,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT ''
+    )
+    DUPLICATE KEY (event_day,site_id,pv);
+    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
     ```
 
 - Hash 分布
 
-  ```SQL
-  CREATE TABLE site_access2 (
-      event_day DATE,
-      site_id INT DEFAULT '10',
-      city_code SMALLINT,
-      user_name VARCHAR(32) DEFAULT '',
-      pv BIGINT SUM DEFAULT '0'
-  )
-  AGGREGATE KEY (event_day, site_id, city_code, user_name)
-  -- 设置分桶方式为哈希分桶，并且必须指定分桶键
-  DISTRIBUTED BY HASH(event_day,site_id); 
-  ```
+    ```SQL
+    CREATE TABLE site_access2 (
+        event_day DATE,
+        site_id INT DEFAULT '10',
+        city_code SMALLINT,
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY (event_day, site_id, city_code, user_name)
+    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+    DISTRIBUTED BY HASH(event_day,site_id); 
+    ```
 
 - Range + Random 分布
 
-  ```SQL
-  CREATE TABLE site_access3 (
-      event_day DATE,
-      site_id INT DEFAULT '10', 
-      pv BIGINT DEFAULT '0' ,
-      city_code VARCHAR(100),
-      user_name VARCHAR(32) DEFAULT ''
-  )
-  DUPLICATE KEY(event_day,site_id,pv)
-  -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
-  PARTITION BY date_trunc('day', event_day);
-  -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
-  ```
+    ```SQL
+    CREATE TABLE site_access3 (
+        event_day DATE,
+        site_id INT DEFAULT '10', 
+        pv BIGINT DEFAULT '0' ,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT ''
+    )
+    DUPLICATE KEY(event_day,site_id,pv)
+    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+    PARTITION BY date_trunc('day', event_day);
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    ```
 
 - Range + Hash 分布
 
-  ```SQL
-  CREATE TABLE site_access4 (
-      event_day DATE,
-      site_id INT DEFAULT '10',
-      city_code VARCHAR(100),
-      user_name VARCHAR(32) DEFAULT '',
-      pv BIGINT SUM DEFAULT '0'
-  )
-  AGGREGATE KEY(event_day, site_id, city_code, user_name)
-  -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
-  PARTITION BY date_trunc('day', event_day)
-  -- 设置分桶方式为哈希分桶，必须指定分桶键
-  DISTRIBUTED BY HASH(event_day, site_id);
-  ```
+    ```SQL
+    CREATE TABLE site_access4 (
+        event_day DATE,
+        site_id INT DEFAULT '10',
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_day, site_id, city_code, user_name)
+    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+    PARTITION BY date_trunc('day', event_day)
+    -- 设置分桶方式为哈希分桶，必须指定分桶键
+    DISTRIBUTED BY HASH(event_day, site_id);
+    ```
 
 - List + Random 分布
 
-  ```SQL
-  CREATE TABLE t_recharge_detail1 (
-      id bigint,
-      user_id bigint,
-      recharge_money decimal(32,2), 
-      city varchar(20) not null,
-      dt date not null
-  )
-  DUPLICATE KEY(id)
-  -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
-  PARTITION BY (city);
-  -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
-  ```
+    ```SQL
+    CREATE TABLE t_recharge_detail1 (
+        id bigint,
+        user_id bigint,
+        recharge_money decimal(32,2), 
+        city varchar(20) not null,
+        dt date not null
+    )
+    DUPLICATE KEY(id)
+    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+    PARTITION BY (city);
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    ```
 
 - List + Hash 分布
 
-  ```SQL
-  CREATE TABLE t_recharge_detail2 (
-      id bigint,
-      user_id bigint,
-      recharge_money decimal(32,2), 
-      city varchar(20) not null,
-      dt date not null
-  )
-  DUPLICATE KEY(id)
-  -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
-  PARTITION BY (city)
-  -- 设置分桶方式为哈希分桶，并且必须指定分桶键
-  DISTRIBUTED BY HASH(city,id); 
-  ```
+    ```SQL
+    CREATE TABLE t_recharge_detail2 (
+        id bigint,
+        user_id bigint,
+        recharge_money decimal(32,2), 
+        city varchar(20) not null,
+        dt date not null
+    )
+    DUPLICATE KEY(id)
+    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+    PARTITION BY (city)
+    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+    DISTRIBUTED BY HASH(city,id); 
+    ```
 
 #### 分区
 
 分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如分桶数、冷热策略、存储介质、副本数等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
 
-| **分区方式**       | **适用场景**                                                 | **分区创建方式**       |
-| ------------------ | ------------------------------------------------------------ | ---------------------- |
-| 表达式分区（推荐） | 原称自动创建分区，适用大多数场景，并且灵活易用。适用于按照连续日期范围或者枚举值来查询和管理数据。 | 导入时自动创建         |
+| **分区方式**       | **适用场景**                                                     | **分区创建方式**                                  |
+| ------------------ | ------------------------------------------------------------ | --------------------------------------------- |
+| 表达式分区（推荐） | 原称自动创建分区，适用大多数场景，并且灵活易用。适用于按照连续日期范围或者枚举值来查询和管理数据。 | 导入时自动创建                                |
 | Range 分区         | 典型的场景是数据简单有序，并且通常按照连续日期/数值范围来查询和管理数据。再如一些特殊场景，比如历史数据需要按月划分分区，而最近数据需要按天划分分区。 | 动态、批量或者手动创建 |
-| List  分区         | 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建               |
+| List  分区         | 典型的场景是按照枚举值来查询和管理数据，并且一个分区中需要包含各分区列的多值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。 | 手动创建                              |
 
 **选择分区列和分区粒度**
 
@@ -231,128 +229,128 @@ DISTRIBUTED BY HASH(site_id);
 
 - **建表时批量创建日期分区**
 
-  当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
+    当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
 
-  如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
+    如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
 
-  ```SQL
-  CREATE TABLE site_access (
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES (
-      "replication_num" = "3" 
-  );
-  ```
+    ```SQL
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    ENGINE=olap
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id)
+    PROPERTIES (
+        "replication_num" = "3" 
+    );
+    ```
 
-  则相当于在建表语句中使用如下 PARTITION BY 子句：
+    则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-      PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-      PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-      PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-  )
-  ```
+    ```SQL
+    PARTITION BY RANGE (datekey) (
+        PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+        PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+        PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+    )
+    ```
 
 - **建表时批量创建不同日期间隔的日期分区**
 
-  建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
+    建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
 
-  ```SQL
-  CREATE TABLE site_access (
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
-      START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
-      START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES (
-      "replication_num" = "3"
-  );
-  ```
+    ```SQL
+    CREATE TABLE site_access (
+        datekey DATE,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    ENGINE=olap
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
+        START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
+        START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id)
+    PROPERTIES (
+        "replication_num" = "3"
+    );
+    ```
 
-  则相当于在建表语句中使用如下 PARTITION BY 子句：
+    则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-      PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-      PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-      PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-      PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-      PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-      PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-      PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-      PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-      PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
-  ```
+    ```SQL
+    PARTITION BY RANGE (datekey) (
+        PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+        PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+        PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+        PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+        PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+        PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+        PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+        PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+        PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+    )
+    ```
 
 - **建表时批量创建数字分区**
 
-  当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
+    当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
 
-  > **说明**
-  >
-  > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+    > **说明**
+    >
+    > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 
-  如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
+    如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
 
-  ```SQL
-  CREATE TABLE site_access (
-      datekey INT,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("1") END ("5") EVERY (1)
-  )
-  DISTRIBUTED BY HASH(site_id)
-  PROPERTIES (
-      "replication_num" = "3"
-  );
-  ```
+    ```SQL
+    CREATE TABLE site_access (
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    ENGINE=olap
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("5") EVERY (1)
+    )
+    DISTRIBUTED BY HASH(site_id)
+    PROPERTIES (
+        "replication_num" = "3"
+    );
+    ```
 
-  则相当于在建表语句中使用如下 PARTITION BY 子句：
+    则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-      PARTITION p1 VALUES [("1"), ("2")),
-      PARTITION p2 VALUES [("2"), ("3")),
-      PARTITION p3 VALUES [("3"), ("4")),
-      PARTITION p4 VALUES [("4"), ("5"))
-  )
-  ```
+    ```SQL
+    PARTITION BY RANGE (datekey) (
+        PARTITION p1 VALUES [("1"), ("2")),
+        PARTITION p2 VALUES [("2"), ("3")),
+        PARTITION p3 VALUES [("3"), ("4")),
+        PARTITION p4 VALUES [("4"), ("5"))
+    )
+    ```
 
 - **建表后批量创建分区**
 
-  建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
+    建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
 
-  ```SQL
-  ALTER TABLE site_access 
-  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
-  ```
+    ```SQL
+    ALTER TABLE site_access 
+    ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+    ```
 
 #### List 分区（自 v3.1）
 
