@@ -867,6 +867,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_batch_size_mb = 100;
 
     /**
+     * Stream load max txn num per BE, less than 0 means no limit
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_max_txn_num_per_be = -1;
+
+    /**
      * Default prepared transaction timeout
      */
     @ConfField(mutable = true)
@@ -2011,7 +2017,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = 64;
+    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool

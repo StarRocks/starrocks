@@ -2170,7 +2170,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn(errMsg);
 
                 String userErrorMsg = String.format(
-                        "Table creation timed out.\n You can increase the timeout by increasing the " +
+                        errMsg + "\n You can increase the timeout by increasing the " +
                                 "config \"tablet_create_timeout_second\" and try again.\n" +
                                 "To increase the config \"tablet_create_timeout_second\" (currently %d), " +
                                 "run the following command:\n" +

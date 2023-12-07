@@ -1484,6 +1484,18 @@ public class DatabaseTransactionMgr {
         return txnInfos;
     }
 
+    public Long getTransactionNumByCoordinateBe(String coordinateHost) {
+        readLock();
+        try {
+            return idToRunningTransactionState.values().stream()
+                    .filter(t -> (t.getCoordinator().sourceType == TransactionState.TxnSourceType.BE
+                            && t.getCoordinator().ip.equals(coordinateHost)))
+                    .mapToLong(item -> 1).sum();
+        } finally {
+            readUnlock();
+        }
+    }
+
     // get show info of a specified txnId
     public List<List<String>> getSingleTranInfo(long dbId, long txnId) throws AnalysisException {
         List<List<String>> infos = new ArrayList<List<String>>();
