@@ -105,6 +105,9 @@ public class Function implements Writable {
     @SerializedName(value = "argTypes")
     private Type[] argTypes;
 
+    @SerializedName(value = "argNames")
+    private String[] argNames;
+
     // If true, this function has variable arguments.
     // TODO: we don't currently support varargs with no fixed types. i.e. fn(...)
     @SerializedName(value = "hasVarArgs")
@@ -148,6 +151,10 @@ public class Function implements Writable {
         this(0, name, argTypes, retType, varArgs);
     }
 
+    public Function(FunctionName name, Type[] argTypes, String[] argNames, Type retType, boolean varArgs) {
+        this(0, name, argTypes, argNames, retType, varArgs);
+    }
+
     public Function(FunctionName name, List<Type> args, Type retType, boolean varArgs) {
         this(0, name, args, retType, varArgs);
     }
@@ -162,6 +169,21 @@ public class Function implements Writable {
         } else {
             this.argTypes = argTypes;
         }
+        this.retType = retType;
+        this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
+    }
+
+    public Function(long id, FunctionName name, Type[] argTypes, String[] argNames, Type retType, boolean hasVarArgs) {
+        this.id = id;
+        this.functionId = id;
+        this.name = name;
+        this.hasVarArgs = hasVarArgs;
+        if (argTypes == null) {
+            this.argTypes = new Type[0];
+        } else {
+            this.argTypes = argTypes;
+        }
+        this.argNames = argNames;
         this.retType = retType;
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
@@ -186,6 +208,7 @@ public class Function implements Writable {
         name = other.name;
         retType = other.retType;
         argTypes = other.argTypes;
+        argNames = other.argNames;
         hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
         location = other.location;
@@ -215,6 +238,14 @@ public class Function implements Writable {
 
     public Type[] getArgs() {
         return argTypes;
+    }
+
+    public String[] getArgNames() {
+        return argNames;
+    }
+
+    public boolean hasNamedArg() {
+        return argNames != null && argNames.length > 0;
     }
 
     // Returns the number of arguments to this function.
@@ -440,9 +471,26 @@ public class Function implements Writable {
         if (o.hasVarArgs != this.hasVarArgs) {
             return false;
         }
-        for (int i = 0; i < this.argTypes.length; ++i) {
-            if (!o.argTypes[i].matchesType(this.argTypes[i])) {
-                return false;
+        if (o.hasNamedArg()) {
+            for (int i = 0; i < this.argTypes.length; ++i) {
+                boolean found = false;
+                for (int j = 0; j < o.getNumArgs(); j++) {
+                    if (this.argNames[i] == o.argNames[j]) {
+                        if (!o.argTypes[j].matchesType(this.argTypes[i])) {
+                            return false;
+                        }
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    return false;
+                }
+            }
+        } else {
+            for (int i = 0; i < this.argTypes.length; ++i) {
+                if (!o.argTypes[i].matchesType(this.argTypes[i])) {
+                    return false;
+                }
             }
         }
         return true;

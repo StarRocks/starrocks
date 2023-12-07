@@ -58,6 +58,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
@@ -4578,6 +4579,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitNamedArgument(StarRocksParser.NamedArgumentContext context) {
+        String name = ((StringLiteral) visitString(context.string())).getStringValue();
+        if (name.isEmpty() || name.equals(" ")) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
+        }
+        Expr node = (Expr) visit(context.expression());
+        if (node == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be empty"));
+        }
+        return new NamedArgument(name, node);
+    }
+
+    @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
@@ -4598,7 +4612,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters, createPos(context));
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {

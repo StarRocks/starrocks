@@ -862,8 +862,12 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
-
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+            List<String> names = node.getFunctionParams().getExprsNames();
+            String[] namesArray = null;
+            if (!names.isEmpty()) {
+                namesArray = names.toArray(String[]::new);
+            }
+            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

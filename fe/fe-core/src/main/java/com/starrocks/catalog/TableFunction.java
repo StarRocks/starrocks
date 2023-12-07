@@ -47,13 +47,31 @@ public class TableFunction extends Function {
     @SerializedName(value = "symbolName")
     private String symbolName = "";
 
+    @SerializedName(value = "argumentNames")
+    private List<String> argNames;
+
     // only used for serialization
     protected TableFunction() {
     }
 
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+    }
+
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+        this(fnName, Lists.newArrayList(""), defaultColumnNames, argTypes, tableFnReturnTypes, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes, boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
+        this.tableFnReturnTypes = tableFnReturnTypes;
+        this.defaultColumnNames = defaultColumnNames;
+        this.argNames = argNames;
+
+        setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
@@ -70,6 +88,7 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
+        argNames = other.argNames;
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
@@ -90,6 +109,7 @@ public class TableFunction extends Function {
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
             // generate_series with default step size: 1
             TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end"),
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type),
                     Lists.newArrayList(type));
@@ -97,6 +117,7 @@ public class TableFunction extends Function {
 
             // generate_series with explicit step size
             func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type));
@@ -138,6 +159,7 @@ public class TableFunction extends Function {
         this.symbolName = tableFunction.symbolName;
         this.tableFnReturnTypes = tableFunction.getTableFnReturnTypes();
         this.defaultColumnNames = tableFunction.getDefaultColumnNames();
+        this.argNames = tableFunction.argNames;
     }
 
     @Override

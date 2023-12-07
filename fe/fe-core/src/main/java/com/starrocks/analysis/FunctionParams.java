@@ -53,14 +53,23 @@ import java.util.stream.Collectors;
 public class FunctionParams implements Writable {
     private boolean isStar;
     private List<Expr> exprs;
+
+    private List<String> exprsNames;
     private boolean isDistinct;
 
     private List<OrderByElement> orderByElements;
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
+        if (exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
+            this.exprs = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getExpr()
+                    : e)).collect(Collectors.toList());
+            this.exprsNames = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getName()
+                    : "")).collect(Collectors.toList());
+        } else {
+            this.exprs = exprs;
+        }
         isStar = false;
         this.isDistinct = isDistinct;
-        this.exprs = exprs;
         this.orderByElements = null;
     }
 
@@ -87,6 +96,10 @@ public class FunctionParams implements Writable {
         isStar = true;
         isDistinct = false;
         orderByElements = null;
+    }
+
+    public List<String> getExprsNames() {
+        return exprsNames;
     }
 
     public static FunctionParams createStarParam() {
