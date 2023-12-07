@@ -71,7 +71,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.ADAPTIVE_DECREASE;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 
 // System variable
