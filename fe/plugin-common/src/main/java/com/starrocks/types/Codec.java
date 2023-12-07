@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common;
+package com.starrocks.types;
 
 import java.io.DataInput;
 import java.io.DataOutput;
