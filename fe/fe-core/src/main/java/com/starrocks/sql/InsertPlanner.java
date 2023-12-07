@@ -124,10 +124,43 @@ public class InsertPlanner {
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
+    private Map<String, Database> dbs;
+    private boolean useOptimisticLock;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
+    public InsertPlanner() {
+        this.useOptimisticLock = false;
+    }
+
+    public InsertPlanner(Map<String, Database> dbs, boolean optimisticLock) {
+        this.dbs = dbs;
+        this.useOptimisticLock = optimisticLock;
+    }
+
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        if (!useOptimisticLock) {
+            return planImpl(insertStmt, session);
+        }
+
+        // Optimistic Lock Optimization
+        long planStartTime = System.currentTimeMillis();
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
+        ExecPlan plan = planImpl(insertStmt, session);
+
+        boolean isSchemaValid = olapTables.stream().noneMatch(t ->
+                t.lastSchemaUpdateTime.get() > planStartTime);
+        isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
+                t.lastVersionUpdateEndTime.get() < planStartTime &&
+                        t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
+        if (!isSchemaValid) {
+            throw new SemanticException("got concurrent metadata modification during query planning, " +
+                    "please retry this query");
+        }
+        return plan;
+    }
+
+    private ExecPlan planImpl(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -316,7 +349,8 @@ public class InsertPlanner {
                     sinkFragment.setPipelineDop(1);
                 } else {
                     if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                        sinkFragment.setPipelineDop(
+                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                     } else {
                         sinkFragment
                                 .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
@@ -370,8 +404,8 @@ public class InsertPlanner {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                     targetColumn.getName() + " You can use `default` for an" +
-                                                     " AUTO INCREMENT column");
+                                targetColumn.getName() + " You can use `default` for an" +
+                                " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -388,9 +422,10 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                        targetColumn.getName() + " You can use `default` for an" +
-                                                        " AUTO INCREMENT column");
+                            throw new SemanticException(
+                                    " `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                            targetColumn.getName() + " You can use `default` for an" +
+                                            " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
@@ -461,8 +496,8 @@ public class InsertPlanner {
     }
 
     private OptExprBuilder fillGeneratedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
-                                                   List<ColumnRefOperator> outputColumns, OptExprBuilder root,
-                                                   ConnectContext session) {
+                                                List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                                ConnectContext session) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
@@ -474,10 +509,11 @@ public class InsertPlanner {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
                 Expr expr = targetColumn.generatedColumnExpr();
                 ExpressionAnalyzer.analyzeExpression(expr,
-                    new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
-                        insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                col.getType(), insertStatement.getTableName(), null))
-                            .collect(Collectors.toList()))), session);
+                        new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                                insertStatement.getTargetTable().getBaseSchema().stream()
+                                        .map(col -> new Field(col.getName(),
+                                                col.getType(), insertStatement.getTableName(), null))
+                                        .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();
                 expr.collect(SlotRef.class, slots);
@@ -566,9 +602,10 @@ public class InsertPlanner {
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
                             targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
-                    throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
-                            "please check the associated materialized view " + targetIndexMetaName
-                            + " of target table:" + insertStatement.getTargetTable().getName());
+                    throw new SemanticException(
+                            "The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                                    "please check the associated materialized view " + targetIndexMetaName
+                                    + " of target table:" + insertStatement.getTargetTable().getName());
                 }
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
@@ -690,7 +727,6 @@ public class InsertPlanner {
             }
         }
 
-
         if (targetTable instanceof TableFunctionTable) {
             TableFunctionTable table = (TableFunctionTable) targetTable;
             if (table.isWriteSingleFile()) {
@@ -716,7 +752,6 @@ public class InsertPlanner {
             // no global shuffle
             return PhysicalPropertySet.EMPTY;
         }
-
 
         if (!(targetTable instanceof OlapTable)) {
             return new PhysicalPropertySet();
@@ -779,7 +814,8 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
-                ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+                ScalarOperator scalarOperator =
+                        ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
                 ColumnRefOperator col = columnRefFactory
                         .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 outputColumns.add(col);

@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
@@ -132,7 +133,14 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
-                return new InsertPlanner().plan((InsertStmt) stmt, session);
+                InsertStmt insertStmt = (InsertStmt) stmt;
+                boolean isSelect = insertStmt.getQueryStatement().getQueryRelation() instanceof SelectRelation;
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect;
+                if (useOptimisticLock) {
+                    unLock(locker, dbs);
+                    needWholePhaseLock = false;
+                }
+                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -291,7 +299,7 @@ public class StatementPlanner {
         return null;
     }
 
-    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
         Locker locker = new Locker();
         try {
