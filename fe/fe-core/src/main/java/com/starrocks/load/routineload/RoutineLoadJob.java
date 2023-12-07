@@ -638,6 +638,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return progress;
     }
 
+    protected abstract String getSourceProgressString();
+
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }
@@ -1469,6 +1471,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                                                TransactionState.TxnStatusChangeReason txnStatusChangeReason);
 
     protected abstract String getStatistic();
+
 
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);

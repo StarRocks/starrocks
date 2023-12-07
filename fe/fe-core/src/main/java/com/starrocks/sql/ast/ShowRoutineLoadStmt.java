@@ -89,6 +89,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             builder.add("Warehouse");
         }
+        builder.add("LatestSourcePosition");
         TITLE_NAMES = builder.build();
     }
 
