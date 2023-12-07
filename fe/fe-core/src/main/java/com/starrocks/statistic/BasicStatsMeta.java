@@ -51,6 +51,9 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    // The old semantics indicated the increment of ingestion tasks after last statistical collect job.
+    // Since manually collecting sampled job would reset it to zero, affecting the incremental information,
+    // it is now changed to record the total number of rows in the table.
     @SerializedName("updateRows")
     private long updateRows;
 
@@ -118,9 +121,12 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
+        long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;
         long cachedTableRowCount = 1L;
+        long updatePartitionRowCount = 0L;
+        long updatePartitionCount = 0L;
         for (Partition partition : table.getPartitions()) {
             tableRowCount += partition.getRowCount();
             TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
@@ -128,11 +134,27 @@ public class BasicStatsMeta implements Writable {
             if (tableStatistic != null) {
                 cachedTableRowCount += tableStatistic.getRowCount();
             }
+            LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
+            if (partition.hasData() && updateTime.isBefore(loadTimes)) {
+                updatePartitionCount++;
+            }
         }
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount, updateRows) - cachedTableRowCount);
 
-        tableRowCount = Math.max(tableRowCount, updateRows);
-
-        return Math.min(1.0D, (cachedTableRowCount * 1.0D) / tableRowCount);
+        double updateRatio;
+        // 1. If none updated partitions, health is 1
+        // 2. If there are few updated partitions, the health only to calculated on rows
+        // 3. If there are many updated partitions, the health needs to be calculated based on partitions
+        if (updatePartitionRowCount == 0 || updatePartitionCount == 0) {
+            return 1;
+        } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
+            updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+        } else {
+            double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
+            updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
+        }
+        return 1 - Math.min(updateRatio, 1.0);
     }
 
     public long getUpdateRows() {
