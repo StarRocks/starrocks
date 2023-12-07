@@ -165,6 +165,10 @@ class RankWindowFunction final : public WindowFunction<RankState> {
         this->data(state).peer_group_start = -1;
     }
 
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
@@ -197,6 +201,10 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).rank = 0;
         this->data(state).peer_group_start = -1;
+    }
+
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,

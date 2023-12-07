@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
+import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Random;
@@ -21,8 +21,12 @@ public class DecommissionTest {
         Config.drop_backend_after_decommission = false;
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         FeConstants.default_scheduler_interval_millisecond = 5000;
+        Config.tablet_sched_slot_num_per_path = 32;
+        PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        ColocateTableBalancer.getInstance().setInterval(5000);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(2000);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
@@ -32,11 +36,10 @@ public class DecommissionTest {
         PseudoCluster.getInstance().shutdown(false);
     }
 
-    //TODO: this ut will fail when the system load is high.
-    @Ignore
     @Test
     public void testDecommission() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
+        Config.statistic_collect_query_timeout = 3600;
         int numTable = 10;
         final String[] tableNames = new String[numTable];
         final String[] createTableSqls = new String[numTable];

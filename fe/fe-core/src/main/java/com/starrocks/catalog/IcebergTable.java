@@ -143,11 +143,14 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        return Joiner.on(":").join(name, ((BaseTable) getIcebergTable()).operations().current().uuid());
+        return Joiner.on(":").join(table, ((BaseTable) getIcebergTable()).operations().current().uuid());
     }
 
     public IcebergCatalogType getCatalogType() {
-        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+        if (icebergProperties.containsKey(ICEBERG_CATALOG_TYPE)) {
+            return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+        }
+        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_LEGACY));
     }
 
     public String getCatalogImpl() {

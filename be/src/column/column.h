@@ -84,8 +84,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual bool low_cardinality() const { return false; }
-
     virtual const uint8_t* raw_data() const = 0;
 
     virtual uint8_t* mutable_raw_data() = 0;
@@ -197,6 +195,7 @@ public:
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
 
     // Append multiple `null` values into this column.

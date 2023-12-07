@@ -139,7 +139,7 @@ public class PluginMgr implements Writable {
             GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info);
             LOG.info("install plugin {}", info.getName());
             return info;
-        } catch (IOException | UserException e) {
+        } catch (Throwable e) {
             pluginLoader.uninstall();
             throw e;
         }
@@ -224,7 +224,7 @@ public class PluginMgr implements Writable {
             pluginLoader.setStatus(PluginStatus.INSTALLED);
         } catch (IOException | UserException e) {
             pluginLoader.setStatus(PluginStatus.ERROR, e.getMessage());
-            throw e;
+            LOG.warn("fail to load plugin", e);
         } finally {
             // this is a replay process, so whether it is successful or not, add it's name.
             addDynamicPluginNameIfAbsent(info.getName());

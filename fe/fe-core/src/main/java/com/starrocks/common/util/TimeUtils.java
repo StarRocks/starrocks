@@ -82,10 +82,6 @@ public class TimeUtils {
     public static Date MIN_DATETIME = null;
     public static Date MAX_DATETIME = null;
 
-    // It's really hard to define max unix timestamp because of timezone.
-    // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
-    public static Long MAX_UNIX_TIMESTAMP = 253402243199L;
-
     static {
         TIME_ZONE = new SimpleTimeZone(8 * 3600 * 1000, "");
 
@@ -275,24 +271,7 @@ public class TimeUtils {
     }
 
     public static long convertTimeUnitValueToSecond(long value, TimeUnit unit) {
-        switch (unit) {
-            case DAYS:
-                return value * 60 * 60 * 24;
-            case HOURS:
-                return value * 60 * 60;
-            case MINUTES:
-                return value * 60;
-            case SECONDS:
-                return value;
-            case MILLISECONDS:
-                return value / 1000;
-            case MICROSECONDS:
-                return value / 1000 / 1000;
-            case NANOSECONDS:
-                return value / 1000 / 1000 / 1000;
-            default:
-                return 0;
-        }
+        return TimeUnit.SECONDS.convert(value, unit);
     }
 
     /**

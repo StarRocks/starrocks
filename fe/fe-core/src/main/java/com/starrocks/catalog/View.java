@@ -22,10 +22,13 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -37,6 +40,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.ref.SoftReference;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
@@ -85,6 +89,9 @@ public class View extends Table {
 
     // Set if this View is from a WITH clause with column labels.
     private List<String> colLabels;
+    
+    // cache used table names
+    private List<TableName> tableRefsCache = Lists.newArrayList();
 
     // Used for read from image
     public View() {
@@ -178,6 +185,16 @@ public class View extends Table {
 
     public boolean hasColLabels() {
         return colLabels != null;
+    }
+
+    public synchronized List<TableName> getTableRefs() {
+        if (this.tableRefsCache.isEmpty()) {
+            QueryStatement qs = getQueryStatement();
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
+            this.tableRefsCache = Lists.newArrayList(allTables.keySet());
+        }
+
+        return Lists.newArrayList(this.tableRefsCache);
     }
 
     @Override

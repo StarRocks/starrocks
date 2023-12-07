@@ -44,6 +44,8 @@ Status parse_root_path(const std::string& root_path, StorePath* path);
 
 Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path);
 
+Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<std::string>* paths);
+
 struct EngineOptions {
     // list paths that tablet will be put into.
     std::vector<StorePath> store_paths;

@@ -486,7 +486,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  2:Project\n" +
                 "  |  <slot 13> : 13: bitmap_union_count\n" +
-                "  |  <slot 14> : 13: bitmap_union_count\n" +
+                "  |  <slot 14> : clone(13: bitmap_union_count)\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)");
@@ -600,7 +600,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -608,7 +608,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2\n");
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -643,7 +643,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -905,34 +905,6 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
-    }
-
-    public void testWindowFunnelWithInvalidModeWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("mode argument's range must be [0-7]");
-        String sql =
-                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                        " group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
-    @Test
-    public void testWindowFunnelWithNonDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("window argument must be numerical type");
-        String sql = "select L_ORDERKEY,window_funnel('varchar', L_SHIPDATE, 3, [L_PARTKEY = 1]) " +
-                "from lineitem_partition_colocate group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
     }
 
     @Test
@@ -1354,6 +1326,15 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultiCountDistinctWithNoneGroup1() throws Exception {
+        String sql = "with tmp1 as (select 'a' as a from dual), tmp2 as (select 'b' as b from dual) " +
+                "select count(distinct t1b), count(distinct t1c), count(distinct t1.a), count(distinct t2.b) " +
+                "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=3)");
+    }
+
+    @Test
     public void testMultiCountDistinctWithNoneGroup2() throws Exception {
         String sql = "select count(distinct t1b), count(distinct t1c), sum(t1c), max(t1b) from test_all_type";
         String plan = getFragmentPlan(sql);
@@ -1499,37 +1480,11 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 20: t1c\n");
-        assertContains(plan, "21:HASH JOIN\n" +
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c\n");
+        assertContains(plan, "20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "1:Project\n" +
-                "  |  <slot 2> : 2: t1b\n" +
-                "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
-        assertContains(plan, "22:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
-                "  |  equal join conjunct: 17: expr <=> 20: expr");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(26: t1b)\n" +
-                "  |  group by: 27: t1c, 28: expr\n" +
-                "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 26> : 2: t1b\n" +
-                "  |  <slot 27> : 3: t1c\n" +
-                "  |  <slot 28> : 11: expr");
+                "  |  equal join conjunct: 15: t1c <=> 20: t1c");
     }
 
     @Test
@@ -1752,5 +1707,42 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
                 "result: PERCENTILE; args nullable: true;");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testOrderByWithAgg() throws Exception {
+        String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
+                "min(t1f) as t1f from test_all_type_not_null " +
+                "group by t1a, t1b " +
+                "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
+
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                        "  |  output: count(5: t1e), min(6: t1f)\n" +
+                        "  |  group by: 1: t1a, 2: t1b",
+                "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
     }
 }

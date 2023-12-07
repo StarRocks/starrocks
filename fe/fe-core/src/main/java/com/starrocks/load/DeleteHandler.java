@@ -194,7 +194,7 @@ public class DeleteHandler implements Writable {
         }
 
         // get partitions
-        List<String> partitionNames = stmt.getPartitionNames();
+        List<String> partitionNames = stmt.getPartitionNamesList();
         Preconditions.checkState(partitionNames != null);
         boolean noPartitionSpecified = partitionNames.isEmpty();
         if (noPartitionSpecified) {
@@ -475,6 +475,11 @@ public class DeleteHandler implements Writable {
                 // ErrorReport.reportDdlException(ErrorCode.ERR_NOT_KEY_COLUMN, columnName);
                 throw new DdlException("Column[" + columnName + "] is not key column or storage model " +
                         "is not duplicate or column type is float or double.");
+            }
+
+            if (column.getType().isComplexType()) {
+                throw new DdlException(
+                        "unsupported delete condition on Array/Map/Struct type column[" + columnName + "]");
             }
 
             if (condition instanceof BinaryPredicate) {
@@ -789,5 +794,13 @@ public class DeleteHandler implements Writable {
                 lock.writeLock().unlock();
             }
         }
+    }
+
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 }

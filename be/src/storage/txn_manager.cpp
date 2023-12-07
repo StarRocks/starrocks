@@ -290,10 +290,10 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 }
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                               int64_t version, const RowsetSharedPtr& rowset) {
+                               int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     if (tablet->updates() != nullptr) {
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
-        auto st = tablet->rowset_commit(version, rowset);
+        auto st = tablet->rowset_commit(version, rowset, wait_time);
         if (!st.ok()) {
             StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
@@ -350,17 +350,26 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         persisted.insert(path);
     }
 
+    // using BThreadCountDownLatch to make sure it wouldn't block the brpc worker.
+    BThreadCountDownLatch bthread_latch(to_flush_tablet.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
     int i = 0;
     for (auto& tablet : to_flush_tablet) {
         auto dir = tablet->data_dir();
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        auto st = token->submit_func([&pair_vec, &bthread_latch, dir, i]() {
+            pair_vec[i].first = dir->get_meta()->flushWAL();
+            bthread_latch.count_down();
+        });
+        if (!st.ok()) {
+            pair_vec[i].first = st;
+            bthread_latch.count_down();
+        }
         pair_vec[i].second = tablet->tablet_id();
         i++;
     }
 
-    token->wait();
+    bthread_latch.wait();
     for (const auto& pair : pair_vec) {
         auto& st = pair.first;
         if (!st.ok()) {
@@ -382,7 +391,7 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
         pair_vec[i].second = dir->path();
         i++;
     }

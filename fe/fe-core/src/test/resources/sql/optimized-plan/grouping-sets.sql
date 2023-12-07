@@ -63,26 +63,26 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
 [sql]
 select count(distinct v1), count(distinct v2) from t0
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1, 2: v2] predicate[null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(6: v1)}] group by [[]] having [null]
-                    CTEConsumer(cteid=2)
+                    CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{5: count=multi_distinct_count(5: count)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{5: count=multi_distinct_count(7: v2)}] group by [[]] having [null]
-                        CTEConsumer(cteid=2)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]
 select count(distinct v1), avg(distinct v2), sum(distinct v3) from t0
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         CROSS JOIN (join-predicate [null] post-join-predicate [null])
@@ -90,22 +90,22 @@ CTEAnchor(cteid=2)
                 AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(7: v1)}] group by [[]] having [null]
-                            CTEConsumer(cteid=2)
+                            CTEConsumer(cteid=1)
                 EXCHANGE BROADCAST
                     AGGREGATE ([GLOBAL] aggregate [{6: sum=multi_distinct_sum(6: sum)}] group by [[]] having [null]
                         EXCHANGE GATHER
                             AGGREGATE ([LOCAL] aggregate [{6: sum=multi_distinct_sum(8: v3)}] group by [[]] having [null]
-                                CTEConsumer(cteid=2)
+                                CTEConsumer(cteid=1)
             EXCHANGE BROADCAST
                 AGGREGATE ([GLOBAL] aggregate [{9: sum=multi_distinct_sum(9: sum)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{9: sum=multi_distinct_sum(10: v2)}] group by [[]] having [null]
-                            CTEConsumer(cteid=2)
+                            CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{11: count=multi_distinct_count(11: count)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{11: count=multi_distinct_count(12: v2)}] group by [[]] having [null]
-                        CTEConsumer(cteid=2)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]
@@ -120,8 +120,8 @@ AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count), 5: avg=
 [sql]
 select count(distinct v1)/count(distinct v2), count(distinct v1)+avg(distinct v2), sum(distinct v3)-count(distinct v1) from t0
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         CROSS JOIN (join-predicate [null] post-join-predicate [null])
@@ -129,39 +129,39 @@ CTEAnchor(cteid=2)
                 AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(11: v1)}] group by [[]] having [null]
-                            CTEConsumer(cteid=2)
+                            CTEConsumer(cteid=1)
                 EXCHANGE BROADCAST
                     AGGREGATE ([GLOBAL] aggregate [{5: count=multi_distinct_count(5: count)}] group by [[]] having [null]
                         EXCHANGE GATHER
                             AGGREGATE ([LOCAL] aggregate [{5: count=multi_distinct_count(12: v2)}] group by [[]] having [null]
-                                CTEConsumer(cteid=2)
+                                CTEConsumer(cteid=1)
             EXCHANGE BROADCAST
                 AGGREGATE ([GLOBAL] aggregate [{7: sum=multi_distinct_sum(7: sum)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{7: sum=multi_distinct_sum(13: v3)}] group by [[]] having [null]
-                            CTEConsumer(cteid=2)
+                            CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{14: sum=multi_distinct_sum(14: sum)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{14: sum=multi_distinct_sum(15: v2)}] group by [[]] having [null]
-                        CTEConsumer(cteid=2)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]
 select count(distinct v1), count(distinct v2) from t0 group by v3
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     INNER JOIN (join-predicate [7: v3 <=> 9: v3] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[7: v3]] having [null]
             EXCHANGE SHUFFLE[7]
                 AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(6: v1)}] group by [[7: v3]] having [null]
-                    CTEConsumer(cteid=2)
+                    CTEConsumer(cteid=1)
         AGGREGATE ([GLOBAL] aggregate [{5: count=multi_distinct_count(5: count)}] group by [[9: v3]] having [null]
             EXCHANGE SHUFFLE[9]
                 AGGREGATE ([LOCAL] aggregate [{5: count=multi_distinct_count(8: v2)}] group by [[9: v3]] having [null]
-                    CTEConsumer(cteid=2)
+                    CTEConsumer(cteid=1)
 [end]
 
 [sql]
@@ -178,31 +178,31 @@ select count(distinct v1) from t0 having avg(distinct v3) > 0 order by sum(disti
 [result]
 TOP-N (order by [[6: sum ASC NULLS FIRST]])
     TOP-N (order by [[6: sum ASC NULLS FIRST]])
-        CTEAnchor(cteid=2)
-            CTEProducer(cteid=2)
+        CTEAnchor(cteid=1)
+            CTEProducer(cteid=1)
                 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-            INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0.0] post-join-predicate [null])
+            INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     CROSS JOIN (join-predicate [null] post-join-predicate [null])
                         AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
                             EXCHANGE GATHER
                                 AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(7: v1)}] group by [[]] having [null]
-                                    CTEConsumer(cteid=2)
+                                    CTEConsumer(cteid=1)
                         EXCHANGE BROADCAST
                             AGGREGATE ([GLOBAL] aggregate [{6: sum=multi_distinct_sum(6: sum)}] group by [[]] having [null]
                                 EXCHANGE GATHER
                                     AGGREGATE ([LOCAL] aggregate [{6: sum=multi_distinct_sum(8: v2)}] group by [[]] having [null]
-                                        CTEConsumer(cteid=2)
+                                        CTEConsumer(cteid=1)
                     EXCHANGE BROADCAST
                         AGGREGATE ([GLOBAL] aggregate [{9: sum=multi_distinct_sum(9: sum)}] group by [[]] having [null]
                             EXCHANGE GATHER
                                 AGGREGATE ([LOCAL] aggregate [{9: sum=multi_distinct_sum(10: v3)}] group by [[]] having [null]
-                                    CTEConsumer(cteid=2)
+                                    CTEConsumer(cteid=1)
                 EXCHANGE BROADCAST
                     AGGREGATE ([GLOBAL] aggregate [{11: count=multi_distinct_count(11: count)}] group by [[]] having [null]
                         EXCHANGE GATHER
                             AGGREGATE ([LOCAL] aggregate [{11: count=multi_distinct_count(12: v3)}] group by [[]] having [null]
-                                CTEConsumer(cteid=2)
+                                CTEConsumer(cteid=1)
 [end]
 
 [sql]
@@ -246,37 +246,37 @@ AGGREGATE ([GLOBAL] aggregate [{13: count=bitmap_union_count(13: count), 14: cou
 [sql]
 select avg(distinct v1) from t0
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1] predicate[null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{5: sum=multi_distinct_sum(5: sum)}] group by [[]] having [null]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{5: sum=multi_distinct_sum(6: v1)}] group by [[]] having [null]
-                    CTEConsumer(cteid=2)
+                    CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{7: count=multi_distinct_count(7: count)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{7: count=multi_distinct_count(8: v1)}] group by [[]] having [null]
-                        CTEConsumer(cteid=2)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]
 select count(distinct v1), avg(distinct v1), sum(distinct v1) from t0
 [result]
-CTEAnchor(cteid=2)
-    CTEProducer(cteid=2)
+CTEAnchor(cteid=1)
+    CTEProducer(cteid=1)
         SCAN (columns[1: v1] predicate[null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(7: v1)}] group by [[]] having [null]
-                    CTEConsumer(cteid=2)
+                    CTEConsumer(cteid=1)
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{6: sum=multi_distinct_sum(6: sum)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{6: sum=multi_distinct_sum(8: v1)}] group by [[]] having [null]
-                        CTEConsumer(cteid=2)
+                        CTEConsumer(cteid=1)
 [end]
 
 [sql]

@@ -38,7 +38,7 @@ column statistics:
 * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-* count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+* count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
 
@@ -60,7 +60,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
 |  aggregate: sum[([19: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true], sum[([20: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true], sum[([21: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([22: sum, DECIMAL128(38,6), true]); args: DECIMAL128; result: DECIMAL128(38,6); args nullable: true; result nullable: true], avg[([23: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], count[([26: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -76,7 +76,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.00037902E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
 cardinality: 3
@@ -112,7 +112,7 @@ OutPut Exchange Id: 03
 |  9 <-> [9: l_returnflag, VARCHAR, true]
 |  10 <-> [10: l_linestatus, VARCHAR, true]
 |  17 <-> [32: multiply, DECIMAL128(33,4), true]
-|  18 <-> [32: multiply, DECIMAL128(33,4), true] * 1 + cast([8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(19,2))
+|  18 <-> [32: multiply, DECIMAL128(33,4), true] * cast(1 + [8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  common expressions:
 |  32 <-> [28: cast, DECIMAL128(15,2), true] * [31: cast, DECIMAL128(18,2), true]
 |  28 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
@@ -148,3 +148,4 @@ column statistics:
 * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 * expr-->[810.9, 113345.46, 0.0, 16.0, 3736520.0] ESTIMATE
 [end]
+

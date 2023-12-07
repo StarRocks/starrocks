@@ -92,34 +92,27 @@ public class HdfsUtil {
                     "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         String[] columns = new String[columnsFromPath.size()];
-        int size = 0;
-        for (int i = strings.length - 2; i >= 0; i--) {
+        for (int i = strings.length - 1; i >= 0; i--) {
             String str = strings[i];
-            if (str != null && str.isEmpty()) {
+            if (str == null || str.isEmpty() || !str.contains("=")) {
                 continue;
-            }
-            if (str == null || !str.contains("=")) {
-                throw new UserException(
-                        "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
             }
             String[] pair = str.split("=", 2);
             if (pair.length != 2) {
-                throw new UserException(
-                        "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
+                continue;
             }
             int index = columnsFromPath.indexOf(pair[0]);
             if (index == -1) {
                 continue;
             }
             columns[index] = pair[1];
-            size++;
-            if (size >= columnsFromPath.size()) {
-                break;
-            }
         }
-        if (size != columnsFromPath.size()) {
-            throw new UserException(
-                    "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
+
+        for (int i = 0; i < columns.length; i++) {
+            if (columns[i] == null) {
+                throw new UserException(
+                        "Fail to parse columnsFromPath, expected: " + columnsFromPath.get(i) + ", filePath: " + filePath);
+            }
         }
         return Lists.newArrayList(columns);
     }

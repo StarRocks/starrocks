@@ -2,7 +2,9 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.gson.JsonObject;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.util.Map;
 import java.util.Objects;
@@ -55,7 +57,8 @@ public class Partition implements PartitionInfo {
 
     @Override
     public long getModifiedTime() {
-        return Long.parseLong(parameters.get(TRANSIENT_LAST_DDL_TIME));
+        String ddlTime = parameters.get(TRANSIENT_LAST_DDL_TIME);
+        return Long.parseLong(ddlTime != null ? ddlTime : "0");
     }
 
     @Override
@@ -91,6 +94,16 @@ public class Partition implements PartitionInfo {
         sb.append(", isSplittable=").append(isSplittable);
         sb.append('}');
         return sb.toString();
+    }
+
+    public JsonObject toJson() {
+        JsonObject obj = new JsonObject();
+        obj.add("parameters", (GsonUtils.GSON.toJsonTree(parameters)));
+        obj.add("inputFormat", (GsonUtils.GSON.toJsonTree(inputFormat)));
+        obj.add("textFileFormatDesc", (GsonUtils.GSON.toJsonTree(textFileFormatDesc)));
+        obj.add("fullPath", GsonUtils.GSON.toJsonTree(fullPath));
+        obj.add("isSplittable", GsonUtils.GSON.toJsonTree(isSplittable));
+        return obj;
     }
 
     public static Builder builder() {

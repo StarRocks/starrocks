@@ -21,8 +21,9 @@
 
 namespace starrocks::parquet {
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size)
-        : _chunk_size(chunk_size), _file(file), _file_size(file_size) {}
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+                       io::SharedBufferedInputStream* sb_stream)
+        : _chunk_size(chunk_size), _file(file), _file_size(file_size), _sb_stream(sb_stream) {}
 
 FileReader::~FileReader() = default;
 
@@ -404,16 +405,17 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
 
 Status FileReader::_init_group_readers() {
     const vectorized::HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
-    GroupReaderParam& param = _group_reader_param;
-    param.tuple_desc = fd_scanner_ctx.tuple_desc;
-    param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
-    param.timezone = fd_scanner_ctx.timezone;
-    param.stats = fd_scanner_ctx.stats;
-    param.shared_buffered_stream = nullptr;
-    param.chunk_size = _chunk_size;
-    param.file = _file;
-    param.file_metadata = _file_metadata.get();
-    param.case_sensitive = fd_scanner_ctx.case_sensitive;
+
+    // _group_reader_param is used by all group readers
+    _group_reader_param.tuple_desc = fd_scanner_ctx.tuple_desc;
+    _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
+    _group_reader_param.timezone = fd_scanner_ctx.timezone;
+    _group_reader_param.stats = fd_scanner_ctx.stats;
+    _group_reader_param.sb_stream = nullptr;
+    _group_reader_param.chunk_size = _chunk_size;
+    _group_reader_param.file = _file;
+    _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
 
     // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
@@ -440,21 +442,19 @@ Status FileReader::_init_group_readers() {
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
-    if (config::parquet_coalesce_read_enable) {
-        _sb_stream = std::make_shared<SharedBufferedInputStream>(_file);
-        SharedBufferedInputStream::CoalesceOptions options = {
+    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
+        io::SharedBufferedInputStream::CoalesceOptions options = {
                 .max_dist_size = config::io_coalesce_read_max_distance_size,
                 .max_buffer_size = config::io_coalesce_read_max_buffer_size};
         _sb_stream->set_coalesce_options(options);
-
-        std::vector<SharedBufferedInputStream::IORange> ranges;
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
         for (auto& r : _row_group_readers) {
             int64_t end_offset = 0;
             r->collect_io_ranges(&ranges, &end_offset);
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
-        param.shared_buffered_stream = _sb_stream.get();
+        _group_reader_param.sb_stream = _sb_stream;
     }
 
     // initialize row group readers.
@@ -487,6 +487,11 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
                 _cur_row_group_idx++;
                 return Status::OK();
             }
+        } else {
+            auto s = strings::Substitute("FileReader::get_next failed. reason = $0, file = $1", status.to_string(),
+                                         _file->filename());
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
         }
 
         return status;
@@ -516,7 +521,7 @@ const tparquet::ColumnMetaData* FileReader::_get_column_meta(const tparquet::Row
                 return &column.meta_data;
             }
         } else {
-            if (boost::algorithm::to_lower_copy(column.meta_data.path_in_schema[0]) == col_name) {
+            if (boost::algorithm::iequals(column.meta_data.path_in_schema[0], col_name)) {
                 return &column.meta_data;
             }
         }

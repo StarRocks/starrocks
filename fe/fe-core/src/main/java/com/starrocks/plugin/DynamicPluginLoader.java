@@ -108,7 +108,8 @@ public class DynamicPluginLoader extends PluginLoader {
      */
     public void install() throws UserException, IOException {
         if (hasInstalled()) {
-            throw new UserException("Plugin " + pluginInfo.getName() + " has already been installed.");
+            String targetPath = pluginDir.toString() + "/" + pluginInfo.getName();
+            throw new UserException("Plugin " + pluginInfo.getName() + " has already been installed at:" + targetPath);
         }
 
         getPluginInfo();

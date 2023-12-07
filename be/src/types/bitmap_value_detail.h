@@ -32,6 +32,7 @@
 #include "roaring/containers/containers.h"
 #include "roaring/roaring.h"
 #include "roaring/roaring_array.h"
+#include "util/coding.h"
 
 namespace starrocks {
 
@@ -149,11 +150,10 @@ public:
      *
      */
     void addMany(size_t n_args, const uint32_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[0].add(vals[lcv]);
-            roarings[0].setCopyOnWrite(copyOnWrite);
-        }
+        roarings[0].addMany(n_args, vals);
+        roarings[0].setCopyOnWrite(copyOnWrite);
     }
+
     void addMany(size_t n_args, const uint64_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));

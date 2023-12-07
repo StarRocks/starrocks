@@ -266,6 +266,11 @@ TEST(StringToUnsignedInt, Basic) {
     test_unsigned_int_value<uint64_t>("-0", 0, StringParser::PARSE_FAILURE);
 }
 
+TEST(StringToUnsignedInt, Basic2) {
+    test_unsigned_int_value<uint64_t>("123", static_cast<uint64_t>(123), StringParser::PARSE_SUCCESS);
+    test_unsigned_int_value<uint64_t>("-123", 0, StringParser::PARSE_FAILURE);
+}
+
 TEST(StringToUnsignedInt, Limit) {
     test_unsigned_int_value<uint8_t>("255", 255, StringParser::PARSE_SUCCESS);
     test_unsigned_int_value<uint16_t>("65535", 65535, StringParser::PARSE_SUCCESS);

@@ -21,6 +21,7 @@
 
 package com.starrocks.http.action;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -62,7 +63,17 @@ public class IndexAction extends WebBaseAction {
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
         appendVersionInfo(response.getContent());
-        appendHardwareInfo(response.getContent());
+        if (Config.http_web_page_display_hardware) {
+            try {
+                appendHardwareInfo(response.getContent());
+            } catch (Throwable t) {
+                response.getContent().append("<h2>Hardware Info</h2>");
+                response.getContent().append("<pre>Hardware info is generated with error: " + t.getMessage() + "</pre>");
+            }
+        } else {
+            response.getContent().append("<h2>Hardware Info</h2>");
+            response.getContent().append("<pre>Hardware info is disabled by config http_web_page_display_hardware</pre>");
+        }
         getPageFooter(response.getContent());
         writeResponse(request, response);
     }
@@ -78,7 +89,6 @@ public class IndexAction extends WebBaseAction {
     }
 
     private void appendHardwareInfo(StringBuilder buffer) {
-        List<String> hardwareInfo = new ArrayList<>();
         SystemInfo si = new SystemInfo();
         OperatingSystem os = si.getOperatingSystem();
         HardwareAbstractionLayer hal = si.getHardware();

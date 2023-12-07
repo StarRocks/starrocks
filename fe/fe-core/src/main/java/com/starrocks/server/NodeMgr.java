@@ -21,6 +21,7 @@
 
 package com.starrocks.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -63,7 +64,6 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -551,7 +551,7 @@ public class NodeMgr {
         if (helpers != null) {
             String[] splittedHelpers = helpers.split(",");
             for (String helper : splittedHelpers) {
-                Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper);
+                Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper, false);
                 if (helperHostPort.equals(selfNode)) {
                     /*
                      * If user specified the helper node to this FE itself,
@@ -842,6 +842,18 @@ public class NodeMgr {
             }
 
             removedFrontends.add(removedFe.getNodeName());
+        } finally {
+            unlock();
+        }
+    }
+
+    public boolean checkFeExistByRPCPort(String host, int rpcPort) {
+        try {
+            tryLock(true);
+            return frontends
+                    .values()
+                    .stream()
+                    .anyMatch(fe -> fe.getHost().equals(host) && fe.getRpcPort() == rpcPort);
         } finally {
             unlock();
         }

@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -39,16 +38,12 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
 
     @Test
     public void testQuery1() {
         runFileUnitTest("materialized-view/tpch/q1");
-    }
-
-    @Test
-    public void testQuery1_1() {
-        runFileUnitTest("materialized-view/tpch/q1-1");
     }
 
     @Test
@@ -73,41 +68,20 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    public void testQuery5_1() {
-        runFileUnitTest("materialized-view/tpch/q5-1");
-    }
-
-    @Test
-    @Ignore
-    public void testQuery5_2() {
-        runFileUnitTest("materialized-view/tpch/q5-2");
-    }
-
-    @Test
     public void testQuery6() {
         runFileUnitTest("materialized-view/tpch/q6");
     }
 
+    @Ignore
     @Test
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch/q7");
     }
 
     @Test
-    public void testQuery7_1() {
-        runFileUnitTest("materialized-view/tpch/q7-1");
-    }
-    
-    @Test
     @Ignore
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");
-    }
-
-    @Test
-    public void testQuery8_1() {
-        runFileUnitTest("materialized-view/tpch/q8-1");
     }
 
     @Test
@@ -118,11 +92,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery10() {
         runFileUnitTest("materialized-view/tpch/q10");
-    }
-
-    @Test
-    public void testQuery10_1() {
-        runFileUnitTest("materialized-view/tpch/q10-1");
     }
 
     @Test
@@ -152,23 +121,8 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testQuery15_1() {
-        runFileUnitTest("materialized-view/tpch/q15-1");
-    }
-
-    @Test
-    public void testQuery15_2() {
-        runFileUnitTest("materialized-view/tpch/q15-2");
-    }
-
-    @Test
     public void testQuery16() {
         runFileUnitTest("materialized-view/tpch/q16");
-    }
-
-    @Test
-    public void testQuery16_1() {
-        runFileUnitTest("materialized-view/tpch/q16-1");
     }
 
     @Test
@@ -192,11 +146,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testQuery20_1() {
-        runFileUnitTest("materialized-view/tpch/q20-1");
-    }
-
-    @Test
     public void testQuery21() {
         runFileUnitTest("materialized-view/tpch/q21");
     }
@@ -206,36 +155,31 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch/q22");
     }
 
-    @Test
-    public void testQuery22_1() {
-        runFileUnitTest("materialized-view/tpch/q22-1");
-    }
-
     /**
-     * >>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<
-     *
+     * ========= Analyze TPCH MVs Result =========
+     * <p>
      * TableName:partsupp_mv
      * Columns:n_name,p_mfgr,p_size,p_type,ps_partkey,ps_partvalue,ps_suppkey,ps_supplycost,r_name,s_acctbal,s_address,
-     *         s_comment,s_name,s_nationkey,s_phone
+     * s_comment,s_name,s_nationkey,s_phone
      * Queries:11,16,2
-     *
+     * <p>
      * TableName:lineitem_mv
      * Columns:c_acctbal,c_address,c_comment,c_mktsegment,c_name,c_nationkey,c_phone,l_commitdate,l_extendedprice,
-     *          l_orderkey,l_partkey,l_quantity,l_receiptdate,l_returnflag,l_saleprice,l_shipdate,l_shipinstruct,
-     *          l_shipmode,l_shipyear,l_suppkey,l_supplycost,n_name1,n_name2,n_regionkey1,n_regionkey2,o_custkey,
-     *          o_orderdate,o_orderpriority,o_orderstatus,o_orderyear,o_shippriority,o_totalprice,p_brand,p_container,
-     *          p_name,p_size,p_type,r_name1,r_name2,s_name,s_nationkey
+     * l_orderkey,l_partkey,l_quantity,l_receiptdate,l_returnflag,l_saleprice,l_shipdate,l_shipinstruct,
+     * l_shipmode,l_shipyear,l_suppkey,l_supplycost,n_name1,n_name2,n_regionkey1,n_regionkey2,o_custkey,
+     * o_orderdate,o_orderpriority,o_orderstatus,o_orderyear,o_shippriority,o_totalprice,p_brand,p_container,
+     * p_name,p_size,p_type,r_name1,r_name2,s_name,s_nationkey
      * Queries:10,12,14,17,18,19,21,3,5,7,8,9
-     *
+     * <p>
      * TableName:lineitem_agg_mv
      * Columns:l_orderkey,l_partkey,l_shipdate,l_suppkey,sum_disc_price,sum_qty
      * Queries:15,18,20
-     *
+     * <p>
      * TableName:customer_order_mv
      * Columns:c_custkey,o_comment,o_orderkey
      * Queries:13
-     *
-     * >>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<
+     * <p>
+     * ========= Analyze TPCH MVs Result =========
      */
     @Test
     public void analyzeTPCHMVs() throws Exception {
@@ -246,7 +190,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         for (int i = 1; i < 23; i++) {
             String content = getFileContent("sql/materialized-view/tpch/q" + i + ".sql");
             String[] lines = content.split("\n");
-            for (String line: lines) {
+            for (String line : lines) {
                 if (line.contains("mv[")) {
                     Matcher matcher = mvPattern.matcher(line);
                     if (matcher.find()) {
@@ -262,7 +206,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
             }
         }
 
-        System.out.println(">>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<");
+        System.out.println("========= Analyze TPCH MVs Result =========");
         System.out.println();
         int totolQueriesUsedMV = 0;
         for (Map.Entry<String, Set<String>> entry : mvTableColumnsMap.entrySet()) {
@@ -274,7 +218,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
             System.out.println();
             totolQueriesUsedMV += mvTableQueryIds.get(mvTableName).size();
         }
-        System.out.println(">>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<");
+        System.out.println("========= Analyze TPCH MVs Result =========");
         Assert.assertTrue(mvTableColumnsMap.size() >= 4);
         Assert.assertTrue(totolQueriesUsedMV >= 19);
     }
@@ -282,7 +226,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     private List<String> splitMVTableColumns(String line) {
         String[] s1 = line.split(",");
         List<String> ret = new ArrayList<>();
-        for (String s: s1) {
+        for (String s : s1) {
             String[] s2 = s.split(":");
             ret.add(s2[1].trim());
         }

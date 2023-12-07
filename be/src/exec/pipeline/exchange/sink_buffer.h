@@ -16,6 +16,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
@@ -87,7 +88,7 @@ private:
     using Mutex = bthread::Mutex;
 
     void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                              const int64_t receive_timestamp);
+                              const int64_t receiver_post_process_time);
     // Update the discontinuous acked window, here are the invariants:
     // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
@@ -108,6 +109,8 @@ private:
     // `accumulated_network_time / average_concurrency`
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
+
+    void _try_to_merge_query_statistics(TransmitChunkInfo& request);
 
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
@@ -140,6 +143,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,

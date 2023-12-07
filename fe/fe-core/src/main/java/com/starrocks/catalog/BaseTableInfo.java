@@ -97,7 +97,7 @@ public class BaseTableInfo {
     }
 
     public String getTableIdentifier() {
-        return this.tableIdentifier;
+        return this.tableIdentifier == null ? String.valueOf(tableId) : this.tableIdentifier;
     }
 
     public long getDbId() {
@@ -147,6 +147,14 @@ public class BaseTableInfo {
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
         }
+    }
+
+    public String getReadableString() {
+        String dbName = getDbName();
+        dbName = dbName != null ? dbName : "null";
+        String tableName = getTableName();
+        tableName = tableName != null ? tableName : "null";
+        return catalogName + "." + dbName + "." + tableName;
     }
 
     @Override

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -63,6 +64,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
+        Preconditions.checkState(limit != 0);
     }
 
     public SortPhase getSortPhase() {

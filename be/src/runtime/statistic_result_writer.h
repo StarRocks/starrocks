@@ -44,6 +44,9 @@ private:
     Status _fill_statistic_histogram(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
                                      TFetchDataResult* result);
 
+    Status _fill_full_statistic_data_v4(int version, const Columns& columns, const Chunk* chunk,
+                                        TFetchDataResult* result);
+
 private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;

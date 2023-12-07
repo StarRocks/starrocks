@@ -47,7 +47,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     private transient ReentrantReadWriteLock lock;
 
     public InsertOverwriteJobManager() {
-        this.overwriteJobMap = Maps.newHashMap();
+        this.overwriteJobMap = Maps.newConcurrentMap();
         this.tableToOverwriteJobs = Maps.newHashMap();
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);

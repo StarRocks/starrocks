@@ -299,6 +299,10 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // last modification time of the hdfs file, for data cache.
+    // skip some field numbers to keep the same number with main branch.
+    16: optional i64 modification_time
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -389,6 +393,11 @@ struct TSchemaScanNode {
   18: optional string type
   19: optional string state
   20: optional i64 limit
+  21: optional i64 log_start_ts;
+  22: optional i64 log_end_ts;
+  23: optional string log_level;
+  24: optional string log_pattern;
+  25: optional i64 log_limit;
 }
 
 struct TOlapScanNode {
@@ -409,6 +418,8 @@ struct TOlapScanNode {
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
+  //29: optional list<TColumnAccessPath> column_access_paths
+  30: optional bool use_pk_index
 }
 
 struct TJDBCScanNode {
@@ -783,6 +794,7 @@ struct TAnalyticNode {
   11: optional string sql_aggregate_functions
 
   20: optional bool has_outer_join_child
+  21: optional bool use_hash_based_partition
 }
 
 struct TMergeNode {

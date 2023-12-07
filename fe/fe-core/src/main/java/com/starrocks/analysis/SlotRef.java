@@ -64,6 +64,10 @@ public class SlotRef extends Expr {
     // We execute sql: `SELECT col.c2.c1 FROM table`, the usedStructFieldPos value is [1, 0].
     private ImmutableList<Integer> usedStructFieldPos;
 
+    // now it is used in Analyzer phase of creating mv to decide the field nullable of mv
+    // can not use desc because the slotId is unknown in Analyzer phase
+    private boolean nullable = true;
+
     // Only used write
     private SlotRef() {
         super();
@@ -228,6 +232,10 @@ public class SlotRef extends Expr {
         }
     }
 
+    public void setNullable(boolean nullable) {
+        this.nullable = nullable;
+    }
+
     public SlotDescriptor getSlotDescriptorWithoutCheck() {
         return desc;
     }
@@ -252,7 +260,7 @@ public class SlotRef extends Expr {
         if (tblName != null) {
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
-            return label + sb.toString();
+            return label;
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
@@ -261,7 +269,7 @@ public class SlotRef extends Expr {
             }
             return sb.toString();
         } else {
-            return "<slot " + desc.getId().asInt() + ">" + sb.toString();
+            return "<slot " + desc.getId().asInt() + ">";
         }
     }
 
@@ -280,20 +288,18 @@ public class SlotRef extends Expr {
 
     @Override
     public String toMySql() {
-        if (col != null) {
-            return col;
-        } else {
-            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+        if (label == null) {
+            throw new IllegalArgumentException("should set label for cols in MySQLScanNode. SlotRef: " + debugString());
         }
+        return label;
     }
 
     @Override
-    public String toJDBCSQL(boolean isMySQL) {
-        if (col != null) {
-            return isMySQL ? "`" + col + "`" : col;
-        } else {
-            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+    public String toJDBCSQL() {
+        if (label == null) {
+            throw new IllegalArgumentException("should set label for cols in JDBCScanNode. SlotRef: " + debugString());
         }
+        return label;
     }
 
     public TableName getTableName() {
@@ -396,7 +402,7 @@ public class SlotRef extends Expr {
         if (desc != null) {
             return desc.getIsNullable();
         }
-        return true;
+        return nullable;
     }
 
     @Override

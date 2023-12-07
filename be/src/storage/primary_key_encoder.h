@@ -33,9 +33,20 @@ public:
     // Return -1 if encoded key is not fixed size
     static size_t get_encoded_fixed_size(const vectorized::Schema& schema);
 
-    static Status create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn);
+    // create suitable column to hold encoded key
+    //   schema: schema of the table
+    //   pcolumn: output column
+    //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     static Status create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
-                                const std::vector<ColumnId>& key_idxes);
+                                bool large_column = false);
+
+    // create suitable column to hold encoded key
+    //   schema: schema of the table
+    //   pcolumn: output column
+    //   key_idxes: indexes of columns for encoding
+    //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
+    static Status create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
+                                const std::vector<ColumnId>& key_idxes, bool large_column = false);
 
     static void encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
                        vectorized::Column* dest);

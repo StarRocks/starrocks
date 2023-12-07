@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -20,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +61,20 @@ public class SemiReorderRule extends TransformationRule {
 
         if (bottomJoin.getJoinType().isOuterJoin() || bottomJoin.hasLimit()) {
             return false;
+        }
+
+        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+        if (leftChildJoin.getProjection() != null) {
+            Projection projection = leftChildJoin.getProjection();
+            // 1. Forbidden expression column on join-reorder
+            // 2. Forbidden on-predicate use columns from two children at same time
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                if (!entry.getValue().isColumnRef() &&
+                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(0).getOutputColumns()) &&
+                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(1).getOutputColumns())) {
+                    return false;
+                }
+            }
         }
 
         // Because the X and Z nodes will be used to build a new semi join,
@@ -102,8 +118,9 @@ public class SemiReorderRule extends TransformationRule {
         ColumnRefSet leftChildJoinRightChildOutputColumns = leftChildJoinRightChild.getOutputColumns();
 
         Projection leftChildJoinProjection = leftChildJoin.getProjection();
-        HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        HashMap<ColumnRefOperator, ScalarOperator> semiExpression = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> semiExpression = new HashMap<>();
+
         if (leftChildJoinProjection != null) {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
@@ -112,16 +129,18 @@ public class SemiReorderRule extends TransformationRule {
                 // like expression mapping.
                 boolean isProjectToColumnRef = entry.getValue().isColumnRef() &&
                         entry.getKey().getName().equals(((ColumnRefOperator) entry.getValue()).getName());
-                if (!isProjectToColumnRef &&
-                        leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    semiExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    // left child projection produce
-                    semiExpression.put(entry.getKey(), entry.getValue());
+
+                if (!isProjectToColumnRef) {
+                    if (entry.getValue().getUsedColumns().isEmpty()) {
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    } else if (leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        rightExpression.put(entry.getKey(), entry.getValue());
+                    } else if (newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    } else if (leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        // left child projection produce
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    }
                 }
             }
         }
@@ -145,7 +164,8 @@ public class SemiReorderRule extends TransformationRule {
         if (semiExpression.isEmpty()) {
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
                     .setLimit(Operator.DEFAULT_LIMIT)
-                    .setProjection(new Projection(projectMap)).build();
+                    .setProjection(new Projection(projectMap))
+                    .build();
         } else {
             semiExpression.putAll(projectMap);
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
@@ -180,6 +200,11 @@ public class SemiReorderRule extends TransformationRule {
         }
 
         OptExpression semiOpt = OptExpression.create(newSemiJoin, input.inputAt(0).inputAt(0), input.inputAt(1));
-        return Lists.newArrayList(OptExpression.create(newTopJoin, semiOpt, newRightChild));
+        OptExpression newTopJoinExpr = OptExpression.create(newTopJoin, semiOpt, newRightChild);
+        if (JoinHelper.validateJoinExpr(newTopJoinExpr)) {
+            return Lists.newArrayList(newTopJoinExpr);
+        } else {
+            return Collections.emptyList();
+        }
     }
 }

@@ -81,6 +81,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -420,12 +421,18 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();
@@ -540,9 +547,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             LOG.info("schema change tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = schemaChangeBatchTask.getUnfinishedTasks(2000);
             for (AgentTask task : tasks) {
-                if (task.getFailedTimes() >= 3) {
-                    throw new AlterCancelException(
-                            "schema change task failed after try three times: " + task.getErrorMsg());
+                if (task.isFailed() || task.getFailedTimes() >= 3) {
+                    throw new AlterCancelException("schema change task failed: " + task.getErrorMsg());
                 }
             }
             return;
@@ -581,7 +587,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
-                        GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
+                        GlobalStateMgr.getCurrentInvertedIndex().
+                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
@@ -755,6 +762,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         tbl.setState(OlapTableState.NORMAL);
+        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
 
     /*
@@ -1167,4 +1175,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
 }

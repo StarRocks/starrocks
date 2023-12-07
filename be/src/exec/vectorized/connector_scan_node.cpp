@@ -11,37 +11,13 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 
 namespace starrocks::vectorized {
 
-// ======================================================
-
-class OpenLimitAllocator {
-public:
-    OpenLimitAllocator() = default;
-    ~OpenLimitAllocator() {
-        for (auto& it : _data) {
-            delete it.second;
-        }
-    }
-
-    OpenLimitAllocator(const OpenLimitAllocator&) = delete;
-    void operator=(const OpenLimitAllocator&) = delete;
-
-    static OpenLimitAllocator& instance() {
-        static OpenLimitAllocator obj;
-        return obj;
-    }
-
-    std::atomic<int32_t>* allocate(const std::string& key);
-
-private:
-    std::mutex _lock;
-    std::unordered_map<std::string, std::atomic<int32_t>*> _data;
-};
-
-// TODO: find granualarity of open limit
 static std::atomic<int32_t> connector_scan_node_open_limit;
+static constexpr double kChunkBufferMemRatio = 0.5;
+static constexpr int64_t ESTIMATED_MEMORY_USAGE_PER_FIELD = 4LL * 1024 * 1024;
 
 // ======================================================
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -127,33 +103,70 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
+    const TQueryOptions& query_options = state->query_options();
+    double mem_ratio = config::connector_scan_use_query_mem_ratio;
+    if (query_options.__isset.connector_scan_use_query_mem_ratio) {
+        mem_ratio = query_options.connector_scan_use_query_mem_ratio;
+    }
+    _mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio;
+    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
+    if (query_options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
+    }
+    _estimate_scan_row_bytes();
+    _estimate_mem_usage_per_chunk_source();
     return Status::OK();
+}
+
+void ConnectorScanNode::_estimate_scan_row_bytes() {
+    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
+    const auto& slots = tuple_desc->slots();
+    _estimated_scan_row_bytes = 0;
+    for (const auto& slot : slots) {
+        size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
+        field_bytes += type_estimated_overhead_bytes(slot->type().type);
+        _estimated_scan_row_bytes += field_bytes;
+    }
+}
+
+void ConnectorScanNode::_estimate_mem_usage_per_chunk_source() {
+    const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
+    const auto& slots = tuple_desc->slots();
+    _estimated_mem_usage_per_chunk_source = slots.size() * ESTIMATED_MEMORY_USAGE_PER_FIELD;
+}
+
+int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
+    // We temporarily assume that the memory tried in the storage layer
+    // is the same size as the chunk_size * _estimated_scan_row_bytes.
+    size_t row_mem_usage = _estimated_scan_row_bytes;
+    size_t chunk_mem_usage = row_mem_usage * runtime_state()->chunk_size();
+    DCHECK_GT(chunk_mem_usage, 0);
+    // give half of the memory to the chunk buffer
+    int concurrency = std::max<int>(int(_mem_limit * kChunkBufferMemRatio / chunk_mem_usage), 1);
+    return concurrency;
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
-    if (config::connector_dynamic_chunk_buffer_limiter_enable && mem_limit > 0) {
-        // port from olap scan node.
-        size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-        size_t default_buffer_capacity = max_buffer_capacity;
-        pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-                max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
-        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                           std::move(buffer_limiter));
-    } else {
-        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
-    }
+    // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
+    size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            max_buffer_capacity, default_buffer_capacity, int64_t(_mem_limit * kChunkBufferMemRatio),
+            runtime_state()->chunk_size());
+    scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       runtime_state(), dop, std::move(buffer_limiter));
+    scan_op->set_estimated_mem_usage_per_chunk_source(_estimated_mem_usage_per_chunk_source);
+    scan_op->set_scan_mem_limit(_mem_limit);
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
-    if (!_data_source_provider->insert_local_exchange_operator()) {
+    if (_data_source_provider->insert_local_exchange_operator()) {
         operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
                                                                           operators, context->degree_of_parallelism());
     }
@@ -191,7 +204,8 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     _pending_scanners.reverse();
     _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
     _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
-    int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
+    int concurrency = std::min<int>(_estimated_max_concurrent_chunks(), _num_scanners);
+    concurrency = std::min<int>(concurrency, config::max_hdfs_scanner_num);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
     TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks));
@@ -214,6 +228,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
+    data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source)));
     scanner->init(state);
     _push_pending_scanner(scanner);
@@ -313,6 +328,14 @@ static int compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockable) {
+    // submit the streaming load scanner to the dedicated thread pool if needed
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
+        config::enable_streaming_load_thread_pool) {
+        VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        return _submit_streaming_load_scanner(scanner, blockable);
+    }
+
     auto* thread_pool = _runtime_state->exec_env()->thread_pool();
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
@@ -333,6 +356,46 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     LOG(WARNING) << "thread pool busy";
     _running_threads.fetch_sub(1, std::memory_order_release);
     _scanner_submit_count.fetch_sub(delta, std::memory_order_relaxed);
+    return false;
+}
+
+bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner, bool blockable) {
+    ThreadPool* thread_pool = _runtime_state->exec_env()->streaming_load_thread_pool();
+    _running_threads.fetch_add(1, std::memory_order_release);
+    // Assume the thread pool is large enough, so there is no need to set the priority
+    Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+    if (status.ok()) {
+        return true;
+    }
+
+    // Thread pool for streaming load is assumed to be infinite, and submit should not fail
+    // because of the pool is full. The possible failure reason is that the thread pool is
+    // shutdown. But we still implement a block logic like PriorityPool::offer used in
+    // _submit_scanner to handle unexpected cases.
+    if (blockable) {
+        Status block_status;
+        while (thread_pool->is_pool_status_ok()) {
+            sleep(1);
+            block_status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });
+            if (block_status.ok()) {
+                // Should not reach here if thread pool is infinite and in normal status in general,
+                // and log the status if happened for debug
+                LOG(INFO) << "Success to submit scanner for streaming load after retry, "
+                          << "fragment: " << print_id(runtime_state()->fragment_instance_id())
+                          << ", first fail status: " << status;
+                return true;
+            }
+        }
+        VLOG(1) << "Failed to submit scanner for streaming load with block mode, "
+                << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
+                << ", last status: " << block_status;
+        // always return true for blockable which is same as that in _submit_scanner
+        return true;
+    }
+
+    LOG(WARNING) << "Failed to submit scanner for streaming load with unblock mode, "
+                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", status: " << status;
+    _running_threads.fetch_sub(1, std::memory_order_release);
     return false;
 }
 
@@ -554,10 +617,6 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-}
-
-int ConnectorScanNode::io_tasks_per_scan_operator() const {
-    return config::connector_io_tasks_per_scan_operator;
 }
 
 } // namespace starrocks::vectorized

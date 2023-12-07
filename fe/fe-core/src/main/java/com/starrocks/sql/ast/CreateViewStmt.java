@@ -9,17 +9,23 @@ import java.util.List;
 
 public class CreateViewStmt extends BaseViewStmt {
     private final boolean ifNotExists;
+    private final boolean replace;
     private final String comment;
 
-    public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
+    public CreateViewStmt(boolean ifNotExists, boolean replace, TableName tableName, List<ColWithComment> cols,
                           String comment, QueryStatement queryStmt) {
         super(tableName, cols, queryStmt);
+        this.replace = replace;
         this.ifNotExists = ifNotExists;
         this.comment = Strings.nullToEmpty(comment);
     }
 
     public boolean isSetIfNotExists() {
         return ifNotExists;
+    }
+
+    public boolean isReplace() {
+        return replace;
     }
 
     public String getComment() {

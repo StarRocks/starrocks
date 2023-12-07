@@ -35,7 +35,6 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
@@ -68,6 +67,7 @@
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -85,6 +85,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     int32_t max_load_memory_percent = config::load_process_max_memory_limit_percent;
     int64_t max_load_memory_bytes = process_mem_limit * max_load_memory_percent / 100;
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
+}
+
+int64_t ExecEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
 }
 
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
@@ -144,19 +155,36 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
+    // Thread pool used for streaming load to scan StreamLoadPipe. The maximum number of
+    // threads and queue size are set INT32_MAX which indicate there is no limit for the
+    // thread pool, and this can avoid deadlock for concurrent streaming loads. The thread
+    // pool will not be full easily because fragment execution pool and http workers also
+    // limit the streaming load concurrency which is controlled by fragment_pool_thread_num_max
+    // and webserver_num_workers respectively. This pool will be used when
+    // enable_streaming_load_thread_pool is true.
+    std::unique_ptr<ThreadPool> streaming_load_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("stream_load_io")
+                    .set_min_threads(config::streaming_load_thread_pool_num_min)
+                    .set_max_threads(INT32_MAX)
+                    .set_max_queue_size(INT32_MAX)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&streaming_load_pool));
+    _streaming_load_thread_pool = streaming_load_pool.release();
+
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
-        num_prepare_threads = std::thread::hardware_concurrency();
+        num_prepare_threads = CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
-        num_sink_io_threads = std::thread::hardware_concurrency();
+        num_sink_io_threads = CpuInfo::num_cores();
     }
     if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
         return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
@@ -165,7 +193,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    _max_executor_threads = std::thread::hardware_concurrency();
+    _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
@@ -356,8 +384,10 @@ Status ExecEnv::init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", this->process_mem_tracker());
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
@@ -460,6 +490,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
     SAFE_DELETE(_thread_pool);
+    SAFE_DELETE(_streaming_load_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();

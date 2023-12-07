@@ -17,6 +17,8 @@ import com.starrocks.common.AnalysisException;
 
 import java.math.BigDecimal;
 
+import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
+
 public class AnalyticAnalyzer {
     public static void verifyAnalyticExpression(AnalyticExpr analyticExpr) {
         for (Expr e : analyticExpr.getPartitionExprs()) {
@@ -25,7 +27,7 @@ public class AnalyticAnalyzer {
                         + e.toSql() + " (in " + analyticExpr.toSql() + ")");
             }
             if (!e.getType().canPartitionBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as partition by column");
+                throw new SemanticException(e.getType().toSql() + " type can't as partition by column");
             }
         }
 
@@ -35,7 +37,7 @@ public class AnalyticAnalyzer {
                         + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")");
             }
             if (!e.getExpr().getType().canOrderBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as order by column");
+                throw new SemanticException(e.getExpr().getType().toString() + " type can't as order by column");
             }
         }
 
@@ -54,7 +56,8 @@ public class AnalyticAnalyzer {
                     !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
-                throw new SemanticException("bitmap type could only used for bitmap_union_count/lead/lag window function");
+                throw new SemanticException(
+                        "bitmap type could only used for bitmap_union_count/lead/lag window function");
             } else if (e.getType().isHllType() &&
                     !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
                     !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
@@ -96,7 +99,7 @@ public class AnalyticAnalyzer {
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
                     isHllAggFn(analyticFunction.getFn()))) {
-                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'");
+                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql());
             }
 
             verifyWindowFrame(analyticExpr);
@@ -315,6 +318,10 @@ public class AnalyticAnalyzer {
         }
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    private static boolean isStatisticFn(Function fn) {
+        return STATISTIC_FUNCTIONS.contains(fn.functionName().toLowerCase());
     }
 
     private static boolean isHllAggFn(Function fn) {

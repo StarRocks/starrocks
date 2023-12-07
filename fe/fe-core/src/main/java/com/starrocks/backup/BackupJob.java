@@ -43,6 +43,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -522,8 +523,10 @@ public class BackupJob extends AbstractJob {
                                       THdfsProperties hdfsProperties, Long beId) {
         int index = 0;
         int totalNum = infos.size();
-        // each backend allot at most 3 tasks
-        int batchNum = Math.min(totalNum, 3);
+        int batchNum = totalNum;
+        if (Config.max_upload_task_per_be > 0) {
+            batchNum = Math.min(totalNum, Config.max_upload_task_per_be);
+        }
         // each task contains several upload subtasks
         int taskNumPerBatch = Math.max(totalNum / batchNum, 1);
         LOG.info("backend {} has {} batch, total {} tasks, {}", beId, batchNum, totalNum, this);

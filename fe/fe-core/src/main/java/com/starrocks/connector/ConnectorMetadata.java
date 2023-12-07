@@ -23,7 +23,6 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -174,14 +173,9 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
-                                         int priority, boolean mergeRedundant, boolean isManual)
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
             throws DdlException, MetaNotFoundException {
-    }
-
-    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                         int priority)
-            throws DdlException, MetaNotFoundException {
+        return null;
     }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)

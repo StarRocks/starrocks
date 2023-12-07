@@ -7,13 +7,13 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -42,8 +42,8 @@ public class UpdateAnalyzer {
                     tableName.getTbl(), tableName.getTbl());
         }
 
-        if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
-            throw unsupportedException("only support updating primary key table");
+        if (!table.supportsUpdate()) {
+            throw unsupportedException("table " + table.getName() + " does not support update");
         }
         if (updateStmt.getWherePredicate() == null) {
             throw new SemanticException("must specify where clause to prevent full table update");
@@ -73,16 +73,23 @@ public class UpdateAnalyzer {
             selectList.addItem(item);
         }
 
-        TableRelation tableRelation = new TableRelation(tableName);
+        Relation relation = new TableRelation(tableName);
+        if (updateStmt.getFromRelations() != null) {
+            for (Relation r : updateStmt.getFromRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+        }
         SelectRelation selectRelation =
-                new SelectRelation(selectList, tableRelation, updateStmt.getWherePredicate(), null, null);
+                new SelectRelation(selectList, relation, updateStmt.getWherePredicate(), null, null);
+        if (updateStmt.getCommonTableExpressions() != null) {
+            updateStmt.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);
 
         updateStmt.setTable(table);
         updateStmt.setQueryStatement(queryStatement);
-
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
         Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());

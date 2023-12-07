@@ -82,8 +82,6 @@ public:
 
     Status skip(int64_t count) override { return _impl->skip(count); }
 
-    bool allows_peek() const override { return _impl->allows_peek(); }
-
     StatusOr<std::string_view> peek(int64_t nbytes) override { return _impl->peek(nbytes); }
 
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {

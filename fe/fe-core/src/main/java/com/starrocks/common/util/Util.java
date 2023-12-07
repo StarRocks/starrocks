@@ -28,6 +28,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +36,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.management.ThreadInfo;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -252,6 +254,10 @@ public class Util {
         for (Column column : columns) {
             adler32.update(column.getName().getBytes(StandardCharsets.UTF_8));
             String typeString = columnHashString(column);
+            if (typeString == null) {
+                throw new SemanticException("Type:%s of column:%s does not support",
+                        column.getType().toString(), column.getName());
+            }
             adler32.update(typeString.getBytes(StandardCharsets.UTF_8));
 
             String columnName = column.getName();
@@ -289,9 +295,16 @@ public class Util {
     }
 
     public static String dumpThread(Thread t, int lineNum) {
+        return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
+    }
+
+    public static String dumpThread(ThreadInfo t, int lineNum) {
+        return dumpThread(t.getThreadName(), t.getThreadId(), t.getStackTrace(), lineNum);
+    }
+
+    public static String dumpThread(String name, long id, StackTraceElement[] elements, int lineNum) {
         StringBuilder sb = new StringBuilder();
-        StackTraceElement[] elements = t.getStackTrace();
-        sb.append("dump thread: ").append(t.getName()).append(", id: ").append(t.getId()).append("\n");
+        sb.append("dump thread: ").append(name).append(", id: ").append(id).append("\n");
         int count = lineNum;
         for (StackTraceElement element : elements) {
             if (count == 0) {

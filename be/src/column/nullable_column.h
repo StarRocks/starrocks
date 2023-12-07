@@ -67,8 +67,6 @@ public:
         return _has_null && immutable_null_column_data()[index];
     }
 
-    bool low_cardinality() const override { return false; }
-
     const uint8_t* raw_data() const override { return _data_column->raw_data(); }
 
     uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data_column->mutable_raw_data()); }
@@ -111,10 +109,7 @@ public:
         _null_column->assign(n, idx);
     }
 
-    void remove_first_n_values(size_t count) override {
-        _data_column->remove_first_n_values(count);
-        _null_column->remove_first_n_values(count);
-    }
+    void remove_first_n_values(size_t count) override;
 
     void append_datum(const Datum& datum) override;
 

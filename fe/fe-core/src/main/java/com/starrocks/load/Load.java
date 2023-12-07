@@ -602,7 +602,7 @@ public class Load {
                 }
 
                 SlotRef slotRef = (SlotRef) child;
-                String columnName = slotRef.getColumn().getName();
+                String columnName = slotRef.getColumnName();
                 if (excludedColumns.contains(columnName)) {
                     continue;
                 }
@@ -811,6 +811,7 @@ public class Load {
                  * UNIX_TIMESTAMP(DATE_FORMAT(FROM_UNIXTIME(ts), "%Y-01-01 00:00:00"));
                  *
                  */
+
                 // FROM_UNIXTIME
                 FunctionName fromUnixName = new FunctionName(FunctionSet.FROM_UNIXTIME);
                 List<Expr> fromUnixArgs = Lists.newArrayList(funcExpr.getChild(1));

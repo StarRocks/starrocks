@@ -159,12 +159,6 @@ under the License.
             <artifactId>jackson-core</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>com.sleepycat</groupId>
             <artifactId>je</artifactId>
@@ -248,6 +242,12 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-api</artifactId>
             <version>${iceberg.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-format-structures</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -449,7 +449,7 @@ under the License.
         <dependency>
             <groupId>org.apache.ivy</groupId>
             <artifactId>ivy</artifactId>
-            <version>2.5.1</version>
+            <version>2.5.2</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-launcher_2.12 -->
@@ -513,11 +513,14 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.3</version>
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-reload4j</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -566,8 +569,44 @@ under the License.
             <artifactId>hudi-common</artifactId>
             <exclusions>
                 <exclusion>
-                    <artifactId>log4j</artifactId>
-                    <groupId>log4j</groupId>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-server</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-hadoop-compat</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-hadoop2-compat</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-protocol-shaded</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-protocol</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase.thirdparty</groupId>
+                    <artifactId>hbase-shaded-protobuf</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase.thirdparty</groupId>
+                    <artifactId>hbase-shaded-gson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase.thirdparty</groupId>
+                    <artifactId>hbase-shaded-miscellaneous</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase.thirdparty</groupId>
+                    <artifactId>hbase-shaded-netty</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -577,6 +616,12 @@ under the License.
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-hadoop-mr</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.10.5</version>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
@@ -606,10 +651,10 @@ under the License.
             <artifactId>opentelemetry-exporter-jaeger</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
+        <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
@@ -638,6 +683,13 @@ under the License.
             <artifactId>commons-dbcp2</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-groovysh</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -696,6 +748,9 @@ under the License.
                     <thriftExecutable>${starrocks.thrift}</thriftExecutable>
                     <thriftSourceRoot>${starrocks.home}/gensrc/thrift</thriftSourceRoot>
                     <generator>java</generator>
+                    <excludes>
+                        <exclude>**/parquet.thrift</exclude>
+                    </excludes>
                 </configuration>
                 <executions>
                     <execution>

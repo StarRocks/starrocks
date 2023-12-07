@@ -54,6 +54,10 @@ public class ErrorReport {
         reportAnalysisException(null, errorCode, objs);
     }
 
+    public static SemanticException buildSemanticException(ErrorCode errorCode, Object... objs) {
+        return new SemanticException(reportCommon(null, errorCode, objs));
+    }
+
     public static void reportSemanticException(ErrorCode errorCode, Object... objs) {
         reportSemanticException(null, errorCode, objs);
     }

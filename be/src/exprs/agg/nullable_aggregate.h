@@ -804,6 +804,14 @@ public:
         }
     }
 
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        for (size_t i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
@@ -825,8 +833,18 @@ public:
                 const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
+                    dst_nullable_column->set_has_null(true);
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
+                    size_t null_size = SIMD::count_nonzero(src_null_data);
+                    // if one column only has null element, set dst_column all null
+                    if (null_size == chunk_size) {
+                        dst_nullable_column->data_column()->resize(chunk_size);
+                        for (int j = 0; j < chunk_size; ++j) {
+                            dst_null_data[j] |= 1;
+                        }
+                        return;
+                    }
                     // for one row, every columns should be probing to obtain null column.
                     for (int j = 0; j < chunk_size; ++j) {
                         dst_null_data[j] |= src_null_data[j];

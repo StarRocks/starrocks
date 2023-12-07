@@ -141,6 +141,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    int64_t total_segment_data_size();
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
@@ -190,6 +191,7 @@ public:
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+    std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
     int64_t txn_id() const { return rowset_meta()->txn_id(); }
@@ -253,6 +255,8 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
+    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
+
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
     }
@@ -283,6 +287,9 @@ public:
 
     uint64_t refs_by_reader() { return _refs_by_reader; }
 
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
         for (int i = 0; i < rowsets.size(); i++) {
@@ -306,6 +313,8 @@ public:
     static void close_rowsets(const std::vector<RowsetSharedPtr>& rowsets) {
         std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
+
+    Status verify();
 
 protected:
     friend class RowsetFactory;

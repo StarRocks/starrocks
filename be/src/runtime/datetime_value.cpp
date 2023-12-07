@@ -1566,6 +1566,10 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, const std::string& timezone
 }
 
 bool DateTimeValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz) {
+    return from_unixtime(timestamp, 0, ctz);
+}
+
+bool DateTimeValue::from_unixtime(int64_t timestamp, int64_t microsecond, const cctz::time_zone& ctz) {
     static const cctz::time_point<cctz::sys_seconds> epoch =
             std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
     cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(timestamp);
@@ -1580,7 +1584,7 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz)
     _hour = tp.hour();
     _minute = tp.minute();
     _second = tp.second();
-    _microsecond = 0;
+    _microsecond = microsecond;
 
     return true;
 }

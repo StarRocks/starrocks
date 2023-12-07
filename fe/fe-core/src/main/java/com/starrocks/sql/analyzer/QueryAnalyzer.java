@@ -284,15 +284,16 @@ public class QueryAnalyzer {
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+            Set<Column> baseSchemaColumns = new HashSet<>(table.getBaseSchema());
 
             for (Column column : table.getFullSchema()) {
                 Field field;
-                if (table.getBaseSchema().contains(column)) {
+                if (baseSchemaColumns.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                            new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                            new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
                 }
                 columns.put(field, column);
                 fields.add(field);
@@ -300,21 +301,23 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
+            if (session.getDumpInfo() != null) {
+                session.getDumpInfo().addTable(dbName, table);
 
-            session.getDumpInfo().addTable(dbName, table);
-            if (table.isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) table;
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
-                        getResource(hiveTable.getResourceName());
-                if (resource != null) {
-                    session.getDumpInfo().addResource(resource);
+                if (table.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) table;
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                            hiveTable.getTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                    hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                    hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                            getResource(hiveTable.getResourceName());
+                    if (resource != null) {
+                        session.getDumpInfo().addResource(resource);
+                    }
                 }
-                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                        hiveTable.getTableName());
-                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
-                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
-                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
             }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
@@ -409,12 +412,35 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
+            } else if (join.getJoinOp().isLeftOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                scope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+            } else if (join.getJoinOp().isRightOuterJoin()) {
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+            } else if (join.getJoinOp().isFullOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
             } else {
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
             join.setScope(scope);
             return scope;
+        }
+
+        private List<Field> getFieldsWithNullable(Scope scope) {
+            List<Field> newFields = new ArrayList<>();
+            for (Field field : scope.getRelationFields().getAllFields()) {
+                Field newField = new Field(field);
+                newField.setNullable(true);
+                newFields.add(newField);
+            }
+            return newFields;
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -439,24 +465,24 @@ public class QueryAnalyzer {
         }
 
         private void analyzeJoinHints(JoinRelation join) {
-            if (join.getJoinHint().equalsIgnoreCase("BROADCAST")) {
+            if (JoinOperator.HINT_BROADCAST.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
                     throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
-            } else if (join.getJoinHint().equalsIgnoreCase("SHUFFLE")) {
+            } else if (JoinOperator.HINT_SHUFFLE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
-            } else if ("BUCKET".equalsIgnoreCase(join.getJoinHint()) ||
-                    "COLOCATE".equalsIgnoreCase(join.getJoinHint())) {
+            } else if (JoinOperator.HINT_BUCKET.equals(join.getJoinHint()) ||
+                    JoinOperator.HINT_COLOCATE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
-            } else {
+            } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
         }
@@ -526,8 +552,11 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            String dbName = node.getName().getDb();
-            session.getDumpInfo().addView(dbName, view);
+            if (session.getDumpInfo() != null) {
+                String dbName = node.getName().getDb();
+                session.getDumpInfo().addView(dbName, view);
+            }
+
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;
@@ -560,6 +589,8 @@ public class QueryAnalyzer {
             Scope leftChildScope = process(setOpRelations.get(0), context);
             Type[] outputTypes = leftChildScope.getRelationFields().getAllFields()
                     .stream().map(Field::getType).toArray(Type[]::new);
+            List<Boolean> nullables = leftChildScope.getRelationFields().getAllFields()
+                    .stream().map(field -> field.isNullable()).collect(Collectors.toList());
             int outputSize = leftChildScope.getRelationFields().size();
 
             for (int i = 1; i < setOpRelations.size(); ++i) {
@@ -568,7 +599,8 @@ public class QueryAnalyzer {
                     throw new SemanticException("Operands have unequal number of columns");
                 }
                 for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
-                    Type fieldType = relation.getRelationFields().getAllFields().get(fieldIdx).getType();
+                    Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
+                    Type fieldType = field.getType();
                     if (fieldType.isOnlyMetricType() &&
                             !((node instanceof UnionRelation) &&
                                     (node.getQualifier().equals(SetQualifier.ALL)))) {
@@ -583,6 +615,7 @@ public class QueryAnalyzer {
                                 relation.getRelationFields().getFieldByIndex(fieldIdx).getType()));
                     }
                     outputTypes[fieldIdx] = commonType;
+                    nullables.set(fieldIdx, nullables.get(fieldIdx) | field.isNullable());
                 }
             }
 
@@ -590,7 +623,7 @@ public class QueryAnalyzer {
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
-                        oldField.getOriginExpression()));
+                        oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }
 
             Scope setOpOutputScope = new Scope(RelationId.of(node), new RelationFields(fields));

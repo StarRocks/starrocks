@@ -46,8 +46,8 @@ RESULT SINK
 cardinality: 150000
 column statistics:
 * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-* count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
-* sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
+* count-->[0.0, 1500000.0, 0.0, 8.0, 150000.0] ESTIMATE
+* sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 
 PLAN FRAGMENT 1(F08)
 
@@ -61,8 +61,8 @@ OutPut Exchange Id: 19
 |  cardinality: 150000
 |  column statistics:
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-|  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
-|  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
+|  * count-->[0.0, 1500000.0, 0.0, 8.0, 150000.0] ESTIMATE
+|  * sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 |
 17:AGGREGATE (merge finalize)
 |  aggregate: count[([33: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false], sum[([34: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
@@ -70,8 +70,8 @@ OutPut Exchange Id: 19
 |  cardinality: 150000
 |  column statistics:
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
-|  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
-|  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
+|  * count-->[0.0, 1500000.0, 0.0, 8.0, 150000.0] ESTIMATE
+|  * sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 |
 16:EXCHANGE
 cardinality: 150000

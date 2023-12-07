@@ -17,11 +17,11 @@ public:
     ArrayElementExpr(const ArrayElementExpr&) = default;
     ArrayElementExpr(ArrayElementExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         DCHECK_EQ(_type, _children[0]->type().children[0]);
-        ColumnPtr arg0 = _children[0]->evaluate(context, chunk);
-        ColumnPtr arg1 = _children[1]->evaluate(context, chunk);
+        ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));
+        ASSIGN_OR_RETURN(ColumnPtr arg1, _children[1]->evaluate_checked(context, chunk));
         size_t num_rows = std::max(arg0->size(), arg1->size());
         // No optimization for const column now.
         arg0 = ColumnHelper::unfold_const_column(_children[0]->type(), num_rows, arg0);

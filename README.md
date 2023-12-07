@@ -65,7 +65,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
    </a>
 </p>
 
-StarRocks’s streamlined architecture is mainly composed of two modules：Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data. 
+StarRocks’s streamlined architecture is mainly composed of two modules: Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data.
 
 <br>
 

@@ -2,18 +2,15 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.google.common.base.Preconditions;
-
 import java.util.Objects;
+import javax.validation.constraints.NotNull;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.Double.NaN;
 import static java.lang.Double.isFinite;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
-import static java.util.Objects.requireNonNull;
 
 // Calculate the cross range and ratio between column statistics
 public class StatisticRangeValues {
@@ -22,16 +19,8 @@ public class StatisticRangeValues {
     private final double distinctValues;
 
     public StatisticRangeValues(double low, double high, double distinctValues) {
-        Preconditions.checkArgument(
-                low <= high || (isNaN(low) && isNaN(high)),
-                "low value must be less than or equal to high value or both values have to be NaN, got %s and %s respectively",
-                low,
-                high);
         this.low = low;
         this.high = high;
-
-        checkArgument(distinctValues >= 0 || isNaN(distinctValues),
-                "Distinct values count should be non-negative, got: %s", distinctValues);
         this.distinctValues = distinctValues;
     }
 
@@ -68,9 +57,7 @@ public class StatisticRangeValues {
     }
 
     // Calculate the proportion of coverage between column statistic range
-    public double overlapPercentWith(StatisticRangeValues other) {
-        requireNonNull(other, "other is null");
-
+    public double overlapPercentWith(@NotNull StatisticRangeValues other) {
         if (this.isEmpty() || other.isEmpty()) {
             return 0.0;
         }

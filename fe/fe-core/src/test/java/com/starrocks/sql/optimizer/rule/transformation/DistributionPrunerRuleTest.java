@@ -170,7 +170,6 @@ public class DistributionPrunerRuleTest {
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
 
-
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator.Builder()
                 .withOperator(olapScanOperator)

@@ -614,6 +614,92 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
 
 /**
  *
+File be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc has 2 stripes
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 19 min: 0 max: 9 sum: 450
+    Column 2: count: 100 hasNull: false bytesOnDisk: 17 min: a max: a sum: 100
+  Stripe 2:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 20 min: 0 max: 9 sum: 451
+    Column 2: count: 100 hasNull: false bytesOnDisk: 1234 min: a max: ztrddxrhvzodrpeomoie sum: 1981
+
+File Statistics:
+  Column 0: count: 200 hasNull: false
+  Column 1: count: 200 hasNull: false bytesOnDisk: 39 min: 0 max: 9 sum: 901
+  Column 2: count: 200 hasNull: false bytesOnDisk: 1251 min: a max: ztrddxrhvzodrpeomoie sum: 2081
+
+Stripes:
+ Stripe1: offset: 3 data: 36 rows: 100 tail: 52 index: 63
+   Stream: column 0 section ROW_INDEX start: 3 length 11
+   Stream: column 1 section ROW_INDEX start: 14 length 25
+   Stream: column 2 section ROW_INDEX start: 39 length 27
+   Stream: column 1 section DATA start: 66 length 19
+   Stream: column 2 section DATA start: 85 length 7
+   Stream: column 2 section LENGTH start: 92 length 6
+   Stream: column 2 section DICTIONARY_DATA start: 98 length 4
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DICTIONARY_V2[1]
+ Stripe2: offset: 154 data: 1254 rows: 100 tail: 50 index: 83
+   Stream: column 0 section ROW_INDEX start: 154 length 11
+   Stream: column 1 section ROW_INDEX start: 165 length 25
+   Stream: column 2 section ROW_INDEX start: 190 length 47
+   Stream: column 1 section DATA start: 237 length 20
+   Stream: column 2 section DATA start: 257 length 1224
+   Stream: column 2 section LENGTH start: 1481 length 10
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DIRECT_V2
+*/
+
+TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                           {"y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                           {""}};
+    const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(two_diff_encode_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(two_diff_encode_orc_desc);
+    auto* param = _create_param(two_diff_encode_orc_file, range, tuple_desc);
+
+    // key = "a", y = 'a' rows is 101
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "a");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[1], TPrimitiveType::VARCHAR, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[1].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    // so stripe will not be filtered out by search argument
+    // and we can test dict-filtering strategy.
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 101);
+    // since we use dict filter eval cache, we can do filter on orc cvb
+    // so actually read rows is 200.
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
+// ====================================================================================================
+
+/**
+ *
 datetime are all in UTC timezone.
 
 File Version: 0.12 with ORC_CPP_ORIGINAL
@@ -884,10 +970,10 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
     };
     std::vector<Case> cases = {
             {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 0},
+            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 0},
             {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
@@ -1080,6 +1166,56 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     status = scanner->get_next(_runtime_state, &chunk);
     // Should be end of file in next read.
     EXPECT_TRUE(status.is_end_of_file());
+
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
+
+    SlotDesc c0{"sex", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BOOLEAN)};
+
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node;
+        lit_node.__set_node_type(TExprNodeType::SLOT_REF);
+        lit_node.__set_num_children(0);
+        lit_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+        TSlotRef t_slot_ref = TSlotRef();
+        t_slot_ref.slot_id = 0;
+        t_slot_ref.tuple_id = 0;
+        lit_node.__set_slot_ref(t_slot_ref);
+        nodes.emplace_back(lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1]", chunk->debug_row(0));
 
     scanner->close(_runtime_state);
 }
@@ -1396,6 +1532,38 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
 
         READ_SCANNER_ROWS(scanner, 2);
 
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string windows_file = "./be/test/exec/test_data/csv_scanner/windows.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(windows_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(windows_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['hello']", chunk->debug_row(0));
+        EXPECT_EQ("['world']", chunk->debug_row(1));
+        EXPECT_EQ("['starrocks']", chunk->debug_row(2));
         scanner->close(_runtime_state);
     }
 }

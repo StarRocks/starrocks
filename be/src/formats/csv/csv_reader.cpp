@@ -17,6 +17,12 @@ Status CSVReader::next_record(Record* record) {
             RETURN_IF_ERROR(_expand_buffer());
         }
         RETURN_IF_ERROR(_fill_buffer());
+        // When _row_delimiter_length larger than 1, for example $$$
+        // we may read $$ first and _buff.find will return nullptr, after
+        // filling buffer we read $, however we will find from $ and skip $$
+        // so we may get wrong result here. we can always set pos = 0, but
+        // for single char _row_delimiter we keep the same logic as before.
+        pos = _row_delimiter_length > 1 ? 0 : pos;
     }
     size_t l = d - _buff.position();
     *record = Record(_buff.position(), l);

@@ -44,6 +44,11 @@ struct SchemaScannerParam {
     int64_t txn_id{-1};
     const std::string* type{nullptr};
     const std::string* state{nullptr};
+    int64_t log_start_ts{-1};
+    int64_t log_end_ts{-1};
+    const std::string* log_level{nullptr};
+    const std::string* log_pattern{nullptr};
+    int64_t log_limit{-1};
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
@@ -67,6 +72,7 @@ public:
     virtual Status init(SchemaScannerParam* param, ObjectPool* pool);
     // Start to work
     virtual Status start(RuntimeState* state);
+    // Must only return one row at most each time
     virtual Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);

@@ -74,6 +74,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -140,6 +141,8 @@ public class SparkLoadJob extends BulkLoadJob {
     private ResourceDesc resourceDesc;
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
+    // spark load wait yarn response timeout
+    protected long sparkLoadSubmitTimeoutSecond = Config.spark_load_submit_timeout_second;
     // below for push task
     private Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
     private Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
@@ -166,6 +169,14 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
+
+        if (properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
+            try {
+                sparkLoadSubmitTimeoutSecond = Long.parseLong(properties.get(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT));
+            } catch (NumberFormatException e) {
+                throw new DdlException("spark_load_submit_timeout is not LONG", e);
+            }
+        }
 
         // set spark resource and broker desc
         setResourceInfo();

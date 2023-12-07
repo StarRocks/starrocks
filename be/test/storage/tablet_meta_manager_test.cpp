@@ -352,8 +352,8 @@ protected:
         };
 
         auto t0 = std::chrono::steady_clock::now();
-        std::vector<std::thread> threads(std::thread::hardware_concurrency());
-        for (int i = 0; i < std::thread::hardware_concurrency(); i++) {
+        std::vector<std::thread> threads(CpuInfo::num_cores());
+        for (int i = 0; i < CpuInfo::num_cores(); i++) {
             threads[i] = std::thread(rowset_commit_thread);
         }
         for (auto& t : threads) {

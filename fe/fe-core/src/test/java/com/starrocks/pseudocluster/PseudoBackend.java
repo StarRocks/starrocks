@@ -11,6 +11,8 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
@@ -178,6 +180,8 @@ public class PseudoBackend {
     private AtomicLong nextRowsetId = new AtomicLong(0);
 
     private Random random;
+
+    private AtomicLong numSchemaScan = new AtomicLong(0);
 
     private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
 
@@ -404,6 +408,10 @@ public class PseudoBackend {
         return publishFailureRate;
     }
 
+    public long getNumSchemaScan() {
+        return numSchemaScan.get();
+    }
+
     private void reportTablets() {
         // report tablets
         TReportRequest request = new TReportRequest();
@@ -554,7 +562,18 @@ public class PseudoBackend {
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
+    private String alterTaskError = null;
+
+    public void injectAlterTaskError(String errMsg) {
+        alterTaskError = errMsg;
+    }
+
     private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
+        if (alterTaskError != null) {
+            String err = alterTaskError;
+            alterTaskError = null;
+            throw new Exception(err);
+        }
         TAlterTabletReqV2 task = request.alter_tablet_req_v2;
         Tablet baseTablet = tabletManager.getTablet(task.base_tablet_id);
         if (baseTablet == null) {
@@ -838,7 +857,6 @@ public class PseudoBackend {
             return CompletableFuture.completedFuture(result);
         }
 
-
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
                 PExecBatchPlanFragmentsRequest request) {
@@ -926,7 +944,6 @@ public class PseudoBackend {
             return progress.getFetchDataResult();
         }
 
-
         @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
@@ -935,6 +952,22 @@ public class PseudoBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
+            ExecuteCommandResultPB result = new ExecuteCommandResultPB();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            result.status = pStatus;
+            if (request.command.equals("execute_script")) {
+                result.result = "dummy result";
+            } else if (request.command.equals("set_config")) {
+                result.result = "";
+            } else {
+                throw new org.apache.commons.lang3.NotImplementedException("TODO");
+            }
+            return CompletableFuture.completedFuture(result);
         }
     }
 
@@ -982,6 +1015,9 @@ public class PseudoBackend {
                         runOlapScan(planNode, scanRanges);
                         System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (numTabletScan > 0) {
@@ -1046,10 +1082,13 @@ public class PseudoBackend {
                         runOlapScan(planNode, scanRanges);
                         System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
                     }
+                } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
+                    numSchemaScan.incrementAndGet();
+                    sb.append(" SchemaScanNode:" + planNode.schema_scan_node.table_name);
                 }
             }
             if (allScans != numTabletScan) {
-                System.out.printf("not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
+                System.out.printf(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
             }
             if (numTabletScan > 0) {
                 scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))

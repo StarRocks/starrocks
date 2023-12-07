@@ -10,7 +10,6 @@
 #include "runtime/types.h"
 #include "types/hll.h"
 #include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 
@@ -140,6 +139,26 @@ TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+TEST(ObjectColumnTest, test_append_value_multiple_times) {
+    auto src_col = BitmapColumn::create();
+    auto copy_col = BitmapColumn::create();
+
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 64; i++) {
+        bitmap.add(i);
+    }
+    src_col->append(&bitmap);
+
+    copy_col->append_value_multiple_times(*src_col, 0, 4);
+    src_col->get_object(0)->add(64);
+
+    ASSERT_EQ(src_col->get_object(0)->cardinality(), 65);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(copy_col->get_object(0)->cardinality(), 64);
+    }
+}
+
+// NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_object_column_downgrade) {
     auto c = HyperLogLogColumn::create();
     c->append(HyperLogLog());
@@ -203,7 +222,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     s->append(3);
     columns.push_back(s);
 
-    auto column = PercentileFunctions::percentile_hash(ctx, columns);
+    auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column->is_object());
 
     auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
@@ -215,7 +234,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     s1->append(4);
     columns.clear();
     columns.push_back(s1);
-    auto column1 = PercentileFunctions::percentile_hash(ctx, columns);
+    auto column1 = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column1->is_object());
 
     std::vector<uint32_t> idx = {1};

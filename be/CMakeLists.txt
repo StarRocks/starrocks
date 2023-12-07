@@ -205,9 +205,14 @@ set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/m
 add_library(hdfs STATIC IMPORTED)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
+# Allow FindOpenSSL() to find correct static libraries
+set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
+message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
+add_library(AWS::crypto STATIC IMPORTED)
+set_target_properties(AWS::crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
@@ -227,10 +232,7 @@ add_library(leveldb STATIC IMPORTED)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_for_starrocks.a)
-
-add_library(jemalloc_for_arrow STATIC IMPORTED)
-set_target_properties(jemalloc_for_arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libjemalloc.a)
+set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_pic.a)
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -597,6 +599,7 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Script
     StarRocksGen
     Webserver
     TestUtil
@@ -659,14 +662,13 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    # arrow compiles jemalloc with a specific prefix, we should keep it
-    jemalloc_for_arrow
     brotlicommon
     brotlidec
     brotlienc
     zstd
     streamvbyte
     arrow
+    jemalloc # required by arrow
     parquet
     orc
     cctz
@@ -837,6 +839,7 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")

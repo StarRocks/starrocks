@@ -17,6 +17,7 @@
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -110,7 +111,7 @@ Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* 
     return Status::OK();
 }
 
-std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* state, bool* eos) const {
+std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state, bool* eos) const {
     Columns res;
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);
@@ -123,6 +124,14 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
 
     std::vector<jvalue> call_stack;
     std::vector<jobject> rets;
+    DeferOp defer = DeferOp([&]() {
+        // clean up arrays
+        for (auto& ret : rets) {
+            if (ret) {
+                env->DeleteLocalRef(ret);
+            }
+        }
+    });
     size_t num_rows = cols[0]->size();
     size_t num_cols = cols.size();
 
@@ -161,6 +170,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
         // update for col
         for (int j = 0; j < len; ++j) {
             jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
+            LOCAL_REF_GUARD_ENV(env, vi);
             append_jvalue(method_desc, col.get(), {.l = vi});
             release_jvalue(method_desc.is_box, {.l = vi});
         }

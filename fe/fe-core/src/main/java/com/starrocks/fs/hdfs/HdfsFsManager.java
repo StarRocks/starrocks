@@ -415,7 +415,7 @@ public class HdfsFsManager {
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
-        if (!authentication.equals("")) {
+        if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
             throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " + 
@@ -1060,10 +1060,19 @@ public class HdfsFsManager {
     public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws UserException {
         WildcardURI srcPathUri = new WildcardURI(srcPath);
         WildcardURI destPathUri = new WildcardURI(destPath);
-        if (!srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-            throw new UserException(
-                    "only allow rename in same file system");
+
+        boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
+        boolean destAuthorityNull = (destPathUri.getAuthority() == null);
+        if (srcAuthorityNull != destAuthorityNull) {
+            throw new UserException("Different authority info between srcPath: " + srcPath +
+                                    " and destPath: " + destPath);
         }
+        if (!srcAuthorityNull && !destAuthorityNull &&
+                !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
+            throw new UserException(
+                "only allow rename in same file system");
+        }
+
         HdfsFs fileSystem = getFileSystem(srcPath, loadProperties, null);
         Path srcfilePath = new Path(srcPathUri.getPath());
         Path destfilePath = new Path(destPathUri.getPath());

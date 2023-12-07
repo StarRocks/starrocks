@@ -24,7 +24,7 @@ private:
 TEST_F(HyperLogLogFunctionsTest, hllEmptyTest) {
     {
         Columns c;
-        auto column = HyperloglogFunction::hll_empty(ctx, c);
+        auto column = HyperloglogFunctions::hll_empty(ctx, c).value();
 
         ASSERT_TRUE(column->is_constant());
 
@@ -46,7 +46,7 @@ TEST_F(HyperLogLogFunctionsTest, hllHashTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_hash(ctx, columns);
+        auto v = HyperloglogFunctions::hll_hash(ctx, columns).value();
 
         ASSERT_TRUE(v->is_object());
 
@@ -92,7 +92,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 
@@ -146,7 +146,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality_from_string(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality_from_string(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 
@@ -158,4 +158,62 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
     }
 }
 
+TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
+    {
+        auto col1 = HyperLogLogColumn::create();
+
+        HyperLogLog h1;
+        h1.update(1);
+        HyperLogLog h2;
+        h2.update(1);
+        h2.update(2);
+        h2.update(1);
+
+        HyperLogLog h3;
+        h3.update(2);
+        h3.update(2);
+        h3.update(2);
+
+        HyperLogLog h4;
+        h4.update(3);
+        h4.update(2);
+        h4.update(5);
+
+        HyperLogLog h5;
+        for (int i = 0; i < 10000; i++) {
+            h5.update(i);
+        }
+
+        HyperLogLog h6;
+        for (int i = 0; i < 100000; i++) {
+            h6.update(i);
+        }
+
+        col1->append(std::move(h1));
+        col1->append(std::move(h2));
+        col1->append(std::move(h3));
+        col1->append(std::move(h4));
+        col1->append(std::move(h5));
+        col1->append(std::move(h6));
+
+        ColumnPtr v = nullptr;
+        v = HyperloglogFunctions::hll_cardinality(ctx, {col1}).value();
+        ASSERT_TRUE(v->is_numeric());
+        auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
+
+        v = HyperloglogFunctions::hll_serialize(ctx, {col1}).value();
+        ASSERT_TRUE(v->is_binary());
+        v = HyperloglogFunctions::hll_deserialize(ctx, {v}).value();
+        ASSERT_TRUE(v->is_object());
+        v = HyperloglogFunctions::hll_cardinality(ctx, {v}).value();
+        ASSERT_TRUE(v->is_numeric());
+
+        auto autcal = ColumnHelper::cast_to<TYPE_BIGINT>(v);
+
+        ASSERT_EQ(expect->size(), autcal->size());
+        for (size_t i = 0; i < expect->size(); i++) {
+            ASSERT_EQ(expect->get_data()[i], autcal->get_data()[i]);
+        }
+    }
+}
 } // namespace starrocks::vectorized

@@ -18,16 +18,10 @@
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
-#include "util/ref_count_closure.h"
 #include "util/thread.h"
 #include "util/time.h"
 
 namespace starrocks {
-
-class RuntimeFilterRpcClosure final : public RefCountClosure<PTransmitRuntimeFilterResult> {
-public:
-    int64_t seq = 0;
-};
 
 static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query_id, bool is_pipeline) {
     if (is_pipeline) {
@@ -43,9 +37,6 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
 
 static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
-    if (rpc_closure->seq != 0) {
-        brpc::Join(rpc_closure->cntl.call_id());
-    }
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
     rpc_closure->cntl.set_timeout_ms(timeout_ms);
@@ -53,7 +44,6 @@ static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFi
     // create a http rpc stub: http_stub
     // http_stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
-    rpc_closure->seq++;
 }
 
 void RuntimeFilterPort::add_listener(vectorized::RuntimeFilterProbeDescriptor* rf_desc) {
@@ -132,7 +122,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
         VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. merge_node[0] = " << rf_desc->merge_nodes()[0]
                   << ", filter_size = " << filter->size() << ", query_id = " << params.query_id()
                   << ", finst_id = " << params.finst_id() << ", be_number = " << params.build_be_number()
-                  << ", is_pipeline = " << params.is_pipeline();
+                  << ", is_pipeline = " << params.is_pipeline() << ", can_use_bf = " << filter->can_use_bf();
 
         std::string* rf_data = params.mutable_data();
         size_t max_size = vectorized::RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
@@ -180,7 +170,8 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
-              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
+              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size()
+              << ", can_use_bf = " << rf->can_use_bf();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_shared_runtime_filter(rf);
     }
@@ -203,8 +194,7 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
     return Status::OK();
 }
 
-void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params,
-                                               RuntimeFilterRpcClosure* rpc_closure) {
+void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params) {
     auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
@@ -252,16 +242,19 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         // something wrong with deserialization.
         return;
     }
+    if (!rf->can_use_bf()) {
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. some partial rf's size exceeds "
+                     "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter";
+        status->can_use_bf = false;
+    }
 
-    // exceeds max size, stop building it.
     status->current_size += rf->size();
     if (status->current_size > status->max_size) {
-        // alreay exceeds max size, no need to build it.
-        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building since size too "
+        // alreay exceeds max size, no need to build bloom filter, but still reserve min/max filter.
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building bf since size too "
                      "large. filter_id = "
                   << filter_id << ", size = " << status->current_size;
-        status->stop = true;
-        return;
+        status->can_use_bf = false;
     }
 
     VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
@@ -271,10 +264,50 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 
     // not ready. still have to wait more filters.
     if (status->filters.size() < status->expect_number) return;
-    _send_total_runtime_filter(filter_id, rpc_closure);
+    if (!status->can_use_bf) {
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
+        for (auto& [be_number, rf] : status->filters) {
+            rf->clear_bf();
+        }
+    }
+    _send_total_runtime_filter(filter_id);
 }
 
-void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeFilterRpcClosure* rpc_closure) {
+struct BatchClosuresJoinAndClean {
+public:
+    BatchClosuresJoinAndClean(RuntimeFilterRpcClosures& closures) : _closures(closures) {}
+    ~BatchClosuresJoinAndClean() {
+        for (auto& closure : _closures) {
+            closure->join();
+            WARN_IF_RPC_ERROR(closure->cntl);
+            if (closure->unref()) {
+                delete closure;
+            }
+        }
+    }
+
+private:
+    RuntimeFilterRpcClosures& _closures;
+    DISALLOW_COPY_AND_MOVE(BatchClosuresJoinAndClean);
+};
+
+struct SingleClosureJoinAndClean {
+public:
+    SingleClosureJoinAndClean(RuntimeFilterRpcClosure* closure) : _closure(closure) {}
+    ~SingleClosureJoinAndClean() {
+        _closure->join();
+        WARN_IF_RPC_ERROR(_closure->cntl);
+        if (_closure->unref()) {
+            delete _closure;
+        }
+    }
+
+private:
+    RuntimeFilterRpcClosure* _closure;
+    DISALLOW_COPY_AND_MOVE(SingleClosureJoinAndClean);
+};
+
+void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id) {
     auto status_it = _statuses.find(filter_id);
     DCHECK(status_it != _statuses.end());
     RuntimeFilterMergerStatus* status = &(status_it->second);
@@ -286,6 +319,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     vectorized::JoinRuntimeFilter* first = status->filters.begin()->second;
     ObjectPool* pool = &(status->pool);
     out = first->create_empty(pool);
+    if (!status->can_use_bf) {
+        out->clear_bf();
+    }
+
     for (auto it : status->filters) {
         out->concat(it.second);
     }
@@ -298,6 +335,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     }
     request.set_filter_id(filter_id);
     request.set_is_partial(false);
+
     PUniqueId* query_id = request.mutable_query_id();
     query_id->set_hi(_query_id.hi);
     query_id->set_lo(_query_id.lo);
@@ -359,10 +397,17 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     size_t index = 0;
     size_t size = targets.size();
 
+    RuntimeFilterRpcClosures rpc_closures;
+    rpc_closures.reserve(size);
+    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     while (index < size) {
         auto& t = targets[index];
         bool is_local = (local == t.first);
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", t.first.hostname, t.first.port);
+            return;
+        }
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
         for (const auto& inst : t.second) {
@@ -399,7 +444,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
 
         index += (1 + half);
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
-        send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
+        rpc_closures.push_back(new RuntimeFilterRpcClosure);
+        auto* closure = rpc_closures.back();
+        closure->ref();
+        send_rpc_runtime_filter(stub, closure, timeout_ms, request);
     }
 
     // we don't need to hold rf any more.
@@ -571,8 +619,7 @@ static inline Status receive_total_runtime_filter_pipeline(
     return Status::OK();
 }
 
-void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request,
-                                                        RuntimeFilterRpcClosure* rpc_closure) {
+void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
     auto mem_tracker = get_mem_tracker(request.query_id(), request.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
@@ -601,12 +648,20 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     }
 
     size_t index = 0;
+    RuntimeFilterRpcClosures rpc_closures;
+    rpc_closures.reserve(size);
+    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
+
     while (index < size) {
         auto& t = targets[index];
         TNetworkAddress addr;
         addr.hostname = t.host();
         addr.port = t.port();
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
+            return;
+        }
 
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
@@ -629,7 +684,10 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
         index += (1 + half);
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        send_rpc_runtime_filter(stub, rpc_closure, config::send_rpc_runtime_filter_timeout_ms, request);
+        rpc_closures.push_back(new RuntimeFilterRpcClosure());
+        auto* closure = rpc_closures.back();
+        closure->ref();
+        send_rpc_runtime_filter(stub, closure, config::send_rpc_runtime_filter_timeout_ms, request);
     }
 }
 
@@ -698,13 +756,17 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
     }
 
     auto* rpc_closure = new RuntimeFilterRpcClosure();
-    rpc_closure->ref();
-    doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
+    SingleClosureJoinAndClean join_and_join(rpc_closure);
+    auto* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
+    if (UNLIKELY(stub == nullptr)) {
+        LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", first_dest.address.hostname,
+                                            first_dest.address.port);
+        return;
+    }
     _exec_env->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
+    rpc_closure->ref();
     send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
-    brpc::Join(rpc_closure->cntl.call_id());
-    rpc_closure->unref();
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
@@ -712,20 +774,23 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
     DCHECK(!destinations.empty());
 
     size_t k = 0;
-    std::vector<RuntimeFilterRpcClosure*> rpc_closures(config::deliver_broadcast_rf_passthrough_inflight_num);
     while (k < destinations.size()) {
         auto num_inflight =
                 std::min<size_t>(destinations.size() - k, config::deliver_broadcast_rf_passthrough_inflight_num);
-        rpc_closures.resize(num_inflight);
+        RuntimeFilterRpcClosures rpc_closures;
+        rpc_closures.reserve(num_inflight);
+        BatchClosuresJoinAndClean join_and_clean(rpc_closures);
         auto start_idx = k;
         k += num_inflight;
         for (auto i = 0; i < num_inflight; ++i) {
-            rpc_closures[i] = new RuntimeFilterRpcClosure();
             auto request = params;
-            auto& rpc_closure = rpc_closures[i];
             auto& dest = destinations[start_idx + i];
-            rpc_closure->ref();
-            doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
+            auto* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
+            if (UNLIKELY(stub == nullptr)) {
+                LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", dest.address.hostname,
+                                                    dest.address.port);
+                return;
+            }
             request.clear_probe_finst_ids();
             request.clear_forward_targets();
             for (const auto& id : dest.finstance_ids) {
@@ -735,13 +800,11 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
             }
             _exec_env->add_rf_event({request.query_id(), request.filter_id(), dest.address.hostname,
                                      "DELIVER_BROADCAST_RF_PASSTHROUGH"});
-            send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
-        }
 
-        for (auto& rpc_closure : rpc_closures) {
-            brpc::Join(rpc_closure->cntl.call_id());
-            rpc_closure->unref();
-            delete rpc_closure;
+            rpc_closures.push_back(new RuntimeFilterRpcClosure());
+            auto* closure = rpc_closures.back();
+            closure->ref();
+            send_rpc_runtime_filter(stub, closure, timeout_ms, request);
         }
     }
 }
@@ -756,15 +819,30 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
         finst_id->set_lo(id.lo);
     }
     _exec_env->add_rf_event({param.query_id(), param.filter_id(), "", "DELIVER_BROADCAST_RF_LOCAL"});
-    _receive_total_runtime_filter(param, nullptr);
+    _receive_total_runtime_filter(param);
+}
+
+void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
+                                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms) {
+    RuntimeFilterRpcClosures rpc_closures;
+    rpc_closures.reserve(transmit_addrs.size());
+    BatchClosuresJoinAndClean join_and_clean(rpc_closures);
+    for (const auto& addr : transmit_addrs) {
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
+            return;
+        }
+        _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, "SEND_PART_RF_RPC"});
+        rpc_closures.push_back(new RuntimeFilterRpcClosure());
+        auto* closure = rpc_closures.back();
+        closure->ref();
+        send_rpc_runtime_filter(stub, closure, transmit_timeout_ms, params);
+    }
 }
 
 void RuntimeFilterWorker::execute() {
     LOG(INFO) << "RuntimeFilterWorker start working.";
-    auto* rpc_closure = new RuntimeFilterRpcClosure();
-    rpc_closure->ref();
-    DeferOp deferop([&] { rpc_closure->Run(); });
-
     for (;;) {
         RuntimeFilterWorkerEvent ev;
         if (!_queue.blocking_get(&ev)) {
@@ -772,7 +850,7 @@ void RuntimeFilterWorker::execute() {
         }
         switch (ev.type) {
         case RECEIVE_TOTAL_RF: {
-            _receive_total_runtime_filter(ev.transmit_rf_request, rpc_closure);
+            _receive_total_runtime_filter(ev.transmit_rf_request);
             break;
         }
 
@@ -809,17 +887,13 @@ void RuntimeFilterWorker::execute() {
             RuntimeFilterMerger& merger = it->second;
             _exec_env->add_rf_event(
                     {ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(), "", "RECV_PART_RF_RPC"});
-            merger.merge_runtime_filter(ev.transmit_rf_request, rpc_closure);
+            merger.merge_runtime_filter(ev.transmit_rf_request);
             break;
         }
 
         case SEND_PART_RF: {
-            for (const auto& addr : ev.transmit_addrs) {
-                doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
-                _exec_env->add_rf_event({ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
-                                         addr.hostname, "SEND_PART_RF_RPC"});
-                send_rpc_runtime_filter(stub, rpc_closure, ev.transmit_timeout_ms, ev.transmit_rf_request);
-            }
+            _deliver_part_runtime_filter(std::move(ev.transmit_addrs), std::move(ev.transmit_rf_request),
+                                         ev.transmit_timeout_ms);
             break;
         }
         case SEND_BROADCAST_GRF: {

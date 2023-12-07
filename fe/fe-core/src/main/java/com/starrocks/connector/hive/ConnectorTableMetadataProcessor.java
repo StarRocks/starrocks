@@ -96,7 +96,7 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                 try {
                     table = metadataMgr.getTable(catalogName, dbName, tableName);
                 } catch (Exception e) {
-                    LOG.warn("can't get table of {}.{}.{}，msg: {}", catalogName, dbName, tableName, e);
+                    LOG.warn("can't get table of {}.{}.{}，msg: ", catalogName, dbName, tableName, e);
                     continue;
                 }
                 if (table == null) {
@@ -104,15 +104,15 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
                     continue;
                 }
                 try {
-                    updateProcessor.refreshTableWithExecutor(table, true, refreshRemoteFileExecutor);
+                    updateProcessor.refreshTableBackground(table, true, refreshRemoteFileExecutor);
                 } catch (Exception e) {
-                    LOG.warn("refresh {}.{}.{} meta store info failed, msg : {}", catalogName, dbName,
+                    LOG.warn("refresh {}.{}.{} meta store info failed, msg : ", catalogName, dbName,
                             tableName, e);
                     continue;
                 }
                 LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
             }
-            LOG.info("refresh catalog {} success", catalogName);
+            LOG.info("refresh connector metadata {} finished", catalogName);
         }
     }
 

@@ -34,16 +34,16 @@ public:
     M(datetime, PrimitiveType::TYPE_DATETIME)   \
     M(date, PrimitiveType::TYPE_DATE)
 
-#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                     \
-    static ColumnPtr array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDistinct<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDistinct<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_DISTINCT_FN)
 #undef DEFINE_ARRAY_DISTINCT_FN
 
-#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                     \
-    static ColumnPtr array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayDifference<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_DIFFERENCE_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_difference_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayDifference<PT>::process(context, columns);                                             \
     }
 
     DEFINE_ARRAY_DIFFERENCE_FN(boolean, PrimitiveType::TYPE_BOOLEAN)
@@ -58,63 +58,63 @@ public:
 
 #undef DEFINE_ARRAY_DIFFERENCE_FN
 
-#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                     \
-    static ColumnPtr array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySlice<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_SLICE_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_slice_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySlice<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
     DEFINE_ARRAY_SLICE_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SLICE_FN
 
-#define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                     \
-    static ColumnPtr array_concat_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayConcat<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_concat_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayConcat<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
     DEFINE_ARRAY_CONCAT_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_CONCAT_FN
 
-#define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                     \
-    static ColumnPtr array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayOverlap<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_overlap_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayOverlap<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
 #undef DEFINE_ARRAY_OVERLAP_FN
 
-#define DEFINE_ARRAY_INTERSECT_FN(NAME, PT)                                                     \
-    static ColumnPtr array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayIntersect<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_INTERSECT_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayIntersect<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_INTERSECT_FN)
 #undef DEFINE_ARRAY_INTERSECT_FN
 
-#define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                     \
-    static ColumnPtr array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySort<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_SORT_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_sort_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySort<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
     DEFINE_ARRAY_SORT_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORT_FN
 
-#define DEFINE_ARRAY_SORTBY_FN(NAME, PT)                                                     \
-    static ColumnPtr array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArraySortBy<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_SORTBY_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySortBy<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORTBY_FN)
     DEFINE_ARRAY_SORTBY_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORTBY_FN
 
-#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
-    static ColumnPtr array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayReverse<PT>::process(context, columns);                                   \
+#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayReverse<PT>::process(context, columns);                                             \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
     DEFINE_ARRAY_REVERSE_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_REVERSE_FN
 
-#define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \
-    static ColumnPtr array_join_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayJoin::process(context, columns);                                       \
+#define DEFINE_ARRAY_JOIN_FN(NAME)                                                                   \
+    static StatusOr<ColumnPtr> array_join_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayJoin::process(context, columns);                                                 \
     }
 
     DEFINE_ARRAY_JOIN_FN(varchar);
@@ -181,27 +181,27 @@ public:
 
 private:
     template <PrimitiveType column_type, ArithmeticType type>
-    static ColumnPtr array_arithmetic(const Columns& columns);
+    static StatusOr<ColumnPtr> array_arithmetic(const Columns& columns);
 
     template <PrimitiveType column_type, ArithmeticType type>
-    static ColumnPtr _array_process_not_nullable(const Column* array_column, std::vector<uint8_t>* null_ptr);
+    static StatusOr<ColumnPtr> _array_process_not_nullable(const Column* array_column, std::vector<uint8_t>* null_ptr);
 
     template <PrimitiveType column_type, bool has_null, ArithmeticType type>
-    static ColumnPtr _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
-                                                       const NullColumn::Container* null_elements,
-                                                       std::vector<uint8_t>* null_ptr);
+    static StatusOr<ColumnPtr> _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
+                                                                 const NullColumn::Container* null_elements,
+                                                                 std::vector<uint8_t>* null_ptr);
 
     template <PrimitiveType type>
-    static ColumnPtr array_sum(const Columns& columns);
+    static StatusOr<ColumnPtr> array_sum(const Columns& columns);
 
     template <PrimitiveType type>
-    static ColumnPtr array_avg(const Columns& columns);
+    static StatusOr<ColumnPtr> array_avg(const Columns& columns);
 
     template <PrimitiveType type>
-    static ColumnPtr array_min(const Columns& columns);
+    static StatusOr<ColumnPtr> array_min(const Columns& columns);
 
     template <PrimitiveType type>
-    static ColumnPtr array_max(const Columns& columns);
+    static StatusOr<ColumnPtr> array_max(const Columns& columns);
 };
 
 } // namespace starrocks::vectorized

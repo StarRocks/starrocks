@@ -29,7 +29,7 @@ public:
 
         Slice operator[](size_t index) const { return _column.get_slice(index); }
 
-        size_t size() { return _column.size(); }
+        size_t size() const { return _column.size(); }
 
     private:
         const BinaryColumnBase& _column;
@@ -79,7 +79,6 @@ public:
         }
     }
 
-    bool low_cardinality() const override { return false; }
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
     bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 

@@ -75,6 +75,26 @@ public abstract class PredicateOperator extends ScalarOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        PredicateOperator other = (PredicateOperator) obj;
+        if (this.arguments.size() != other.arguments.size()) {
+            return false;
+        }
+        for (int i = 0; i < this.arguments.size(); i++) {
+            if (!this.arguments.get(i).equivalent(other.arguments.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public ScalarOperator clone() {
         PredicateOperator operator = (PredicateOperator) super.clone();
         // Deep copy here

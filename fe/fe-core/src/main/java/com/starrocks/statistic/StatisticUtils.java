@@ -77,6 +77,11 @@ public class StatisticUtils {
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
+        if (null != ConnectContext.get() && ConnectContext.get().isStatisticsConnection()) {
+            // avoid query statistics table when collect statistics
+            return true;
+        }
+
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {
@@ -147,17 +152,6 @@ public class StatisticUtils {
         ScalarType bucketsType = ScalarType.createMaxVarcharType();
         ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
 
-        // varchar type column need call setAssignedStrLenInColDefinition here,
-        // otherwise it will be set length to 1 at analyze
-        columnNameType.setAssignedStrLenInColDefinition();
-        tableNameType.setAssignedStrLenInColDefinition();
-        partitionNameType.setAssignedStrLenInColDefinition();
-        dbNameType.setAssignedStrLenInColDefinition();
-        maxType.setAssignedStrLenInColDefinition();
-        minType.setAssignedStrLenInColDefinition();
-        bucketsType.setAssignedStrLenInColDefinition();
-        mostCommonValueType.setAssignedStrLenInColDefinition();
-
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
                     new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
@@ -222,8 +216,7 @@ public class StatisticUtils {
                     return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
                             statistic, DateUtils.DATE_FORMATTER_UNIX)));
                 case DATETIME:
-                    return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                            statistic, DateUtils.DATE_TIME_FORMATTER_UNIX)));
+                    return Optional.of((double) getLongFromDateTime(DateUtils.parseDatTimeString(statistic)));
                 case CHAR:
                 case VARCHAR:
                     return Optional.empty();

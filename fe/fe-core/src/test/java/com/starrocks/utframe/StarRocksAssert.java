@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -33,11 +34,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -60,6 +65,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
@@ -68,6 +76,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
+    private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
 
     private ConnectContext ctx;
 
@@ -157,6 +166,32 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+    }
+
+    public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof CreateTableStmt) {
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            return this.withTable(sql);
+        } else if (statementBase instanceof CreateMaterializedViewStatement) {
+            return this.withMaterializedView(sql, true);
+        } else {
+            throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+        }
+    }
+
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createView(createTableStmt);
@@ -193,18 +228,41 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
+        return withMaterializedView(sql, false);
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof CreateMaterializedViewStmt) {
             CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            if (isOnlySingleReplica) {
+                createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (isOnlySingleReplica) {
+                createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         }
         checkAlterJob();
         return this;
+    }
+
+    private void waitingTaskFinish(TaskRun taskRun) {
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
     }
     
     // Add rollup

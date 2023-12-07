@@ -32,7 +32,7 @@ TEST_F(EsFunctionsTest, matchTest) {
         columns.emplace_back(var1_col);
         columns.emplace_back(var2_col);
 
-        ColumnPtr result = ESFunctions::match(ctx, columns);
+        ColumnPtr result = ESFunctions::match(ctx, columns).value();
 
         ASSERT_EQ(1, result->size());
         ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));

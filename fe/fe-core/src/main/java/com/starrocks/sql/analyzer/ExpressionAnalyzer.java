@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
@@ -89,6 +90,10 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -99,6 +104,16 @@ public class ExpressionAnalyzer {
 
     public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
         IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
+    public void analyzeWithoutUpdateState(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        Visitor visitor = new Visitor(analyzeState, session) {
+            @Override
+            protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+                // do not put the slotRef in analyzeState
+            }
+        };
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -165,6 +180,10 @@ public class ExpressionAnalyzer {
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr, scope);
+        }
+        // putting lambda inputs should after analyze
+        for (int i = 1; i < childSize; ++i) {
+            Expr expr = expression.getChild(i);
             if (expr instanceof NullLiteral) {
                 expr.setType(Type.ARRAY_INT); // Let it have item type.
             }
@@ -184,6 +203,7 @@ public class ExpressionAnalyzer {
         if (res != null) {
             visitor.visit(res, scope);
         }
+        scope.clearLambdaInputs();
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
@@ -211,7 +231,7 @@ public class ExpressionAnalyzer {
             throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+        protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
         }
 
@@ -243,6 +263,9 @@ public class ExpressionAnalyzer {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+            // help to get nullable info in Analyzer phase
+            // now it is used in creating mv to decide nullable of fields
+            node.setNullable(resolvedField.getField().isNullable());
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
@@ -393,16 +416,17 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
+            node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
-                Type type = node.getChild(i).getType();
-                if (!type.isBoolean() && !type.isNull()) {
-                    throw new SemanticException("Operand '%s' part of predicate " +
-                            "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
+                Expr child = node.getChild(i);
+                if (child.getType().isBoolean() || child.getType().isNull()) {
+                    // do nothing
+                } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                    node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
+                } else {
+                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
                 }
             }
-
-            node.setType(Type.BOOLEAN);
             return null;
         }
 
@@ -452,22 +476,21 @@ public class ExpressionAnalyzer {
                 Type t1 = node.getChild(0).getType().getNumResultType();
                 Type t2 = node.getChild(1).getType().getNumResultType();
                 if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                    ArithmeticExpr.TypeTriple typeTriple = null;
                     try {
-                        node.rewriteDecimalOperation();
+                        typeTriple = node.rewriteDecimalOperation();
                     } catch (AnalysisException ex) {
                         throw new SemanticException(ex.getMessage());
                     }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
+                    Preconditions.checkArgument(typeTriple != null);
+                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
                     Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
                 }
@@ -828,6 +851,9 @@ public class ExpressionAnalyzer {
             if (fn == null) {
                 fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
+            if (fn == null) {
+                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+            }
 
             if (fn == null) {
                 throw new SemanticException("No matching function with signature: %s(%s).",
@@ -1029,7 +1055,7 @@ public class ExpressionAnalyzer {
                 whenTypes.add(node.getChild(i).getType());
             }
 
-            Type compatibleType = Type.NULL;
+            Type compatibleType = Type.BOOLEAN;
             if (null != caseExpr) {
                 compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
@@ -1119,7 +1145,7 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                if (node.getSetType().equals(SetType.USER)) {
+                if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
                     //If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {

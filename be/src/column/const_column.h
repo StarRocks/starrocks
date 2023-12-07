@@ -43,8 +43,6 @@ public:
 
     bool is_constant() const override { return true; }
 
-    bool low_cardinality() const override { return false; }
-
     const uint8_t* raw_data() const override { return _data->raw_data(); }
 
     uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data->mutable_raw_data()); }
@@ -92,12 +90,13 @@ public:
     virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
+        DCHECK_GT(count, 0);
         if (_data->is_nullable()) {
             bool ok = true;
             if (_size == 0) {
                 ok = _data->append_nulls(1);
             }
-            _size += ok;
+            _size += count;
             return ok;
         } else {
             return false;

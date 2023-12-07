@@ -8,7 +8,6 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
@@ -218,35 +217,33 @@ public class IcebergTableStatisticCalculator {
                 snapshot.get(), icebergPredicate);
 
         IcebergFileStats icebergFileStats = null;
-        for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
-            for (FileScanTask fileScanTask : combinedScanTask.files()) {
-                DataFile dataFile = fileScanTask.file();
-                // ignore this data file.
-                if (dataFile.recordCount() == 0) {
-                    continue;
-                }
-                if (icebergFileStats == null) {
-                    icebergFileStats = new IcebergFileStats(
-                            idToTypeMapping,
-                            nonPartitionPrimitiveColumns,
-                            dataFile.partition(),
-                            dataFile.recordCount(),
-                            dataFile.fileSizeInBytes(),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
-                            dataFile.nullValueCounts(),
-                            dataFile.columnSizes());
-                } else {
-                    icebergFileStats.incrementFileCount();
-                    icebergFileStats.incrementRecordCount(dataFile.recordCount());
-                    icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
-                    updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    icebergFileStats.updateNullCount(dataFile.nullValueCounts());
-                    updateColumnSizes(icebergFileStats, dataFile.columnSizes());
-                }
+        for (FileScanTask fileScanTask : tableScan.planFiles()) {
+            DataFile dataFile = fileScanTask.file();
+            // ignore this data file.
+            if (dataFile.recordCount() == 0) {
+                continue;
+            }
+            if (icebergFileStats == null) {
+                icebergFileStats = new IcebergFileStats(
+                        idToTypeMapping,
+                        nonPartitionPrimitiveColumns,
+                        dataFile.partition(),
+                        dataFile.recordCount(),
+                        dataFile.fileSizeInBytes(),
+                        IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
+                        IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
+                        dataFile.nullValueCounts(),
+                        dataFile.columnSizes());
+            } else {
+                icebergFileStats.incrementFileCount();
+                icebergFileStats.incrementRecordCount(dataFile.recordCount());
+                icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
+                updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                        dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                        dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                icebergFileStats.updateNullCount(dataFile.nullValueCounts());
+                updateColumnSizes(icebergFileStats, dataFile.columnSizes());
             }
         }
 

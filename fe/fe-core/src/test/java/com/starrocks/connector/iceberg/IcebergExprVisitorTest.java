@@ -81,6 +81,15 @@ public class IcebergExprVisitorTest {
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
 
+        // equal timestamp
+        value = ConstantOperator.createDatetime(LocalDateTime.of(2023, 8, 18, 15, 13, 12, 634297000));
+        epochSec = 1692342792634297L;
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, K4, value)), context);
+        expectedExpr = Expressions.equal("k4", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.MICROSECONDS));
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpr.toString(), convertedExpr.toString());
+
         // notEqual
         value = ConstantOperator.createBoolean(true);
         convertedExpr = converter.convert(Lists.newArrayList(

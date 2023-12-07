@@ -97,21 +97,21 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testStructWithWindow() throws Exception {
         String sql = "select sum(c2.b) over(partition by c2.a order by c0) from test";
-        assertPlanContains(sql, " 4:ANALYTIC\n" +
+        assertPlanContains(sql, " 3:ANALYTIC\n" +
                 "  |  functions: [, sum(7: c2.b), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 1: c0 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "select sum(c0) over(partition by c2.a order by c2.b) from test";
-        assertPlanContains(sql, " 4:ANALYTIC\n" +
+        assertPlanContains(sql, " 3:ANALYTIC\n" +
                 "  |  functions: [, sum(5: c0), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "select sum(c1.b[10].b) over(partition by c2.a order by c2.b) from test";
-        assertPlanContains(sql, "4:ANALYTIC\n" +
+        assertPlanContains(sql, "3:ANALYTIC\n" +
                 "  |  functions: [, sum(6: c1.b[10].b), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +

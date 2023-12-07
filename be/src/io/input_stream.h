@@ -23,9 +23,6 @@ public:
     // Returns error if an underlying read error occurs.
     virtual Status skip(int64_t count) = 0;
 
-    // Returns true if InputStream support `peek()`
-    virtual bool allows_peek() const { return false; }
-
     // Return zero-copy string_view to upcoming bytes.
     //
     // Do not modify the stream position. The view becomes invalid after
@@ -64,8 +61,6 @@ public:
     Status read_fully(void* data, int64_t count) override { return _impl->read_fully(data, count); }
 
     Status skip(int64_t count) override { return _impl->skip(count); }
-
-    bool allows_peek() const override { return _impl->allows_peek(); }
 
     StatusOr<std::string_view> peek(int64_t nbytes) override { return _impl->peek(nbytes); }
 

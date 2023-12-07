@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -43,7 +44,7 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    public ColumnRefOperator rewriteViewToQuery(ColumnRefOperator colRef) {
+    public ColumnRefOperator rewriteColumnViewToQuery(final ColumnRefOperator colRef) {
         if (colRef == null) {
             return null;
         }
@@ -58,6 +59,23 @@ public class ColumnRewriter {
             return null;
         }
         return (ColumnRefOperator) target;
+    }
+
+    public ScalarOperator rewriteViewToQuery(final ScalarOperator scalarOperator) {
+        if (scalarOperator == null) {
+            return null;
+        }
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .build();
+        ScalarOperator target = scalarOperator.accept(visitor, null);
+        if (target == null || target == scalarOperator) {
+            return null;
+        }
+        return target;
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -100,12 +118,47 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+    public ScalarOperator rewriteByEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteByViewEc(predicate);
+        } else {
+            return rewriteByQueryEc(predicate);
+        }
+    }
+
+    public ScalarOperator rewriteToTargetWithEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteViewToQueryWithViewEc(predicate);
+        } else {
+            return rewriteViewToQueryWithQueryEc(predicate);
+        }
+    }
+
+    public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
+                                                                       ScalarOperator target,
+                                                                       boolean isQueryToMV) {
+        if (isQueryToMV) {
+            // for view, swap column by relation mapping and query ec
+            return Pair.create(rewriteByQueryEc(src), rewriteViewToQueryWithQueryEc(target));
+        } else {
+            return Pair.create(rewriteViewToQueryWithViewEc(src), rewriteByViewEc(target));
+        }
+
+    }
+
     public class ColumnWriterBuilder {
         private RewriteContext rewriteContext;
         private boolean enableRelationRewrite;
         private boolean viewToQuery;
         private boolean enableEquivalenceClassesRewrite;
         private boolean useQueryEquivalenceClasses;
+
+        public ColumnWriterBuilder() {
+            this.enableRelationRewrite = false;
+            this.viewToQuery = false;
+            this.enableEquivalenceClassesRewrite = false;
+            this.useQueryEquivalenceClasses = false;
+        }
 
         ColumnWriterBuilder withRewriteContext(RewriteContext rewriteContext) {
             this.rewriteContext = rewriteContext;
@@ -180,7 +233,10 @@ public class ColumnRewriter {
                 if (relationColumns == null) {
                     return result;
                 }
-                result = relationColumns.getOrDefault(columnRef.getName(), columnRef);
+                if (!relationColumns.containsKey(columnRef.getName())) {
+                    return result;
+                }
+                result = relationColumns.get(columnRef.getName());
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
                 Set<ColumnRefOperator> equalities = equivalenceClasses.getEquivalenceClass(result);

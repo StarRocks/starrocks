@@ -21,7 +21,7 @@
 
 #include "storage/rowset/ordinal_page_index.h"
 
-#include <bthread/sys_futex.h>
+#include <memory>
 
 #include "common/logging.h"
 #include "fs/fs.h"
@@ -89,9 +89,14 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
-        _ordinals.push_back(0);
-        _ordinals.push_back(num_values);
-        _pages.emplace_back(meta.root_page().root_page());
+
+        _ordinals = std::make_unique<ordinal_t[]>(2);
+        _ordinals[0] = 0;
+        _ordinals[1] = num_values;
+
+        _pages = std::make_unique<uint64_t[]>(2);
+        _pages[0] = meta.root_page().root_page().offset();
+        _pages[1] = meta.root_page().root_page().offset() + meta.root_page().root_page().size();
         return Status::OK();
     }
     // need to read index page
@@ -117,8 +122,8 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     RETURN_IF_ERROR(reader.parse(body, footer.index_page_footer()));
 
     _num_pages = reader.count();
-    _ordinals.resize(_num_pages + 1);
-    _pages.resize(_num_pages);
+    _ordinals = std::make_unique<ordinal_t[]>(_num_pages + 1);
+    _pages = std::make_unique<uint64_t[]>(_num_pages + 1);
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
@@ -126,16 +131,17 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
                                                                                           (uint8_t*)&ordinal, nullptr));
 
         _ordinals[i] = ordinal;
-        _pages[i] = reader.get_value(i);
+        _pages[i] = reader.get_value(i).offset;
     }
     _ordinals[_num_pages] = num_values;
+    _pages[_num_pages] = reader.get_value(_num_pages - 1).offset + reader.get_value(_num_pages - 1).size;
     return Status::OK();
 }
 
 void OrdinalIndexReader::_reset() {
     _num_pages = 0;
-    std::vector<ordinal_t>{}.swap(_ordinals);
-    std::vector<PagePointer>{}.swap(_pages);
+    _ordinals.reset();
+    _pages.reset();
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {

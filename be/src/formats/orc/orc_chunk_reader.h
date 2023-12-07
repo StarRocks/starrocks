@@ -10,10 +10,10 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "util/buffered_stream.h"
 
 namespace orc::proto {
 class ColumnStatistics;
@@ -24,9 +24,6 @@ class RandomAccessFile;
 class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
-
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
-                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -56,19 +53,17 @@ public:
     // copy from cvb to chunk
     Status fill_chunk(ChunkPtr* chunk);
     // some type cast & conversion.
-    ChunkPtr cast_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
+    ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    void set_conjuncts(const std::vector<Expr*>& conjuncts);
-    void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           const RuntimeFilterProbeCollector* rf_collector);
+    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
+    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                             const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
-    // to decode min and max value from column stats.
-    Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
-                                ColumnPtr max_col, int64_t tz_offset_in_seconds);
     Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                         Filter* filter);
     size_t get_cvb_size();
@@ -131,10 +126,11 @@ public:
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
-    ChunkPtr _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
+                                   const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
@@ -194,55 +190,6 @@ private:
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
-};
-
-class ORCHdfsFileStream : public orc::InputStream {
-public:
-    // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length);
-
-    ~ORCHdfsFileStream() override = default;
-
-    uint64_t getLength() const override { return _length; }
-
-    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
-
-    // It's for read size after doing seek.
-    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
-    // And if we still use NaturalReadSize we probably read many row groups
-    // after the row group we want to read, and that will amplify read IO bytes.
-
-    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
-    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
-    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
-    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
-
-    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
-    // And this value can not be too small because if we can not read a row group in a single shot,
-    // we will fallback to read in normal size, and we pay cost of a extra read.
-
-    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
-
-    void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
-    void read(void* buf, uint64_t length, uint64_t offset) override;
-
-    const std::string& getName() const override;
-
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
-    void clearIORanges() override;
-    void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override;
-
-private:
-    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
-
-    RandomAccessFile* _file;
-    uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
-    SharedBufferedInputStream _buffer_stream;
-    bool _buffer_stream_enabled = false;
 };
 
 } // namespace starrocks::vectorized

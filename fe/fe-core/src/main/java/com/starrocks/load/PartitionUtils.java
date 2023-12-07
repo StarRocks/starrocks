@@ -5,6 +5,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -12,15 +13,21 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class PartitionUtils {
+    private static final Logger LOG = LogManager.getLogger(PartitionUtils.class);
+
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
                                                           List<Long> tmpPartitionIds) throws DdlException {
@@ -29,6 +36,7 @@ public class PartitionUtils {
         if (!db.writeLockAndCheckExist()) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
+        boolean success = false;
         try {
             // should check whether targetTable exists
             Table tmpTable = db.getTable(targetTable.getId());
@@ -69,8 +77,28 @@ public class PartitionUtils {
             }
             AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
             GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
+
+            success = true;
         } finally {
+            if (!success) {
+                try {
+                    clearTabletsFromInvertedIndex(newTempPartitions);
+                } catch (Throwable t) {
+                    LOG.warn("clear tablets from inverted index failed", t);
+                }
+            }
             db.writeUnlock();
+        }
+    }
+
+    public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (Partition partition : partitions) {
+            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : materializedIndex.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
         }
     }
 }

@@ -40,6 +40,8 @@ vectorized_functions = [
     [10080, "acos", "DOUBLE", ["DOUBLE"], "MathFunctions::acos"],
     [10090, "tan", "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
+    [10102, "cosine_similarity", "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
+    [10103, "cosine_similarity_norm", "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
 
     [10110, "ceil", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -371,15 +373,6 @@ vectorized_functions = [
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
-    # unix timestamp extended version to int64
-    # be sure to put before int32 version, so fe will find signature in order.
-    [50284, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now'],
-    [50285, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
-    [50286, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
-    [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format'],
-    [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime'],
-    [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
-
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
     [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
@@ -496,13 +489,22 @@ vectorized_functions = [
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
     # hyperloglog function
-    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunction::hll_cardinality'],
-    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunction::hll_cardinality_from_string'],
-    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
-    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
+    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
+    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
+    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
+    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
+
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
-    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
+    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],
+    [90011, 'to_bitmap', 'BITMAP', ['BOOLEAN'], 'BitmapFunctions::to_bitmap<TYPE_BOOLEAN>', False],
+    [90012, 'to_bitmap', 'BITMAP', ['TINYINT'], 'BitmapFunctions::to_bitmap<TYPE_TINYINT>', False],
+    [90013, 'to_bitmap', 'BITMAP', ['SMALLINT'], 'BitmapFunctions::to_bitmap<TYPE_SMALLINT>', False],
+    [90014, 'to_bitmap', 'BITMAP', ['INT'], 'BitmapFunctions::to_bitmap<TYPE_INT>', False],
+    [90015, 'to_bitmap', 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>', False],
+    [90016, 'to_bitmap', 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
     [90030, 'bitmap_count', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', 'BITMAP', [], 'BitmapFunctions::bitmap_empty', False],

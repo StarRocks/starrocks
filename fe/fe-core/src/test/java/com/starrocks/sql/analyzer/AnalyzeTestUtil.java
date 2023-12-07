@@ -107,7 +107,8 @@ public class AnalyzeTestUtil {
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
                 "  `v3` ARRAY<bigint(20)>  NULL,\n" +
-                "  `v4` ARRAY<largeint>  NULL\n" +
+                "  `v4` ARRAY<largeint>  NULL,\n" +
+                "  `v5` ARRAY<json>  NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -143,6 +144,20 @@ public class AnalyzeTestUtil {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL,\n" +
+                "  `v3` array<int> not null" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary2` (\n" +
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
                 "  `v2` int NOT NULL,\n" +

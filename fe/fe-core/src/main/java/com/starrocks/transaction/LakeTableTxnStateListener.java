@@ -4,6 +4,7 @@ package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -35,6 +36,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private final LakeTable table;
 
     private Set<Long> dirtyPartitionSet;
+    private Set<String> invalidDictCacheColumns;
+    private Map<String, Long> validDictCacheColumns;
 
     public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -49,6 +52,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
         dirtyPartitionSet = Sets.newHashSet();
+        invalidDictCacheColumns = Sets.newHashSet();
+        validDictCacheColumns = Maps.newHashMap();
+
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
@@ -68,6 +74,30 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             dirtyPartitionSet.add(tabletMeta.getPartitionId());
+
+            // Invalid column set should union
+            invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
+
+            // Valid column set should intersect and remove all invalid columns
+            // Only need to add valid column set once
+            if (validDictCacheColumns.isEmpty() &&
+                    !finishedTablets.get(i).getValidDictCacheColumns().isEmpty()) {
+                TabletCommitInfo tabletCommitInfo = finishedTablets.get(i);
+                List<Long> validDictCollectedVersions = tabletCommitInfo.getValidDictCollectedVersions();
+                List<String> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+                for (int j = 0; j < validDictCacheColumns.size(); j++) {
+                    long version = 0;
+                    // validDictCollectedVersions != validDictCacheColumns means be has not upgrade
+                    if (validDictCollectedVersions.size() == validDictCacheColumns.size()) {
+                        version = validDictCollectedVersions.get(j);
+                    }
+                    this.validDictCacheColumns.put(validDictCacheColumns.get(i), version);
+                }
+            }
+            if (i == tabletMetaList.size() - 1) {
+                validDictCacheColumns.entrySet().removeIf(entry -> invalidDictCacheColumns.contains(entry.getKey()));
+            }
+
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
@@ -98,10 +128,30 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     public void preWriteCommitLog(TransactionState txnState) {
         Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
+        boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
-            long version = partition.getNextVersion();
-            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+            PartitionCommitInfo partitionCommitInfo;
+            long version = -1;
+            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                version = partition.getNextVersion();
+            }
+            if (isFirstPartition) {
+                List<String> validDictCacheColumnNames = Lists.newArrayList();
+                List<Long> validDictCacheColumnVersions = Lists.newArrayList();
+
+                validDictCacheColumns.forEach((name, dictVersion) -> {
+                    validDictCacheColumnNames.add(name);
+                    validDictCacheColumnVersions.add(dictVersion);
+                });
+
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0,
+                        Lists.newArrayList(invalidDictCacheColumns),
+                        validDictCacheColumnNames,
+                        validDictCacheColumnVersions);
+            } else {
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+            }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         }
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);

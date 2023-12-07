@@ -16,6 +16,8 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -29,6 +31,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatisticSQLBuilder;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -188,14 +191,6 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList(10003L),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        Assert.assertEquals("SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
-                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0",
-                collectJob.buildCollectSQLList(2).get(0).get(0));
-        Assert.assertEquals("SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
-                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
-                collectJob.buildCollectSQLList(2).get(0).get(1));
     }
 
     @Test
@@ -309,13 +304,43 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
                         " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10167 and column_name = \"kk1\" " +
+                        "FROM column_statistics WHERE table_id = 10176 and column_name = \"kk1\" " +
                         "GROUP BY db_id, table_id, column_name " +
                         "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
-                        "FROM column_statistics WHERE table_id = 10167 and column_name = \"kk2\" " +
+                        "FROM column_statistics WHERE table_id = 10176 and column_name = \"kk2\" " +
                         "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
+    }
+
+    @Test
+    public void testQueryDict() throws Exception {
+        String column = "case";
+        String catalogName = "default_catalog";
+        String dbName = "select";
+        String tblName = "insert";
+        String sql = "select cast(" + 1 + " as Int), " +
+                "cast(" + 2 + " as bigint), " +
+                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
+        Assert.assertEquals("select.insert",
+                ((SelectRelation) stmt.getQueryRelation()).getRelation().getResolveTableName().toString());
+    }
+
+    @Test
+    public void testTypeKeys() throws Exception {
+        analyzeSuccess("select count(*) from tarray group by v4");
+        analyzeSuccess("select distinct v4 from tarray");
+        analyzeSuccess("select * from tarray order by v4");
+        analyzeSuccess("select DENSE_RANK() OVER(partition by v3 order by v4) from tarray");
+        analyzeFail("select avg(v4) from tarray");
+        analyzeFail("select count(*) from tarray group by v5");
+        analyzeFail("select distinct v5 from tarray");
+        analyzeFail("select * from tarray join tarray y using(v4)");
+        analyzeFail("select * from tarray join tarray y using(v5)");
+        analyzeFail("select * from tarray order by v5");
+        analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
 }

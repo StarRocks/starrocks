@@ -38,7 +38,7 @@ public:
     std::string debug_string() const override;
 
     // vector query engine
-    vectorized::ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
 
     static vectorized::ColumnPtr& get_column(Expr* expr, vectorized::Chunk* chunk);
 

@@ -325,7 +325,10 @@ public class Memo {
 
     private void removeGroupInitLogicExpression(Group group) {
         GroupExpression initGroupExpression = group.getFirstLogicalExpression();
-        groupExpressions.remove(initGroupExpression);
+        // This remove must be successful, otherwise GroupExpression::op or GroupExpression::inputs
+        // may be updated without re-inserted.
+        Preconditions.checkNotNull(groupExpressions.remove(initGroupExpression),
+                "GroupExpression has been updated without re-inserting");
 
         Preconditions.checkState(group.isValidInitState());
 

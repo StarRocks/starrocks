@@ -120,6 +120,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         LogicalJoinOperator newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
                 .setJoinType(newJoinType)
                 .setOnPredicate(newJoinOnPredicate)
+                .setOriginalOnPredicate(join.getOnPredicate())
                 .build();
         root = OptExpression.create(newJoinOperator, input.getInputs());
         if (!join.hasDeriveIsNotNullPredicate()) {
@@ -197,10 +198,10 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
         JoinOperator joinType = joinOp.getJoinType();
         if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
-            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(leftPushDown::add);
+            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(leftPushDown::add);
         }
         if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
-            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(rightPushDown::add);
+            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(rightPushDown::add);
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
     }

@@ -29,6 +29,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
+#include "io/io_profiler.h"
 #include "util/errno.h"
 #include "util/slice.h"
 
@@ -171,7 +172,9 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
 class PosixWritableFile : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd, uint64_t filesize, bool sync_on_close)
-            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {}
+            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~PosixWritableFile() override { WARN_IF_ERROR(close(), "Failed to close file, file=" + _filename); }
 
@@ -182,6 +185,7 @@ public:
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
         _pending_sync = true;
+        IOProfiler::add_write(bytes_written);
         return Status::OK();
     }
 
@@ -206,6 +210,7 @@ public:
         if (_closed) {
             return Status::OK();
         }
+        FileSystem::on_file_write_close(this);
         Status s;
 
         // If we've allocated more space than we used, truncate to the

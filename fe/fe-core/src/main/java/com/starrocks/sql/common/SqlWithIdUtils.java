@@ -3,6 +3,7 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -23,7 +24,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.parser.SqlParser;
-import org.spark_project.guava.collect.Maps;
 
 import java.util.ArrayList;
 import java.util.HashMap;

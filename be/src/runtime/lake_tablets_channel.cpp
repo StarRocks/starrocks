@@ -51,6 +51,8 @@ public:
 
     void abort() override;
 
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:

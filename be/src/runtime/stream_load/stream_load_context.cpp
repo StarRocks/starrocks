@@ -215,4 +215,9 @@ std::string StreamLoadContext::brief(bool detail) const {
     return ss.str();
 }
 
+bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
+    _http_limiter_guard.reset(new ConcurrentLimiterGuard());
+    return _http_limiter_guard->set_limiter(limiter);
+}
+
 } // namespace starrocks

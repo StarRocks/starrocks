@@ -98,6 +98,7 @@ protected:
     std::deque<AgentTaskRequestPtr> _tasks;
 
     uint32_t _worker_count = 0;
+    uint32_t _sleeping_count = 0;
     CALLBACK_FUNCTION _callback_function = nullptr;
 
     std::atomic<bool> _stopped{false};

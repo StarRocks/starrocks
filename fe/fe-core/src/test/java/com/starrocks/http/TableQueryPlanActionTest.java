@@ -142,6 +142,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         Assert.assertEquals(403, jsonObject.getInt("status"));
         String exception = jsonObject.getString("exception");
         Assert.assertNotNull(exception);
-        Assert.assertTrue(exception.startsWith("only support OlapTable currently"));
+        Assert.assertTrue(
+                exception.startsWith("Only support OlapTable and MaterializedView currently"));
     }
 }

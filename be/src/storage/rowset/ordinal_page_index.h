@@ -96,9 +96,6 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int32_t num_data_pages() const { return _num_pages; }
 
-    // REQUIRES: the index data has been successfully `load()`ed into memory.
-    size_t num_rows() const { return _ordinals.back() - _ordinals.front(); }
-
     bool loaded() const { return invoked(_load_once); }
 
 private:
@@ -107,7 +104,12 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
-        return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
+        if (_num_pages == 0) {
+            return sizeof(OrdinalIndexReader);
+        } else {
+            return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) +
+                   (_num_pages + 1) * sizeof(uint64_t);
+        }
     }
 
     Status _do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
@@ -117,9 +119,9 @@ private:
     // valid after load
     int _num_pages = 0;
     // _ordinals[i] = first ordinal of the i-th data page,
-    std::vector<ordinal_t> _ordinals;
-    // _pages[i] = page pointer to the i-th data page
-    std::vector<PagePointer> _pages;
+    std::unique_ptr<ordinal_t[]> _ordinals;
+    // _pages[i] = page pointer to offset of the i-th data page
+    std::unique_ptr<uint64_t[]> _pages;
 };
 
 class OrdinalPageIndexIterator {
@@ -133,7 +135,10 @@ public:
         _cur_idx++;
     }
     int32_t page_index() const { return _cur_idx; };
-    const PagePointer& page() const { return _index->_pages[_cur_idx]; };
+    PagePointer page() const {
+        return {_index->_pages[_cur_idx],
+                static_cast<uint32_t>(_index->_pages[_cur_idx + 1] - _index->_pages[_cur_idx])};
+    };
     ordinal_t first_ordinal() const { return _index->get_first_ordinal(_cur_idx); }
     ordinal_t last_ordinal() const { return _index->get_last_ordinal(_cur_idx); }
 

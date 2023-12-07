@@ -7,6 +7,8 @@
 #include "column/json_column.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type_infra.h"
@@ -20,7 +22,6 @@ namespace starrocks::vectorized {
 
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
-static const size_t kPrimaryKeyLimitSize = 128;
 
 Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
     Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
@@ -213,7 +214,7 @@ Status MemTable::finalize() {
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
@@ -261,6 +262,8 @@ Status MemTable::flush(SegmentPB* seg_info) {
         return Status::InternalError(
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet_id);
+
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);

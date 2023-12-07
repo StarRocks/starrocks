@@ -23,9 +23,12 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,6 +54,15 @@ public class AdminSetConfigStmtTest {
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         GlobalStateMgr.getCurrentState().setConfig(adminSetConfigStmt);
+    }
+
+    @Test
+    public void testSetMysqlVersion() throws Exception {
+        String stmt = "admin set frontend config(\"mysql_server_version\" = \"5.1.1\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
     }
 
     @Test

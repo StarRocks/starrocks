@@ -12,6 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -686,7 +687,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 4>\n" +
+                "    HASH_PARTITIONED: 4: v7\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
@@ -842,8 +843,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
             assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -871,8 +872,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String exceptPlan = plans.get(1);
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -883,8 +884,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String intersectPlan = plans.get(2);
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
@@ -1560,7 +1561,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
@@ -1593,6 +1594,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2");
+
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
@@ -2094,4 +2099,48 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  0:OlapScanNode");
         }
     }
+
+    @Test
+    public void testPlanCost() throws Exception {
+        String plan = getVerboseExplain("select t1a, v1 " +
+                "from t0 join [broadcast] test_all_type " +
+                "join [shuffle] (select 1 as v1_c1 where false) v1 on t1a=v1 and t1a=v1_c1");
+        assertContains(plan, "  9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), true]\n" +
+                "  |  output columns: 1, 4\n" +
+                "  |  cardinality: 9000\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  6:EXCHANGE\n" +
+                "     cardinality: 9000");
+
+        AuditEvent event = connectContext.getAuditEventBuilder().build();
+        Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
+        Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+    }
+
+    @Test
+    public void testSemiJoinConstantProjection() throws Exception {
+        String sql = "select t.t1a, t.xx from (select t0.*, 1920 as xx from test_all_type t0 " +
+                "where not exists (select v10 from t3 where t3.v11 =t0.t1c)) t " +
+                "where not exists(select v7 from t2 where v9  = 10 and t2.v8 = t.t1d);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: t1d = 17: v8\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: t1a\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 15> : 1920\n" +
+                "  |  \n" +
+                "  4:HASH JOIN");
+    }
+
 }

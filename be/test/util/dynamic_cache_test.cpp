@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <vector>
 
 #include "util/logging.h"
 
@@ -54,6 +55,22 @@ TEST(DynamicCacheTest, cache) {
     cache.clear_expired();
     ASSERT_EQ(4, cache.size());
     ASSERT_TRUE(cache.get(19) == nullptr);
+}
+
+TEST(DynamicCacheTest, cache2) {
+    int N = 1000;
+    DynamicCache<int32_t, int64_t> cache(N);
+    for (int i = 0; i < N; i++) {
+        auto e = cache.get_or_create(i);
+        cache.update_object_size(e, 1);
+        cache.release(e);
+    }
+    std::vector<DynamicCache<int32_t, int64_t>::Entry*> entry_list;
+    ASSERT_TRUE(cache.TEST_evict(0, &entry_list));
+    ASSERT_EQ(entry_list.size(), N);
+    for (DynamicCache<int32_t, int64_t>::Entry* entry : entry_list) {
+        delete entry;
+    }
 }
 
 } // namespace starrocks

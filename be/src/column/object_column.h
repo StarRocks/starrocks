@@ -81,6 +81,8 @@ public:
 
     void append(T&& object);
 
+    void append(const T& object);
+
     void append_datum(const Datum& datum) override { append(datum.get<T*>()); }
 
     void remove_first_n_values(size_t count) override;

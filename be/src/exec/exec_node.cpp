@@ -250,6 +250,7 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
         ChunkPtr cur_chunk = nullptr;
 
         RETURN_IF_ERROR(specific_get_next(state, &cur_chunk, &cur_eos));
+        TRY_CATCH_ALLOC_SCOPE_START()
         if (cur_eos) {
             if (pre_output_chunk != nullptr) {
                 *eos = false;
@@ -293,6 +294,7 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                 }
             }
         }
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
 }
 
@@ -682,7 +684,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate_with_filter(chunk, filter->data()));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {

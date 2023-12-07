@@ -108,15 +108,13 @@ OutPut Exchange Id: 25
 |  output columns: 21, 22, 23, 36, 42, 48
 |  cardinality: 540034112
 |  column statistics:
-|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
-|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1992.0, 1998.0, 0.0, 2.0, 7.0] ESTIMATE
 |  * expr-->[-49189.1, 104948.5, 0.0, 16.0, 3736520.0] ESTIMATE
@@ -151,12 +149,13 @@ OutPut Exchange Id: 25
 |  output columns: 18, 19, 21, 22, 23, 42, 48
 |  cardinality: 150009476
 |  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
@@ -278,13 +277,12 @@ OutPut Exchange Id: 11
 |  output columns: 18, 19, 21, 22, 23, 42
 |  cardinality: 150009476
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |
 |----8:EXCHANGE

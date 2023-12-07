@@ -47,10 +47,10 @@ void ResultSinkOperator::close(RuntimeState* state) {
     }
 
     // Close the shared sender when the last result sink operator is closing.
-    if (_num_result_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
         if (_sender != nullptr) {
             // Incrementing and reading _num_written_rows needn't memory barrier, because
-            // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
+            // the visibility of _num_written_rows is guaranteed by _num_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
             QueryContext* query_ctx = state->query_ctx();

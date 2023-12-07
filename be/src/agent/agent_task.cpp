@@ -7,6 +7,7 @@
 #include "agent/task_singatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
@@ -62,12 +63,13 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     // Because if delete failed create rollup will failed
     TTabletId new_tablet_id;
     TSchemaHash new_schema_hash = 0;
+    Status sc_status;
     if (status == STARROCKS_SUCCESS) {
         new_tablet_id = agent_task_req.new_tablet_id;
         new_schema_hash = agent_task_req.new_schema_hash;
         EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req,
                                           signature, task_type, &error_msgs, process_name);
-        Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
+        sc_status = StorageEngine::instance()->execute_task(&engine_task);
         if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
         } else {
@@ -122,6 +124,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << process_name << " failed. signature: " << signature;
         error_msgs.push_back(process_name + " failed");
         error_msgs.push_back("status: " + print_agent_status(status));
+        error_msgs.push_back(sc_status.get_error_msg());
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -269,6 +272,8 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, clone_req.tablet_id);
+
     // Return result to fe
     TStatus task_status;
     TFinishTaskRequest finish_task_request;
@@ -289,17 +294,19 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "storage migrate failed. status:" << res << ", signature:" << agent_task_req->signature;
-                error_msgs.emplace_back("storage migrate failed.");
+                LOG(WARNING) << "local tablet migration failed. status: " << res
+                             << ", signature: " << agent_task_req->signature;
+                error_msgs.emplace_back("local tablet migration failed. error message: " + res.get_error_msg());
             } else {
-                LOG(INFO) << "storage migrate success. status:" << res << ", signature:" << agent_task_req->signature;
+                LOG(INFO) << "local tablet migration succeeded. status: " << res
+                          << ", signature: " << agent_task_req->signature;
 
                 TTabletInfo tablet_info;
                 AgentStatus status = TaskWorkerPoolBase::get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
                                                                          agent_task_req->signature, &tablet_info);
                 if (status != STARROCKS_SUCCESS) {
-                    LOG(WARNING) << "storage migrate success, but get tablet info failed"
-                                 << ". status:" << status << ", signature:" << agent_task_req->signature;
+                    LOG(WARNING) << "local tablet migration succeeded, but get tablet info failed"
+                                 << ". status: " << status << ", signature: " << agent_task_req->signature;
                 } else {
                     tablet_infos.push_back(tablet_info);
                 }
@@ -339,6 +346,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateTaskRequest>& agent_task_req,
                                      ExecEnv* exec_env) {
     const TStorageMediumMigrateReq& storage_medium_migrate_req = agent_task_req->task_req;
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, storage_medium_migrate_req.tablet_id);
+
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
     TStatus task_status;

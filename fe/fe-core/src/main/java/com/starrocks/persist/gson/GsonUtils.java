@@ -497,10 +497,17 @@ public class GsonUtils {
 
             return new TypeAdapter<T>() {
                 public void write(JsonWriter out, T obj) throws IOException {
+                    // Use Object lock to protect its properties from changed by other serialize thread.
+                    // But this will only take effect when all threads uses GSONUtils to serialize object,
+                    // because other methods of changing properties do not necessarily require the acquisition of the object lock
                     if (obj instanceof GsonPreProcessable) {
-                        ((GsonPreProcessable) obj).gsonPreProcess();
+                        synchronized (obj) {
+                            ((GsonPreProcessable) obj).gsonPreProcess();
+                            delegate.write(out, obj);
+                        }
+                    } else {
+                        delegate.write(out, obj);
                     }
-                    delegate.write(out, obj);
                 }
 
                 public T read(JsonReader reader) throws IOException {

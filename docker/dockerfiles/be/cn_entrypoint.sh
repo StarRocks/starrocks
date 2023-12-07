@@ -166,4 +166,19 @@ trap exit_clean SIGTERM
 
 update_conf_from_configmap
 log_stderr "run start_cn.sh"
-$STARROCKS_HOME/bin/start_cn.sh
+
+addition_args=
+if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+    # env var `LOG_CONSOLE=1` can be added to enable logging to console
+    addition_args="--logconsole"
+fi
+$STARROCKS_HOME/bin/start_cn.sh $addition_args
+ret=$?
+if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+    nol=50
+    log_stderr "Last $nol lines of cn.INFO ..."
+    tail -n $nol $STARROCKS_HOME/log/cn.INFO
+    log_stderr "Last $nol lines of cn.out ..."
+    tail -n $nol $STARROCKS_HOME/log/cn.out
+fi
+exit $ret

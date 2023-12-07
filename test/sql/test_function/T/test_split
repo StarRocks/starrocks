@@ -1,0 +1,10 @@
+-- name: test_split_constant_source_and_delimiter
+select split('测隔试隔试', '');
+select split('测隔试隔试', '隔');
+select split('测隔试隔试', 'a');
+select split('测abc隔试隔试', '');
+select split('测abc隔试隔试', '隔');
+select split('测abc隔试abc隔试', 'a');
+select split('a|b|c|d', '');
+select split('a|b|c|d', '|');
+select split('a|b|c|d', '隔');

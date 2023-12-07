@@ -21,10 +21,13 @@ public:
     // The filter is divided up into Buckets:
     static constexpr int BITS_SET_PER_BLOCK = 8;
     using Bucket = uint32_t[BITS_SET_PER_BLOCK];
+    static constexpr size_t MINIMUM_ELEMENT_NUM = 1UL;
 
     SimdBlockFilter() = default;
 
-    ~SimdBlockFilter() noexcept { free(_directory); }
+    ~SimdBlockFilter() noexcept {
+        if (_directory) free(_directory);
+    }
 
     SimdBlockFilter(const SimdBlockFilter& bf) = delete;
     SimdBlockFilter(SimdBlockFilter&& bf) noexcept;
@@ -47,6 +50,10 @@ public:
     }
 
     bool test_hash(const uint64_t hash) const noexcept {
+        if (UNLIKELY(_directory == nullptr)) {
+            DCHECK(false) << "unexpected test_hash on cleared bf";
+            return true;
+        }
         const uint32_t bucket_idx = hash & _directory_mask;
 #ifdef __AVX2__
         const __m256i mask = make_mask(hash >> _log_num_buckets);
@@ -99,6 +106,14 @@ public:
     bool check_equal(const SimdBlockFilter& bf) const;
     uint32_t directory_mask() const { return _directory_mask; }
 
+    void clear();
+    // whether this bloom filter can be used
+    // if the bloom filter's size of partial rf has exceed the size limit of global rf,
+    // we still send this rf but ignore bloom filter and only keep min/max filter,
+    // in this case, we will use clear() to release the memory of bloom filter,
+    // we can use can_use() to check if this bloom filter can be used
+    bool can_use() const { return _directory != nullptr; }
+
 private:
     // The number of bits to set in a tiny Bloom filter block
 
@@ -124,13 +139,15 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const { return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE); }
+    size_t get_alloc_size() const {
+        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
+    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
-    int _log_num_buckets;
+    int _log_num_buckets = 0;
     // directory_mask_ is (1 << log_num_buckets_) - 1
-    uint32_t _directory_mask;
+    uint32_t _directory_mask = 0;
     Bucket* _directory = nullptr;
 };
 
@@ -217,6 +234,15 @@ public:
 
     void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
 
+    void clear_bf();
+
+    bool can_use_bf() const {
+        if (_num_hash_partitions == 0) {
+            return _bf.can_use();
+        }
+        return _hash_partition_bf[0].can_use();
+    }
+
     virtual size_t max_serialized_size() const;
     virtual size_t serialize(uint8_t* data) const;
     virtual size_t deserialize(const uint8_t* data);
@@ -299,33 +325,37 @@ public:
         }
     }
 
-    void insert(CppType* value) {
-        if (value == nullptr) {
-            _has_null = true;
-            return;
+    void insert(const CppType& value) {
+        if (LIKELY(_bf.can_use())) {
+            size_t hash = compute_hash(value);
+            _bf.insert_hash(hash);
         }
 
-        size_t hash = compute_hash(*value);
-        _bf.insert_hash(hash);
-
-        _min = std::min(*value, _min);
-        _max = std::max(*value, _max);
+        _min = std::min(value, _min);
+        _max = std::max(value, _max);
     }
+
+    void insert_null() { _has_null = true; }
 
     CppType min_value() const { return _min; }
 
     CppType max_value() const { return _max; }
 
+    template <bool can_use_bf = true>
     bool test_data(CppType value) const {
         if constexpr (!IsSlice<CppType>) {
             if (value < _min || value > _max) {
                 return false;
             }
         }
-        size_t hash = compute_hash(value);
-        return _bf.test_hash(hash);
+        if constexpr (can_use_bf) {
+            size_t hash = compute_hash(value);
+            return _bf.test_hash(hash);
+        }
+        return true;
     }
 
+    template <bool can_use_bf = true>
     bool test_data_with_hash(CppType value, const uint32_t shuffle_hash) const {
         static constexpr uint32_t BUCKET_ABSENT = 2147483647;
         if (shuffle_hash == BUCKET_ABSENT) {
@@ -336,10 +366,13 @@ public:
                 return false;
             }
         }
-        // module has been done outside, so actually here is bucket idx.
-        const uint32_t bucket_idx = shuffle_hash;
-        size_t hash = compute_hash(value);
-        return _hash_partition_bf[bucket_idx].test_hash(hash);
+        if constexpr (can_use_bf) {
+            // module has been done outside, so actually here is bucket idx.
+            const uint32_t bucket_idx = shuffle_hash;
+            size_t hash = compute_hash(value);
+            return _hash_partition_bf[bucket_idx].test_hash(hash);
+        }
+        return true;
     }
 
     void compute_hash_values_for_multi_part(RunningContext* running_ctx, int8_t join_mode,
@@ -418,9 +451,11 @@ public:
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
-            return t_evaluate<true>(input_column, ctx);
+            return _hash_partition_bf[0].can_use() ? t_evaluate<true, true>(input_column, ctx)
+                                                   : t_evaluate<true, false>(input_column, ctx);
         } else {
-            return t_evaluate<false>(input_column, ctx);
+            return _bf.can_use() ? t_evaluate<false, true>(input_column, ctx)
+                                 : t_evaluate<false, false>(input_column, ctx);
         }
     }
 
@@ -429,7 +464,7 @@ public:
     // and for global runtime filter, since it concates multiple runtime filters from partitions
     // so it has multiple `simd-block-filter` and `hash_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
-    template <bool hash_partition = false>
+    template <bool hash_partition = false, bool can_use_bf = true>
     void t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Column::Filter& _selection = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
@@ -449,9 +484,9 @@ public:
             } else {
                 auto* input_data = down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
                 if constexpr (hash_partition) {
-                    sel = test_data_with_hash(input_data[0], _hash_values[0]);
+                    sel = test_data_with_hash<can_use_bf>(input_data[0], _hash_values[0]);
                 } else {
-                    sel = test_data(input_data[0]);
+                    sel = test_data<can_use_bf>(input_data[0]);
                 }
             }
             for (int i = 0; i < size; i++) {
@@ -467,18 +502,18 @@ public:
                         _selection[i] = _has_null;
                     } else {
                         if constexpr (hash_partition) {
-                            _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
+                            _selection[i] = test_data_with_hash<can_use_bf>(input_data[i], _hash_values[i]);
                         } else {
-                            _selection[i] = test_data(input_data[i]);
+                            _selection[i] = test_data<can_use_bf>(input_data[i]);
                         }
                     }
                 }
             } else {
                 for (int i = 0; i < size; ++i) {
                     if constexpr (hash_partition) {
-                        _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
+                        _selection[i] = test_data_with_hash<can_use_bf>(input_data[i], _hash_values[i]);
                     } else {
-                        _selection[i] = test_data(input_data[i]);
+                        _selection[i] = test_data<can_use_bf>(input_data[i]);
                     }
                 }
             }
@@ -486,9 +521,9 @@ public:
             auto* input_data = down_cast<const ColumnType*>(input_column)->get_data().data();
             for (int i = 0; i < size; ++i) {
                 if constexpr (hash_partition) {
-                    _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
+                    _selection[i] = test_data_with_hash<can_use_bf>(input_data[i], _hash_values[i]);
                 } else {
-                    _selection[i] = test_data(input_data[i]);
+                    _selection[i] = test_data<can_use_bf>(input_data[i]);
                 }
             }
         }

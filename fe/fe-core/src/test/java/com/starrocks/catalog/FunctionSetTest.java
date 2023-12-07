@@ -249,4 +249,12 @@ public class FunctionSetTest {
         Assert.assertEquals(Type.INT, fn.getReturnType());
         Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
     }
+
+    @Test
+    public void testCopyFunction() {
+        Type[] argTypes1 = {ScalarType.DECIMALV2, ScalarType.TINYINT, ScalarType.TINYINT};
+        Function lagDesc1 = new Function(new FunctionName(FunctionSet.LAG), argTypes1, ScalarType.INVALID, true);
+        Function copy = lagDesc1.copy();
+        Assert.assertEquals(copy, lagDesc1);
+    }
 }

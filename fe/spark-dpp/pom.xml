@@ -92,7 +92,7 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
-		<!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
+        <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.12</artifactId>
@@ -144,13 +144,18 @@ under the License.
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-catalyst_2.12</artifactId>
-            <version>2.4.5</version>
             <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

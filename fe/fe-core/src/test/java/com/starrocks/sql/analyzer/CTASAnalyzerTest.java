@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -10,10 +11,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -319,6 +322,7 @@ public class CTASAnalyzerTest {
                 "c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
+        createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
@@ -375,7 +379,7 @@ public class CTASAnalyzerTest {
 
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
         Assert.assertTrue(properties2.containsKey("replication_num"));
-        Assert.assertEquals(properties2.get("replication_num"), "1");
+        Assert.assertEquals(properties2.get("replication_num"), "3");
     }
 
     @Test
@@ -404,8 +408,76 @@ public class CTASAnalyzerTest {
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertTrue(columnDefs.get(0).isAllowNull());
-        Assert.assertTrue(columnDefs.get(1).isAllowNull());
+        Assert.assertFalse(columnDefs.get(0).isAllowNull());
+        Assert.assertFalse(columnDefs.get(1).isAllowNull());
         Assert.assertTrue(columnDefs.get(2).isAllowNull());
+    }
+
+    @Test
+    public void testCtasWithNullale() throws Exception {
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertTrue(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
+
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int not null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertFalse(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
+    }
+
+    @Test
+    public void testCTASDefaultLimit() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_limit as select * from test_notnull t1;";
+        try {
+            ctx.getSessionVariable().setSqlSelectLimit(10);
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            QueryStatement query = ctasStmt.getQueryStatement();
+            Assert.assertFalse(query.getQueryRelation().hasLimit());
+        } finally {
+            ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        }
     }
 }

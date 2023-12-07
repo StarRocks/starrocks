@@ -1,5 +1,4 @@
 -- query1
--- query9?
 create materialized view lineitem_agg_mv1
 distributed by hash(l_orderkey,
                l_shipdate,
@@ -16,15 +15,12 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
               l_shipdate,
               l_returnflag,
               l_linestatus,
+              count(1) as total_cnt,
               sum(l_quantity) as sum_qty,
-              count(l_quantity) as count_qty,
               sum(l_extendedprice) as sum_base_price,
-              count(l_extendedprice) as count_base_price,
               sum(l_discount) as sum_discount,
-              count(l_discount) as count_discount,
               sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
-              sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
-              count(*) as count_order
+              sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge
    from
               lineitem
    group by
@@ -46,11 +42,8 @@ properties (
 as select  /*+ SET_VAR(query_timeout = 7200) */
               l_suppkey, l_shipdate, l_partkey,
               sum(l_quantity) as sum_qty,
-              count(l_quantity) as count_qty,
               sum(l_extendedprice) as sum_base_price,
-              count(l_extendedprice) as count_base_price,
               sum(l_discount) as sum_discount,
-              count(l_discount) as count_discount,
               sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
               sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge
    from
@@ -95,29 +88,3 @@ as select
    from
               customer
    group by c_custkey, c_phone, c_acctbal, substring(c_phone, 1  ,2);
-
--- query13
-create materialized view customer_order_mv_agg_mv1
-distributed by hash( c_custkey,
-       o_comment) buckets 24
-refresh manual
-properties (
-    "replication_num" = "1"
-)
-as select
-              c_custkey,
-              o_comment,
-              count(o_orderkey) as c_count,
-              count(1) as c_count_star
-   from
-              (select
-                   c_custkey,o_comment,o_orderkey
-               from
-                   customer
-                       left outer join
-                   orders
-                   on orders.o_custkey=customer.c_custkey) a
-   group by
-       c_custkey,
-       o_comment
-;

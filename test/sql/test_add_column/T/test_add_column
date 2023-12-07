@@ -1,0 +1,27 @@
+-- name: test_count_star_after_adding_column @sequential
+
+create table t0(
+    k1 INT,
+    c1 INT
+) 
+DUPLICATE KEY(k1) 
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+insert into t0 values (1,1);
+select count(*) from t0;
+select * from t0 order by k1;
+
+alter table t0 add column b1 BOOLEAN;
+select count(*) from t0;
+
+function: wait_alter_table_not_pending()
+select count(*) from t0;
+select count(*) from t0;
+select count(*) from t0;
+
+function: wait_alter_table_finish()
+select count(*) from t0;
+select count(*) from t0;
+select count(*) from t0;
+
+select * from t0 order by k1;

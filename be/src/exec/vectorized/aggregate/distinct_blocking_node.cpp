@@ -163,15 +163,16 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     }
     context->add_pipeline(ops_with_sink);
 
+    if (limit() != -1) {
+        ops_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         ops_with_source.emplace_back(
                 std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
     }
 
-    if (limit() != -1) {
-        ops_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
     return ops_with_source;
 }
 

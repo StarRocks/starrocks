@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -151,7 +152,8 @@ public class JoinAssociativityRule extends TransformationRule {
                 .setPredicate(topJoinPredicate)
                 .build();
 
-        ColumnRefSet parentJoinRequiredColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
+        ColumnRefSet outputCols = parentJoin.getOutputColumns(new ExpressionContext(input));
+        ColumnRefSet parentJoinRequiredColumns = outputCols.clone();
         parentJoinRequiredColumns.union(topJoinOperator.getRequiredChildInputColumns());
         List<ColumnRefOperator> newRightOutputColumns = newRightChildColumns.getStream()
                 .filter(parentJoinRequiredColumns::contains)
@@ -234,9 +236,18 @@ public class JoinAssociativityRule extends TransformationRule {
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
+            if (topJoinOperator.getProjection() == null) {
+                topJoinOperator.setProjection(buildTopJoinProjection(outputCols, newOp.getProjection(),
+                        newRightChildJoin.getOp().getProjection()));
+            }
+
 
             OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
+            if (JoinHelper.validateJoinExpr(topJoin)) {
+                return Lists.newArrayList(topJoin);
+            } else {
+                return Collections.emptyList();
+            }
         } else {
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
@@ -245,9 +256,49 @@ public class JoinAssociativityRule extends TransformationRule {
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
+            Projection leftProjection;
+            if (leftChild1.getOp().getProjection() != null) {
+                leftProjection = leftChild1.getOp().getProjection();
+            } else {
+                leftProjection = new Projection(leftChild1.getOutputColumns().getStream()
+                        .map(id -> context.getColumnRefFactory().getColumnRef(id))
+                        .collect(Collectors.toMap(Function.identity(), Function.identity())));
+            }
+            if (topJoinOperator.getProjection() == null) {
+                topJoinOperator.setProjection(buildTopJoinProjection(outputCols, leftProjection,
+                        newRightChildJoin.getOp().getProjection()));
+            }
 
             OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
+            if (JoinHelper.validateJoinExpr(topJoin)) {
+                return Lists.newArrayList(topJoin);
+            } else {
+                return Collections.emptyList();
+            }
         }
+    }
+
+
+    private Projection buildTopJoinProjection(ColumnRefSet oldOutputCols, Projection leftProjection, Projection rightProjection) {
+        ColumnRefSet newOutputCols = new ColumnRefSet();
+        newOutputCols.union(new ColumnRefSet(leftProjection.getOutputColumns()));
+        newOutputCols.union(new ColumnRefSet(rightProjection.getOutputColumns()));
+
+        if (oldOutputCols.equals(newOutputCols)) {
+            return null;
+        }
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftProjection.getColumnRefMap().entrySet()) {
+            if (oldOutputCols.contains(entry.getKey())) {
+                columnRefMap.put(entry.getKey(), entry.getKey());
+            }
+        }
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rightProjection.getColumnRefMap().entrySet()) {
+            if (oldOutputCols.contains(entry.getKey())) {
+                columnRefMap.put(entry.getKey(), entry.getKey());
+            }
+        }
+        return new Projection(columnRefMap);
     }
 }

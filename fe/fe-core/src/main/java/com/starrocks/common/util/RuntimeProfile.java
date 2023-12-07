@@ -526,7 +526,25 @@ public class RuntimeProfile {
             return;
         }
 
-        this.infoStrings.putAll(srcProfile.infoStrings);
+        srcProfile.infoStrings.forEach((key, value) -> {
+            if (!this.infoStrings.containsKey(key)) {
+                this.infoStrings.put(key, value);
+            } else if (!Objects.equals(value, this.infoStrings.get(key))) {
+                String originalKey = key;
+                int pos;
+                if ((pos = key.indexOf("__DUP(")) != -1) {
+                    originalKey = key.substring(0, pos);
+                }
+                int i = 0;
+                while (true) {
+                    String indexedKey = String.format("%s__DUP(%d)", originalKey, i++);
+                    if (!this.infoStrings.containsKey(indexedKey)) {
+                        this.infoStrings.put(indexedKey, value);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     public void setName(String name) {
@@ -552,6 +570,10 @@ public class RuntimeProfile {
         }
 
         RuntimeProfile profile0 = profiles.get(0);
+
+        for (int i = 1; i < profiles.size(); i++) {
+            profile0.copyAllInfoStringsFrom(profiles.get(i));
+        }
 
         // Find all counters, although these profiles are expected to be isomorphic,
         // some counters are only attached to one of them

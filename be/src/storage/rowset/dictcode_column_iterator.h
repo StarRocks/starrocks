@@ -102,6 +102,7 @@ public:
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
         RETURN_IF_ERROR(decode_dict_codes(*_local_dict_code_col, values));
         _swap_null_columns(_local_dict_code_col.get(), values);
+        values->set_delete_state(_local_dict_code_col->delete_state());
         return Status::OK();
     }
 

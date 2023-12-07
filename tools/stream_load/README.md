@@ -23,14 +23,16 @@ Optional:
 
 - --enable_debug: default false ,`--enable_debug=true`
 - --max_threads: parallel thread number , default min(server_core_number,32) ,`--max_threads=16`
-- --timeout: http protocol connect timeout and proccess timeout , default 60*1000ms, for example 5s `--timeout=5000`
+- --timeout: http protocol connect timeout and process timeout , default 60*1000ms, for example 5s `--timeout=5000`
 - --queue_size: memory queue limit size , default 256 , not reset unless you have a lot of memory and you need reset `-Xmx`
 - --H: http request header , for example `--H=column_separator:,`,column_separator as key,`,`as value
 
 Other:
-https://docs.starrocks.io/en-us/latest/loading/StreamLoad
+
+[Stream Load](../../docs/loading/StreamLoad.md)
 
 ### Warn
+
 When appear error a certain thread, other normal thread transaction will not rollback
 
 Currently, you need ensure your file not contain error data,and can clear table

@@ -22,6 +22,7 @@
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -125,5 +126,10 @@ public class ConsistencyCheckInfo implements Writable {
         ConsistencyCheckInfo info = new ConsistencyCheckInfo();
         info.readFields(in);
         return info;
+    }
+
+    @Override
+    public String toString() {
+        return GsonUtils.GSON.toJson(this);
     }
 }

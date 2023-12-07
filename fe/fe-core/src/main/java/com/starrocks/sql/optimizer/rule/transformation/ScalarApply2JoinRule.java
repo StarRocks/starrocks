@@ -140,6 +140,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // any_value aggregate
         ScalarOperator subqueryOperator = apply.getSubqueryOperator();
         CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
+        if (anyValueCallOp.getFunction() == null) {
+            throw new SemanticException(String.format(
+                    "NOT support scalar correlated sub-query of type %s",
+                    subqueryOperator.getType().toSql()));
+        }
         ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
         aggregates.put(anyValue, anyValueCallOp);
 
@@ -229,8 +234,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
         assertOptExpression.getInputs().add(input.getInputs().get(1));
 
         // use hint, forbidden reorder un-correlate subquery
-        OptExpression joinOptExpression = new OptExpression(
-                LogicalJoinOperator.builder().setJoinType(JoinOperator.CROSS_JOIN).setJoinHint("broadcast").build());
+        OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
+                .setJoinType(JoinOperator.CROSS_JOIN)
+                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
         joinOptExpression.getInputs().add(assertOptExpression);
 
