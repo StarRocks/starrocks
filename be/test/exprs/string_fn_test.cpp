@@ -3560,7 +3560,6 @@ PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
 
     ASSERT_EQ(2312449062, StringFunctions::crc32(ctx.get(), columns1));
     ASSERT_EQ(3440849609, StringFunctions::crc32(ctx.get(), columns2));
-
 }
 
 } // namespace starrocks
