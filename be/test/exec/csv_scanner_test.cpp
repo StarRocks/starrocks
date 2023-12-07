@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -62,6 +63,7 @@ protected:
         RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
+        state->_query_options.query_type = TQueryType::LOAD;
 
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
@@ -982,6 +984,49 @@ TEST_P(CSVScannerTest, test_empty) {
     run_test(TYPE_INT);
     run_test(TYPE_DATE);
     run_test(TYPE_DATETIME);
+}
+
+TEST_P(CSVScannerTest, test_column_count_inconsistent) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_DATE);
+
+    types[2].len = 10;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_one;
+    range_one.__set_path("./be/test/exec/test_data/csv_scanner/csv_file1");
+    range_one.__set_start_offset(0);
+    range_one.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range_one);
+
+    auto scanner = create_csv_scanner(types, ranges);
+    EXPECT_NE(scanner, nullptr);
+
+    auto st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    auto log_file_path = "test_column_count_inconsistent_error_log_file";
+    std::ofstream wfile(log_file_path, std::ofstream::out);
+    scanner->TEST_runtime_state()->_error_log_file = &wfile;
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.status().is_end_of_file()) << res.status().to_string();
+    wfile.close();
+    scanner->TEST_runtime_state()->_error_log_file = nullptr;
+
+    std::ifstream rfile(log_file_path, std::ifstream::in);
+    std::string line;
+    line.resize(1024);
+    rfile.getline(line.data(), line.size());
+    auto found = line.find("Value count does not match column count. Expect 4, but got 5");
+    ASSERT_TRUE(found != std::string::npos);
+    rfile.close();
+
+    (void)fs::remove(log_file_path);
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
