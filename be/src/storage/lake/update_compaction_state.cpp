@@ -105,7 +105,8 @@ void CompactionState::release_segments(uint32_t segment_id) {
     }
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    // reset ptr to release memory immediately
+    pk_cols[segment_id].reset();
 }
 
 std::string CompactionState::to_string() const {
