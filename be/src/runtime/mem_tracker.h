@@ -163,6 +163,7 @@ public:
         if (bytes != 0) {
             for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
                 _all_trackers[i]->_consumption->add(-bytes);
+                // LOG(INFO) << "label: " << _label << " release_without_root: " << bytes << ", tracker: " << _all_trackers[i]->debug_string();
             }
         }
     }
@@ -222,7 +223,7 @@ public:
     }
 
     WARN_UNUSED_RESULT
-    MemTracker* try_consume_with_limited(int64_t bytes, MemTracker* limited_tracker, int64_t high_limit) {
+    MemTracker* try_consume_with_limited(int64_t bytes) {
         if (UNLIKELY(bytes <= 0)) return nullptr;
         int64_t i;
         // Walk the tracker tree top-down.
@@ -231,9 +232,9 @@ public:
             if (tracker->limit() < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                int64_t limit = tracker->limit();
-                if (tracker == limited_tracker) {
-                    limit = high_limit;
+                int64_t limit = tracker->reserve_limit();
+                if (limit == -1) {
+                    limit = tracker->limit();
                 }
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
                     continue;
@@ -304,6 +305,18 @@ public:
 
     bool has_limit() const { return _limit >= 0; }
 
+    void set_reserve_limit(int64_t reserve_limit) {
+        _reserve_limit = reserve_limit;
+    }
+
+    int64_t reserve_limit() const {
+        return _reserve_limit;
+    }
+
+    bool has_reserve_limit() const {
+        return _reserve_limit >= 0;
+    }
+
     const std::string& label() const { return _label; }
 
     /// Returns the lowest limit for this tracker and its ancestors. Returns
@@ -337,6 +350,7 @@ public:
     std::string debug_string() {
         std::stringstream msg;
         msg << "limit: " << _limit << "; "
+            << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
             << "allocation: " << _allocation->value() << "; "
             << "deallocation: " << _deallocation->value() << "; "
@@ -372,6 +386,7 @@ private:
     Type _type{NO_SET};
 
     int64_t _limit; // in bytes
+    int64_t _reserve_limit = -1; // only used in spillable query
 
     std::string _label;
     MemTracker* _parent;
