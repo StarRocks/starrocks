@@ -120,6 +120,7 @@ set(EXEC_FILES
         ./exprs/string_fn_concat_test.cpp
         ./exprs/string_fn_locate_test.cpp
         ./exprs/string_fn_pad_test.cpp
+        ./exprs/string_fn_regexp_replace_test.cpp
         ./exprs/string_fn_repeat_test.cpp
         ./exprs/string_fn_reverse_test.cpp
         ./exprs/string_fn_sm3_test.cpp
