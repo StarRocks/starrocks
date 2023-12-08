@@ -429,7 +429,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |brpc_port|8060|bRPC 的端口，可以查看 bRPC 的一些网络统计信息。|
 |brpc_num_threads|-1|bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
 |priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
-|starlet_port|9070|StarRocks 存算分离集群用于 BE 心跳服务的端口。 |
+|starlet_port|9070|存算分离集群中 BE 的额外 Agent 服务端口。 |
 |heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
 |heartbeat_service_thread_count|1|心跳线程数。|
 |create_tablet_worker_count|3|创建 tablet 的线程数。|
