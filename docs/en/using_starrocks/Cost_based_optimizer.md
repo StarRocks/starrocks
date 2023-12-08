@@ -4,7 +4,9 @@ displayed_sidebar: "English"
 
 # Gather statistics for CBO
 
-This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics. Since v3.2.0, StarRocks supports collecting statistics from Hive, Iceberg, and Hudi tables, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
+This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics.
+
+Since v3.2.0, StarRocks supports collecting statistics from Hive, Iceberg, and Hudi tables, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
 
 ## What is CBO
 
@@ -459,7 +461,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## Collect statistics of Hive/Iceberg/Hudi tables
 
-Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual and automatic full collection are supported. Sampled collection or histogram collection is not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual and automatic full collection are supported. Sampled collection and histogram collection are not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
 Following is an example of querying statistics data from `external_column_statistics`.
 
@@ -494,6 +496,8 @@ The following limits apply when you collect statistics for Hive, Iceberg, Hudi t
 The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
 
 ### Manual collection
+
+You can create an Analyze job on demand and the job runs immediately after you create it.
 
 #### Create a manual collection task
 
@@ -570,7 +574,7 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 ### Automatic collection
 
-For the system to automatically collect statistics of tables in an external data source, you must create an Analyze job. StarRocks checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
+For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
 
 However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following properties when you create an Analyze job:
 

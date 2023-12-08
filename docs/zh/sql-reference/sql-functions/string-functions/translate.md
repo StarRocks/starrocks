@@ -38,7 +38,7 @@ TRANSLATE(source, from_string, to_string)
 
 ## 示例
 
-```SQL
+```plaintext
 -- 将原字符串中的字符 'ab' 按顺序替换为 '12'。
 MySQL > select translate('abcabc', 'ab', '12') as test;
 +--------+

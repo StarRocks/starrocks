@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # translate
 
 ## Description
@@ -30,11 +34,9 @@ Scenarios where the result is `NULL`:
 
 - The length of the result string after translation exceeds the maximum length (1048576) of `VARCHAR`.
 
-1048573
-
 ## Examples
 
-```SQL
+```plaintext
 -- Replace 'ab' in the source string with '12'.
 mysql > select translate('abcabc', 'ab', '12') as test;
 +--------+
