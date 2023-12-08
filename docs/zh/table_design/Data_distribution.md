@@ -530,10 +530,9 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   :::
 
-  建表示例：
-
   <Tabs groupId="automaticexamples1">
   <TabItem value="example1" label="哈希分桶表" default>
+  建表示例：
 
   ```sql
   CREATE TABLE site_access (
@@ -661,7 +660,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     </TabItem>
     <TabItem value="example2" label="随机分桶表">
 
-  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
+  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。
 
   :::warning
 
