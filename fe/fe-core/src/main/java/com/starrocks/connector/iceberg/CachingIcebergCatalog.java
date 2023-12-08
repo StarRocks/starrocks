@@ -133,7 +133,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void refreshTable(String dbName, String tableName, ExecutorService executorService) {
+    public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
             partitionNames.remove(icebergTableName);
@@ -187,6 +187,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
             }
         }
+    }
+
+    public void clearCacheWithoutTable() {
+        partitionNames.clear();
     }
 
     private static class IcebergTableName {
