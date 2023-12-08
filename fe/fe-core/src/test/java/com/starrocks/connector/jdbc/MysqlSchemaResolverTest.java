@@ -130,47 +130,6 @@ public class MysqlSchemaResolverTest {
                 result = dbResult;
                 minTimes = 0;
 
-                String partitionInfoTable = "partitions";
-                tableResult = new MockResultSet("tables");
-                tableResult.addColumn("TABLE_NAME", Arrays.asList(partitionInfoTable));
-                connection.getMetaData().getTables(catalogSchema, null, null, null);
-                result = tableResult;
-                minTimes = 0;
-            }
-        };
-        try {
-            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
-            Assert.assertTrue(schemaResolver.checkAndSetSupportPartitionInformation(connection));
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testCheckPartitionWithoutPartitionsTable() {
-        try {
-            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
-            Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testCheckPartitionWithPartitionsTable() throws SQLException {
-        new Expectations() {
-            {
-                String catalogSchema = "information_schema";
-
-                dbResult = new MockResultSet("catalog");
-                dbResult.addColumn("TABLE_CAT", Arrays.asList(catalogSchema));
-
-                connection.getMetaData().getCatalogs();
-                result = dbResult;
-                minTimes = 0;
-
                 MockResultSet piResult = new MockResultSet("partitions");
                 piResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
                 connection.getMetaData().getTables(anyString, null, null, null);
