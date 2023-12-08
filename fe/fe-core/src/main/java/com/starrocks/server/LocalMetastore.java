@@ -1448,8 +1448,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 // update partition info
                 updatePartitionInfo(partitionInfo, newPartitions, existPartitionNameSet, addPartitionClause, olapTable);
 
-                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
-                        null /* expectGroupId */);
+                try {
+                    colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                            null /* expectGroupId */);
+                } catch (DdlException e) {
+                    LOG.info("table {} update colocation info failed when add partition, {}", olapTable.getId(), e.getMessage());
+                }
 
                 // add partition log
                 addPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
@@ -3144,7 +3148,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;
-        if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+        if (RunMode.isSharedNothingMode()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 materializedView =
                         MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
@@ -3155,7 +3159,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 baseDistribution, mvRefreshScheme);
             }
         } else {
-            Preconditions.checkState(RunMode.getCurrentRunMode().isAllowCreateLakeTable());
+            Preconditions.checkState(RunMode.isSharedDataMode());
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 throw new DdlException("Incremental materialized view in shared_data mode is not supported");
             }
@@ -4873,7 +4877,12 @@ public class LocalMetastore implements ConnectorMetadata {
             // replace
             truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
-            colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */, null /* expectGroupId */);
+            try {
+                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                        null /* expectGroupId */);
+            } catch (DdlException e) {
+                LOG.info("table {} update colocation info failed when truncate table, {}", olapTable.getId(), e.getMessage());
+            }
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,

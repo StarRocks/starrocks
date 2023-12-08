@@ -67,11 +67,20 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
+        checkAndSetSupportPartitionInformation();
     }
 
     public Connection getConnection() throws SQLException {
         return DriverManager.getConnection(properties.get(JDBCResource.URI),
                 properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
+    }
+
+    public void checkAndSetSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
     }
 
     @Override
@@ -117,7 +126,10 @@ public class JDBCMetadata implements ConnectorMetadata {
         try (Connection connection = getConnection()) {
             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
             List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
-            List<Column> partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+            List<Column> partitionColumns = Lists.newArrayList();
+            if (schemaResolver.isSupportPartitionInformation()) {
+                partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+            }
             if (fullSchema.isEmpty()) {
                 return null;
             }
@@ -126,7 +138,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
                         tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             } else {
-                Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
                 JDBCTableIdCache.putTableId(tableKey, tableId);
                 return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             }
@@ -148,15 +160,16 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
-                    .stream().map(columnName -> columnName.toLowerCase()).collect(Collectors.toSet());
-            if (partitionColumnNames.size() > 0) {
+                    .stream().map(String::toLowerCase).collect(Collectors.toSet());
+            if (!partitionColumnNames.isEmpty()) {
                 return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
                         .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+        } catch (SQLException  | StarRocksConnectorException e) {
+            LOG.warn(e.getMessage());
+            return Lists.newArrayList();
         }
     }
 

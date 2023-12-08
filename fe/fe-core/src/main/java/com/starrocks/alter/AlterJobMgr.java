@@ -770,7 +770,6 @@ public class AlterJobMgr {
             LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
-            view.lastSchemaUpdateTime.set(System.currentTimeMillis());
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {

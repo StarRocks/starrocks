@@ -243,6 +243,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get tablet metadata error"))
+                << response.status().error_msgs(0);
     }
     // Publish failed: get txn log failed
     {
@@ -259,12 +261,15 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get txn log error"))
+                << response.status().error_msgs(0);
     }
     // Publish txn success
     {
         lake::PublishVersionResponse response;
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     }
 
     // publish version request for the second transaction
@@ -291,6 +296,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected put tablet metadata error"))
+                << response.status().error_msgs(0);
     }
 
     // Publish txn success
@@ -298,6 +305,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         lake::PublishVersionResponse response;
         _lake_service.publish_version(nullptr, &publish_request_1, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     }
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
     {

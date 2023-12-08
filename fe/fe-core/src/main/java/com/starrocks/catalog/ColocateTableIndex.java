@@ -1071,7 +1071,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedNothingMode()) {
             return;
         }
 

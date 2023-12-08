@@ -300,6 +300,7 @@ public class QueryAnalyzer {
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
+
                     r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
@@ -613,6 +614,25 @@ public class QueryAnalyzer {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
+            } else if (JoinOperator.HINT_SKEW.equals(join.getJoinHint())) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
+                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
+                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
+                }
+                if (join.getJoinOp().isRightJoin()) {
+                    throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
+                }
+                if (join.getSkewColumn() != null) {
+                    if (!(join.getSkewColumn() instanceof SlotRef)) {
+                        throw new SemanticException("Skew join column must be a column reference");
+                    }
+                    analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                }
+                if (join.getSkewValues() != null) {
+                    if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
+                        throw new SemanticException("skew join values must be constant");
+                    }
+                }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
@@ -687,11 +707,11 @@ public class QueryAnalyzer {
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
             Scope queryOutputScope;
-            if (node.getView().isAnalyzed()) {
-                queryOutputScope = node.getQueryStatement().getQueryRelation().getScope();
-            } else {
-                // TODO support hiveView cache
+            try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (SemanticException e) {
+                throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
+                        "function(s) or definer/invoker of view lack rights to use them");
             }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();

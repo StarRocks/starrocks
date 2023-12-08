@@ -306,6 +306,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
 
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1491,6 +1493,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -2912,6 +2917,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
+    }
+
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
     }
 
     // Serialize to thrift object
