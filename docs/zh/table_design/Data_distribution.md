@@ -524,7 +524,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   自 2.5.7 版本起，StarRocks 支持根据机器资源和数据量自动设置分区中分桶数量。
 
-  :::info
+  :::tip
 
   如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
 
@@ -644,7 +644,6 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   <Tabs groupId="automaticexamples2">
   <TabItem value="example1" label="哈希分桶表" default>
-  
 
     ```sql
   -- 自动设置所有分区的分桶数量
@@ -667,14 +666,14 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要修改表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
     ```sql
-  -- 系统自动设置分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
+  -- 自动设置所有分区的分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
   ALTER TABLE details DISTRIBUTED BY RANDOM;
-  -- 系统自动设置分桶数量，并且开启按需动态增加分桶数量。
+  -- 自动设置所有分区的分桶数量，并且开启按需动态增加分桶数量。
   ALTER TABLE details SET("bucket_size"="1073741824");
   
   -- 自动设置指定分区的分桶数量
@@ -737,7 +736,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   </TabItem>
   </Tabs>
 
-#### **查看分桶数量**
+#### 查看分桶数量
 
 如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)。
 

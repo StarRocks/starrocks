@@ -620,7 +620,7 @@ PROPERTIES (
 
 #### 设置随机分桶表中分桶大小
 
-自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。
+自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
 
 ``` sql
 PROPERTIES (
@@ -773,10 +773,6 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
-
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 ### 创建表并设置存储介质和数据自动降冷时间
 
