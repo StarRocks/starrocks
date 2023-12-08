@@ -21,10 +21,6 @@ on:
         required: true
         type: string
 
-concurrency:
-  group: 'INSPECTION-MAIN'
-  cancel-in-progress: false
-
 permissions:
   checks: write
   actions: write
@@ -228,7 +224,7 @@ jobs:
             echo "PR_NUMBER=${{ needs.build.outputs.pr_number }}" >> $GITHUB_OUTPUT
             echo "BRANCH=main" >> $GITHUB_OUTPUT
             echo "BASE_VERSION=${{ needs.build.outputs.base_version }}" >> $GITHUB_OUTPUT
-          else:
+          else
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
             echo "BRANCH=${{ inputs.BRANCH }}" >> $GITHUB_OUTPUT
             echo "TAR_PATH=${{ inputs.TAR_PATH }}" >> $GITHUB_OUTPUT
@@ -259,7 +255,7 @@ jobs:
             bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
             tar_path="oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/${{needs.build.outputs.build_output_tar}}"
             with_cov="--with-coverage"
-          else:
+          else
             tar_path=${TAR_PATH}
           fi
           
