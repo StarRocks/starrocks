@@ -313,7 +313,6 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
     ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
-    CHECK(_tablet.valid());
     _tablet_schema = _tablet.get_schema();
     return Status::OK();
 }
