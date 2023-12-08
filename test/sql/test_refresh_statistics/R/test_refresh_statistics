@@ -37,21 +37,21 @@ function: assert_table_cardinality('explain select * from activities', '5')
 -- result:
 None
 -- !result
-insert into activities values (1, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(2, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',2),
-(3, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',3),
-(4, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',4),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
-(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5);
+insert into activities values (1, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(2, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',2),
+(3, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',3),
+(4, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',4),
+(5, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-03', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-04', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5);
 -- result:
 -- !result
 [UC]analyze sample table activities with sync mode;
 -- result:
-test_db_caaa5af293e611eeafdd2207f0c2897f.activities	sample	status	OK
+test_db_ccb50316957511eeabcf2207f0c2897f.activities	sample	status	OK
 -- !result
 function: assert_table_cardinality('explain select * from activities', '1\d+')
 -- result:
@@ -60,15 +60,15 @@ None
 insert into test_2 select * from activities;
 -- result:
 -- !result
-function: assert_table_cardinality('explain select * from test_2', '5')
+function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:
 None
 -- !result
 [UC]analyze sample table test_2;
 -- result:
-test_db_caaa5af293e611eeafdd2207f0c2897f.test_2	sample	status	OK
+test_db_ccb50316957511eeabcf2207f0c2897f.test_2	sample	status	OK
 -- !result
-function: assert_table_cardinality('explain select * from test_2', '5')
+function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:
 None
 -- !result
@@ -86,7 +86,7 @@ insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a'
 -- !result
 [UC]analyze sample table test_2;
 -- result:
-test_db_caaa5af293e611eeafdd2207f0c2897f.test_2	sample	status	OK
+test_db_ccb50316957511eeabcf2207f0c2897f.test_2	sample	status	OK
 -- !result
 function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:

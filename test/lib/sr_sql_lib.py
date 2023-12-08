@@ -1382,4 +1382,4 @@ class StarrocksSQLApiLib(object):
         expect = r"cardinality=" + rows
         match = re.search(expect, str(res["result"]))
         print(expect)
-        tools.assert_true(match, "unexpected cardinality. " + str(res["result"]))
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
