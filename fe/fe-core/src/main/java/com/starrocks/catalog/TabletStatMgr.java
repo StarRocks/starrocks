@@ -53,6 +53,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
@@ -108,6 +109,7 @@ public class TabletStatMgr extends FrontendDaemon {
             locker.lockDatabase(db, LockType.WRITE);
             try {
                 for (Table table : db.getTables()) {
+                    long totalRowCount = 0L;
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -123,11 +125,15 @@ public class TabletStatMgr extends FrontendDaemon {
                                     indexRowCount += tablet.getRowCount(version);
                                 } // end for tablets
                                 index.setRowCount(indexRowCount);
+                                if (!olapTable.isTempPartition(partition.getId())) {
+                                    totalRowCount += indexRowCount;
+                                }
                             } // end for indices
                         } // end for physical partitions
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
+                    adjustStatUpdateRows(table.getId(), totalRowCount);
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.WRITE);
@@ -213,6 +219,13 @@ public class TabletStatMgr extends FrontendDaemon {
                     updateLakeTableTabletStat(db, (OlapTable) table);
                 }
             }
+        }
+    }
+
+    private void adjustStatUpdateRows(long tableId, long totalRowCount) {
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (meta != null) {
+            meta.setUpdateRows(totalRowCount);
         }
     }
 
