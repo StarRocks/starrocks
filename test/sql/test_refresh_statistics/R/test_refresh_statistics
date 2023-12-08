@@ -51,7 +51,7 @@ insert into activities values (1, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a',
 -- !result
 [UC]analyze sample table activities with sync mode;
 -- result:
-test_db_ccb50316957511eeabcf2207f0c2897f.activities	sample	status	OK
+test_db_f6c267c8957711eea4152207f0c2897f.activities	sample	status	OK
 -- !result
 function: assert_table_cardinality('explain select * from activities', '1\d+')
 -- result:
@@ -66,7 +66,7 @@ None
 -- !result
 [UC]analyze sample table test_2;
 -- result:
-test_db_ccb50316957511eeabcf2207f0c2897f.test_2	sample	status	OK
+test_db_f6c267c8957711eea4152207f0c2897f.test_2	sample	status	OK
 -- !result
 function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:
@@ -86,7 +86,7 @@ insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a'
 -- !result
 [UC]analyze sample table test_2;
 -- result:
-test_db_ccb50316957511eeabcf2207f0c2897f.test_2	sample	status	OK
+test_db_f6c267c8957711eea4152207f0c2897f.test_2	sample	status	OK
 -- !result
 function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:
