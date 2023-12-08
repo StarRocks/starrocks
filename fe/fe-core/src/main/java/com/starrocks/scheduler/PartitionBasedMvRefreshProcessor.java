@@ -202,8 +202,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private RefreshJobStatus doMvRefresh(TaskRunContext context, MaterializedViewMetricsEntity mvEntity)
             throws Exception {
-        InsertStmt insertStmt = null;
-        ExecPlan execPlan = null;
         int retryNum = 0;
         boolean checked = false;
 
@@ -271,11 +269,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
 
-        // Unlock current database and acquire lock for all databases referenced by the plan
-        insertStmt = prepareRefreshPlan(refTableRefreshPartitions, mvToRefreshedPartitions, refTablePartitionNames);
-
-        // execute the ExecPlan of insert outside lock
-        refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
+        // refresh materialized view
+        doRefreshMaterializedView(mvToRefreshedPartitions, refTablePartitionNames);
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
@@ -294,11 +289,47 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return RefreshJobStatus.SUCCESS;
     }
 
+    private void doRefreshMaterializedView(Set<String> mvToRefreshedPartitions,
+                                           Map<String, Set<String>> refTablePartitionNames) throws DmlException {
+        // Use current connection variables instead of mvContext's session variables to be better debug.
+        ConnectContext currConnectCtx = ConnectContext.get();
+        int maxRefreshMaterializedViewRetryNum = 1;
+        if (currConnectCtx != null && currConnectCtx.getSessionVariable() != null) {
+            maxRefreshMaterializedViewRetryNum =
+                    currConnectCtx.getSessionVariable().getQueryDebugOptions().getMaxRefreshMaterializedViewRetryNum();
+            if (maxRefreshMaterializedViewRetryNum <= 0) {
+                maxRefreshMaterializedViewRetryNum = 1;
+            }
+        }
+
+        Throwable lastException = null;
+        for (int i = 0; i < maxRefreshMaterializedViewRetryNum; i++) {
+            boolean isRefreshFailed = false;
+            try {
+                // Unlock current database and acquire lock for all databases referenced by the plan
+                InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
+                // execute the ExecPlan of insert outside lock
+                refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
+            } catch (Throwable e) {
+                isRefreshFailed = true;
+                LOG.warn("Refresh materialized view {} at {}th retry time failed: {}",
+                        this.materializedView.getName(), i + 1, e);
+                lastException = e;
+            }
+            if (!isRefreshFailed) {
+                return;
+            }
+        }
+        if (lastException != null) {
+            throw new DmlException("Refresh materialized view %s failed after retrying %s times", lastException,
+                    this.materializedView.getName(), maxRefreshMaterializedViewRetryNum);
+        }
+    }
+
     /**
      * Prepare the statement and plan for mv refreshing, considering the partitions of ref table
      */
-    private InsertStmt prepareRefreshPlan(Map<Table, Set<String>> refTableRefreshPartitions,
-                                          Set<String> mvToRefreshedPartitions,
+    private InsertStmt prepareRefreshPlan(Set<String> mvToRefreshedPartitions,
                                           Map<String, Set<String>> refTablePartitionNames) throws AnalysisException {
         // 1. Prepare context
         ConnectContext ctx = mvContext.getCtx();
@@ -322,8 +353,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             StatementPlanner.lock(dbs);
 
-            insertStmt =
-                    analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
+            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView);
+            // Must set execution id before StatementPlanner.plan
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             execPlan = StatementPlanner.plan(insertStmt, ctx);
         } catch (Throwable e) {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
@@ -1085,7 +1117,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     @VisibleForTesting
     public InsertStmt analyzeInsertStmt(InsertStmt insertStmt,
-                                        Set<String> materializedViewPartitions,
                                         Map<String, Set<String>> refTableRefreshPartitions,
                                         MaterializedView materializedView) throws AnalysisException {
         Analyzer.analyze(insertStmt, ConnectContext.get());

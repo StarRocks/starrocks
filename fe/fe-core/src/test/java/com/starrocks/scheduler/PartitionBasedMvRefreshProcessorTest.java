@@ -39,12 +39,14 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
@@ -2850,6 +2852,14 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
 
         starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testQueryDebugOptions() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        QueryDebugOptions debugOptions = sessionVariable.getQueryDebugOptions();
+        Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
+        Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
 }
 
