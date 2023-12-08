@@ -50,6 +50,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
@@ -101,6 +102,7 @@ public class TabletStatMgr extends FrontendDaemon {
             db.writeLock();
             try {
                 for (Table table : db.getTables()) {
+                    long totalRowCount = 0L;
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -114,10 +116,14 @@ public class TabletStatMgr extends FrontendDaemon {
                                 indexRowCount += tablet.getRowCount(version);
                             } // end for tablets
                             index.setRowCount(indexRowCount);
+                            if (!olapTable.isTempPartition(partition.getId())) {
+                                totalRowCount += indexRowCount;
+                            }
                         } // end for indices
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
+                    adjustStatUpdateRows(table.getId(), totalRowCount);
                 }
             } finally {
                 db.writeUnlock();
@@ -126,6 +132,13 @@ public class TabletStatMgr extends FrontendDaemon {
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
         lastWorkTimestamp = LocalDateTime.now();
+    }
+
+    private void adjustStatUpdateRows(long tableId, long totalRowCount) {
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (meta != null) {
+            meta.setUpdateRows(totalRowCount);
+        }
     }
 
     private void updateLocalTabletStat() {
