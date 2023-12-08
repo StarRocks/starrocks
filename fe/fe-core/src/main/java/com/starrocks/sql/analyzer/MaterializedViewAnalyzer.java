@@ -157,7 +157,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
 
-            if (table.isView()) {
+            if (table.isOlapView()) {
                 continue;
             }
 
