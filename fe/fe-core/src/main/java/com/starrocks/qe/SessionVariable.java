@@ -588,6 +588,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1197,6 +1199,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
+
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
 
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
@@ -3024,6 +3029,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         return tResult;
     }
 
