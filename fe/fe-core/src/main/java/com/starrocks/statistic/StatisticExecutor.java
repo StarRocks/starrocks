@@ -289,11 +289,32 @@ public class StatisticExecutor {
                         Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
             }
         } else {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                     statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
             GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
                     basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), refreshAsync);
+=======
+            if (table.isNativeTableOrMaterializedView()) {
+                long existUpdateRows = GlobalStateMgr.getCurrentAnalyzeMgr().getExistUpdateRows(table.getId());
+                BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
+                        statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
+                        statsJob.getProperties(), existUpdateRows);
+                GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
+                        basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
+                        refreshAsync);
+            } else {
+                // for external table
+                ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
+                        analyzeStatus.getEndTime(), statsJob.getProperties());
+                GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                        db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
+            }
+>>>>>>> 211b5ca04a ([Enhancement] refresh row count info immediately after load (#36472))
         }
         return analyzeStatus;
     }

@@ -1234,4 +1234,126 @@ class StarrocksSQLApiLib(object):
                     headers["columns"] = switch[table_name]
 
             res = self._stream_load(label, db, table_name, data, headers)
+<<<<<<< HEAD
             tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
+=======
+            tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
+
+    def execute_cmd(self, exec_url):
+        cmd_template = "curl -XPOST -u {user}:{passwd} '" + exec_url + "'"
+        cmd = cmd_template.format(user=self.mysql_user, passwd=self.mysql_password)
+        res = subprocess.run(
+            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800
+        )
+        return str(res)
+
+    def post_http_request(self, exec_url) -> str:
+        """Sends a POST request.
+
+        Returns:
+            the response content.
+        """
+        res = requests.post(exec_url, auth=HTTPBasicAuth(self.mysql_user, self.mysql_password))
+        tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
+        return res.content.decode("utf-8")
+
+    def manual_compact(self, database_name, table_name):
+        sql = "show tablet from " + database_name + "." + table_name
+        res = self.execute_sql(sql, "dml")
+        tools.assert_true(res["status"], res["msg"])
+        url = res["result"][0][20]
+
+        pos = url.find("api")
+        exec_url = url[0:pos] + "api/update_config?min_cumulative_compaction_num_singleton_deltas=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?base_compaction_interval_seconds_since_last_operation=0"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url[0:pos] + "api/update_config?cumulative_compaction_skip_window_seconds=1"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=cumulative"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+        exec_url = url.replace("compaction/show", "compact") + "&compaction_type=base"
+        res = self.execute_cmd(exec_url)
+        print(res)
+
+    def wait_analyze_finish(self, database_name, table_name, sql):
+        timeout = 300
+        analyze_sql = "show analyze status where `Database` = 'default_catalog.%s'" % database_name
+        res = self.execute_sql(analyze_sql, "dml")
+        while timeout > 0:
+            res = self.execute_sql(analyze_sql, "dml")
+            if len(res["result"]) > 0:
+                for table in res["result"]:
+                    if table[2] == table_name and table[4] == "FULL" and table[6] == "SUCCESS":
+                        break
+                break
+            else:
+                time.sleep(1)
+                timeout -= 1
+        else:
+            tools.assert_true(False, "analyze timeout")
+
+        finished = False
+        counter = 0
+        while True:
+            res = self.execute_sql(sql, "dml")
+            tools.assert_true(res["status"], res["msg"])
+            if str(res["result"]).find("Decode") > 0:
+                finished = True
+                break
+            time.sleep(5)
+            if counter > 10:
+                break
+            counter = counter + 1
+
+        tools.assert_true(finished, "analyze timeout")
+
+    def _get_backend_http_endpoints(self) -> List[Dict]:
+        """Get the http host and port of all the backends.
+
+        Returns:
+            a dict list, each of which contains the key "host" and "host" of a backend.
+        """
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        backends = []
+        for row in res["result"]:
+            backends.append({
+                "host": row[1],
+                "port": row[4],
+            })
+
+        return backends
+
+    def update_be_config(self, key, value):
+        """Update the config to all the backends.
+        """
+        backends = self._get_backend_http_endpoints()
+        for backend in backends:
+            exec_url = f"http://{backend['host']}:{backend['port']}/api/update_config?{key}={value}"
+            print(f"post {exec_url}")
+            res = self.post_http_request(exec_url)
+
+            res_json = json.loads(res)
+            tools.assert_dict_contains_subset({"status": "OK"}, res_json,
+                                              f"failed to update be config [response={res}] [url={exec_url}]")
+
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
+>>>>>>> 211b5ca04a ([Enhancement] refresh row count info immediately after load (#36472))
