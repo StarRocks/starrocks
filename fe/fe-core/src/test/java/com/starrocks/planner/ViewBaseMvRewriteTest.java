@@ -262,7 +262,22 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
                 "select v4, sum(v5) as total4 from t1 group by v4");
         starRocksAssert.withView("create view view_5 as " +
                 "select v4, sum(v5) as total5 from t1 group by v4");
+        {
+            // can not be rewritten by cost
+            starRocksAssert.withView("create view view_6 as " +
+                    "select v1, total1, total2 from view_1 join view_2 on v1 = v4;");
+            String mv = "select * from view_6";
+            String query = "select view_6.v1, view_6.total1, view_3.total3 from view_6 join view_3 on view_6.v1 = view_3.v4;";
+            testRewriteOK(mv, query);
+            starRocksAssert.dropView("view_6");
+        }
 
+        /*{
+            // can not be rewritten by cost
+            String mv = "select v1, total1, total2 from view_1 join view_2 on v1 = v4;";
+            String query = "select view_1.v1, total1, total2, total3 from view_1 join view_2 on v1 = v4 join view_3 on view_1.v1 = view_3.v4 ;";
+            testRewriteOK(mv, query);
+        }*/
         {
             // test two views
             String mv = "select v1, sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";

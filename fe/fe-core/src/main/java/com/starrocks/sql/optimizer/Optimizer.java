@@ -30,7 +30,9 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -93,10 +95,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
 /**
@@ -485,10 +489,16 @@ public class Optimizer {
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            boolean isRewritten = judgeIsViewRewritten(treeWithView);
-            if (isRewritten) {
+            // boolean isRewritten = judgeIsViewRewritten(treeWithView);
+            //if (isRewritten) {
+            List<Operator> viewScanOperators = Lists.newArrayList();
+            MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
+            if (viewScanOperators.size() < context.getViewPlanMap().size()) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
+                if (!viewScanOperators.isEmpty()) {
+                    replaceLogicalViewScanOperator(tree);
+                }
             }
         } catch (Exception e) {
             LOG.warn("view based mv rule rewrite failed.", e);
@@ -496,6 +506,48 @@ public class Optimizer {
             // reset logical tree with view
             // no need to try view base rewrite in cost phase again
             context.setLogicalTreeWithView(null);
+        }
+    }
+
+    private OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
+        if (context.getViewPlanMap() == null) {
+            return queryExpression;
+        }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private void doReplaceLogicalViewScanOperator(OptExpression parent, int index, OptExpression queryExpression) {
+        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = context.getViewPlanMap();
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            if (!viewPlanMap.containsKey(op)) {
+                LogicalViewScanOperator viewScanOperator = op.cast();
+                return;
+            }
+            OptExpression viewPlan = viewPlanMap.get(op);
+            /*if (op.getPredicate() != null) {
+                // update predicates
+                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
+                builder.withOperator(viewPlan.getOp());
+                builder.setPredicate(Utils.compoundAnd(viewPlan.getOp().getPredicate(), op.getPredicate()));
+                Operator newOperator = builder.build();
+                viewPlan = OptExpression.create(newOperator, viewPlan.getInputs());
+            }*/
+            parent.setChild(index, viewPlan);
+        } else {
+            for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+                doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
+            }
         }
     }
 
