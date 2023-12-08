@@ -1266,7 +1266,6 @@ public class AstToStringBuilder {
 
         @Override
         public String visitCreateCatalogStatement(CreateCatalogStmt stmt, Void context) {
-
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE EXTERNAL CATALOG '");
             sb.append(stmt.getCatalogName()).append("' ");
