@@ -196,6 +196,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
              request->tablet_ids_size());
 
+    Status::OK().to_protobuf(response->mutable_status());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
@@ -233,6 +234,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                              << " txn_id=" << txns[0] << " version=" << new_version;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
+                res.status().to_protobuf(response->mutable_status());
             }
             TRACE("finished");
             g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
@@ -245,6 +247,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                          << " txn_id=" << request->txn_ids()[0];
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            st.to_protobuf(response->mutable_status());
             latch.count_down();
         }
     }
