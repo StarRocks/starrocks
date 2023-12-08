@@ -330,6 +330,7 @@ You can find a function based on the following categories:
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
+- [crc32](./string-functions/crc32.md)
 
 ## Map functions
 
