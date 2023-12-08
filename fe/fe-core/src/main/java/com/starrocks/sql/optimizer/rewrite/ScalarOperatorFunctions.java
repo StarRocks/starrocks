@@ -148,6 +148,9 @@ public class ScalarOperatorFunctions {
 
     private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
 
+    private static final int MAX_NOW_PRECISION = 6;
+    private static final Integer[] NOW_PRECISION_FACTORS = new Integer[MAX_NOW_PRECISION];
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -163,6 +166,9 @@ public class ScalarOperatorFunctions {
                 .put("week", ChronoUnit.WEEKS)
                 .put("quarter", IsoFields.QUARTER_YEARS)
                 .build();
+        for (int i = 0, val = 100000000; i < 6; i++, val /= 10) {
+            NOW_PRECISION_FACTORS[i] = val;
+        }
     }
 
     /**
@@ -496,7 +502,12 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
 
-    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "current_timestamp", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "localtime", argTypes = {INT}, returnType = DATETIME),
+            @ConstantFunction(name = "localtimestamp", argTypes = {INT}, returnType = DATETIME)
+    })
     public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
         int fspVal = fsp.getInt();
         if (fspVal == 0) {
@@ -509,11 +520,12 @@ public class ScalarOperatorFunctions {
         if (fspVal > 6) {
             throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
         }
-        // Here only the syntax is implemented for the metabase to use.
-        // If you want to achieve a precise type, you need to change the BE code
-        // and consider the transitivity of the FE expression.
+
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        Instant instant = connectContext.getStartTimeInstant();
+        int factor = NOW_PRECISION_FACTORS[fspVal - 1];
+        LocalDateTime startTime = Instant.ofEpochSecond(
+                instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
