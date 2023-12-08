@@ -1477,6 +1477,10 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public boolean isTempPartition(long partitionId) {
+        return tempPartitions.getPartition(partitionId) != null;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TOlapTable tOlapTable = new TOlapTable(getName());
