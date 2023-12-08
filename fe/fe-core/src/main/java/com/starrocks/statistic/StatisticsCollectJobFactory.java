@@ -184,6 +184,10 @@ public class StatisticsCollectJobFactory {
                                                                          StatsConstants.AnalyzeType analyzeType,
                                                                          StatsConstants.ScheduleType scheduleType,
                                                                          Map<String, String> properties) {
+        // refresh table to get latest table/partition info
+        GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(catalogName,
+                db.getFullName(), table, Lists.newArrayList(), true);
+
         if (columns == null || columns.isEmpty()) {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
