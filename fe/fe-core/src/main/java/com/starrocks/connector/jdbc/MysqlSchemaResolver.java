@@ -58,6 +58,32 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
+    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
+        String catalogSchema = "information_schema";
+        String partitionInfoTable = "partitions";
+        // Different types of MySQL protocol databases have different case names for schema and table names,
+        // which need to be converted to lowercase for comparison
+        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
+            while (catalogSet.next()) {
+                String schemaName = catalogSet.getString("TABLE_CAT");
+                if (schemaName.equalsIgnoreCase(catalogSchema)) {
+                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
+                        while (tableSet.next()) {
+                            String tableName = tableSet.getString("TABLE_NAME");
+                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
+                                return this.supportPartitionInformation = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+        return this.supportPartitionInformation = false;
+    }
+
+    @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         boolean isUnsigned = typeName.toLowerCase().contains("unsigned");
