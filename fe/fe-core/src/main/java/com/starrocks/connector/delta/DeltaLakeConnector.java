@@ -2,8 +2,6 @@
 
 package com.starrocks.connector.delta;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -33,6 +31,7 @@ public class DeltaLakeConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
+<<<<<<< HEAD
         validate();
         onCreate();
     }
@@ -41,6 +40,9 @@ public class DeltaLakeConnector implements Connector {
         String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
         Util.validateMetastoreUris(hiveMetastoreUris);
+=======
+        // TODO extract to ConnectorConfigFactory
+>>>>>>> 6d9cfde017 ([BugFix][Cherry-Pick][Branch-3.1] Fix deltalake glue catalog (backport #31839) (#36687))
     }
 
     @Override
@@ -54,7 +56,7 @@ public class DeltaLakeConnector implements Connector {
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
-                properties.get(HIVE_METASTORE_URIS),
+                properties,
                 internalMgr.getHdfsEnvironment()
         );
     }
