@@ -1705,7 +1705,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_port
 
-- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 含义：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
 - 默认值：9070
 
 #### heartbeat_service_port
