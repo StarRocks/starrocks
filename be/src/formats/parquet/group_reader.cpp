@@ -139,7 +139,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
+        _param.stats->late_materialize_skip_rows += count;
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
