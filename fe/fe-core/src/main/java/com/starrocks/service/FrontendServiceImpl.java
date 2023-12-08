@@ -504,10 +504,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                if (tableName.getCatalog() != null &&
-                                        !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(tableName.getCatalog())) {
-                                    continue;
-                                }
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
