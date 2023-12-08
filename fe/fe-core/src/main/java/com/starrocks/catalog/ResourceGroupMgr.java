@@ -383,7 +383,6 @@ public class ResourceGroupMgr implements Writable {
 
                 Double spillMemLimitThreshold = changedProperties.getSpillMemLimitThreshold();
                 if (spillMemLimitThreshold != null) {
-                    System.out.println("get spill mem limit" + spillMemLimitThreshold);
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 

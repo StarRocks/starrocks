@@ -132,9 +132,9 @@ public class ResourceGroup {
         }
         row.add("" + concurrencyLimit);
         if (spillMemLimitThreshold != null) {
-            row.add("" + spillMemLimitThreshold);
+            row.add("" + (spillMemLimitThreshold * 100) + "%");
         } else {
-            row.add("" + 0);
+            row.add("" + "100%");
         }
         row.add("" + resourceGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
