@@ -262,7 +262,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
