@@ -1,0 +1,10 @@
+[
+  {
+    "id": "zh-cn",
+    "sourceDir": "docs/zh"
+  },
+  {
+    "id": "en-us",
+    "sourceDir": "docs/en"
+  }
+]
