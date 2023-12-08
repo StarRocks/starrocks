@@ -29,8 +29,10 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
@@ -72,24 +74,12 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public String getString(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATE) {
-            int epoch = (int) fieldData;
-            LocalDate date = LocalDate.ofEpochDay(epoch);
-            return PaimonScannerUtils.formatDate(date);
-        } else {
-            return fieldData.toString();
-        }
+        return fieldData.toString();
     }
 
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATETIME_MILLIS) {
-            Timestamp ts = (Timestamp) fieldData;
-            LocalDateTime dateTime = ts.toLocalDateTime();
-            return PaimonScannerUtils.formatDateTime(dateTime);
-        } else {
-            return fieldData.toString();
-        }
+        return fieldData.toString();
     }
 
     @Override
@@ -158,5 +148,16 @@ public class PaimonColumnValue implements ColumnValue {
             }
             values.add(cv);
         }
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        return Instant.ofEpochMilli(((Timestamp) fieldData)
+                .getMillisecond()).atZone(ZoneOffset.ofHours(0)).toLocalDateTime();
     }
 }

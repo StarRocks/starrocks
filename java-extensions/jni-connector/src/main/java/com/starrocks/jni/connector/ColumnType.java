@@ -114,6 +114,8 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 16);
     }
 
     @Override
@@ -234,6 +236,10 @@ public class ColumnType {
             default: {
                 if (t.startsWith("decimal")) {
                     typeValue = parseDecimal(t);
+                } else if (t.startsWith("timestamp")) {
+                    typeValue = TypeValue.DATETIME;
+                } else if (t.startsWith("date")) {
+                    typeValue = TypeValue.DATE;
                 } else {
                     typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
                 }
@@ -261,9 +267,7 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE
-                || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
-                || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.BINARY;
     }
 
     public boolean isArray() {

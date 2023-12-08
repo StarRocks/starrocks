@@ -26,11 +26,13 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.hudi.reader.HudiScannerUtils.DATETIME_FORMATTER;
 import static com.starrocks.hudi.reader.HudiScannerUtils.TIMESTAMP_UNIT_MAPPING;
 
 public class HudiColumnValue implements ColumnValue {
@@ -158,5 +160,23 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public BigDecimal getDecimal() {
         return ((HiveDecimal) inspectObject()).bigDecimalValue();
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        // INT64 timestamp type
+        if (HudiScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
+            long datetime = ((LongWritable) fieldData).get();
+            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+            LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(datetime, timeUnit, true);
+            return localDateTime;
+        } else {
+            return LocalDateTime.parse(inspectObject().toString(), DATETIME_FORMATTER);
+        }
     }
 }
