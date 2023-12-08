@@ -10,9 +10,9 @@ Modifies an existing table, including:
 
 - [Rename table, partition, index](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
-- [Add/delete partitions and modify partition attributes](#modify-partition)
+- [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify bucketing method and the number of buckets](#modify-bucketing-method-and-the-number-of-buckets-from-v32)
-- [Modify columns (add/delete columns, change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
+- [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
 - [Modify table properties](#modify-table-properties)
@@ -30,22 +30,23 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
+`alter_clause` is classified into operations on: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap and compaction.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - comment: modifies the table comment (supported from **v3.1 onwards**).
-- swap: atomic exchange of two tables.
 - partition: modifies partition properties, drops a partition, or adds a partition.
-- schema change: adds, drops, or reorders columns, or modifies column type.
-- rollup: creates or drops a rollup index.
-- index: modifies index (only Bitmap index can be modified).
-- compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
+- bucket: modifies bucketing method and the number of buckets.
+- column: adds, drops, or reorders columns, or modifies column type.
+- rollup index: creates or drops a rollup index.
+- bitmap index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
+- compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
 :::note
 
-- Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
-- Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+- Operations on partition, column and rollup index cannot be performed in one ALTER TABLE statement.
+- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
+- Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
 :::
 
 ### Rename
@@ -183,8 +184,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 ### Modify bucketing method and the number of buckets (from v3.2)
 
-You can modify the bucketing method and the number of buckets for all partitions. Also you can modify the number of buckets for specified partitions.
-
 Syntax:
 
 ```SQL
@@ -192,17 +191,17 @@ ALTER TABLE [<db_name>.]<table_name>
 [ partition_names ]
 [ distribution_desc ]
 
+partition_names ::= 
+    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
+
 distribution_desc ::=
     DISTRIBUTED BY RANDOM [ BUCKETS <num> ] |
     DISTRIBUTED BY HASH ( <column_name> [, <column_name> ...] ) [ BUCKETS <num> ]
-
-partition_names ::= 
-    (PARTITION | PARTITIONS) ( <partition_name> [, <partition_name> ...] )
 ```
 
 Example:
 
-For example, the original table is a Duplicate Key table where Hash bucketing method is used and the number of buckets is automatically set by StarRocks.
+For example, the original table is a Duplicate Key table where hash bucketing is used and the number of buckets is automatically set by StarRocks.
 
 ```SQL
 CREATE TABLE IF NOT EXISTS details (
@@ -236,7 +235,12 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 ('2023-11-28 10:30:00', 1, 109, 66666, 1);
 ```
 
-#### Modify bucketing method
+#### Modify only the bucketing method
+
+> **NOTICE**
+>
+> - The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
+> - Although you only want to modify the bucketing method and do not want to change the number of buckets, you still need to specify the number of buckets in the command using `BUCKETS <num>`. If `BUCKETS <num>` is not unspecified, it means that the number of buckets is automatically determined by StarRocks.
 
 - The bucketing method is modified to random bucketing and the number of buckets is still automatically set by StarRocks.
 
@@ -244,36 +248,23 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- Modify the bucketing method to random bucketing and change the number of buckets to 10.
+- Modify the keys for hash bucketing to `user_id, event_time` from the `event_time, event_type`. And the number of buckets is still automatically set by StarRocks.
 
   ```SQL
-  ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ```
 
-#### Modify the key for hash bucketing
-
-Modify the keys for hash bucketing of all partitions to `user_id, event_time`.
-
-```SQL
-ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
-```
+#### Modify only the number of buckets
 
 > **NOTICE**
 >
-> Modifying the keys for hash bucketing is applied to all partitions in the table and cannot be applied to specific partitions only.
-
-#### Modify the number of buckets
+> Although you only want to modify the number of buckets, you still need to specify the bucketing method in the statement, for example, as in the example `HASH(user_id)`.
 
 - Modify the number of buckets for all partitions to 10.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
-
-  > **NOTICE**
-  >
-  > - Although this example doesn’t modify the bucketing method but only the number of buckets, it is still necessary to specify the bucketing method by using `HASH(user_id)` in the statement.
-  > - If `BUCKETS <num>` is not specified, it means that StarRocks automatically set the number of buckets.
 
 - Modify the number of buckets for specified partitions to 15.
 
@@ -284,6 +275,24 @@ ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   > **NOTE**
   >
   > Partition names can be viewed by executing `SHOW PARTITIONS FROM <table_name>;`.
+
+#### Modify both the bucketing method and the number of buckets
+
+> **NOTICE**
+>
+> The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
+
+- Modify the bucketing method from hash bucketing to random bucketing, and change the number of buckets to 10.
+
+   ```SQL
+   ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
+   ```
+
+- Modify the key for hash bucketing, and change the number of buckets to 10.
+
+  ```SQL
+  ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
+  ``
 
 ### Modify columns (add/delete columns, change the order of columns)
 
