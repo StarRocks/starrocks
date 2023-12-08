@@ -107,6 +107,19 @@ bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
     bool ret = true;
     auto now = time(nullptr);
 
+    auto mtime_or = FileSystem::Default()->get_file_modified_time(tablet_pk_path);
+    if (!mtime_or.ok()) {
+        return false;
+    }
+    auto mtime = *mtime_or;
+    if (now - mtime < config::lake_local_pk_index_unused_threshold_seconds) {
+        ret = false;
+    }
+    TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &ret);
+    if (!ret) {
+        return ret;
+    }
+
     auto st = FileSystem::Default()->iterate_dir2(tablet_pk_path, [&](DirEntry entry) {
         if (now - entry.mtime.value() < config::lake_local_pk_index_unused_threshold_seconds) {
             ret = false;
@@ -117,7 +130,7 @@ bool LocalPkIndexManager::need_evict_tablet(const std::string& tablet_pk_path) {
     if (!st.ok()) {
         return false;
     }
-    TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:2", &ret);
+    TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::evict:3", &ret);
     return ret;
 }
 
