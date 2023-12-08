@@ -4895,12 +4895,18 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
 Status PersistentIndex::major_compaction(Tablet* tablet) {
+    if (_cancel_major_compaction) {
+        return Status::InternalError("cancel major compaction");
+    }
     bool expect_running_state = false;
     if (!_major_compaction_running.compare_exchange_strong(expect_running_state, true)) {
         // already in compaction
         return Status::OK();
     }
-    DeferOp defer([&]() { _major_compaction_running.store(false); });
+    DeferOp defer([&]() { 
+        _major_compaction_running.store(false);
+        _cancel_major_compaction = false; 
+    });
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
@@ -4926,6 +4932,9 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
     {
         std::lock_guard lg(*tablet->updates()->get_index_lock());
+        if (_cancel_major_compaction) {
+            return Status::OK();
+        }
         PersistentIndexMetaPB index_meta;
         RETURN_IF_ERROR(
                 TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
@@ -5001,6 +5010,32 @@ double PersistentIndex::get_write_amp_score() const {
         return 0.0;
     } else {
         return _write_amp_score.load();
+    }
+}
+
+Status PersistentIndex::reset() {
+    std::unique_lock wrlock(_lock);
+    _cancel_major_compaction = true;
+
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
+    _l2_versions.clear();
+    _l2_vec.clear();
+    _has_l1 = false;
+    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
+    if (!st.ok()) {
+        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
+        return st.status();
+    }
+    _l0 = std::move(st).value();
+    
+    return Status::OK();
+}
+
+void PersistentIndex::reset_cancel_major_compaction() {
+    if (!_major_compaction_running.load(std::memory_order_relaxed)) {
+        _cancel_major_compaction = false;
     }
 }
 

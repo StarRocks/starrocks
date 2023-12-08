@@ -1414,4 +1414,20 @@ Status PrimaryIndex::major_compaction(Tablet* tablet) {
     }
 }
 
+Status PrimaryIndex::reset() {
+    if (_persistent_index != nullptr) {
+        return _persistent_index->reset();
+    } else {
+        _pkey_to_rssid_rowid.reset();
+        _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
+    }
+    return Status::OK();
+}
+
+void PrimaryIndex::reset_cancel_major_compaction() {
+    if (_persistent_index != nullptr) {
+        _persistent_index->reset_cancel_major_compaction();
+    }
+}
+
 } // namespace starrocks

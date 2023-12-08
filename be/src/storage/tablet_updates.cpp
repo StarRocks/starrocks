@@ -1937,7 +1937,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
-    auto st = index.load(&_tablet);
+    Status st;
+    bool rebuild_index = (version_info.rowsets.size() == 1);
+    // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
+    if (rebuild_index) {
+        st = index.reset();
+    } else {
+        st = index.load(&_tablet);
+    }
+    
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
@@ -1949,6 +1957,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         } else {
             manager->index_cache().release(index_entry);
         }
+        index.reset_cancel_major_compaction();
     });
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
@@ -2011,14 +2020,25 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
-        // replace will not grow hashtable, so don't need to check memory limit
-        st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
-        if (!st.ok()) {
-            _compaction_state.reset();
-            std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
-                                                  st.to_string(), debug_string());
-            failure_handler(msg);
-            return;
+        if (rebuild_index) {
+            st = index.insert(rssid, 0, *pk_col);
+            if (!st.ok()) {
+                _compaction_state.reset();
+                std::string msg = strings::Substitute("_apply_compaction_commit error: index isnert failed: $0 $1",
+                                                      st.to_string(), debug_string());
+                failure_handler(msg);
+                return;
+            }
+        } else {
+            // replace will not grow hashtable, so don't need to check memory limit
+            st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+            if (!st.ok()) {
+                _compaction_state.reset();
+                std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
+                                                      st.to_string(), debug_string());
+                failure_handler(msg);
+                return;
+            }
         }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
