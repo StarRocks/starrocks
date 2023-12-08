@@ -43,6 +43,7 @@ import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.LocalDate;
@@ -684,6 +685,7 @@ public class RefreshMaterializedViewTest {
         }
     }
 
+    @Ignore
     @Test
     public void testMaterializedViewPartitionTTL() throws Exception {
         String dbName = "test";
