@@ -266,6 +266,7 @@ private:
     }
 
     void _init() {
+        LOG(INFO) << "_rowset_meta_pb memory before clear:" << _rowset_meta_pb->SpaceUsedLong();
         if (_rowset_meta_pb->deprecated_rowset_id() > 0) {
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
@@ -282,10 +283,11 @@ private:
         }
         _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
 
+        // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();
-        RowsetMetaPB* meta_pb = new RowsetMetaPB();
-        *meta_pb = *_rowset_meta_pb;
-        _rowset_meta_pb = std::move(std::make_unique<RowsetMetaPB>(*meta_pb));
+        std::unique_ptr<RowsetMetaPB> ptr = std::make_unique<RowsetMetaPB>(*_rowset_meta_pb);
+        _rowset_meta_pb = std::move(ptr);
+        LOG(INFO) << "_rowset_meta_pb memory after clear:" << _rowset_meta_pb->SpaceUsedLong();
     }
 
     int64_t _calc_mem_usage() const {
