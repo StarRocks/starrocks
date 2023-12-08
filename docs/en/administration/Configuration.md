@@ -1713,7 +1713,7 @@ BE static parameters are as follows.
 
 - **Default**: 9070
 - **Unit**: N/A
-- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+- **Description**: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
 
 #### heartbeat_service_thread_count
 
