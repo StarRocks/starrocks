@@ -2282,7 +2282,8 @@ int64_t TabletUpdates::get_compaction_score() {
         // only 1 input and no delete, no need to do compaction
         return -1;
     }
-    return total_score;
+    // scale score to a reasonable range relative to the number of files * 10
+    return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
 }
 
 struct CompactionEntry {
