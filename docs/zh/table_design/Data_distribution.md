@@ -555,7 +555,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   :::warning
 
   - 如果需要启用按需动态增加分桶数量，您需要在建表的时候设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
-  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](https://github.com/StarRocks/starrocks/blob/6a0ea16ff3df1797b9627cb8e7f65d23884951b4/docs/zh/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
 
   :::
 
