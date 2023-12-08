@@ -226,6 +226,11 @@ public class AnalyzeMgr implements Writable {
         return basicStatsMetaMap;
     }
 
+    public long getExistUpdateRows(Long tableId) {
+        BasicStatsMeta existInfo =  basicStatsMetaMap.get(tableId);
+        return existInfo == null ? 0 : existInfo.getUpdateRows();
+    }
+
     public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
         histogramStatsMetaMap.put(
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
@@ -471,51 +476,25 @@ public class AnalyzeMgr implements Writable {
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
-            if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
-            }
-            if (basicStatsMeta != null) {
-                basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
-            }
+            long tableId = transactionState.getTableIdList().get(0);
+            long loadedRows = ((RLTaskTxnCommitAttachment) attachment).getLoadedRows();
+            updateBasicStatsMeta(db.getId(), tableId, loadedRows);
         } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
-            if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
-            }
-            if (basicStatsMeta != null) {
-                basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
-            }
+            long tableId = transactionState.getTableIdList().get(0);
+            long loadedRows = ((ManualLoadTxnCommitAttachment) attachment).getLoadedRows();
+            updateBasicStatsMeta(db.getId(), tableId, loadedRows);
         } else if (attachment instanceof LoadJobFinalOperation) {
             LoadJobFinalOperation loadJobFinalOperation = (LoadJobFinalOperation) attachment;
             loadJobFinalOperation.getLoadingStatus().travelTableCounters(
-                    kv -> {
-                        BasicStatsMeta basicStatsMeta =
-                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(kv.getKey());
-                        if (basicStatsMeta != null) {
-                            basicStatsMeta.increaseUpdateRows(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
-                        }
-                    }
-            );
+                    kv -> updateBasicStatsMeta(db.getId(), kv.getKey(), kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS)));
         } else if (attachment instanceof InsertTxnCommitAttachment) {
-            BasicStatsMeta basicStatsMeta = null;
-            if (!transactionState.getTableIdList().isEmpty()) {
-                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
-                        .get(transactionState.getTableIdList().get(0));
+            long tableId = transactionState.getTableIdList().get(0);
+            long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+            if (loadRows == 0) {
+                OlapTable table = (OlapTable) db.getTable(tableId);
+                loadRows = table != null ? table.getRowCount() : 0;
             }
-            if (basicStatsMeta != null) {
-                long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
-                if (loadRows == 0) {
-                    OlapTable table = (OlapTable) db.getTable(basicStatsMeta.getTableId());
-                    if (table != null) {
-                        basicStatsMeta.increaseUpdateRows(table.getRowCount());
-                    }
-                } else {
-                    basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
-                }
-            }
+            updateBasicStatsMeta(db.getId(), tableId, loadRows);
         }
     }
 
@@ -640,6 +619,19 @@ public class AnalyzeMgr implements Writable {
         for (int i = 0; i < histogramStatsMetaSize; ++i) {
             HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
             replayAddHistogramStatsMeta(histogramStatsMeta);
+        }
+    }
+
+    private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (basicStatsMeta == null) {
+            // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
+            BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    StatsConstants.buildInitStatsProp(), loadedRows);
+            GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+        } else {
+            basicStatsMeta.increaseUpdateRows(loadedRows);
         }
     }
 
