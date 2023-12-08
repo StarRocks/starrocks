@@ -58,6 +58,7 @@ On the instances used for the CN deployment, you need to check the following por
 - `8040`: CN HTTP server port (`be_http_port`)
 - `9050`: CN heartbeat service port (`heartbeat_service_port`)
 - `8060`: CN bRPC port (`brpc_port`)
+- `9070`: An extra agent service port for CN (BE in v3.0) in a shared-data cluster (`starlet_port`)
 
 Run the following commands on the CN instances to check whether these ports are occupied:
 
@@ -66,6 +67,7 @@ netstat -tunlp | grep 9060
 netstat -tunlp | grep 8040
 netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
+netstat -tunlp | grep 9070
 ```
 
 If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-3-optional-start-the-cn-service).
