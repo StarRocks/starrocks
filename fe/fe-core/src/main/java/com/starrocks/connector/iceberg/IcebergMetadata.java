@@ -628,6 +628,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
+        } finally {
+            icebergCatalog.clearCacheWithoutTable();
         }
     }
 
