@@ -274,7 +274,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema#loads).
+For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md#loads).
 
 > **NOTE**
 >
