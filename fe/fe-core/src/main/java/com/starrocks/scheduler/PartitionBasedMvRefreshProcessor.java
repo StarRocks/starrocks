@@ -353,14 +353,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             StatementPlanner.lock(dbs);
 
-<<<<<<< HEAD
-            insertStmt =
-                    analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
-=======
             insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView);
             // Must set execution id before StatementPlanner.plan
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
->>>>>>> f0e6aad756 ([Enhancement] [UT] Add PlannerDebugOptions to support debug options for query tests (#36475))
             execPlan = StatementPlanner.plan(insertStmt, ctx);
         } catch (Throwable e) {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);

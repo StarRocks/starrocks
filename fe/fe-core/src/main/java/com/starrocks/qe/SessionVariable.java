@@ -270,11 +270,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
-<<<<<<< HEAD
-=======
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
-    public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
->>>>>>> f0e6aad756 ([Enhancement] [UT] Add PlannerDebugOptions to support debug options for query tests (#36475))
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -982,15 +978,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
 
-<<<<<<< HEAD
-=======
     @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
     private String queryDebugOptions = "";
 
-    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
-    private long optimizerMaterializedViewTimeLimitMillis = 1000;
-
->>>>>>> f0e6aad756 ([Enhancement] [UT] Add PlannerDebugOptions to support debug options for query tests (#36475))
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
 
@@ -2054,8 +2044,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
     }
 
-<<<<<<< HEAD
-=======
     public QueryDebugOptions getQueryDebugOptions() {
         if (Strings.isNullOrEmpty(queryDebugOptions)) {
             return QueryDebugOptions.getInstance();
@@ -2075,15 +2063,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryDebugOptions = queryDebugOptions;
     }
 
-    public long getOptimizerMaterializedViewTimeLimitMillis() {
-        return optimizerMaterializedViewTimeLimitMillis;
-    }
-
-    public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
-        this.optimizerMaterializedViewTimeLimitMillis = millis;
-    }
-
->>>>>>> f0e6aad756 ([Enhancement] [UT] Add PlannerDebugOptions to support debug options for query tests (#36475))
     public boolean getEnableGroupbyUseOutputAlias() {
         return enableGroupbyUseOutputAlias;
     }
