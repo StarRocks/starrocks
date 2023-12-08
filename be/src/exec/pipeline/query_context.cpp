@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -35,7 +36,6 @@ namespace starrocks::pipeline {
 using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
-ConnectorScanOperatorMemShareArbitrator* create_connector_scan_operator_mem_share_arbitrator(int64_t query_mem_limit);
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
@@ -71,7 +71,9 @@ QueryContext::~QueryContext() noexcept {
     }
 
     // Make sure all bytes are released back to parent trackers.
-    _connector_scan_mem_tracker->release_without_root();
+    if (_connector_scan_mem_tracker != nullptr) {
+        _connector_scan_mem_tracker->release_without_root();
+    }
 }
 
 void QueryContext::count_down_fragments() {
@@ -154,7 +156,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
         }
         _connector_scan_operator_mem_share_arbitrator =
-                _object_pool.add(create_connector_scan_operator_mem_share_arbitrator(_static_query_mem_limit));
+                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
 
         {
             MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();

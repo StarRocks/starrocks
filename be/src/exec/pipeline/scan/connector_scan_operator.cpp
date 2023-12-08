@@ -26,10 +26,6 @@ namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
 
-ConnectorScanOperatorMemShareArbitrator* create_connector_scan_operator_mem_share_arbitrator(int64_t query_mem_limit) {
-    return new ConnectorScanOperatorMemShareArbitrator(query_mem_limit);
-}
-
 struct ConnectorScanOperatorIOTasksMemLimiter {
     mutable std::mutex lock;
 
