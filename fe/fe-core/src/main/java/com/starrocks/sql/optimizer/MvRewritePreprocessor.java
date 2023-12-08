@@ -100,10 +100,8 @@ public class MvRewritePreprocessor {
                 Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
                 prepareRelatedMVs(queryTables, validMVs);
             } catch (Exception e) {
-                // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
-                throw e;
+                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
             }
         }
     }
