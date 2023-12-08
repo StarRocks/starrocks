@@ -77,7 +77,6 @@ public class AlterResourceGroupStmt extends DdlStmt {
             if (changedProperties.getResourceGroupType() != null) {
                 throw new SemanticException("type of ResourceGroup is immutable");
             }
-            System.out.println("alter rg: " + changedProperties.getSpillMemLimitThreshold());
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&

@@ -163,7 +163,6 @@ public:
         if (bytes != 0) {
             for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
                 _all_trackers[i]->_consumption->add(-bytes);
-                // LOG(INFO) << "label: " << _label << " release_without_root: " << bytes << ", tracker: " << _all_trackers[i]->debug_string();
             }
         }
     }

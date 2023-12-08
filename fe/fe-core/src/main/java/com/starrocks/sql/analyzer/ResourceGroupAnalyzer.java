@@ -235,7 +235,7 @@ public class ResourceGroupAnalyzer {
                     spillMemLimitThreshold = Double.parseDouble(value);
                 }
                 if (spillMemLimitThreshold <= 0.0 || spillMemLimitThreshold >= 1.0) {
-                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
+                    throw new SemanticException("spill_mem_limit_threshold should range from 0.00(exclude) to 1.00(exclude)");
                 }
                 resourceGroup.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 continue;

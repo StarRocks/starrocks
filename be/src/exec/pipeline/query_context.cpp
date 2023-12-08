@@ -132,7 +132,6 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (wg != nullptr && big_query_mem_limit > 0 &&
             (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
-            // @TODO big_query_mem_limit may smaller than spill_mem_limit
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
             _mem_tracker->set_reserve_limit(spill_mem_limit);
