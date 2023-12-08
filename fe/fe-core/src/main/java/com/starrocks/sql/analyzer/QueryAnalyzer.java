@@ -47,11 +47,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -199,15 +200,20 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            if (!(resolvedRelation instanceof ViewRelation)) {
-                new AstTraverser<Void, Void>() {
-                    @Override
-                    public Void visitTable(TableRelation tableRelation, Void context) {
-                        generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                        return null;
-                    }
-                }.visit(resolvedRelation);
-            }
+            new AstVisitor<Void, Void>() {
+                @Override
+                public Void visitTable(TableRelation tableRelation, Void context) {
+                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                    return null;
+                }
+
+                @Override
+                public Void visitJoin(JoinRelation joinRelation, Void context) {
+                    visit(joinRelation.getLeft());
+                    visit(joinRelation.getRight());
+                    return null;
+                }
+            }.visit(resolvedRelation);
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
@@ -247,7 +253,8 @@ public class QueryAnalyzer {
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
                     Optional<CTERelation> withQuery = scope.getCteQueries(tableName.getTbl());
                     if (withQuery.isPresent()) {
-                        CTERelation cteRelation = withQuery.get();
+                        CTERelation withRelation = withQuery.get();
+                        withRelation.addTableRef();
                         RelationFields withRelationFields = withQuery.get().getRelationFields();
                         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
 
@@ -264,9 +271,9 @@ public class QueryAnalyzer {
                         // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                         //                "having v1 in (select v3 from w where v2 = 2)
                         // cte used in outer query and sub-query can't use same relation-id and field
-                        CTERelation newCteRelation = new CTERelation(cteRelation.getCteMouldId(), tableName.getTbl(),
-                                cteRelation.getColumnOutputNames(),
-                                cteRelation.getCteQueryStatement());
+                        CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
+                                withRelation.getColumnOutputNames(),
+                                withRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
@@ -607,6 +614,25 @@ public class QueryAnalyzer {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
+            } else if (JoinOperator.HINT_SKEW.equals(join.getJoinHint())) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
+                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
+                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
+                }
+                if (join.getJoinOp().isRightJoin()) {
+                    throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
+                }
+                if (join.getSkewColumn() != null) {
+                    if (!(join.getSkewColumn() instanceof SlotRef)) {
+                        throw new SemanticException("Skew join column must be a column reference");
+                    }
+                    analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                }
+                if (join.getSkewValues() != null) {
+                    if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
+                        throw new SemanticException("skew join values must be constant");
+                    }
+                }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
@@ -918,8 +944,9 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-            Database database = metadataMgr.getDb(catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(database, dbName);
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+            Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
@@ -931,14 +958,14 @@ public class QueryAnalyzer {
                     Preconditions.checkState(mvTable instanceof OlapTable);
                     try {
                         // Add read lock to avoid concurrent problems.
-                        database.readLock();
+                        locker.lockDatabase(db, LockType.READ);
                         OlapTable mvOlapTable = new OlapTable();
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                         table = mvOlapTable;
                     } finally {
-                        database.readUnlock();
+                        locker.unLockDatabase(db, LockType.READ);
                     }
                 }
             } else {
@@ -954,6 +981,11 @@ public class QueryAnalyzer {
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+
+            if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
+                throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

@@ -75,6 +75,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
@@ -141,6 +142,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -181,6 +183,8 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -189,6 +193,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
@@ -233,6 +238,7 @@ import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -259,6 +265,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -288,6 +295,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -337,6 +345,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
+
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
@@ -372,6 +382,8 @@ public class GlobalStateMgr {
      * Alter Job Manager
      */
     private final AlterJobMgr alterJobMgr;
+
+    private final PortConnectivityChecker portConnectivityChecker;
 
     private Load load;
     private LoadMgr loadMgr;
@@ -471,6 +483,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
@@ -541,6 +554,7 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+    private MVActiveChecker mvActiveChecker;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
@@ -572,16 +586,16 @@ public class GlobalStateMgr {
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
-                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
         } else {
             for (Long id : systemInfoService.getBackendIds(false)) {
                 Backend backend = systemInfoService.getBackend(id);
-                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
             }
         }
 
@@ -652,13 +666,14 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.starOSAgent = new StarOSAgent();
         }
 
         // System Manager
         this.nodeMgr = new NodeMgr();
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+        this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr();
@@ -730,6 +745,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
@@ -762,8 +778,9 @@ public class GlobalStateMgr {
         this.pipeManager = new PipeManager();
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
+        this.mvActiveChecker = new MVActiveChecker();
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
@@ -902,6 +919,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static StarMgrMetaSyncer getCurrentStarMgrMetaSyncer() {
+        return getCurrentState().getStarMgrMetaSyncer();
+    }
+
     public static WarehouseManager getCurrentWarehouseMgr() {
         return getCurrentState().getWarehouseMgr();
     }
@@ -961,6 +982,10 @@ public class GlobalStateMgr {
         return starOSAgent;
     }
 
+    public StarMgrMetaSyncer getStarMgrMetaSyncer() {
+        return starMgrMetaSyncer;
+    }
+
     public CatalogMgr getCatalogMgr() {
         return catalogMgr;
     }
@@ -1017,6 +1042,10 @@ public class GlobalStateMgr {
 
     public PipeListener getPipeListener() {
         return pipeListener;
+    }
+
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1114,7 +1143,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
+        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1320,7 +1349,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1385,12 +1414,13 @@ public class GlobalStateMgr {
         mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1403,6 +1433,7 @@ public class GlobalStateMgr {
 
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
+        portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
@@ -1417,12 +1448,14 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
 
         slotManager.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -2290,6 +2323,7 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
+            boolean readSucc = false;
             try {
                 entity = cursor.next();
 
@@ -2297,6 +2331,8 @@ public class GlobalStateMgr {
                 if (entity == null) {
                     break;
                 }
+
+                readSucc = true;
 
                 // apply
                 EditLog.loadJournal(this, entity);
@@ -2306,7 +2342,9 @@ public class GlobalStateMgr {
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
-                    cursor.skipNext();
+                    if (!readSucc) {
+                        cursor.skipNext();
+                    }
                     continue;
                 }
                 // handled in outer loop
@@ -2745,10 +2783,10 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // show lightSchemaChange only when it is set true
-                if (olapTable.getUseLightSchemaChange()) {
-                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
-                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                // show fastSchemaEvolution only when it is set true
+                if (olapTable.getUseFastSchemaEvolution()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
+                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
                 // storage media
@@ -2791,6 +2829,18 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
+                }
+
+                // store type
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+                    if (olapTable.storageType() != null &&
+                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+                                .append("\" = \"");
+
+                        sb.append(olapTable.storageType()).append("\"");
+                    }
                 }
             }
 
@@ -3505,8 +3555,12 @@ public class GlobalStateMgr {
         localMetastore.replayRenamePartition(tableInfo);
     }
 
+    public void replayRenameColumn(ColumnRenameInfo columnRenameInfo) throws DdlException {
+        localMetastore.replayRenameColumn(columnRenameInfo);
+    }
+
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
-        throw new DdlException("not implemented");
+        localMetastore.renameColumn(db, table, renameClause);
     }
 
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
@@ -3636,7 +3690,7 @@ public class GlobalStateMgr {
                     ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    ctx.getQualifiedUser(), dbName);
+                    ctx.getCurrentUserIdentity().getUser(), dbName);
         }
 
         ctx.setDatabase(dbName);
@@ -3776,22 +3830,23 @@ public class GlobalStateMgr {
         if (db == null) {
             throw new StarRocksConnectorException("db: " + tableName.getDb() + " not exists");
         }
-        HiveMetaStoreTable hmsTable;
+
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi external table");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
             }
-            hmsTable = (HiveMetaStoreTable) table;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            catalogName = hmsTable.getCatalogName();
+            Preconditions.checkState(table instanceof HiveMetaStoreTable);
+            catalogName = ((HiveMetaStoreTable) table).getCatalogName();
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
@@ -3816,6 +3871,7 @@ public class GlobalStateMgr {
         String dumpFilePath;
         Map<Long, Database> lockedDbMap = Maps.newTreeMap();
         tryLock(true);
+        Locker locker = new Locker();
         try {
             // sort all dbs
             for (long dbId : getDbIds()) {
@@ -3826,7 +3882,7 @@ public class GlobalStateMgr {
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -3842,7 +3898,7 @@ public class GlobalStateMgr {
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             unlock();
         }
@@ -3853,9 +3909,9 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds, boolean isOptimize) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds, isOptimize);
+                tmpPartitionIds, distributionDesc);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

@@ -58,6 +58,7 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -162,7 +163,7 @@ public class PrivilegeStmtAnalyzer {
                 UserAuthenticationInfo info = provider.validAuthenticationInfo(
                         userIdentity, new String(password, StandardCharsets.UTF_8), stmt.getAuthStringUnResolved());
                 info.setAuthPlugin(authPluginUsing);
-                info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+                info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
                 if (stmt instanceof AlterUserStmt) {
                     session.getGlobalStateMgr().getAuthenticationMgr().checkPasswordReuse(
@@ -182,7 +183,7 @@ public class PrivilegeStmtAnalyzer {
 
         private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
             return Config.authorization_enable_admin_user_protection &&
-                    userIdentity.getQualifiedUser().equalsIgnoreCase("admin") &&
+                    userIdentity.getUser().equalsIgnoreCase("admin") &&
                     !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
         }
 
@@ -290,14 +291,17 @@ public class PrivilegeStmtAnalyzer {
                         }
                         objectList.add(authorizationManager.generateObject(objectType,
                                 Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1))));
-                    } else if (ObjectType.VIEW.equals(objectType) || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+                    } else if (ObjectType.VIEW.equals(objectType)
+                            || ObjectType.MATERIALIZED_VIEW.equals(objectType)
+                            || ObjectType.PIPE.equals(objectType)) {
                         if (tokens.size() != 2) {
                             throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
                         }
                         objectList.add(authorizationManager.generateObject(objectType, tokens));
                     } else if (ObjectType.DATABASE.equals(objectType)) {
                         if (tokens.size() != 1) {
-                            throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
                         }
                         objectList.add(authorizationManager.generateObject(objectType,
                                 Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0))));
@@ -376,11 +380,29 @@ public class PrivilegeStmtAnalyzer {
                                 tableName = new TableName("", tokens.get(0));
                                 MetaUtils.normalizationTableName(session, tableName);
                             } else {
-                                throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
+                                throw new SemanticException(
+                                        "Invalid grant statement with error privilege object " + tokens);
                             }
 
                             objectList.add(authorizationManager.generateObject(objectType,
                                     Lists.newArrayList(tableName.getDb(), tableName.getTbl())));
+                        }
+                    } else if (ObjectType.PIPE.equals(objectType)) {
+                        Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                            PipeName pipeName;
+                            if (tokens.size() == 2) {
+                                pipeName = new PipeName(tokens.get(0), tokens.get(1));
+                            } else if (tokens.size() == 1) {
+                                pipeName = new PipeName("", tokens.get(0));
+                                PipeAnalyzer.analyzePipeName(pipeName, session);
+                            } else {
+                                throw new SemanticException(
+                                        "Invalid grant statement with error privilege object " + tokens);
+                            }
+
+                            objectList.add(authorizationManager.generateObject(objectType,
+                                    Lists.newArrayList(pipeName.getDbName(), pipeName.getPipeName())));
                         }
                     } else if (ObjectType.DATABASE.equals(objectType)) {
                         Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);

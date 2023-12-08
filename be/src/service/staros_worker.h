@@ -110,6 +110,7 @@ private:
 extern std::shared_ptr<StarOSWorker> g_worker;
 void init_staros_worker();
 void shutdown_staros_worker();
+void update_staros_starcache();
 
 } // namespace starrocks
 #endif // USE_STAROS

@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
@@ -86,7 +87,8 @@ public class ExpressionStatisticCalculator {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getTypeSize(), 1);
             } else if (operator.getType().isStringType()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
+                        operator.toString().length(), 1);
             } else {
                 return ColumnStatistic.unknown();
             }
@@ -106,8 +108,13 @@ public class ExpressionStatisticCalculator {
             // 2. use sum of then clause and else clause's distinct values as column distinctValues
             double distinctValues = childrenColumnStatistics.stream().mapToDouble(
                     ColumnStatistic::getDistinctValuesCount).sum();
-            return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                    caseWhenOperator.getType().getTypeSize(), distinctValues);
+            return ColumnStatistic.builder()
+                    .setMinValue(Double.NEGATIVE_INFINITY)
+                    .setMaxValue(Double.POSITIVE_INFINITY)
+                    .setNullsFraction(0)
+                    .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .build();
         }
 
         @Override
@@ -137,20 +144,33 @@ public class ExpressionStatisticCalculator {
                     min = ConstantOperator.createDatetime(
                             Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
-                    max = max.castTo(cast.getType());
-                    min = min.castTo(cast.getType());
+                    Optional<ConstantOperator> maxRes;
+                    Optional<ConstantOperator> minRes;
+                    maxRes = max.castTo(cast.getType());
+                    minRes = max.castTo(cast.getType());
+                    if (maxRes.isPresent() && minRes.isPresent()) {
+                        max = maxRes.get();
+                        min = minRes.get();
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
                 }
             } catch (Exception e) {
-                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min +
-                        ", to type: " + cast.getType());
+                LOG.debug("expression statistic compute cast failed: max value: {}, min value: {}, to type {}",
+                        max, min, cast.getType());
                 return childStatistic;
             }
 
             double maxValue = Utils.getLongFromDateTime(max.getDatetime());
             double minValue = Utils.getLongFromDateTime(min.getDatetime());
 
-            return new ColumnStatistic(minValue, maxValue, childStatistic.getNullsFraction(),
-                    childStatistic.getAverageRowSize(), childStatistic.getDistinctValuesCount());
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(childStatistic.getNullsFraction())
+                    .setAverageRowSize(cast.getType().getTypeSize())
+                    .setDistinctValuesCount(childStatistic.getDistinctValuesCount())
+                    .build();
         }
 
         @Override
@@ -224,7 +244,13 @@ public class ExpressionStatisticCalculator {
                 default:
                     return ColumnStatistic.unknown();
             }
-            return new ColumnStatistic(minValue, maxValue, 0, callOperator.getType().getTypeSize(), distinctValue);
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(0)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValue)
+                    .build();
         }
 
         private ColumnStatistic unaryExpressionCalculate(CallOperator callOperator, ColumnStatistic columnStatistic) {
@@ -442,6 +468,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.ROUND:
                 case FunctionSet.DROUND:
                 case FunctionSet.TRUNCATE:
+                case FunctionSet.UPPER:
                     // Just use the input's statistics as output's statistics
                     break;
                 case FunctionSet.TO_BITMAP:
@@ -457,10 +484,17 @@ public class ExpressionStatisticCalculator {
                     || callOperator.getType().isDateType() || callOperator.getType().isBitmapType()) {
                 averageRowSize = callOperator.getType().getTypeSize();
             } else {
-                averageRowSize = columnStatistic.getAverageRowSize();
+                averageRowSize = columnStatistic.isUnknown() ? callOperator.getType().getTypeSize() :
+                        columnStatistic.getAverageRowSize();
             }
-            return new ColumnStatistic(minValue, maxValue, columnStatistic.getNullsFraction(), averageRowSize,
-                    distinctValue);
+
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(columnStatistic.getNullsFraction())
+                    .setAverageRowSize(averageRowSize)
+                    .setDistinctValuesCount(distinctValue)
+                    .build();
         }
 
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
@@ -558,8 +592,13 @@ public class ExpressionStatisticCalculator {
                 default:
                     return ColumnStatistic.unknown();
             }
-
-            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(averageRowSize)
+                    .setDistinctValuesCount(distinctValues)
+                    .build();
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,

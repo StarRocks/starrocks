@@ -32,20 +32,8 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiPartitionKey;
-import com.starrocks.catalog.IcebergPartitionKey;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.JDBCPartitionKey;
-import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.NullablePartitionKey;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonPartitionKey;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -53,21 +41,30 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -85,9 +82,17 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
+
+    public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
+    }
+
+    public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
+                                                  Table.TableType tableType) throws AnalysisException {
+        return ConnectorPartitionTraits.build(tableType).createPartitionKey(values, types);
     }
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
@@ -95,49 +100,7 @@ public class PartitionUtil {
         Preconditions.checkState(values.size() == columns.size(),
                 "columns size is %s, but values size is %s", columns.size(), values.size());
 
-        PartitionKey partitionKey = null;
-        switch (tableType) {
-            case HIVE:
-                partitionKey = new HivePartitionKey();
-                break;
-            case HUDI:
-                partitionKey = new HudiPartitionKey();
-                break;
-            case ICEBERG:
-                partitionKey = new IcebergPartitionKey();
-                break;
-            case DELTALAKE:
-                partitionKey = new DeltaLakePartitionKey();
-                break;
-            case JDBC:
-                partitionKey = new JDBCPartitionKey();
-                break;
-            case PAIMON:
-                partitionKey = new PaimonPartitionKey();
-                break;
-            default:
-                Preconditions.checkState(false, "Do not support create partition key for " +
-                        "table type %s", tableType);
-        }
-
-        // change string value to LiteralExpr,
-        for (int i = 0; i < values.size(); i++) {
-            String rawValue = values.get(i);
-            Type type = columns.get(i).getType();
-            LiteralExpr exprValue;
-            // rawValue could be null for delta table
-            if (rawValue == null) {
-                rawValue = "null";
-            }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
-                partitionKey.setNullPartitionValue(rawValue);
-                exprValue = NullLiteral.create(type);
-            } else {
-                exprValue = LiteralExpr.create(rawValue, type);
-            }
-            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
-        }
-        return partitionKey;
+        return createPartitionKeyWithType(values, columns.stream().map(Column::getType).collect(Collectors.toList()), tableType);
     }
 
     // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
@@ -238,35 +201,7 @@ public class PartitionUtil {
     }
 
     public static List<String> getPartitionNames(Table table) {
-        if (table.isUnPartitioned()) {
-            return Lists.newArrayList(table.getName());
-        }
-        List<String> partitionNames = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
-        } else if (table.isPaimonTable()) {
-            PaimonTable paimonTable = (PaimonTable) table;
-            if (paimonTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(paimonTable.getTableName());
-            }
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
-        } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
-        }
-        return partitionNames;
+        return ConnectorPartitionTraits.build(table).getPartitionNames();
     }
 
     // use partitionValues to filter partitionNames
@@ -293,24 +228,7 @@ public class PartitionUtil {
     }
 
     public static List<Column> getPartitionColumns(Table table) {
-        List<Column> partitionColumns = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            partitionColumns = hmsTable.getPartitionColumns();
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            partitionColumns = icebergTable.getPartitionColumns();
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitionColumns = jdbcTable.getPartitionColumns();
-        } else if (table.isPaimonTable()) {
-            PaimonTable paimonTable = (PaimonTable) table;
-            partitionColumns = paimonTable.getPartitionColumns();
-        } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
-        }
-        return partitionColumns;
+        return ConnectorPartitionTraits.build(table).getPartitionColumns();
     }
 
     // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
@@ -332,27 +250,14 @@ public class PartitionUtil {
      * @param table : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
      */
-    public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn)
+    public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
             throws UserException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable() ||
-                table.isPaimonTable()) {
-            return PartitionUtil.getRangePartitionMapOfExternalTable(table, partitionColumn, getPartitionNames(table));
-        } else {
-            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-        }
+        return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
 
     public static Map<String, List<List<String>>> getPartitionList(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getListPartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
-            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames(table));
-        } else {
-            throw new DmlException("Can not get partition list from table with type : %s", table.getType());
-        }
+        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumn);
     }
 
     // check the partitionColumn exist in the partitionColumns
@@ -385,26 +290,7 @@ public class PartitionUtil {
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
-        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
-        List<String> partitionNames = getPartitionNames(table);
-
-        List<PartitionInfo> partitions;
-        if (table.isHiveTable()) {
-            HiveTable hiveTable = (HiveTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), table, partitionNames);
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(jdbcTable.getCatalogName(), table, partitionNames);
-        } else {
-            LOG.warn("Only support get partition for hive table and jdbc table type");
-            return null;
-        }
-        for (int index = 0; index < partitionNames.size(); ++index) {
-            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
-        }
-        return partitionNameWithPartition;
+        return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
     }
 
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
@@ -413,12 +299,22 @@ public class PartitionUtil {
     // it needs to generate a legal partition name for mv like 'p20230101' when mv
     // based on partitioned external table.
     public static Set<String> getMVPartitionName(Table table, Column partitionColumn,
-                                                 List<String> partitionNames, boolean isListPartition)
+                                                 List<String> partitionNames,
+                                                 boolean isListPartition,
+                                                 Expr partitionExpr)
             throws AnalysisException {
         if (isListPartition) {
             return Sets.newHashSet(getMVPartitionNameWithList(table, partitionColumn, partitionNames).keySet());
         } else {
-            return Sets.newHashSet(getRangePartitionMapOfExternalTable(table, partitionColumn, partitionNames).keySet());
+            if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
+                return Sets.newHashSet(getRangePartitionMapOfExternalTable(
+                        table, partitionColumn, partitionNames, partitionExpr).keySet());
+            } else if (table.isJDBCTable()) {
+                return Sets.newHashSet(PartitionUtil.getRangePartitionMapOfJDBCTable(
+                        table, partitionColumn, partitionNames, partitionExpr).keySet());
+            } else {
+                throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+            }
         }
     }
 
@@ -439,6 +335,7 @@ public class PartitionUtil {
         Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
+                partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
                 PartitionKey partitionKey = createPartitionKey(
                         ImmutableList.of(partitionName),
                         ImmutableList.of(partitionColumn),
@@ -462,22 +359,36 @@ public class PartitionUtil {
         return mvPartitionKeySetMap;
     }
 
+    private static String getPartitionNameForJDBCTable(Column partitionColumn, String partitionName) {
+        if (partitionName.equalsIgnoreCase(MYSQL_PARTITION_MAXVALUE)) {
+            // For the special handling of maxvalue, take the maximum value for int type and 9999-12-31 for date,
+            // For varchar and char, due to the need to convert them to time partitions using str2date, they are also taken as 9999-12-31
+            if (partitionColumn.getPrimitiveType().isIntegerType()) {
+                partitionName = IntLiteral.createMaxValue(partitionColumn.getType()).getStringValue();
+            } else {
+                partitionName = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+            }
+        }
+        return partitionName;
+    }
+
     /**
-     *  Map partition values to partition ranges, eg:
-     *  [NULL,1992-01-01,1992-01-02,1992-01-03]
-     *                  ||
-     *                  \/
-     *  [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
-     *
-     *  NOTE:
-     *  External tables may contain multi partition columns, so the same mv partition name may contain multi external
-     *  table partitions. eg:
-     *   partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
-     *   partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     * Map partition values to partition ranges, eg:
+     * [NULL,1992-01-01,1992-01-02,1992-01-03]
+     * ||
+     * \/
+     * [0000-01-01,1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 1993-01-04)
+     * <p>
+     * NOTE:
+     * External tables may contain multi partition columns, so the same mv partition name may contain multi external
+     * table partitions. eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
     public static Map<String, Range<PartitionKey>> getRangePartitionMapOfExternalTable(Table table,
                                                                                        Column partitionColumn,
-                                                                                       List<String> partitionNames)
+                                                                                       List<String> partitionNames,
+                                                                                       Expr partitionExpr)
             throws AnalysisException {
         List<Column> partitionColumns = getPartitionColumns(table);
 
@@ -485,16 +396,11 @@ public class PartitionUtil {
         int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
-        if (table.isJDBCTable()) {
-            for (String partitionName : partitionNames) {
-                putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
-            }
-        } else {
-            for (String partitionName : partitionNames) {
-                List<String> partitionNameValues = toPartitionValues(partitionName);
-                putMvPartitionKeyIntoMap(table, partitionColumns.get(partitionColumnIndex), partitionKeys,
-                        mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
-            }
+
+        for (String partitionName : partitionNames) {
+            List<String> partitionNameValues = toPartitionValues(partitionName);
+            putMvPartitionKeyIntoMap(table, partitionColumns.get(partitionColumnIndex), partitionKeys,
+                    mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
         }
 
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
@@ -504,56 +410,206 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
 
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (entry.getValue().getKeys().get(0) instanceof StringLiteral) {
-                if (index == 0) {
-                    lastPartitionKey = entry.getValue();
-                    PartitionKey startPartitionKey = new PartitionKey();
-                    startPartitionKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MINVALUE,
-                            partitionColumn.getType()),
-                            partitionColumn.getPrimitiveType());
-                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(startPartitionKey, entry.getValue()));
-                    ++index;
-                    continue;
-                }
-                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-                if (entry.getValue().getKeys().get(0).getStringValue().equals(FeConstants.MYSQL_PARTITION_MAXVALUE)) {
-                    PartitionKey endKey = new PartitionKey();
-                    endKey.pushColumn(StringLiteral.create(FeConstants.PARTITION_USE_STR2DATE_MAXVALUE,
-                            partitionColumn.getType()),
-                            partitionColumn.getPrimitiveType());
-                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, endKey));
-                } else {
-                    mvPartitionRangeMap.put(entry.getKey(), Range.closedOpen(lastPartitionKey, entry.getValue()));
-                }
-                lastPartitionKey = entry.getValue();
-            } else {
-                if (index == 0) {
-                    lastPartitionName = entry.getKey();
-                    lastPartitionKey = entry.getValue();
-                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                        // If partition key is NULL literal, rewrite it to min value.
-                        lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
-                    }
-                    ++index;
-                    continue;
-                }
-                Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-                mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
+            if (index == 0) {
                 lastPartitionName = entry.getKey();
                 lastPartitionKey = entry.getValue();
+                if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                    // If partition key is NULL literal, rewrite it to min value.
+                    lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
+                            ImmutableList.of(partitionColumn.getPrimitiveType()), false);
+                }
+                ++index;
+                continue;
             }
+            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+            PartitionKey upperBound = entry.getValue();
+            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
+            lastPartitionName = entry.getKey();
+            lastPartitionKey = upperBound;
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
-            endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1),
-                    partitionColumn.getPrimitiveType());
+            if (!isConvertToDate) {
+                endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1), partitionColumn.getPrimitiveType());
+            } else {
+                PartitionKey lastDate = convertToDate(lastPartitionKey);
+                String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
+                DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
+                DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1);
+                LiteralExpr nextStringDate = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
+                endKey.pushColumn(nextStringDate, partitionColumn.getPrimitiveType());
+            }
 
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
+            putRangeToMvPartitionRangeMap(mvPartitionRangeMap, lastPartitionName, lastPartitionKey, endKey);
         }
         return mvPartitionRangeMap;
+    }
+
+    /**
+     * Map partition values to partition ranges, eg:
+     * [1992-01-01,1992-01-02,1992-01-03]
+     * ||
+     * \/
+     * (0000-01-01, 1992-01-01],(1992-01-01, 1992-01-02], (1992-01-02, 1992-01-03]
+     * <p>
+     * NOTE:
+     * External tables may contain multi partition columns, so the same mv partition name may contain multi external
+     * table partitions. eg:
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     */
+    public static Map<String, Range<PartitionKey>> getRangePartitionMapOfJDBCTable(Table table,
+                                                                                   Column partitionColumn,
+                                                                                   List<String> partitionNames,
+                                                                                   Expr partitionExpr)
+            throws AnalysisException {
+
+        // Determine if it is the str2date function
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
+        List<PartitionKey> partitionKeys = new ArrayList<>();
+        Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
+        for (String partitionName : partitionNames) {
+            partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
+            putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
+        }
+
+        LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        PartitionKey lastPartitionKey = null;
+        String partitionName = null;
+
+        Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
+            partitionName = entry.getKey();
+            if (lastPartitionKey == null) {
+                lastPartitionKey = entry.getValue();
+                if (!lastPartitionKey.getKeys().get(0).isMinValue()) {
+                    // If partition key is not min value, rewrite it to min value.
+                    lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
+                            ImmutableList.of(isConvertToDate ?
+                                    PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
+                } else {
+                    if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                        // If partition key is NULL literal, rewrite it to min value.
+                        lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
+                                ImmutableList.of(isConvertToDate ?
+                                        PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
+                    } else {
+                        lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+                    }
+                    continue;
+                }
+            }
+            PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+            putRangeToMvPartitionRangeMapForJDBCTable(mvPartitionRangeMap, partitionName, lastPartitionKey, upperBound);
+            lastPartitionKey = upperBound;
+        }
+
+        return mvPartitionRangeMap;
+    }
+
+    private static void putRangeToMvPartitionRangeMap(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
+                                                      String lastPartitionName,
+                                                      PartitionKey lastPartitionKey,
+                                                      PartitionKey upperBound) {
+        Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+        mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
+    }
+
+    private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
+                                                      String partitionName,
+                                                      PartitionKey lastPartitionKey,
+                                                      PartitionKey upperBound) {
+        Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionName));
+        mvPartitionRangeMap.put(partitionName, Range.openClosed(lastPartitionKey, upperBound));
+    }
+    /**
+     * If base table column type is string but partition type is date, we need to convert the string to date
+     * @param partitionExpr   PARTITION BY expr
+     * @param partitionColumn PARTITION BY referenced column
+     * @return
+     */
+    public static boolean isConvertToDate(Expr partitionExpr, Column partitionColumn) {
+        if (!(partitionExpr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        return isConvertToDate(partitionExpr.getType(), partitionColumn.getType());
+    }
+
+    /**
+     * Check whether convert filter to date type.
+     * @param partitionType     : Partition defined type.
+     * @param filterType        : Filter type from query.
+     * @return: true if convert is needed, false if not.
+     */
+    public static boolean isConvertToDate(Type partitionType, Type filterType) {
+        if (partitionType == null || filterType == null) {
+            return false;
+        }
+
+        PrimitiveType filterPrimitiveType = filterType.getPrimitiveType();
+        PrimitiveType partitionPrimitiveType = partitionType.getPrimitiveType();
+        return partitionPrimitiveType.isDateType() && !filterPrimitiveType.isDateType();
+    }
+
+    /**
+     * Check whether convert partition column filter to date type.
+     * @param partitionColumn           : Partition column which is defined in adding partitions.
+     * @param partitionColumnFilter     : Partition column filter from query.
+     * @return : true if partition column is defined as date type but filter is not date type.
+     */
+    public static boolean isConvertToDate(Column partitionColumn, PartitionColumnFilter partitionColumnFilter) {
+        if (partitionColumnFilter == null || partitionColumn == null) {
+            return false;
+        }
+        Type filterType = partitionColumnFilter.getFilterType();
+        if (filterType == null) {
+            return false;
+        }
+        return isConvertToDate(partitionColumn.getType(), filterType);
+    }
+
+    /**
+     * Convert a string literal expr to a date literal.
+     * @param stringLiteral: input string literal to convert.
+     * @return             : date literal if string literal can be converted, otherwise throw SemanticException.
+     */
+    public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
+        if (stringLiteral == null) {
+            return null;
+        }
+        try {
+            String dateLiteral = stringLiteral.getStringValue();
+            LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
+            return new DateLiteral(dateValue, Type.DATE);
+        } catch (Exception e) {
+            throw new SemanticException("create string to date literal failed:" +  stringLiteral.getStringValue(), e);
+        }
+    }
+
+    /**
+     * Convert a string type partition key to date type partition key.
+     * @param partitionKey : input string partition key to convert.
+     * @return             : partition key with date type if input can be converted.
+     */
+    private static PartitionKey convertToDate(PartitionKey partitionKey) throws SemanticException {
+        PartitionKey newPartitionKey = new PartitionKey();
+        try {
+            DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
+            return newPartitionKey;
+        } catch (SemanticException e) {
+            SemanticException semanticException =
+                    new SemanticException("convert string %s to date partition key failed:",
+                            partitionKey.getKeys().get(0).getStringValue(), e);
+            semanticException.addSuppressed(e);
+            throw semanticException;
+        }
     }
 
     private static void putMvPartitionKeyIntoMap(Table table, Column partitionColumn, List<PartitionKey> partitionKeys,
@@ -604,11 +660,18 @@ public class PartitionUtil {
         return partitionKeyList;
     }
 
+    // return partition name in forms of `col1=value1/col2=value2`
+    // if the partition field is explicitly named, use this name without change
+    // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
+    // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
-        int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < filePartitionFields; ++index) {
+        for (int index = 0; index < partition.size(); ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
+            // skip inactive partition field
+            if (partitionField.transform().isVoid()) {
+                continue;
+            }
             sb.append(partitionField.name());
             sb.append("=");
             String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
@@ -616,7 +679,37 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
-        return sb.substring(0, sb.length() - 1);
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
+    }
+
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+
+            // currently starrocks date literal only support local datetime
+            org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
+            if (partitionField.transform().isIdentity() && icebergType.equals(Types.TimestampType.withZone())) {
+                value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
+            }
+
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
     }
 
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
@@ -661,15 +754,16 @@ public class PartitionUtil {
 
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
-                                                      Map<String, Range<PartitionKey>> mvPartitionMap) {
+                                                      Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                      PartitionDiffer differ) {
         if (partitionExpr instanceof SlotRef) {
-            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
+            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
                     functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
-                        mvPartitionMap, functionCallExpr, partitionColumn.getPrimitiveType(), null);
+                        mvPartitionMap, functionCallExpr, differ);
             } else {
                 throw new SemanticException("Materialized view partition function " +
                         functionCallExpr.getFnName().getFunction() +

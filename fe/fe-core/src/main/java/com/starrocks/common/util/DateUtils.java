@@ -60,6 +60,7 @@ public class DateUtils {
     public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d");
     public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s");
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s.%f");
+    public static final DateTimeFormatter SECOND_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
     public static final DateTimeFormatter MINUTE_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i");
     public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
@@ -72,6 +73,7 @@ public class DateUtils {
             .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
+            .disableHtmlEscaping()
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATETIME_PRINTER)
             .create();
     /*
@@ -159,7 +161,23 @@ public class DateUtils {
         }
     }
 
-    public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+    public static String convertDateFormaterToDateKeyFormater(String datetime) {
+        LocalDate date = LocalDate.parse(datetime, DATE_FORMATTER);
+        String convertedDate = date.format(DATEKEY_FORMATTER_UNIX);
+        return convertedDate;
+    }
+
+    public static String convertDateTimeFormaterToSecondFormater(String datetime) {
+        LocalDateTime date = LocalDateTime.parse(datetime, DATE_TIME_FORMATTER);
+        String convertedDatetime = date.format(SECOND_FORMATTER_UNIX);
+        return convertedDatetime;
+    }
+
+    public static String formatTimestampInSeconds(long timestampInSeconds) {
+        return formatTimestampInSeconds(timestampInSeconds, TimeUtils.getSystemTimeZone().toZoneId());
+    }
+
+    public static String formatTimestampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
         return formatTimeStampInMill(timestampInSeconds * 1000, timeZoneId);
     }
 

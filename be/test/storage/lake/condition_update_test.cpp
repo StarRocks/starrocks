@@ -192,7 +192,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -226,7 +226,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
         ASSERT_EQ(kChunkSize, check(version, [&](int c0, int c1, int c2) {
                       return (c0 * result[i].first == c1) && (c0 * result[i].second == c2);
@@ -264,7 +264,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -292,7 +292,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     config::write_buffer_size = old_size;
@@ -334,7 +334,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     ASSERT_OK(delta_writer->finish());
     delta_writer->close();
     // Publish version
-    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize, check(version, [&](int c0, int c1, int c2) {
                   return (c0 * result.first == c1) && (c0 * result.second == c2);

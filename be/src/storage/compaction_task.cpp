@@ -218,7 +218,7 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
         std::unique_ptr<RowsetWriter> output_rs_writer;
         RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
                                                                         _task_info.algorithm, _task_info.output_version,
-                                                                        &output_rs_writer));
+                                                                        &output_rs_writer, _tablet_schema));
         Status status = output_rs_writer->add_rowset(data_rowsets.back());
         if (!status.ok()) {
             LOG(WARNING) << "fail to compact rowset."

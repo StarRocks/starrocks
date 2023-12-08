@@ -264,6 +264,63 @@ TEST_F(ArrayFunctionsTest, array_length) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_cum_sum) {
+    // []
+    // NULL
+    // [NULL]
+    // [1]
+    // [1,2,3,4,5]
+    // [null,null,1, null]
+    {
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        c->append_datum(Datum(DatumArray{}));
+        c->append_datum(Datum());
+        c->append_datum(Datum(DatumArray{Datum()}));
+        c->append_datum(Datum(DatumArray{Datum((int64_t)1)}));
+        c->append_datum(Datum(DatumArray{Datum((int64_t)1), Datum((int64_t)2), Datum((int64_t)3), Datum((int64_t)4),
+                                         Datum((int64_t)5)}));
+        c->append_datum(Datum(DatumArray{Datum(), Datum(), Datum((int64_t)1), Datum()}));
+
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(6, result->size());
+
+        ASSERT_FALSE(result->get(0).is_null());
+        ASSERT_TRUE(result->get(1).is_null());
+        ASSERT_FALSE(result->get(2).is_null());
+        ASSERT_FALSE(result->get(3).is_null());
+        ASSERT_FALSE(result->get(4).is_null());
+        ASSERT_FALSE(result->get(5).is_null());
+
+        EXPECT_EQ(0, result->get(0).get_array().size());
+        EXPECT_EQ(1, result->get(2).get_array().size());
+        EXPECT_EQ(1, result->get(3).get_array().size());
+        EXPECT_EQ(5, result->get(4).get_array().size());
+        EXPECT_EQ(4, result->get(5).get_array().size());
+    }
+
+    // [] only null
+    {
+        auto c = ColumnHelper::create_const_null_column(3);
+
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
+    }
+
+    // [] only const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        src_column->append_datum(Datum(DatumArray{Datum((int64_t)1), Datum((int64_t)2), Datum((int64_t)3),
+                                                  Datum((int64_t)4), Datum((int64_t)5)}));
+        auto c = std::make_shared<ConstColumn>(src_column, 3);
+        auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
+        EXPECT_EQ(3, result->size());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     // array_contains([], 1)
     {
@@ -5408,6 +5465,118 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
         dest_column = ArrayMatch<false>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->get(0).get_int8());
+    }
+}
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_contains_seq) {
+    // array_contains_seq(["a", "b", "c"], ["c"])         -> 1
+    // array_contains_seq(NULL, ["c"])                    -> NULL
+    // array_contains_seq(["a", "b", "c"], NULL)          -> NULL
+    // array_contains_seq(["a", "b", NULL], NULL)         -> NULL
+    // array_contains_seq(["a", "b", NULL], ["a", NULL])  -> 0
+    // array_contains_seq(NULL, ["a", NULL])              -> NULL
+    // array_contains_seq(["a", "b", NULL], [NULL])       -> 1
+    // array_contains_seq(["a", "b", "c"], ["d"])         -> 0
+    // array_contains_seq(["a", "b", "c"], ["a", "d"])    -> 0
+    // array_contains_all(["a", "b", "c"], ["a", "c"])    -> 0
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{Datum()});
+        target->append_datum(DatumArray{"d"});
+        target->append_datum(DatumArray{"a", "d"});
+        target->append_datum(DatumArray{"a", "c"});
+
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
+        EXPECT_EQ(10, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+        EXPECT_TRUE(result->get(3).is_null());
+        EXPECT_EQ(0, result->get(4).get_int8());
+        EXPECT_TRUE(result->get(5).is_null());
+        EXPECT_EQ(1, result->get(6).get_int8());
+        EXPECT_EQ(0, result->get(7).get_int8());
+        EXPECT_EQ(0, result->get(8).get_int8());
+        EXPECT_EQ(0, result->get(9).get_int8());
+    }
+
+    // array_contains_seq([["a"], ["b"]], [["c"]])
+    // array_contains_seq(["a","c"], [["c"]])
+    // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "c"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        target->append_datum(DatumArray{Datum(DatumArray{"c"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"c"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
+
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+    // array_contains_seq([["a"], ["b"], [NULL]], [["c"]])
+    // array_contains_seq([["a","d","c"]], [["e"]])
+    // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"}), Datum()});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        target->append_datum(DatumArray{Datum(DatumArray{"c"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"e"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
+
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+    // array_contains_seq([["a"], ["b"]], [["c"], [NULL]])
+    // array_contains_seq([["a","d","c"]], [["e", NULL]])
+    // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        target->append_datum(DatumArray{Datum(DatumArray{"c"}), Datum()});
+        target->append_datum(DatumArray{Datum(DatumArray{"e"}), Datum()});
+        target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
+
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
+        EXPECT_EQ(1, result->get(2).get_int8());
     }
 }
 } // namespace starrocks

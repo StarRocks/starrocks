@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -121,10 +122,28 @@ import static java.util.stream.Collectors.toList;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return new AST2StringBuilderVisitor().visit(expr);
+        return toString(expr, true);
+    }
+
+    public static String toString(ParseNode expr, boolean addFunctionDbName) {
+        return new AST2StringBuilderVisitor(addFunctionDbName).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+
+        // when you want to get the full string of a functionCallExpr set it true
+        // when you just want to a function name as its alias set it false
+        protected boolean addFunctionDbName;
+
+
+        public AST2StringBuilderVisitor() {
+            this(true);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName) {
+            this.addFunctionDbName = addFunctionDbName;
+        }
+
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
@@ -895,7 +914,7 @@ public class AstToStringBuilder {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
-            if (node.getFnName().getDb() != null) {
+            if (addFunctionDbName && node.getFnName().getDb() != null) {
                 sb.append("`" + node.getFnName().getDb() + "`.");
             }
             String functionName = node.getFnName().getFunction();
@@ -1221,8 +1240,10 @@ public class AstToStringBuilder {
             }
             Map<String, String> properties = new HashMap<>(stmt.getProperties());
             StorageVolume.addMaskForCredential(properties);
-            sb.append(" PROPERTIES (").
-                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            if (!stmt.getProperties().isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            }
             return sb.toString();
         }
 
@@ -1240,6 +1261,18 @@ public class AstToStringBuilder {
                         append(new PrintableMap<>(properties, "=", true, false))
                         .append(")");
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreateCatalogStatement(CreateCatalogStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL CATALOG '");
+            sb.append(stmt.getCatalogName()).append("' ");
+            if (stmt.getComment() != null) {
+                sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
+            }
+            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
             return sb.toString();
         }
     }

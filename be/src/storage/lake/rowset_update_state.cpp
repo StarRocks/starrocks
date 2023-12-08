@@ -451,6 +451,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet, std::map<int, std::string>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = op_write.rowset();
     auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));

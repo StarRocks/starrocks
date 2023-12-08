@@ -1504,7 +1504,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                                               Map<String, HivePartitionStats> hivePartitionStatsMap,
                                                               double avgNumPerPartition, double rowCount) {
         HiveMetaClient metaClient = new HiveMetaClient(new HiveConf());
-        HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME);
+        HiveMetastore metastore = new HiveMetastore(metaClient, MOCKED_HIVE_CATALOG_NAME, MetastoreType.HMS);
         CachingHiveMetastore cachingHiveMetastore =
                 createCatalogLevelInstance(metastore, Executors.newSingleThreadExecutor(), 0, 0, 0, false);
         HiveMetastoreOperations hmsOps =

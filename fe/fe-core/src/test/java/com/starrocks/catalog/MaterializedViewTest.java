@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -37,7 +38,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -689,53 +689,6 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testAlterAsyncMaterializedViewWithInterval() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE base_table\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
-                        "PARTITION BY k1\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
-                        "as select k1,k2,v1 from base_table;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView baseMv = ((MaterializedView) testDb.getTable("base_mv"));
-
-        String alterMvSql = "ALTER MATERIALIZED VIEW base_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterMvSql);
-        stmtExecutor.execute();
-
-        // assert context
-        MaterializedView.AsyncRefreshContext asyncRefreshContext = baseMv.getRefreshScheme().getAsyncRefreshContext();
-        // start time must equal 2022-12-31
-        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
-        Assert.assertEquals(2, asyncRefreshContext.getStep());
-        Assert.assertEquals("DAY", asyncRefreshContext.getTimeUnit());
-
-        // assert task schedule
-        String mvTaskName = "mv-" + baseMv.getId();
-        TaskSchedule schedule = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName).getSchedule();
-        // start time must equal 2022-12-31
-        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
-    }
-
-    @Test
     public void testMvMysqlType() {
         MaterializedView mv = new MaterializedView();
         String mysqlType = mv.getMysqlType();
@@ -855,5 +808,141 @@ public class MaterializedViewTest {
         Assert.assertThrows("Do not support alter non-native table/materialized-view[index_view_to_check]",
                 DdlException.class,
                 () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterViewStmt));
+    }
+
+    public void testCreateMV(String mvSql) throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.table1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView(mvSql);
+        String showCreateSql = "show create materialized view test.index_mv_to_check;";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
+        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getResultRows());
+    }
+
+    @Test
+    public void testCreateMVWithIndex() throws Exception {
+        String mvSqlWithBitMapAndBloomfilter = "create materialized view index_mv_to_check " +
+                "(k2 ," +
+                " total ," +
+                "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala' " +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"HDD\","
+                + "\"bloom_filter_columns\" = \"k2\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        String mvSqlWithBitMap = "create materialized view index_mv_to_check " +
+                "(k2 ," +
+                " total ," +
+                "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala' " +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"HDD\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        String mvSqlWithBloomFilter = "create materialized view index_mv_to_check " +
+                "(k2 ," +
+                " total" +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"HDD\","
+                + "\"bloom_filter_columns\" = \"k2\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        testCreateMV(mvSqlWithBitMapAndBloomfilter);
+        testCreateMV(mvSqlWithBitMap);
+        testCreateMV(mvSqlWithBloomFilter);
+    }
+
+
+    @Test
+    public void testCreateMVWithDuplicateIndexOrDuplicateColumn() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.table1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String mvSql = "create materialized view index_mv_to_check " +
+                "(k2 ," +
+                " total ," +
+                "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala', " +
+                "INDEX index1 (`total`) USING BITMAP COMMENT 'balabala' " +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"HDD\","
+                + "\"bloom_filter_columns\" = \"k2\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        Assert.assertThrows("Duplicate index name 'index1'",
+                UserException.class,
+                () -> starRocksAssert.withMaterializedView(mvSql));
+
+        String mvSql2 = "create materialized view index_mv_to_check " +
+                "(k2 ," +
+                " total ," +
+                "INDEX index1 (`k2`) USING BITMAP COMMENT 'balabala', " +
+                "INDEX index2 (`k2`) USING BITMAP COMMENT 'balabala' " +
+                ")" +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replicated_storage\" = \"true\","
+                + "\"replication_num\" = \"1\","
+                + "\"storage_medium\" = \"HDD\","
+                + "\"bloom_filter_columns\" = \"k2\""
+                + ")" +
+                "as select k2, sum(v1) as total from table1 group by k2;";
+        Assert.assertThrows("Duplicate column name 'k2' in index",
+                UserException.class,
+                () -> starRocksAssert.withMaterializedView(mvSql2));
     }
 }

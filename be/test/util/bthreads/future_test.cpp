@@ -228,6 +228,15 @@ TEST(FutureTest, test_share03) {
     f2.get();
 }
 
+TEST(FutureTest, test_share04) {
+    Promise<std::string> p1;
+    SharedFuture<std::string> f1(p1.get_future());
+    SharedFuture<std::string> f2(f1);
+    p1.set_value("test");
+    EXPECT_EQ("test", f1.get());
+    EXPECT_EQ("test", f2.get());
+}
+
 TEST(FutureTest, test_valid) {
     Future<int> f0;
     EXPECT_TRUE(!f0.valid());
@@ -284,7 +293,13 @@ TEST(FutureTest, test_wait_for01) {
 
     std::chrono::milliseconds delay(100);
 
+    auto t0 = std::chrono::steady_clock::now();
     EXPECT_TRUE(f1.wait_for(delay) == future_status::timeout);
+    auto t1 = std::chrono::steady_clock::now();
+    auto d = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    EXPECT_GE(d, delay.count());
+    // Assuming that the delay due to scheduling does not exceed 50ms
+    EXPECT_LT(d, delay.count() + 50);
 
     p1.set_value(1);
 

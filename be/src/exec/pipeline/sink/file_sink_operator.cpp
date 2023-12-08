@@ -107,7 +107,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         if (!io_status.ok() && final_status.ok()) {
             final_status = io_status;
         }
-        _sender->close(final_status);
+        WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
         auto st = _state->exec_env()->result_mgr()->cancel_at_time(

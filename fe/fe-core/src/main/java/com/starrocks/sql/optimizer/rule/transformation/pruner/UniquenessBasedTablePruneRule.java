@@ -170,6 +170,12 @@ public class UniquenessBasedTablePruneRule implements TreeRewriteRule {
 
         @Override
         public Boolean visitLogicalCTEConsume(OptExpression optExpression, Void context) {
+            // In some cases(TPC-DS q45), we have high certainty that a query can benefit from CTE optimization;
+            // then LogicalCTEConsumeOperators in its plan has no children to avoid CTE inlining or other
+            // respective optimization.
+            if (optExpression.getInputs().isEmpty()) {
+                return false;
+            }
             return propagateBottomUp(optExpression, 0);
         }
 

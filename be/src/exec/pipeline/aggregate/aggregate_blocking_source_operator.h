@@ -35,11 +35,11 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    Status set_finished(RuntimeState* state) override;
+    [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 protected:
     // It is used to perform aggregation algorithms shared by

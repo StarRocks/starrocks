@@ -31,6 +31,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -99,24 +101,23 @@ public class CompactionScheduler extends Daemon {
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
         // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
-        // compaction task can be executed only after the status of the previous compaction task changes to visible or canceled.
-        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedTransactionsBeforeRestartHaveFinished()) {
+        // compaction task can be executed only after the status of the previous compaction task changes to visible or
+        // canceled.
+        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedCompactionsBeforeRestartHaveFinished()) {
             schedule();
             history.changeMaxSize(Config.lake_compaction_history_size);
             failHistory.changeMaxSize(Config.lake_compaction_fail_history_size);
         }
     }
 
-    // Returns true if all transactions committed before this restart have finished(i.e., of VISIBLE state).
-    // Technically, we only need to wait for compaction transactions finished, but I don't want to check the
-    // type of each transaction.
-    private boolean allCommittedTransactionsBeforeRestartHaveFinished() {
+    // Returns true if all compaction transactions committed before this restart have finished(i.e., of VISIBLE state).
+    private boolean allCommittedCompactionsBeforeRestartHaveFinished() {
         if (finishedWaiting) {
             return true;
         }
-        // Note: must call getMinActiveTxnId() before getNextTransactionId(), otherwise if there are no running transactions
-        // waitTxnId <= minActiveTxnId will always be false.
-        long minActiveTxnId = transactionMgr.getMinActiveTxnId();
+        // Note: must call getMinActiveCompactionTxnId() before getNextTransactionId(), otherwise if there are
+        // no running transactions waitTxnId <= minActiveTxnId will always be false.
+        long minActiveTxnId = transactionMgr.getMinActiveCompactionTxnId();
         if (waitTxnId < 0) {
             waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
         }
@@ -233,13 +234,14 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             return false;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // lake table or lake materialized view
             OlapTable table = (OlapTable) db.getTable(partition.getTableId());
             return table != null && table.getPartition(partition.getPartitionId()) != null;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -250,17 +252,14 @@ public class CompactionScheduler extends Daemon {
             return null;
         }
 
-        if (!db.tryReadLock(50, TimeUnit.MILLISECONDS)) {
-            LOG.info("Skipped partition compaction due to get database lock timeout");
-            compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-            return null;
-        }
-
         long txnId;
         long currentVersion;
         OlapTable table;
         Partition partition;
         Map<Long, List<Long>> beToTablets;
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
 
         try {
             // lake table or lake materialized view
@@ -298,7 +297,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
@@ -339,6 +338,7 @@ public class CompactionScheduler extends Daemon {
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
+            request.timeoutMs = LakeService.TIMEOUT_COMPACT;
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -393,12 +393,13 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

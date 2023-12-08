@@ -64,6 +64,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -149,14 +150,16 @@ public class LakeTableAlterMetaJobTest {
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(partitionId, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
+        TabletMeta tabletMeta =
+                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
         }
         table.addPartition(partition);
 
-        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN, keysType);
+        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
+                keysType);
         table.setBaseIndexId(index.getId());
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -277,6 +280,7 @@ public class LakeTableAlterMetaJobTest {
             Assert.assertEquals(commitVersionMap.get(partitionId).longValue(), partition.getCommittedVersion());
         }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, alterMetaJob.getJobState());
+        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
     }
 
     @Test
@@ -288,7 +292,8 @@ public class LakeTableAlterMetaJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime) throws
                     RpcException {
             }
         };
@@ -298,9 +303,11 @@ public class LakeTableAlterMetaJobTest {
 
         alterMetaJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, alterMetaJob.getJobState());
+        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
         alterMetaJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterMetaJob.getJobState());
+        Assert.assertTrue(alterMetaJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
         Table<Long, Long, MaterializedIndex> partitionIndexMap = alterMetaJob.getPartitionIndexMap();
         Map<Long, Long> commitVersionMap = alterMetaJob.getCommitVersionMap();
@@ -312,7 +319,6 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertTrue(table.enablePersistentIndex());
     }
 
-
     @Test
     public void testReplay() throws AlterCancelException {
         new MockUp<Utils>() {
@@ -322,7 +328,8 @@ public class LakeTableAlterMetaJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime) throws
                     RpcException {
             }
         };
@@ -353,6 +360,7 @@ public class LakeTableAlterMetaJobTest {
         replayAlterMetaJob.replay(alterMetaJob);
 
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
+        Assert.assertEquals(alterMetaJob.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
         Assert.assertEquals(alterMetaJob.getTransactionId(), replayAlterMetaJob.getTransactionId());
         Assert.assertEquals(alterMetaJob.getJobId(), replayAlterMetaJob.getJobId());
         Assert.assertEquals(alterMetaJob.getTableId(), replayAlterMetaJob.getTableId());
@@ -383,4 +391,14 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
+    @Test
+    public void testSetPropertyNotSupport() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, "all");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        Assertions.assertThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+    }
 }

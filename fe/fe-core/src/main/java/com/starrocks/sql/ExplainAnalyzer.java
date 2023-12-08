@@ -29,7 +29,6 @@ import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanNode;
-import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.SessionVariable;
@@ -213,7 +212,7 @@ public class ExplainAnalyzer {
         // Bind plan element
         plan.getFragments().forEach((fragment) -> {
             ProfilingExecPlan.ProfilingElement sink = fragment.getSink();
-            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
+            if (sink.isFinalSink()) {
                 NodeInfo resultNodeInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (resultNodeInfo == null) {
                     resultNodeInfo =
@@ -363,10 +362,12 @@ public class ExplainAnalyzer {
                     "]");
         }
         if (!isRuntimeProfile) {
-            appendSummaryLine("CollectProfileTime: ", summaryProfile.containsInfoString(ProfileManager.PROFILE_TIME) ?
-                    summaryProfile.getInfoString(ProfileManager.PROFILE_TIME) :
-                    summaryProfile.getCounter(ProfileManager.PROFILE_TIME));
+            appendSummaryLine("CollectProfileTime: ",
+                    summaryProfile.containsInfoString(ProfileManager.PROFILE_COLLECT_TIME) ?
+                            summaryProfile.getInfoString(ProfileManager.PROFILE_COLLECT_TIME) :
+                            summaryProfile.getCounter(ProfileManager.PROFILE_COLLECT_TIME));
         }
+        appendSummaryLine("FrontendProfileMergeTime: ", executionProfile.getCounter("FrontendProfileMergeTime"));
         popIndent(); // metric indent
 
         // 3. Memory Usage
@@ -491,7 +492,7 @@ public class ExplainAnalyzer {
             appendDetailLine(GraphElement.LST_OPERATOR_INDENT, sink.getDisplayName(),
                     String.format(" (ids=[%s])", String.join(", ", ids)));
         } else {
-            if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
+            if (sink.isFinalSink()) {
                 isFinalSink = true;
                 // Calculate result sink's time info, other sink's type will be properly processed
                 // at the receiver side fragment through exchange node
@@ -1236,7 +1237,7 @@ public class ExplainAnalyzer {
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
             titleBuilder.append(element.getDisplayName());
-            if (!(element.instanceOf(ResultSink.class) && !(element.instanceOf(OlapTableSink.class)))) {
+            if (!element.isFinalSink()) {
                 titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             }
             // Attributes
@@ -1283,8 +1284,6 @@ public class ExplainAnalyzer {
                 int planNodeId = getPlanNodeId(nextOperator);
                 RuntimeProfile commonMetrics = nextOperator.getChild("CommonMetrics");
                 boolean isSubordinate = commonMetrics != null && commonMetrics.containsInfoString("IsSubordinate");
-                boolean isFinalSink = commonMetrics != null && commonMetrics.containsInfoString("IsFinalSink");
-                Preconditions.checkState(isFinalSink || planNodeId != FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (isSubordinate) {
                     subordinateOperatorProfiles.add(nextOperator);
                 } else {

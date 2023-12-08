@@ -44,7 +44,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -56,6 +56,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -207,7 +208,10 @@ public class StarRocksAssert {
     // };
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getRoutineLoadMgr().createRoutineLoadJob(createRoutineLoadStmt);
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 100);
+        routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
         return this;
     }
 
@@ -240,6 +244,11 @@ public class StarRocksAssert {
 
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
@@ -297,6 +306,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
+        for (String tableName : tableNames) {
+            dropTable(tableName);
+        }
+        return this;
+    }
+
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
@@ -345,6 +361,7 @@ public class StarRocksAssert {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            String mvName = createMaterializedViewStatement.getTableName().getTbl();
         }
         return this;
     }
@@ -390,8 +407,8 @@ public class StarRocksAssert {
     }
 
     public void updateTablePartitionVersion(String dbName, String tableName, long version) {
-        Table table = GlobalStateMgr.getCurrentState().getDb(dbName).getTable(tableName);
-        for (Partition partition : table.getPartitions()) {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(dbName).getTable(tableName);
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
             partition.setVisibleVersion(version, System.currentTimeMillis());
             MaterializedIndex baseIndex = partition.getBaseIndex();
             List<Tablet> tablets = baseIndex.getTablets();
@@ -463,6 +480,10 @@ public class StarRocksAssert {
         Analyzer.analyze(stmt, ctx);
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
         return showExecutor.execute().getResultRows();
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }
 
     private void checkAlterJob() throws InterruptedException {

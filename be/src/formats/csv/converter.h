@@ -59,6 +59,7 @@ public:
         // TODO: user configurable.
         bool bool_alpha = true;
 
+        bool is_hive = false;
         // Here used to control array parse format.
         // Considering Hive array format is different from traditional array format,
         // so here we provide some variables to customize array format, and you can

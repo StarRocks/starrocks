@@ -67,6 +67,11 @@ public:
     // TODO: Change signature to `Future<Status> write(Chunk*, uint32_t*, uint32_t)`
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
+    // This method will flush all the records in memtable to disk.
+    //
+    // [thread-safe]
+    void flush(Callback cb);
+
     // If the AsyncDeltaWriter has been `close()`ed, |cb| will be invoked immediately
     // in the caller's thread with an error status.
     //
@@ -86,6 +91,8 @@ public:
     // [thread-safe]
     void close();
 
+    [[nodiscard]] int64_t queueing_memtable_num() const;
+
     [[nodiscard]] int64_t tablet_id() const;
 
     [[nodiscard]] int64_t partition_id() const;
@@ -95,6 +102,8 @@ public:
     [[nodiscard]] bool is_immutable() const;
 
     [[nodiscard]] Status check_immutable();
+
+    [[nodiscard]] int64_t last_write_ts() const;
 
 private:
     AsyncDeltaWriterImpl* _impl;

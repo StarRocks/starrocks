@@ -116,6 +116,8 @@ public:
 
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
+    void prune();
+
 private:
     static StoragePageCache* _s_instance;
 

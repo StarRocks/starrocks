@@ -56,8 +56,7 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[2: v2]] having [null]
 select v1 from t0 group by not (false), v1 having not (false) != v1
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1] predicate[1: v1 = 0])
+    SCAN (columns[1: v1] predicate[1: v1 = 0])
 [end]
 
 [sql]
@@ -230,17 +229,15 @@ TOP-N (order by [[15: count ASC NULLS FIRST]])
 [sql]
 select v1,count(distinct b1) from test_object group by v1 having count(distinct h1) > 1
 [result]
-AGGREGATE ([GLOBAL] aggregate [{13: count=bitmap_union_count(13: count), 14: count=hll_union_agg(14: count)}] group by [[1: v1]] having [14: count > 1]
-    AGGREGATE ([LOCAL] aggregate [{13: count=bitmap_union_count(5: b1), 14: count=hll_union_agg(9: h1)}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1, 5: b1, 9: h1] predicate[null])
+AGGREGATE ([GLOBAL] aggregate [{13: count=bitmap_union_count(5: b1), 14: count=hll_union_agg(9: h1)}] group by [[1: v1]] having [14: count > 1]
+    SCAN (columns[1: v1, 5: b1, 9: h1] predicate[null])
 [end]
 
 [sql]
 select v1,count(distinct b1)/ count(distinct h2) from test_object group by v1 having count(distinct h1) > 1
 [result]
-AGGREGATE ([GLOBAL] aggregate [{13: count=bitmap_union_count(13: count), 14: count=hll_union_agg(14: count), 15: count=hll_union_agg(15: count)}] group by [[1: v1]] having [15: count > 1]
-    AGGREGATE ([LOCAL] aggregate [{13: count=bitmap_union_count(5: b1), 14: count=hll_union_agg(10: h2), 15: count=hll_union_agg(9: h1)}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1, 5: b1, 9: h1, 10: h2] predicate[null])
+AGGREGATE ([GLOBAL] aggregate [{13: count=bitmap_union_count(5: b1), 14: count=hll_union_agg(10: h2), 15: count=hll_union_agg(9: h1)}] group by [[1: v1]] having [15: count > 1]
+    SCAN (columns[1: v1, 5: b1, 9: h1, 10: h2] predicate[null])
 [end]
 
 [sql]

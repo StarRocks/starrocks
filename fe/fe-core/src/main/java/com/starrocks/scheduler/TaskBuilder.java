@@ -20,6 +20,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
@@ -81,13 +82,17 @@ public class TaskBuilder {
         if (ctx == null) {
             return "";
         }
-        String stmt;
         String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        String stmt;
+        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE TABLE " + tableName + async;
         } else {
+            stmt = "";
+        }
+        if (FeConstants.runningUnitTest) {
             stmt = "";
         }
         return stmt;
@@ -113,8 +118,7 @@ public class TaskBuilder {
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
-        task.setDefinition(
-                "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;

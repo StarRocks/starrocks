@@ -81,19 +81,19 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testCreateUser() throws Exception {
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'10.1.1.1'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("10.1.1.1", stmt.getUserIdentity().getHost());
         Assert.assertEquals("", stmt.getOriginalPassword());
 
         sql = "create user 'test'@'%' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test", stmt.getUserIdentity().getUser());
         Assert.assertEquals("%", stmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", stmt.getOriginalPassword());
 
@@ -229,7 +229,7 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testAlterDropUser() throws Exception {
         String sql = "alter user test_user identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test_user", alterUserStmt.getUserIdentity().getUser());
         Assert.assertEquals("%", alterUserStmt.getUserIdentity().getHost());
         Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
 
@@ -252,7 +252,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         sql = "drop user test_user";
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("test_user", dropUserStmt.getUserIdentity().getUser());
 
         sql = "drop user root";
         try {

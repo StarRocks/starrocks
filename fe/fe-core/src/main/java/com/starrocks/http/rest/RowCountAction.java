@@ -49,6 +49,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -92,7 +94,8 @@ public class RowCountAction extends RestBaseAction {
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -117,7 +120,7 @@ public class RowCountAction extends RestBaseAction {
                 } // end for indices
             } // end for partitions            
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // to json response

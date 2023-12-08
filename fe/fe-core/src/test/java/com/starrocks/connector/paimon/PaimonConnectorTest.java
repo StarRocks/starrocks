@@ -130,4 +130,25 @@ public class PaimonConnectorTest {
         Assert.assertEquals(secretKeyOption, secretKeyValue);
         Assert.assertEquals(endpointOption, endpointValue);
     }
+
+    @Test
+    public void testCreatePaimonConnectorWithOSS() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.warehouse", "oss://bucket/warehouse");
+        properties.put("paimon.catalog.type", "filesystem");
+        String accessKeyValue = "oss_access_key";
+        String secretKeyValue = "oss_secret_key";
+        String endpointValue = "oss_endpoint";
+        properties.put("aliyun.oss.access_key", accessKeyValue);
+        properties.put("aliyun.oss.secret_key", secretKeyValue);
+        properties.put("aliyun.oss.endpoint", endpointValue);
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options paimonOptions = connector.getPaimonOptions();
+        String accessKeyOption = paimonOptions.get("fs.oss.accessKeyId");
+        String secretKeyOption = paimonOptions.get("fs.oss.accessKeySecret");
+        String endpointOption = paimonOptions.get("fs.oss.endpoint");
+        Assert.assertEquals(accessKeyOption, accessKeyValue);
+        Assert.assertEquals(secretKeyOption, secretKeyValue);
+        Assert.assertEquals(endpointOption, endpointValue);
+    }
 }

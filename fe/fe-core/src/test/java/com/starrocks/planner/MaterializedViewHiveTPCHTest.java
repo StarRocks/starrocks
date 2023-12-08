@@ -20,9 +20,8 @@ import org.junit.Test;
 
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
-        PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
@@ -61,7 +60,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        runFileUnitTest("materialized-view/tpch-hive/q7");
+        runFileUnitTestWithNormalizedResult("materialized-view/tpch-hive/q7");
     }
 
     @Test

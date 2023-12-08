@@ -28,19 +28,19 @@ public class PhysicalPropertySet {
     public static final PhysicalPropertySet EMPTY = new PhysicalPropertySet();
 
     public PhysicalPropertySet() {
-        this(DistributionProperty.EMPTY, SortProperty.EMPTY, CTEProperty.EMPTY);
+        this(EmptyDistributionProperty.INSTANCE, EmptySortProperty.INSTANCE, EmptyCTEProperty.INSTANCE);
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty) {
-        this(distributionProperty, SortProperty.EMPTY, CTEProperty.EMPTY);
+        this(distributionProperty, EmptySortProperty.INSTANCE, EmptyCTEProperty.INSTANCE);
     }
 
     public PhysicalPropertySet(SortProperty sortProperty) {
-        this(DistributionProperty.EMPTY, sortProperty, CTEProperty.EMPTY);
+        this(EmptyDistributionProperty.INSTANCE, sortProperty, EmptyCTEProperty.INSTANCE);
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty) {
-        this(distributionProperty, sortProperty, CTEProperty.EMPTY);
+        this(distributionProperty, sortProperty, EmptyCTEProperty.INSTANCE);
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty,
@@ -106,7 +106,7 @@ public class PhysicalPropertySet {
 
     @Override
     public String toString() {
-        return sortProperty.getSpec().getOrderDescs().toString() +
-                ", " + distributionProperty.getSpec() + ", " + cteProperty.toString();
+        return sortProperty.toString() +
+                ", " + distributionProperty.toString() + ", " + cteProperty.toString();
     }
 }

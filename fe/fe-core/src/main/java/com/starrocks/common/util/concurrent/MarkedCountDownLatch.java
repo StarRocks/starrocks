@@ -38,14 +38,19 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.common.Status;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MarkedCountDownLatch<K, V> extends CountDownLatch {
+    private static final Logger LOG = LogManager.getLogger(MarkedCountDownLatch.class);
 
     private final Multimap<K, V> marks;
+    private final List<Runnable> listeners = Lists.newArrayList();
     private Status st = Status.OK;
 
     public MarkedCountDownLatch(int count) {
@@ -57,9 +62,15 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         marks.put(key, value);
     }
 
+    public synchronized void addListener(Runnable listener) {
+        listeners.add(new OneShotListener(listener));
+        triggerListeners();
+    }
+
     public synchronized boolean markedCountDown(K key, V value) {
         if (marks.remove(key, value)) {
             super.countDown();
+            triggerListeners();
             return true;
         }
         return false;
@@ -88,6 +99,36 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         }
         while (getCount() > 0) {
             super.countDown();
+        }
+        triggerListeners();
+    }
+
+    private synchronized void triggerListeners() {
+        if (getCount() > 0) {
+            return;
+        }
+        for (Runnable listener : listeners) {
+            try {
+                listener.run();
+            } catch (Throwable e) {
+                LOG.warn("Listener invoke failed", e);
+            }
+        }
+    }
+
+    private static final class OneShotListener implements Runnable {
+        private final AtomicBoolean hasRun = new AtomicBoolean(false);
+        private final Runnable runnable;
+
+        public OneShotListener(Runnable runnable) {
+            this.runnable = runnable;
+        }
+
+        @Override
+        public void run() {
+            if (hasRun.compareAndSet(false, true)) {
+                runnable.run();
+            }
         }
     }
 }

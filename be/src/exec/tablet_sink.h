@@ -244,6 +244,7 @@ private:
     // bucket size for automatic bucket
     int64_t _automatic_bucket_size = 0;
     std::set<int64_t> _immutable_partition_ids;
+    RuntimeState* _state = nullptr;
 };
 
 } // namespace starrocks::stream_load

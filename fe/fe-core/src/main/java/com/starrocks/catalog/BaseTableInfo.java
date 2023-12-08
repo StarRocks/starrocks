@@ -183,6 +183,10 @@ public class BaseTableInfo {
             LOG.warn("catalog {} not exist", catalogName);
             return null;
         }
+        // upgrade from 3.1 to 3.2, dbName/tableName maybe null after dbs or tables are dropped
+        if (dbName == null || tableName == null) {
+            return null;
+        }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
         if (table == null) {
             LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);

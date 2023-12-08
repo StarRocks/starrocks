@@ -37,6 +37,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.server.MetadataMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -248,13 +249,14 @@ public class PartitionUtilTest {
 
         new MockUp<PartitionUtil>() {
             @Mock
-            public List<String> getPartitionNames(Table table) {
-                return partitionNames;
-            }
-
-            @Mock
             public List<Column> getPartitionColumns(Table table) {
                 return ImmutableList.of(partitionColumn);
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+                return partitionNames;
             }
         };
         new Expectations() {
@@ -269,7 +271,7 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
+        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();

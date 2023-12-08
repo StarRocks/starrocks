@@ -263,6 +263,7 @@ struct TBrokerScanRangeParams {
     27: optional i8 escape
     // confluent schema registry url for pb import
     28: optional string confluent_schema_registry_url
+    29: optional i64 json_file_size_limit;
 }
 
 // Broker scan range
@@ -352,6 +353,9 @@ struct THdfsScanRange {
     16: optional i64 modification_time
 
     17: optional TDataCacheOptions datacache_options
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -432,6 +436,12 @@ struct TEsScanNode {
     4: optional map<string, string> fields_context
 }
 
+struct TFrontend {
+  1: optional string id
+  2: optional string ip
+  3: optional i32 http_port
+}
+
 struct TSchemaScanNode {
   1: required Types.TTupleId tuple_id
 
@@ -459,6 +469,7 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
+  26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
 }
@@ -503,6 +514,9 @@ struct TOlapScanNode {
   30: optional bool use_pk_index
   31: optional list<Descriptors.TColumn> columns_desc
   32: optional bool output_chunk_by_bucket
+  // order by hint for scan
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TJDBCScanNode {
@@ -608,6 +622,9 @@ struct THashJoinNode {
   52: optional TJoinDistributionMode distribution_mode;
   53: optional list<Exprs.TExpr> partition_exprs
   54: optional list<Types.TSlotId> output_columns
+
+  // used in pipeline engine
+  55: optional bool interpolate_passthrough = false
 }
 
 struct TMergeJoinNode {
@@ -792,6 +809,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
+  31: optional bool analytic_partition_skewed;
 }
 
 enum TAnalyticWindowType {
@@ -887,6 +905,7 @@ struct TAnalyticNode {
 
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
+  22: optional bool is_skewed
 }
 
 struct TMergeNode {
@@ -1026,6 +1045,8 @@ struct THdfsScanNode {
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
+
+    16: optional bool use_partition_column_value_only;
 }
 
 struct TProjectNode {
@@ -1037,6 +1058,7 @@ struct TProjectNode {
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
+    2: optional list<Descriptors.TColumn> columns
 }
 
 struct TDecodeNode {

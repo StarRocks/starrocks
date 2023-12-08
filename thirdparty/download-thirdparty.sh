@@ -477,6 +477,15 @@ fi
 echo "Finished patching $SERDES_SOURCE"
 cd -
 
+# patch sasl2
+cd $TP_SOURCE_DIR/$SASL_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
+    patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $SASL_SOURCE"
+cd -
+
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
@@ -485,6 +494,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
         # fix exception handling
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
     fi
     cd -

@@ -12,6 +12,10 @@ on:
       - edited
       - synchronize
 
+concurrency:
+  group: PR-CHECKER-${{ github.event.number }}
+  cancel-in-progress: false
+
 permissions:
   checks: write
   actions: write
@@ -53,7 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
+       startsWith(github.event.pull_request.title, '[Enhancement]') ||
+       startsWith(github.event.pull_request.title, '[Doc]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
@@ -129,7 +134,9 @@ jobs:
           (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
           !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
           (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
@@ -180,7 +187,7 @@ jobs:
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: automerge
 
       - name: automerge
@@ -188,7 +195,7 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: rebase
+          merge-method: squash
 
   changelist-check:
     runs-on: [self-hosted, normal]
@@ -198,7 +205,7 @@ jobs:
       !contains(github.event.pull_request.title, 'backport')
     env:
       PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: CHECK CHANGELIST
         run: |

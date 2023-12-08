@@ -29,9 +29,10 @@ PersistentIndexCompactionManager::~PersistentIndexCompactionManager() {
 }
 
 Status PersistentIndexCompactionManager::init() {
-    int max_pk_index_compaction_thread_cnt = config::pindex_major_compaction_num_threads > 0
-                                                     ? config::pindex_major_compaction_num_threads
-                                                     : StorageEngine::instance()->get_store_num() * 2;
+    int max_pk_index_compaction_thread_cnt =
+            config::pindex_major_compaction_num_threads > 0
+                    ? config::pindex_major_compaction_num_threads
+                    : std::max((size_t)1, StorageEngine::instance()->get_store_num() * 2);
     RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_compaction_worker")
                             .set_min_threads(1)
                             .set_max_threads(max_pk_index_compaction_thread_cnt)

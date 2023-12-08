@@ -78,6 +78,9 @@ struct TColumnDesc {
   23: optional string dbName
   24: optional string tableName
   25: optional string columnDefault
+  // Let FE control the type, which makes it easier to modify and display complex types
+  26: optional string columnTypeStr
+  27: optional string dataType
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -409,6 +412,7 @@ struct TListPipesInfo {
 
     // schema info
     10: optional string database_name
+    11: optional string table_name
 
     // pipe status and statistics
     20: optional string state
@@ -417,6 +421,9 @@ struct TListPipesInfo {
     30: optional i64 loaded_files
     31: optional i64 loaded_rows
     32: optional i64 loaded_bytes
+    33: optional string load_status
+    34: optional string last_error
+    35: optional i64 created_time
 }
 
 struct TListPipesResult {
@@ -1520,6 +1527,28 @@ struct TGetRoleEdgesResponse {
     1: optional list<TGetRoleEdgesItem> role_edges
 }
 
+struct TObjectDependencyItem {
+    1: optional i64 object_id
+    2: optional string object_name
+    3: optional string database
+    4: optional string catalog
+    5: optional string object_type
+    
+    11: optional i64 ref_object_id
+    12: optional string ref_object_name
+    13: optional string ref_database
+    14: optional string ref_catalog
+    15: optional string ref_object_type
+}
+
+struct TObjectDependencyReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TObjectDependencyRes {
+    1: optional list<TObjectDependencyItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1645,6 +1674,9 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+
+    // sys.object_dependencies
+    TObjectDependencyRes listObjectDependencies(1: TObjectDependencyReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

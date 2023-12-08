@@ -803,8 +803,8 @@ private:
                 res.set_null(i);
                 continue;
             }
-            auto datum = src_column->get(i);
-            const auto& datum_array = datum.get_array();
+            auto tmp_datum = src_column->get(i);
+            const auto& datum_array = tmp_datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             Slice null_slice = null_replace_column->get(i).get_slice();
@@ -840,8 +840,8 @@ private:
                 continue;
             }
 
-            auto datum = src_column->get(i);
-            const auto& datum_array = datum.get_array();
+            auto tmp_datum = src_column->get(i);
+            const auto& datum_array = tmp_datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             for (const auto& datum : datum_array) {
@@ -1166,7 +1166,7 @@ public:
         if constexpr (HasNull) {
             elements_nulls = elements_null_col->get_data().data();
         }
-        auto* elements_data = down_cast<const RunTimeColumnType<ElementType>*>(elements)->get_data().data();
+        const auto& elements_data = GetContainer<ElementType>().get_data(elements);
 
         auto* offsets_ptr = offsets->get_data().data();
         auto* null_ptr = null_cols->get_data().data();
@@ -1222,7 +1222,7 @@ public:
                 }
 
                 has_data = true;
-                auto& value = elements_data[offset + index];
+                const auto& value = elements_data[offset + index];
                 if constexpr (isMin) {
                     result = result < value ? result : value;
                 } else {

@@ -393,6 +393,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 
+            if (fn.name.function_name == "array_union_agg" || fn.name.function_name == "array_unique_agg") {
+                // for array_union_agg use inner type as signature
+                arg_type = arg_type.children[0];
+            }
+
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
                                                 is_input_nullable, fn.binary_type, state->func_version());
@@ -612,9 +617,9 @@ void Aggregator::close(RuntimeState* state) {
     };
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
-        promise_st->get_future().get();
+        (void)promise_st->get_future().get();
     } else {
-        agg_close();
+        (void)agg_close();
     }
 }
 

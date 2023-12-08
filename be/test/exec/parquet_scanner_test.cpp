@@ -224,7 +224,9 @@ class ParquetScannerTest : public ::testing::Test {
                 {"issue_17693_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"issue_17822_c0", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR))},
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
-                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))}};
+                                            TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
+                {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::create_varchar_type(1048576))}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -753,6 +755,59 @@ TEST_F(ParquetScannerTest, datetime) {
         std::vector<std::string> column_names{column_name};
 
         ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 5);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
+    }
+}
+
+TEST_F(ParquetScannerTest, optional_map_key) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/optional_map_key.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_int", {"1", "2", "6", "3", "4", "5", "7", "8", "9", "1", "2", "3", "4", "5", "7", "8", "9", "6"}},
+            {"col_map",
+             {"{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'你好，中国！':NULL}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{'你好，中国！':NULL}"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 18);
         ASSERT_EQ(1, chunk->num_columns());
 
         auto col = chunk->columns()[0];

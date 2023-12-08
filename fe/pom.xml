@@ -29,6 +29,7 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
+        <module>plugin-common</module>
         <module>fe-common</module>
         <module>spark-dpp</module>
         <module>fe-core</module>
@@ -39,8 +40,8 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
@@ -151,6 +152,12 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>plugin-common</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-common</artifactId>
@@ -335,7 +342,7 @@ under the License.
             <dependency>
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
-                <version>20230227</version>
+                <version>20231013</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -434,7 +441,7 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.7.9.Final</version>
+                <version>3.8.10.Final</version>
             </dependency>
 
             <!-- support jdk9 -->

@@ -169,6 +169,10 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
+    default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+        throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
+    }
+
     /**
      * Clean the query level cache after the query.
      */

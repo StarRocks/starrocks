@@ -46,9 +46,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.management.ThreadInfo;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -62,6 +64,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
+import java.util.zip.DeflaterOutputStream;
 
 public class Util {
     private static final Logger LOG = LogManager.getLogger(Util.class);
@@ -310,9 +313,16 @@ public class Util {
     }
 
     public static String dumpThread(Thread t, int lineNum) {
+        return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
+    }
+
+    public static String dumpThread(ThreadInfo t, int lineNum) {
+        return dumpThread(t.getThreadName(), t.getThreadId(), t.getStackTrace(), lineNum);
+    }
+
+    public static String dumpThread(String name, long id, StackTraceElement[] elements, int lineNum) {
         StringBuilder sb = new StringBuilder();
-        StackTraceElement[] elements = t.getStackTrace();
-        sb.append("dump thread: ").append(t.getName()).append(", id: ").append(t.getId()).append("\n");
+        sb.append("dump thread: ").append(name).append(", id: ").append(id).append("\n");
         int count = lineNum;
         for (StackTraceElement element : elements) {
             if (count == 0) {
@@ -455,5 +465,13 @@ public class Util {
 
     public static String deriveAliasFromOrdinal(int ordinal) {
         return AUTO_GENERATED_EXPR_ALIAS_PREFIX + ordinal;
+    }
+
+    public static byte[] compress(byte[] input) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream)) {
+            dos.write(input);
+        }
+        return outputStream.toByteArray();
     }
 }

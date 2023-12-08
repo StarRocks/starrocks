@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -30,8 +31,10 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -61,7 +64,7 @@ public class InsertStmt extends DmlStmt {
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
-    private final List<String> targetColumnNames;
+    private List<String> targetColumnNames;
     private QueryStatement queryStatement;
     private String label = null;
 
@@ -92,6 +95,7 @@ public class InsertStmt extends DmlStmt {
 
     // tableFunctionAsTargetTable is true if insert statement is parsed from INSERT INTO FILES(..)
     private final boolean tableFunctionAsTargetTable;
+    private final boolean blackHoleTableAsTargetTable;
     private final Map<String, String> tableFunctionProperties;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
@@ -110,6 +114,7 @@ public class InsertStmt extends DmlStmt {
         this.isOverwrite = isOverwrite;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -123,6 +128,7 @@ public class InsertStmt extends DmlStmt {
         this.forCTAS = true;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
     }
 
     // Ctor for INSERT INTO FILES(...)
@@ -134,6 +140,19 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.tableFunctionAsTargetTable = true;
         this.tableFunctionProperties = tableFunctionProperties;
+        this.blackHoleTableAsTargetTable = false;
+    }
+
+    // Ctor for INSERT INTO blackhole() SELECT ...
+    public InsertStmt(QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tblName = new TableName("black_hole_catalog", "black_hole_db", "black_hole_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = true;
     }
 
     public Table getTargetTable() {
@@ -207,6 +226,10 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
     }
 
+    public void setTargetColumnNames(List<String> targetColumnNames) {
+        this.targetColumnNames = targetColumnNames;
+    }
+
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
     }
@@ -265,21 +288,49 @@ public class InsertStmt extends DmlStmt {
         return tableFunctionAsTargetTable;
     }
 
+    public boolean useBlackHoleTableAsTargetTable() {
+        return blackHoleTableAsTargetTable;
+    }
+
     public Map<String, String> getTableFunctionProperties() {
         return tableFunctionProperties;
     }
 
+    private List<Column> collectSelectedFieldsFromQueryStatement() {
+        QueryRelation query = getQueryStatement().getQueryRelation();
+        return query.getRelationFields().getAllFields().stream()
+                .filter(Field::isVisible)
+                .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
+                .collect(Collectors.toList());
+    }
+
+    public Table makeBlackHoleTable() {
+        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+    }
+
     public Table makeTableFunctionTable() {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
-        // fetch schema from query
-        QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Field> allFields = query.getRelationFields().getAllFields();
-        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
-                field.getType(), field.isNullable())).collect(Collectors.toList());
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+        List<String> columnNames = columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
+        Set<String> duplicateColumnNames = columns.stream()
+                .map(Column::getName)
+                .filter(name -> Collections.frequency(columnNames, name) > 1)
+                .collect(Collectors.toSet());
+        if (!duplicateColumnNames.isEmpty()) {
+            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
+        }
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();
-        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+        String single = props.getOrDefault("single", "false");
+        if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
+            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
+                    single);
+        }
+
+        boolean writeSingleFile = single.equalsIgnoreCase("true");
         String path = props.get("path");
         String format = props.get("format");
         String partitionBy = props.get("partition_by");
@@ -303,12 +354,12 @@ public class InsertStmt extends DmlStmt {
         if (compressionType == null) {
             throw new SemanticException("compression is a mandatory property. " +
                     "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                    "(uncompressed, gzip, brotli, zstd, lz4).");
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
             throw new SemanticException("compression type " + compressionType + " is not supported. " +
-                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
         }
 
         if (writeSingleFile && partitionBy != null) {
@@ -332,8 +383,6 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException(
                     "If partition_by is used, path should be a directory ends with forward slash(/).");
         }
-
-        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
 
         // parse and validate partition columns
         List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));

@@ -57,6 +57,7 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
                     .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).add(FunctionSet.ARRAY_AGG_DISTINCT)
+                    .add(FunctionSet.ARRAY_UNIQUE_AGG)
                     .add(FunctionSet.ANY_VALUE)
                     .add(FunctionSet.APPROX_TOP_K)
                     .add(FunctionSet.HISTOGRAM).build();
@@ -190,8 +191,8 @@ public class DecimalV3FunctionAnalyzer {
 
     public static AggregateFunction rectifyAggregationFunction(AggregateFunction fn, Type argType, Type returnType) {
         if (argType.isDecimalV2() || argType.isDecimalV3()) {
-            if (fn.functionName().equals(FunctionSet.COUNT)) {
-                // count function return type always bigint
+            if (fn.functionName().equals(FunctionSet.COUNT) || fn.functionName().equals(FunctionSet.COUNT_IF)) {
+                // count & count_if function return type always bigint
                 returnType = fn.getReturnType();
             } else if (fn.functionName().equals(FunctionSet.AVG)) {
                 // avg on decimal complies with Snowflake-style

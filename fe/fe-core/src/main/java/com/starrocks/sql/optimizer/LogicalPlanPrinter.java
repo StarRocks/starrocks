@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -37,13 +38,12 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -153,6 +153,9 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalCTEConsume(OptExpression optExpression, Integer step) {
+            if (optExpression.getInputs().isEmpty()) {
+                return new OperatorStr("logical cte consume", step, Collections.emptyList());
+            }
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             return new OperatorStr("logical cte consume", step, Collections.singletonList(child));
@@ -250,6 +253,26 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalWindow(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            LogicalWindowOperator window = optExpression.getOp().cast();
+            String windowCallStr = window.getWindowCall().entrySet().stream()
+                    .map(e -> String.format("%d: %s", e.getKey().getId(),
+                            scalarOperatorStringFunction.apply(e.getValue())))
+                    .collect(Collectors.joining(", "));
+            String windowDefStr = window.getAnalyticWindow() != null ? window.getAnalyticWindow().toSql() : "NONE";
+            String partitionByStr = window.getPartitionExpressions().stream()
+                    .map(scalarOperatorStringFunction).collect(Collectors.joining(", "));
+            String orderByStr = window.getOrderByElements().stream().map(Ordering::toString)
+                    .collect(Collectors.joining(", "));
+            return new OperatorStr("logical window( calls=[" +
+                    windowCallStr + "], window=" +
+                    windowDefStr + ", partitionBy=" +
+                    partitionByStr + ", orderBy=" + orderByStr + ")", step, Collections.singletonList(child));
+        }
+
+        @Override
         public OperatorStr visitLogicalApply(OptExpression optExpression, Integer step) {
             OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
@@ -327,10 +350,9 @@ public class LogicalPlanPrinter {
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
-        @Override
-        public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
-            PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("JDBC SCAN (");
+        private OperatorStr visitScanCommon(OptExpression optExpression, Integer step, String scanName) {
+            PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder(scanName + " (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
@@ -341,16 +363,18 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "JDBC SCAN");
+        }
+
+        @Override
         public OperatorStr visitPhysicalHiveScan(OptExpression optExpression, Integer step) {
-            PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("SCAN (");
-            sb.append("columns").append(scan.getUsedColumns());
-            sb.append(" predicate[").append(scan.getPredicate()).append("]");
-            sb.append(")");
-            if (scan.getLimit() >= 0) {
-                sb.append(" Limit ").append(scan.getLimit());
-            }
-            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+            return visitScanCommon(optExpression, step, "HIVE SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIcebergScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG SCAN");
         }
 
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {

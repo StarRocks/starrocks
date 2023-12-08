@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include "block_cache/block_cache.h"
 #include "block_cache/io_buffer.h"
 #include "io/shared_buffered_input_stream.h"
 
@@ -29,8 +30,16 @@ public:
         int64_t write_cache_ns = 0;
         int64_t read_cache_count = 0;
         int64_t write_cache_count = 0;
+        int64_t write_mem_cache_bytes = 0;
+        int64_t write_disk_cache_bytes = 0;
         int64_t read_cache_bytes = 0;
+        int64_t read_mem_cache_bytes = 0;
+        int64_t read_disk_cache_bytes = 0;
         int64_t write_cache_bytes = 0;
+        int64_t skip_read_cache_count = 0;
+        int64_t skip_read_cache_bytes = 0;
+        int64_t skip_write_cache_count = 0;
+        int64_t skip_write_cache_bytes = 0;
         int64_t write_cache_fail_count = 0;
         int64_t write_cache_fail_bytes = 0;
         int64_t read_block_buffer_bytes = 0;
@@ -40,7 +49,7 @@ public:
     explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
                               size_t size, int64_t modification_time);
 
-    ~CacheInputStream() override = default;
+    ~CacheInputStream() override;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
@@ -55,6 +64,8 @@ public:
     const Stats& stats() { return _stats; }
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
+
+    void set_enable_block_buffer(bool v) { _enable_block_buffer = v; }
 
     int64_t get_align_size() const;
 
@@ -83,6 +94,8 @@ private:
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
+    bool _enable_block_buffer = false;
+    BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;
 };

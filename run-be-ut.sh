@@ -39,7 +39,8 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --module                       module to run uts
-     --use-staros                   enable to build with staros
+     --enable-shared-data           enable to build with shared-data feature support
+     --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      -j                             build parallel
 
   Eg.
@@ -95,7 +96,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --use-staros) USE_STAROS=ON; shift ;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -151,10 +152,8 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
-# Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
-# Once the starcache version is stable, we will turn on it by default.
 if [[ -z ${WITH_STARCACHE} ]]; then
-  WITH_STARCACHE=${USE_STAROS}
+    WITH_STARCACHE=ON
 fi
 
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \

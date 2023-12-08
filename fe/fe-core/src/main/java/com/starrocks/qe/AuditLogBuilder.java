@@ -147,7 +147,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 }
             }
         } catch (Exception e) {
-            LOG.debug("failed to process audit event", e);
+            LOG.warn("failed to process audit event", e);
         }
     }
 

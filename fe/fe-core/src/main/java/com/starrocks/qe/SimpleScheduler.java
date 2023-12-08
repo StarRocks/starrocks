@@ -110,7 +110,7 @@ public class SimpleScheduler {
                 }
 
                 // In shared data mode, we can select any alive node to replace the original dead node for query
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                if (RunMode.isSharedDataMode()) {
                     List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
                     allNodes.addAll(computeNodes.values());
                     List<ComputeNode> candidateNodes = allNodes.stream()
@@ -261,7 +261,7 @@ public class SimpleScheduler {
                                 Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
                                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
                                     iterator.remove();
-                                    LOG.warn("remove backendID {} from blacklist", backendId);;
+                                    LOG.warn("remove backendID {} from blacklist", backendId);
                                 }
                             } else {
                                 Integer retryTimes = entry.getValue();

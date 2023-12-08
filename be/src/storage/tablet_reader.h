@@ -40,9 +40,11 @@ public:
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                  std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+                 RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema, Schema schema);
     ~TabletReader() override { close(); }
+
+    void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
 
     Status prepare();
 
@@ -58,7 +60,7 @@ public:
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
-    static Status parse_seek_range(const TabletSharedPtr& tablet,
+    static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
                                    TabletReaderParams::RangeEndOperation range_end_op,
                                    const std::vector<OlapTuple>& range_start_key,
@@ -105,6 +107,7 @@ private:
 
     // used for pk index based pointer read
     const TabletReaderParams* _reader_params = nullptr;
+    bool _is_asc_hint = true;
 };
 
 } // namespace starrocks

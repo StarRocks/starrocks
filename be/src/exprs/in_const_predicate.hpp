@@ -326,23 +326,15 @@ public:
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
-    void insert(const ValueType* value) {
-        if (value == nullptr) {
-            _null_in_set = true;
-        } else {
-            _hash_set.emplace(*value);
+    void insert(const ValueType& value) { _hash_set.emplace(value); }
+
+    void insert_array(const ValueType& value) {
+        if constexpr (can_use_array()) {
+            _set_array_index(value);
         }
     }
 
-    void insert_array(const ValueType* value) {
-        if (value == nullptr) {
-            _null_in_set = true;
-        } else {
-            if constexpr (can_use_array()) {
-                _set_array_index(*value);
-            }
-        }
-    }
+    void insert_null() { _null_in_set = true; }
 
     template <bool use_array>
     uint8_t check_value_existence(const ValueType& value) const {

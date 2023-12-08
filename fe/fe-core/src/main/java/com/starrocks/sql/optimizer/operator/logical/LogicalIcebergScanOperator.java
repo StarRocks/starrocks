@@ -25,9 +25,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+
+    private boolean hasUnknownColumn = true;
 
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -42,6 +45,8 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) table;
+        partitionColumns.addAll(icebergTable.getPartitionColumns().stream().map(x -> x.getName()).collect(Collectors.toList()));
     }
 
     private LogicalIcebergScanOperator() {
@@ -60,7 +65,17 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     @Override
     public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+        return !table.isUnPartitioned() &&
+                !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
+                predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
     }
 
     @Override

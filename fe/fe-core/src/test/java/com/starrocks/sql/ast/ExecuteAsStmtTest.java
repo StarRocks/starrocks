@@ -82,7 +82,7 @@ public class ExecuteAsStmtTest {
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("user1", stmt.getToUser().getQualifiedUser());
+        Assert.assertEquals("user1", stmt.getToUser().getUser());
         Assert.assertEquals("%", stmt.getToUser().getHost());
         Assert.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
         Assert.assertFalse(stmt.isAllowRevert());
@@ -90,7 +90,6 @@ public class ExecuteAsStmtTest {
         ExecuteAsExecutor.execute(stmt, ctx);
 
         Assert.assertEquals(new UserIdentity("user1", "%"), ctx.getCurrentUserIdentity());
-        Assert.assertEquals("user1", ctx.getQualifiedUser());
     }
 
     @Test(expected = SemanticException.class)

@@ -18,7 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.common.Config;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -32,15 +32,19 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -54,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
@@ -64,6 +69,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
+import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -75,6 +81,7 @@ import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -86,6 +93,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
@@ -99,6 +108,8 @@ public class Optimizer {
     private final OptimizerConfig optimizerConfig;
 
     private long updateTableId = -1;
+
+    private Set<OlapTable> queryTables;
 
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
@@ -123,12 +134,16 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
-        context.setUpdateTableId(updateTableId);
+
         if (optimizerConfig.isRuleBased()) {
             return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
             return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         }
+    }
+
+    public void setQueryTables(Set<OlapTable> queryTables) {
+        this.queryTables = queryTables;
     }
 
     public void setUpdateTableId(long updateTableId) {
@@ -169,15 +184,19 @@ public class Optimizer {
         Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        // collect all olap scan operator
+        collectAllScanOperators(logicOperatorTree, rootTaskContext);
+
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
         }
 
+        if (logicOperatorTree.getShortCircuit()) {
+            return logicOperatorTree;
+        }
+
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
-
-        // collect all olap scan operator
-        collectAllScanOperators(memo, rootTaskContext);
 
         // Currently, we cache output columns in logic property.
         // We derive logic property Bottom Up firstly when new group added to memo,
@@ -233,18 +252,11 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
-        if (Config.enable_experimental_mv
-                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
-                && !optimizerConfig.isRuleBased()) {
-            MvRewritePreprocessor preprocessor =
-                    new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
-            try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
-                preprocessor.prepareMvCandidatesForPlan();
-                if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
-                    preprocessor.prepareSyncMvCandidatesForPlan();
-                }
-            }
-        }
+        context.setQueryTables(queryTables);
+        context.setUpdateTableId(updateTableId);
+
+        // prepare related mvs if needed
+        new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -256,7 +268,9 @@ public class Optimizer {
             // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
             // projection before ReorderJoinRule's application, after that, we must separate operator's
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
             tree = new ReorderJoinRule().rewrite(tree, context);
@@ -283,7 +297,13 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
-        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        tree = OptExpression.createForShortCircuit(new LogicalTreeAnchorOperator(), tree, tree.getShortCircuit());
+        // for short circuit
+        Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
+        if (result.isPresent()) {
+            return result.get();
+        }
+
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
 
@@ -315,6 +335,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -341,6 +362,10 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
+        // after pruneSubfield which will push down subfield expr
+        if (sessionVariable.getEnableSubfieldNoCopy()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new SubfieldExprNoCopyRule());
+        }
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -361,6 +386,8 @@ public class Optimizer {
             if (cteContext.needPushLimit()) {
                 ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
             }
+
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
         }
 
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
@@ -393,6 +420,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -414,7 +442,22 @@ public class Optimizer {
         // if this rule has applied before MV.
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
+
         return tree.getInputs().get(0);
+    }
+
+    private Optional<OptExpression> ruleRewriteForShortCircuit(OptExpression tree, TaskContext rootTaskContext) {
+        Boolean isShortCircuit = tree.getShortCircuit();
+
+        if (isShortCircuit) {
+            deriveLogicalProperty(tree);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
+            OptExpression result = tree.getInputs().get(0);
+            result.setShortCircuit(true);
+            return Optional.of(result);
+        }
+        return Optional.empty();
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
@@ -457,26 +500,41 @@ public class Optimizer {
         OptExpression result = logicalRuleRewrite(connectContext, tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
+        // skip memo
+        if (result.getShortCircuit()) {
+            result = new OlapScanImplementationRule().transform(result, null).get(0);
+            result.setShortCircuit(true);
+        }
         return result;
     }
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
+        boolean pushDistinctFlag = false;
+        boolean pushAggFlag = false;
         if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
             // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
             //  fused one rule to tackle with all scenarios of agg push-down.
-            tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+            PushDownDistinctAggregateRule rule = new PushDownDistinctAggregateRule(rootTaskContext);
+            tree = rule.rewrite(tree, rootTaskContext);
+            pushDistinctFlag = rule.getRewriter().hasRewrite();
         }
 
-        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
-            return tree;
+        if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
+            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+            rule.getRewriter().collectRewriteContext(tree);
+            if (rule.getRewriter().isNeedRewrite()) {
+                pushAggFlag = true;
+                tree = rule.rewrite(tree, rootTaskContext);
+            }
         }
 
-        tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
-        deriveLogicalProperty(tree);
+        if (pushDistinctFlag || pushAggFlag) {
+            deriveLogicalProperty(tree);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        }
 
-        rootTaskContext.setRequiredColumns(requiredColumns.clone());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         return tree;
     }
 
@@ -612,8 +670,7 @@ public class Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
-
-        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
+        result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
@@ -651,16 +708,16 @@ public class Optimizer {
         expression.setRequiredProperties(inputProperties);
         expression.setStatistics(groupExpression.getGroup().getStatistics());
         expression.setCost(groupExpression.getCost(requiredProperty));
+        expression.setOutputProperty(requiredProperty);
 
         // When build plan fragment, we need the output column of logical property
         expression.setLogicalProperty(rootGroup.getLogicalProperty());
         return expression;
     }
 
-    private void collectAllScanOperators(Memo memo, TaskContext rootTaskContext) {
-        OptExpression tree = memo.getRootGroup().extractLogicalTree();
+    private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
-        Utils.extractOlapScanOperator(tree.getGroupExpression(), list);
+        Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
     }
 

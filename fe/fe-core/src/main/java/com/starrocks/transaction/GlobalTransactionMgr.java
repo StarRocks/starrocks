@@ -44,6 +44,8 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -121,9 +123,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
-        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId,
-                new DatabaseTransactionMgr(dbId, globalStateMgr, idGenerator)) ==
-                null) {
+        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, globalStateMgr)) == null) {
             LOG.debug("add database transaction manager for db {}", dbId);
         }
     }
@@ -423,14 +423,15 @@ public class GlobalTransactionMgr implements Writable {
         VisibleStateWaiter waiter;
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
-        if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
+        Locker locker = new Locker();
+        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMillis)) {
             throw new UserException("get database write lock timeout, database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -541,11 +542,12 @@ public class GlobalTransactionMgr implements Writable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment) throws UserException {
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -606,6 +608,17 @@ public class GlobalTransactionMgr implements Writable {
         return transactionStateList;
     }
 
+    public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {
+        List<TransactionStateBatch> transactionStateList = Lists.newArrayList();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            List<TransactionStateBatch> dbTransactionStatesBatch = dbTransactionMgr.getReadyToPublishTxnListBatch();
+            if (dbTransactionStatesBatch.size() != 0) {
+                transactionStateList.addAll(dbTransactionStatesBatch);
+            }
+        }
+        return transactionStateList;
+    }
+
     public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (tableId == null && partitionId == null) {
@@ -634,6 +647,12 @@ public class GlobalTransactionMgr implements Writable {
     public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
+    }
+
+    public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
+            throws UserException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
     }
 
     public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws UserException {
@@ -704,6 +723,21 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     /**
+     * Get the min txn id of running compaction transactions.
+     *
+     * @return the min txn id of running compaction transactions.
+     * If there are no running compaction transactions, return the next transaction id that will be assigned.
+     */
+    public long getMinActiveCompactionTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveCompactionTxnId().orElse(Long.MAX_VALUE));
+        }
+        return minId;
+    }
+
+    /**
      * Get the smallest transaction ID of active transactions in a database.
      * If there are no active transactions in the database, return the transaction ID that will be assigned to the
      * next transaction.
@@ -739,6 +773,15 @@ public class GlobalTransactionMgr implements Writable {
             dbTransactionMgr.replayUpsertTransactionState(transactionState);
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
+        }
+    }
+
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionStateBatch.getDbId());
+            dbTransactionMgr.replayUpsertTransactionStateBatch(transactionStateBatch);
+        } catch (AnalysisException e) {
+            LOG.warn("replay upsert transaction batch[" + transactionStateBatch + "] failed", e);
         }
     }
 
@@ -803,6 +846,14 @@ public class GlobalTransactionMgr implements Writable {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             txnNum += dbTransactionMgr.getTransactionNum();
+        }
+        return txnNum;
+    }
+
+    public int getFinishedTransactionNum() {
+        int txnNum = 0;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += dbTransactionMgr.getFinishedTxnNums();
         }
         return txnNum;
     }
@@ -892,6 +943,14 @@ public class GlobalTransactionMgr implements Writable {
             }
         }
         return txnInfos.size() > limit ? new ArrayList<>(txnInfos.subList(0, limit)) : txnInfos;
+    }
+
+    public Long getTransactionNumByCoordinateBe(String coordinateHost) {
+        Long txnNum = 0L;
+        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += databaseTransactionMgr.getTransactionNumByCoordinateBe(coordinateHost);
+        }
+        return txnNum;
     }
 
     /**

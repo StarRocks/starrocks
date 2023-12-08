@@ -73,6 +73,17 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
+    public List<PartitionDesc> getPartitionDescs() {
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        if (singleListPartitionDescs != null) {
+            partitionDescs.addAll(singleListPartitionDescs);
+        }
+        if (multiListPartitionDescs != null) {
+            partitionDescs.addAll(multiListPartitionDescs);
+        }
+        return partitionDescs;
+    }
+
     public List<String> getPartitionColNames() {
         return partitionColNames;
     }
@@ -317,6 +328,8 @@ public class ListPartitionDesc extends PartitionDesc {
         }
         return partitionColumns;
     }
+
+
 
     public boolean isAutoPartitionTable() {
         return isAutoPartitionTable;

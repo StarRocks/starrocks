@@ -89,10 +89,11 @@ AS SELECT k1,v1 FROM t1;
 drop table t1;
 -- result:
 -- !result
-CREATE TABLE t1 (
-    k1 INT,
-    v1 INT,
-    v2 INT)
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
 DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1)
 PROPERTIES(

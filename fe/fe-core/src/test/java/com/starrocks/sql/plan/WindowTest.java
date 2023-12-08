@@ -38,7 +38,6 @@ public class WindowTest extends PlanTestBase {
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
                 "has_var_args:false";
-        System.out.println(expectSlice);
         Assert.assertTrue(plan, plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
@@ -984,8 +983,17 @@ public class WindowTest extends PlanTestBase {
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
-                "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 0, probe_expr = (1: v1)");
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: 1: v1 IS NOT NULL\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=2.0\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v1)");
     }
 
     @Test
@@ -1147,10 +1155,10 @@ public class WindowTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 10001) over() from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 100001) over() from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the second parameter is 10000";
+            String expectedMessage = "The maximum number of the second parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
@@ -1165,10 +1173,10 @@ public class WindowTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) over() from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 100001) over() from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the third parameter is 10000";
+            String expectedMessage = "The maximum number of the third parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
@@ -1217,5 +1225,103 @@ public class WindowTest extends PlanTestBase {
                 "cast([2: v2, BIGINT, true] as VARCHAR)); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testSkewPartition() throws Exception {
+        String sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
     }
 }

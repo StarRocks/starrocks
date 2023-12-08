@@ -63,6 +63,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.annotation.Nullable;
 
 /**
@@ -117,7 +118,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("PAIMON")
         PAIMON,
         @SerializedName("HIVE_VIEW")
-        HIVE_VIEW;
+        HIVE_VIEW,
+        @SerializedName("BLACKHOLE")
+        BLACKHOLE;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -168,8 +171,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      * <p>
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
      */
+    // If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent 
+    // read-write operations between these tasks with a relatively low probability. 
+    // Therefore, we choose to use a CopyOnWriteArrayList.
     @SerializedName(value = "fullSchema")
-    protected List<Column> fullSchema;
+    protected List<Column> fullSchema = new CopyOnWriteArrayList<>();
     // tree map for case-insensitive lookup.
     /**
      * The nameToColumn of OlapTable includes the base columns and the SHADOW_NAME_PREFIX columns.
@@ -248,6 +254,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public void setId(long id) {
         this.id = id;
+    }
+
+    public String getCatalogName() {
+        return "default";
     }
 
     public String getName() {
@@ -350,6 +360,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.TABLE_FUNCTION;
     }
 
+    public boolean isBlackHoleTable() {
+        return type == TableType.BLACKHOLE;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -397,6 +411,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public Map<String, Column> getNameToColumn() {
+        return nameToColumn;
     }
 
     public String getTableLocation() {
@@ -726,6 +744,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isUnPartitioned() {
         return true;
+    }
+
+    public List<Column> getPartitionColumns() {
+        throw new NotImplementedException();
     }
 
     public List<String> getPartitionColumnNames() {

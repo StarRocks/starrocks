@@ -224,9 +224,10 @@ public class OperationType {
     public static final short OP_SAVE_TRANSACTION_ID = 104;
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
-
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
+
+    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 108;
 
     // routine load 110~120
     @Deprecated
@@ -460,6 +461,7 @@ public class OperationType {
     public static final short OP_RECOVER_PARTITION_V2 = 13003;
     public static final short OP_RENAME_TABLE_V2 = 13004;
     public static final short OP_RENAME_PARTITION_V2 = 13005;
+    public static final short OP_RENAME_COLUMN_V2 = 13006;
 
     public static final short OP_DROP_ROLLUP_V2 = 13010;
     public static final short OP_FINISH_CONSISTENCY_CHECK_V2 = 13011;

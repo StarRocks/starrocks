@@ -32,6 +32,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -183,7 +185,8 @@ public class ExportStmt extends StatementBase {
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tblName.getTbl());
             if (table == null) {
@@ -235,7 +238,7 @@ public class ExportStmt extends StatementBase {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

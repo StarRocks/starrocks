@@ -224,14 +224,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(1).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(2).num_dels(), 0);
 
-    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     // make sure delvecs have been generated
     for (int i = 0; i < 2; i++) {
         auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
@@ -248,7 +251,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
     if (GetParam().enable_persistent_index) {
@@ -259,6 +264,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
     EXPECT_EQ(3, new_tablet_metadata2->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata2->has_prev_garbage_version());
+    EXPECT_EQ(new_tablet_metadata2->rowsets(0).num_dels(), 0);
 }
 
 // test write 3 diff chunk
@@ -290,7 +296,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -303,7 +309,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
     if (GetParam().enable_persistent_index) {
@@ -314,6 +322,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(3, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
 }
 
 // test write empty chunk
@@ -354,7 +363,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 2, read(version));
@@ -367,7 +376,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -376,6 +387,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_EQ(2, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
 }
@@ -408,7 +420,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -457,7 +469,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     {
@@ -475,7 +487,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
@@ -487,7 +499,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(4, input_rowsets.size());
 
-    // check the rowset order, pick rowset#1 first, because it have deleted rows.
+    // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#4#2#3, by their byte size.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
     EXPECT_EQ(input_rowsets[1]->id(), 4);
@@ -532,7 +544,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     {
@@ -550,7 +562,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     config::write_buffer_size = old_size;
@@ -563,16 +575,16 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
-    EXPECT_EQ(3, input_rowsets[1]->num_segments());
+    EXPECT_EQ(1, input_rowsets[1]->num_segments());
     EXPECT_EQ(2, input_rowsets[2]->num_segments());
-    EXPECT_EQ(1, input_rowsets[3]->num_segments());
+    EXPECT_EQ(3, input_rowsets[3]->num_segments());
 
-    // check the rowset order, pick rowset#1 first, because it have deleted rows.
-    // Next order is rowset#4#2#3, by their segment count.
+    // check the rowset order, pick rowset#1 first, because it is empty.
+    // Next order is rowset#7#2#4, by their segment count.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
-    EXPECT_EQ(input_rowsets[1]->id(), 4);
+    EXPECT_EQ(input_rowsets[1]->id(), 7);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
-    EXPECT_EQ(input_rowsets[3]->id(), 7);
+    EXPECT_EQ(input_rowsets[3]->id(), 4);
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
@@ -603,7 +615,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -658,7 +670,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -670,22 +682,28 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     EXPECT_EQ(100, progress.value());
     // check compaction state
     ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
     RowsetPtr output_rowset = std::make_shared<Rowset>(
             tablet, std::make_shared<RowsetMetadata>(txn_log->op_compaction().output_rowset()));
-    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get(), _update_mgr.get());
-    for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
-        ASSERT_OK(compaction_state->load_segments(output_rowset.get(), _tablet_schema, i));
-        auto& pk_col = compaction_state->pk_cols[i];
-        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage());
-        compaction_state->release_segments(i);
-        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
+    {
+        auto compaction_state = std::make_unique<CompactionState>();
+        EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker() != nullptr);
+        auto prev = _update_mgr->compaction_state_mem_tracker()->consumption();
+        for (size_t i = 0; i < output_rowset->num_segments(); i++) {
+            ASSERT_OK(compaction_state->load_segments(output_rowset.get(), _update_mgr.get(), _tablet_schema, i));
+            auto& pk_col = compaction_state->pk_cols[i];
+            EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage() + prev);
+            compaction_state->release_segments(i);
+            EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), prev);
+        }
     }
     // publish version
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -699,6 +717,88 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     for (int i = 0; i < key_list.size() - 1; i++) {
         EXPECT_TRUE(key_list[i] < key_list[i + 1]);
     }
+
+    // Make sure all memory consume by compaction have return.
+    EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    // make sure delvecs have been generated
+    for (int i = 0; i < 2; i++) {
+        auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
+        EXPECT_TRUE(itr != new_tablet_metadata1->delvec_meta().version_to_file().end());
+        auto delvec_file = itr->second;
+        EXPECT_TRUE(fs::path_exist(_lp->delvec_location(tablet_id, delvec_file.name())));
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+    check_task(task);
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
+    // remove compaction state
+    _update_mgr->TEST_remove_compaction_cache(tablet_id, txn_id);
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    version++;
+    ASSERT_EQ(kChunkSize, read(version));
+    // write again
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    // check again
+    ASSERT_EQ(kChunkSize, read(version));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,

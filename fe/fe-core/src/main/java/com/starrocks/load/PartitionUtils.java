@@ -31,12 +31,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,10 +51,12 @@ public class PartitionUtils {
 
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
-                                                          List<Long> tmpPartitionIds, boolean isOptimize) throws DdlException {
+                                                          List<Long> tmpPartitionIds,
+                                                          DistributionDesc distributionDesc)throws DdlException {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds, isOptimize);
-        if (!db.writeLockAndCheckExist()) {
+                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds, distributionDesc);
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
@@ -137,7 +142,7 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

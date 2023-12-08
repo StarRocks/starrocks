@@ -309,7 +309,7 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
-    ThreadPool* vacuum_thread_pool();
+    ThreadPool* delete_file_thread_pool();
 
 private:
     void _wait_for_fragments_finish();

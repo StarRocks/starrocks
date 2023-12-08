@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, Void> {
 
@@ -257,9 +258,8 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
         }
 
         private void checkDateType(ConstantOperator constant, Type toType) {
-            try {
-                constant.castTo(toType);
-            } catch (Exception e) {
+            Optional<ConstantOperator> res = constant.castTo(toType);
+            if (!res.isPresent()) {
                 ErrorReport.reportValidateException(ErrorCode.ERR_INVALID_DATE_ERROR,
                         ErrorType.USER_ERROR, toType, constant.getValue());
             }

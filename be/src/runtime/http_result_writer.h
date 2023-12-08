@@ -65,12 +65,12 @@ public:
 private:
     void _init_profile();
 
-    void _transform_row_to_json(const Columns& column, int idx);
+    Status _transform_row_to_json(const Columns& column, int idx);
 
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
-    raw::RawString row_str;
+    raw::RawString _row_str;
     RuntimeProfile* _parent_profile; // parent profile from result sink. not owned
     // total time cost on append chunk operation
     RuntimeProfile::Counter* _append_chunk_timer = nullptr;

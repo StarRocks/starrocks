@@ -72,7 +72,8 @@ public class Tracers {
 
     public static void init(ConnectContext context, Mode mode, String moduleStr) {
         Tracers tracers = THREAD_LOCAL.get();
-        boolean enableProfile = context.getSessionVariable().isEnableProfile();
+        boolean enableProfile =
+                context.getSessionVariable().isEnableProfile() || context.getSessionVariable().isEnableBigQueryProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
 
         Module module = getTraceModule(moduleStr);
@@ -107,6 +108,16 @@ public class Tracers {
         } else if (Mode.NONE != mode && null != mode) {
             tracers.modeMask |= 1 << mode.ordinal();
         }
+    }
+
+    public static boolean isSetTraceMode(Mode e) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return (tracers.modeMask & 1 << e.ordinal()) != 0;
+    }
+
+    public static boolean isSetTraceModule(Module m) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return (tracers.moduleMask & 1 << m.ordinal()) != 0;
     }
 
     public static void close() {

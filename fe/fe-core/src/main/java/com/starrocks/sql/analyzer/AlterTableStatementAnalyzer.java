@@ -16,13 +16,17 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -53,6 +57,12 @@ public class AlterTableStatementAnalyzer {
         AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
         alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
+            if ((table instanceof OlapTable) &&
+                    ((OlapTable) table).hasRowStorageType() &&
+                    (alterClause instanceof AddColumnClause || alterClause instanceof DropColumnClause ||
+                            alterClause instanceof AlterTableColumnClause)) {
+                throw new SemanticException(String.format("row store table %s can't do schema change", table.getName()));
+            }
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
     }

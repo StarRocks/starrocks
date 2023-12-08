@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "gutil/macros.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
@@ -29,7 +29,8 @@ namespace starrocks::lake {
 
 class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
+    explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                           std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -37,7 +38,7 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data) override;
+    Status write(const Chunk& data, SegmentPB* segment = nullptr) override;
 
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
@@ -47,13 +48,13 @@ public:
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_del_file not support");
     }
 
-    Status flush() override;
+    Status flush(SegmentPB* segment = nullptr) override;
 
     Status flush_columns() override {
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_columns not support");
     }
 
-    Status finish() override;
+    Status finish(SegmentPB* segment = nullptr) override;
 
     void close() override;
 
@@ -61,14 +62,15 @@ public:
 
 protected:
     Status reset_segment_writer();
-    virtual Status flush_segment_writer();
+    virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
     std::unique_ptr<SegmentWriter> _seg_writer;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+    explicit VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                         std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                          uint32_t max_rows_per_segment);
 
     ~VerticalGeneralTabletWriter() override;
@@ -77,7 +79,7 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data) override {
+    Status write(const Chunk& data, SegmentPB* segment = nullptr) override {
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
     }
 
@@ -87,12 +89,12 @@ public:
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
     }
 
-    Status flush() override;
+    Status flush(SegmentPB* segment = nullptr) override;
 
     Status flush_columns() override;
 
     // Finalize all segments footer.
-    Status finish() override;
+    Status finish(SegmentPB* segment = nullptr) override;
 
     void close() override;
 

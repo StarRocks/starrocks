@@ -28,6 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -42,6 +43,7 @@ import kotlin.text.Charsets;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.rules.ErrorCollector;
@@ -89,12 +91,26 @@ public class PlanTestNoneDBBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.showJoinLocalShuffleInExplain = false;
+    }
+
+    @Before
+    public void setUp() {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
     }
 
     public static void assertContains(String text, String... pattern) {
         for (String s : pattern) {
             Assert.assertTrue(text, text.contains(s));
         }
+    }
+
+    public static void assertContainsCTEReuse(String sql) throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
+        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "  MultiCastDataSinks");
     }
 
     public static void assertContains(String text, List<String> patterns) {
@@ -132,10 +148,14 @@ public class PlanTestNoneDBBase {
     }
 
     public ExecPlan getExecPlan(String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
     }
 
     public String getFragmentPlan(String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
     }
@@ -580,7 +600,7 @@ public class PlanTestNoneDBBase {
         String explainString = getFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+            Assert.assertTrue("expected is:\n" + expected + "\n but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
     }

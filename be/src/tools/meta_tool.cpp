@@ -52,6 +52,7 @@
 #include "json2pb/pb_to_json.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -85,11 +86,12 @@ using starrocks::PageHandle;
 using starrocks::PagePointer;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
+using starrocks::DeltaColumnGroupList;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
+              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
+              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -129,12 +131,16 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool.sh --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=dump_column_size --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
-    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
-    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
+    ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
+          "--tablet_id=tabletid\n";
+    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
+    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
+    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
     return ss.str();
 }
 
@@ -581,6 +587,18 @@ void check_meta_consistency(DataDir* data_dir) {
     return;
 }
 
+void scan_dcgs(DataDir* data_dir) {
+    DeltaColumnGroupList dcgs;
+    Status st = TabletMetaManager::scan_tablet_delta_column_group(data_dir->get_meta(), FLAGS_tablet_id, &dcgs);
+    if (!st.ok()) {
+        std::cout << "scan delta column group, st: " << st.to_string() << std::endl;
+        return;
+    }
+    for (const auto& dcg : dcgs) {
+        std::cout << dcg->debug_string() << std::endl;
+    }
+}
+
 namespace starrocks {
 
 class SegmentDump {
@@ -591,6 +609,7 @@ public:
     Status dump_segment_data();
     Status dump_short_key_index(size_t key_column_count);
     Status calc_checksum();
+    Status dump_column_size();
 
 private:
     struct ColItem {
@@ -602,6 +621,8 @@ private:
     Status _init();
     void _convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col);
     std::shared_ptr<Schema> _init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema);
+    std::shared_ptr<Schema> _init_query_schema_by_column_id(const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                            ColumnId id);
     std::shared_ptr<TabletSchema> _init_search_schema_from_footer(const SegmentFooterPB& footer);
     void _analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols);
     Status _output_short_key_string(const std::vector<ColItem>& cols, size_t idx, Slice& key, std::string* result);
@@ -620,6 +641,13 @@ private:
 
 std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema) {
     return std::make_shared<Schema>(tablet_schema->schema());
+}
+
+std::shared_ptr<Schema> SegmentDump::_init_query_schema_by_column_id(const std::shared_ptr<TabletSchema>& tablet_schema,
+                                                                     ColumnId id) {
+    std::vector<ColumnId> cids;
+    cids.push_back(id);
+    return std::make_shared<Schema>(tablet_schema->schema(), cids);
 }
 
 void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
@@ -907,6 +935,59 @@ Status SegmentDump::dump_segment_data() {
     return Status::OK();
 }
 
+Status SegmentDump::dump_column_size() {
+    Status st = _init();
+    if (!st.ok()) {
+        std::cout << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    std::string result = "";
+    // for each column
+    for (ColumnId id = 0; id < _tablet_schema->num_columns(); id++) {
+        // read column one by one
+        auto schema = _init_query_schema_by_column_id(_tablet_schema, id);
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.use_page_cache = false;
+        OlapReaderStatistics stats;
+        seg_opts.stats = &stats;
+        auto seg_res = _segment->new_iterator(*schema, seg_opts);
+        if (!seg_res.ok()) {
+            std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
+            return seg_res.status();
+        }
+        auto seg_iter = std::move(seg_res.value());
+
+        // iter chunk
+        auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+        do {
+            st = seg_iter->get_next(chunk.get());
+            if (!st.ok()) {
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                std::cout << "iter chunk failed: " << st.to_string() << std::endl;
+                return st;
+            }
+            chunk->reset();
+        } while (true);
+        const ColumnMetaPB& column_meta = _footer.columns(id);
+        const google::protobuf::EnumValueDescriptor* compession_desc =
+                CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+        const google::protobuf::EnumValueDescriptor* encoding_desc =
+                EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+
+        result += fmt::format(
+                "[ column id: {} compression: {} encoding: {} compressed bytes: {} uncompressed bytes: {}]\n", id,
+                compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
+                column_meta.total_mem_footprint());
+    }
+    std::cout << result;
+
+    return Status::OK();
+}
+
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
@@ -942,6 +1023,17 @@ int meta_tool_main(int argc, char** argv) {
         Status st = segment_dump.dump_segment_data();
         if (!st.ok()) {
             std::cout << "dump segment data failed: " << st << std::endl;
+            return -1;
+        }
+    } else if (FLAGS_operation == "dump_column_size") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump segment file" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file);
+        Status st = segment_dump.dump_column_size();
+        if (!st.ok()) {
+            std::cout << "dump column size failed: " << st << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "dump_short_key_index") {
@@ -1001,6 +1093,21 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_schema") {
+        starrocks::TabletSchemaPB schema;
+        if (!schema.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse schema\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(schema, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",
@@ -1012,7 +1119,7 @@ int meta_tool_main(int argc, char** argv) {
                                                   "get_meta_stats",
                                                   "ls",
                                                   "check_table_meta_consistency",
-                                                  "calc_checksum"};
+                                                  "scan_dcgs"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -1020,7 +1127,7 @@ int meta_tool_main(int argc, char** argv) {
 
         bool read_only = false;
         if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
-            FLAGS_operation == "check_table_meta_consistency") {
+            FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs") {
             read_only = true;
         }
 
@@ -1049,6 +1156,8 @@ int meta_tool_main(int argc, char** argv) {
             list_meta(data_dir.get());
         } else if (FLAGS_operation == "check_table_meta_consistency") {
             check_meta_consistency(data_dir.get());
+        } else if (FLAGS_operation == "scan_dcgs") {
+            scan_dcgs(data_dir.get());
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
             return -1;

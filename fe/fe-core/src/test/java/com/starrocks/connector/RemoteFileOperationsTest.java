@@ -65,7 +65,7 @@ public class RemoteFileOperationsTest {
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
 
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
 

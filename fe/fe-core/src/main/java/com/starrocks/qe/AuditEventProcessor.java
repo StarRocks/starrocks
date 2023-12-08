@@ -73,7 +73,7 @@ public class AuditEventProcessor {
         try {
             eventQueue.put(auditEvent);
         } catch (InterruptedException e) {
-            LOG.debug("encounter exception when handle audit event, ignore", e);
+            LOG.warn("encounter exception when handle audit event, ignore", e);
         }
     }
 
@@ -96,7 +96,7 @@ public class AuditEventProcessor {
                         continue;
                     }
                 } catch (InterruptedException e) {
-                    LOG.debug("encounter exception when getting audit event from queue, ignore", e);
+                    LOG.warn("encounter exception when getting audit event from queue, ignore", e);
                     continue;
                 }
 
@@ -107,7 +107,7 @@ public class AuditEventProcessor {
                         }
                     }
                 } catch (Exception e) {
-                    LOG.debug("encounter exception when processing audit event.", e);
+                    LOG.warn("encounter exception when processing audit event.", e);
                 }
             }
         }

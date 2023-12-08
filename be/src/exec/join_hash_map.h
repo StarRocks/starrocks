@@ -101,8 +101,6 @@ struct JoinHashTableItems {
     Columns key_columns;
     Buffer<HashTableSlotDescriptor> build_slots;
     Buffer<HashTableSlotDescriptor> probe_slots;
-    Buffer<TupleId> output_build_tuple_ids;
-    Buffer<TupleId> output_probe_tuple_ids;
     const RowDescriptor* row_desc;
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
@@ -120,7 +118,6 @@ struct JoinHashTableItems {
     size_t build_column_count = 0;
     size_t probe_column_count = 0;
     bool with_other_conjunct = false;
-    bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
     bool has_large_column = false;
@@ -175,10 +172,6 @@ struct HashTableProbeState {
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
 
-    // true: generated chunk has null build tuple.
-    // e.g. left join and there is not matched row in build table
-    bool has_null_build_tuple = false;
-
     bool has_remain = false;
     // When one-to-many, one probe may not be able to probe all the data,
     // cur_probe_index records the position of the last probe
@@ -189,7 +182,6 @@ struct HashTableProbeState {
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
     HashTableProbeState() = default;
@@ -236,14 +228,12 @@ struct HashTableProbeState {
               count(rhs.count),
               probe_row_count(rhs.probe_row_count),
               match_flag(rhs.match_flag),
-              has_null_build_tuple(rhs.has_null_build_tuple),
               has_remain(rhs.has_remain),
               cur_probe_index(rhs.cur_probe_index),
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
-              output_probe_column_timer(rhs.output_probe_column_timer),
-              output_tuple_column_timer(rhs.output_tuple_column_timer) {}
+              output_probe_column_timer(rhs.output_probe_column_timer) {}
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -263,7 +253,6 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
-    bool need_create_tuple_columns = true;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
@@ -275,7 +264,6 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
 };
 
 template <class T>
@@ -612,11 +600,9 @@ public:
 
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
-    void _probe_tuple_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
     void _build_output(ChunkPtr* chunk);
-    void _build_tuple_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
@@ -753,7 +739,6 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
-                           RuntimeProfile::Counter* output_tuple_column_timer,
                            RuntimeProfile::Counter* output_build_column_timer);
 
     void create(const HashTableParam& param);
@@ -765,7 +750,7 @@ public:
                                bool* eos);
     [[nodiscard]] Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
-    void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
+    void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
     [[nodiscard]] StatusOr<ChunkPtr> convert_to_spill_schema(const ChunkPtr& chunk) const;
 
@@ -816,7 +801,6 @@ private:
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128 = nullptr;
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
-    bool _need_create_tuple_columns = true;
 
     std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();

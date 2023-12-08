@@ -217,10 +217,10 @@ public class SetTest extends PlanTestBase {
                 "  5:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
-        Assert.assertTrue(plan.contains("  12:Project\n" +
+        Assert.assertTrue(plan.contains("13:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
-                "  11:UNION\n" +
+                "  12:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
@@ -511,48 +511,39 @@ public class SetTest extends PlanTestBase {
 
     @Test
     public void testUnionWithOrderBy() throws Exception {
-        {
-            String sql =
-                    "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
-            String plan = getFragmentPlan(sql);
-            System.out.println(plan);
-            Assert.assertTrue(plan.contains("10:TOP-N\n" +
-                    "  |  order by: <slot 12> 12: v3 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 2\n" +
-                    "  |  \n" +
-                    "  0:UNION\n" +
-                    "  |  \n" +
-                    "  |----6:EXCHANGE\n" +
-                    "  |       limit: 2\n" +
-                    "  |    \n" +
-                    "  |----9:EXCHANGE\n" +
-                    "  |       limit: 2\n" +
-                    "  |    \n" +
-                    "  3:EXCHANGE\n" +
-                    "     limit: 2"));
-        }
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
+        String sql =
+                "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:TOP-N\n" +
+                "  |  order by: <slot 12> 12: v3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE"));
 
-        {
-            String sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
-            String plan = getFragmentPlan(sql);
-            Assert.assertTrue(plan.contains("  2:TOP-N\n" +
-                    "  |  order by: <slot 1> 1: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 1\n" +
-                    "  |  \n" +
-                    "  1:OlapScanNode\n" +
-                    "     TABLE: t0"));
-        }
+        sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0"));
 
-        {
-            String sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
-            String plan = getFragmentPlan(sql);
-            Assert.assertTrue(plan.contains("  6:SORT\n" +
-                    "  |  order by: <slot 8> 8: expr ASC"));
-            Assert.assertTrue(plan.contains("  2:Project\n" +
-                    "  |  <slot 4> : 1: v1 + 2: v2"));
-        }
+        sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 4> : 1: v1 + 2: v2"));
     }
 
     @Test

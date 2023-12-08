@@ -23,7 +23,6 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
-      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
       - name: Check
         id: check
@@ -34,20 +33,11 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
-      - uses: dorny/paths-filter@v2
-        id: thirdparty-checker
-        if: always()
-        with:
-          filters: |
-            thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: BE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}

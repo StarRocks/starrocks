@@ -58,6 +58,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         for (const auto& column_desc : _parent->_olap_scan_node.columns_desc) {
             _tablet_schema->append_column(TabletColumn(column_desc));
         }
+        _tablet_schema->generate_sort_key_idxes();
     }
 
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
@@ -110,9 +111,9 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
     }
 }
 
-Status TabletScanner::close(RuntimeState* state) {
+void TabletScanner::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -124,7 +125,6 @@ Status TabletScanner::close(RuntimeState* state) {
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(state->chunk_size() * 512);
     _is_closed = true;
-    return Status::OK();
 }
 
 Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
@@ -151,7 +151,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
-    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
+    auto parser = _pool.add(new PredicateParser(_tablet_schema));
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
 

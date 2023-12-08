@@ -53,6 +53,8 @@ struct TTabletSchema {
     8: optional bool is_in_memory // Deprecated
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
+    11: optional list<i32> sort_key_unique_ids
+    12: optional i32 schema_version;
 }
 
 // this enum stands for different storage format in src_backends
@@ -84,6 +86,7 @@ struct TBinlogConfig {
 // don't forget to also add type to PersistentIndexTypePB
 enum TPersistentIndexType {
     LOCAL = 0
+    CLOUD_NATIVE = 1
 }
 
 struct TCreateTabletReq {
@@ -110,6 +113,8 @@ struct TCreateTabletReq {
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
     19: optional i32 primary_index_cache_expire_sec;
+    // Whether or not need to create a separate file to hold schema information.
+    20: optional bool create_schema_file = true;
 }
 
 struct TDropTabletReq {
@@ -130,6 +135,13 @@ struct TAlterTabletMaterializedColumnReq {
     3: optional map<i32, Exprs.TExpr> mc_exprs
 }
 
+enum TAlterJobType {
+    ROLLUP = 0,
+    SCHEMA_CHANGE = 1,
+    DECOMMISSION_BACKEND = 2
+}
+
+
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
 struct TAlterTabletReqV2 {
@@ -147,6 +159,11 @@ struct TAlterTabletReqV2 {
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
     14: optional list<Descriptors.TColumn> columns
+    // synchronized materialized view parameters
+    15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
+    16: optional Descriptors.TDescriptorTable desc_tbl
+    17: optional Exprs.TExpr where_expr
+    18: optional list<string> base_table_column_names 
 }
 
 struct TAlterMaterializedViewParam {
@@ -345,7 +362,8 @@ enum TTabletMetaType {
     DISABLE_BINLOG,
     BINLOG_CONFIG,
     BUCKET_SIZE,
-    PRIMARY_INDEX_CACHE_EXPIRE_SEC
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+    STORAGE_TYPE
 }
 
 struct TTabletMetaInfo {

@@ -233,7 +233,7 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getQualifiedUser());
+                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
@@ -307,9 +307,6 @@ public class WebBaseAction extends BaseAction {
                     .append("ha")
                     .append("</a></li>");
         }
-        sb.append("<li id=\"nav_help\"><a href=\"/help\">")
-                .append("help")
-                .append("</a></li></tr>");
 
         sb.append(NAVIGATION_BAR_SUFFIX);
     }

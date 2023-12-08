@@ -93,7 +93,7 @@ protected:
 TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -175,7 +175,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -243,7 +243,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -311,7 +311,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -393,7 +393,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -444,8 +444,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
-
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
     // --------------init context---------------
     auto ctx = _create_scan_context();
     TIcebergSchema schema = TIcebergSchema{};
@@ -488,7 +487,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -532,7 +531,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -593,7 +592,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
     auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_subfield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -648,7 +647,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     auto file = _create_file(no_field_id_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(no_field_id_file_path));
+                                                    std::filesystem::file_size(no_field_id_file_path), 0);
 
     // --------------init context---------------
     auto ctx = _create_scan_context();

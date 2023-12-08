@@ -40,12 +40,18 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table array_struct_nest(c1 int, " +
+                "c2 array<struct<c2_sub1 int, c2_sub2 int>>, " +
+                "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
+                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
+                "properties('replication_num'='1');");
         FeConstants.runningUnitTest = false;
     }
 
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
         connectContext.getSessionVariable().setCboPruneSubfield(true);
     }
 
@@ -142,7 +148,7 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testStructWithWindow() throws Exception {
         String sql = "select sum(c2.b) over(partition by c2.a order by c0) from test";
         assertPlanContains(sql, " 3:ANALYTIC\n" +
-                "  |  functions: [, sum(7: c2.b), ]\n" +
+                "  |  functions: [, sum(7: c2.b[true]), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 1: c0 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -156,7 +162,7 @@ public class StructTypePlanTest extends PlanTestBase {
 
         sql = "select sum(c1.b[10].b) over(partition by c2.a order by c2.b) from test";
         assertPlanContains(sql, "3:ANALYTIC\n" +
-                "  |  functions: [, sum(6: c1.b[10].b), ]\n" +
+                "  |  functions: [, sum(6: c1.b[true][10].b[true]), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -187,7 +193,7 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "[], []");
+        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
     }
 
     @Test
@@ -205,7 +211,100 @@ public class StructTypePlanTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  5 <-> 2: c1.b[111]",
+                "  |  5 <-> 2: c1.b[true][111]",
                 "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
+    }
+
+    @Test
+    public void testNoProjectOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // no project on input, and no project on tf, no prune
+        String sql = "select c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2, c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        // project on input, no project on tf, prune
+        sql = "select c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        // output contains the complete column, no prune
+        sql = "select c3 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
+                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        sql = "select c3, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
+                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testProjectOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // no project on input, and project on tf, prune
+        String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        // no project on input, and project on tf all subfiled, no prune
+        sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2_struct, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        // project on input, project on tf, prune
+        sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        // project on input, project on tf but all subfiled, prune
+        sql = "select c3_struct.c3_sub1_sub1, c3_struct.c3_sub1_sub2 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        sql = "select c3_struct.c3_sub1_sub1, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testNoOutputOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c1 from array_struct_nest, unnest(c2) as t(c2_struct) where c2_struct.c2_sub1 > 0;";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        sql = "select c1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct) where c3_struct.c3_sub1_sub1 > 0;";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnnestComplex() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c2) as t(c_struct), " +
+                "unnest(c3.c3_sub1) as tt(c3_struct) where c_struct.c2_sub1 > 10";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnnestCrossJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest cross join " +
+                "unnest(c3.c3_sub1) as t(c3_struct) where c1 > 0;";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testSubfieldNoCopy() throws Exception {
+        String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
+        assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
+                "c3.d[false]", "c2.a[false]", "c1.a[false]");
+        // we don't support non-copy for this expr now
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+    }
+
+    @Test
+    public void testSubfieldNeedCopyForOverlap() throws Exception {
+        String sql = "select c3.c.a, c3.c from test";
+        assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
+        sql = "select c1.b, c1.b[1] from test";
+        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
+        sql = "select c1.b[1].a, c1.b from test";
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
     }
 }

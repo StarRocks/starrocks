@@ -51,6 +51,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -65,8 +66,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -81,15 +85,16 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -97,7 +102,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -115,6 +119,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -187,8 +192,9 @@ public class AnalyzerUtils {
             return null;
         }
 
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
@@ -206,7 +212,7 @@ public class AnalyzerUtils {
 
             return fn;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -463,6 +469,12 @@ public class AnalyzerUtils {
         return viewRelations;
     }
 
+    public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
+        Map<TableName, Relation>  allTableAndViewRelations = Maps.newHashMap();
+        new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
+        return allTableAndViewRelations;
+    }
+
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -503,6 +515,12 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
+    }
+
+    public static List<Pair<Expr, Relation[]>> collectAllJoinPredicatesRelations(StatementBase statementBase) {
+        List<Pair<Expr, Relation[]>> joinPredicates = Lists.newArrayList();
+        new AnalyzerUtils.JoinPredicateRelationCollector(joinPredicates).visit(statementBase);
+        return joinPredicates;
     }
 
     private static class TableAndViewCollector extends TableCollector {
@@ -562,9 +580,11 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            // if olap table has MV, we remove it
-            if (!node.getTable().isOlapTable() ||
-                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
+
+            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+            boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
+                    relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -572,22 +592,42 @@ public class AnalyzerUtils {
     }
 
     private static class OlapTableCollector extends TableCollector {
-        Set<OlapTable> olapTables;
+        private Set<OlapTable> olapTables;
+        private Map<Long, OlapTable> idMap;
 
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
+            this.idMap = new HashMap<>();
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
             if (node.getTable().isOlapTable()) {
                 OlapTable table = (OlapTable) node.getTable();
-                olapTables.add(table);
-                // Only copy the necessary olap table meta to avoid the lock when plan query
-                OlapTable copied = new OlapTable();
-                table.copyOnlyForQuery(copied);
-                node.setTable(copied);
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    OlapTable copied = new OlapTable();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
+            } else if (node.getTable().isOlapMaterializedView()) {
+                MaterializedView table = (MaterializedView) node.getTable();
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    MaterializedView copied = new MaterializedView();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
             }
+            // TODO: support cloud native table and mv
             return null;
         }
     }
@@ -684,6 +724,57 @@ public class AnalyzerUtils {
         }
     }
 
+    private static class TableAndViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final Map<TableName, Relation> allTableAndViewRelations;
+
+        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations) {
+            this.allTableAndViewRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.isCreateByPolicyRewritten()) {
+                return null;
+            }
+            allTableAndViewRelations.put(node.getName(), node);
+            return null;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            if (node.isCreateByPolicyRewritten()) {
+                return null;
+            }
+            allTableAndViewRelations.put(node.getName(), node);
+            return null;
+        }
+    }
+
+    private static class JoinPredicateRelationCollector extends TableCollector {
+        private final List<Pair<Expr, Relation[]>> joinPredicates;
+
+        public JoinPredicateRelationCollector(List<Pair<Expr, Relation[]>> joinPredicates) {
+            super(null);
+            this.joinPredicates = joinPredicates;
+        }
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            Relation[] relations = new Relation[2];
+            relations[0] = node.getLeft();
+            relations[1] = node.getRight();
+            joinPredicates.add(Pair.create(node.getOnPredicate(), relations));
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            return null;
+        }
+    }
+
     private static class SubQueryRelationCollector extends TableCollector {
         Map<TableName, SubqueryRelation> subQueryRelations;
 
@@ -776,15 +867,15 @@ public class AnalyzerUtils {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                int len = ScalarType.OLAP_MAX_VARCHAR_LENGTH;
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
-                        len = scalarType.getLength();
+                        // Catalog's varchar length may larger than olap's max varchar length
+                        len = Integer.min(scalarType.getLength(), ScalarType.OLAP_MAX_VARCHAR_LENGTH);
                     }
                 }
-                ScalarType stringType = ScalarType.createVarcharType(len);
-                newType = stringType;
+                newType = ScalarType.createVarcharType(len);
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
                     PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
                 if (convertDouble) {
@@ -908,14 +999,13 @@ public class AnalyzerUtils {
         return new PartitionMeasure(interval, granularity);
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+    public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                                            List<List<String>> partitionValues)
             throws AnalysisException {
-        Map<String, AddPartitionClause> result = Maps.newHashMap();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
-            getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure, result,
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure,
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
@@ -924,6 +1014,8 @@ public class AnalyzerUtils {
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
 
+            List<String> partitionColNames = Lists.newArrayList();
+            List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
@@ -934,19 +1026,21 @@ public class AnalyzerUtils {
                 if (partitionName.length() > 50) {
                     partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
-                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                        partitionName, Collections.singletonList(partitionValue), partitionProperties);
-
-                multiItemListPartitionDesc.setSystem(true);
-                AddPartitionClause addPartitionClause =
-                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc,
-                                partitionProperties, false);
-                result.put(partitionName, addPartitionClause);
+                if (!partitionColNames.contains(partitionName)) {
+                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                    multiItemListPartitionDesc.setSystem(true);
+                    partitionDescs.add(multiItemListPartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             }
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            listPartitionDesc.setSystem(true);
+            return new AddPartitionClause(listPartitionDesc, distributionDesc,
+                    partitionProperties, false);
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
-        return result;
     }
 
     @VisibleForTesting
@@ -971,9 +1065,9 @@ public class AnalyzerUtils {
         return sb.toString();
     }
 
-    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<List<String>> partitionValues,
-                                                               PartitionMeasure measure,
-                                                               Map<String, AddPartitionClause> result,
+    private static AddPartitionClause getAddPartitionClauseForRangePartition(OlapTable olapTable,
+                                                                             List<List<String>> partitionValues,
+                                                                             PartitionMeasure measure,
                                                                ExpressionRangePartitionInfo expressionRangePartitionInfo)
             throws AnalysisException {
         String granularity = measure.getGranularity();
@@ -984,6 +1078,8 @@ public class AnalyzerUtils {
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        List<String> partitionColNames = Lists.newArrayList();
         for (List<String> partitionValue : partitionValues) {
             if (partitionValue.size() != 1) {
                 throw new AnalysisException("automatic partition only support single column for range partition.");
@@ -1028,17 +1124,20 @@ public class AnalyzerUtils {
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
-                SingleRangePartitionDesc singleRangePartitionDesc =
-                        new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-                singleRangePartitionDesc.setSystem(true);
-                AddPartitionClause addPartitionClause =
-                        new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
-                                partitionProperties, false);
-                result.put(partitionName, addPartitionClause);
+                if (!partitionColNames.contains(partitionName)) {
+                    SingleRangePartitionDesc singleRangePartitionDesc =
+                            new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
+                    singleRangePartitionDesc.setSystem(true);
+                    partitionDescs.add(singleRangePartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
+        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
+        rangePartitionDesc.setSystem(true);
+        return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, false);
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
@@ -1277,67 +1376,6 @@ public class AnalyzerUtils {
         return null;
     }
 
-
-    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
-        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
-            @Override
-            public Expr visitSelect(SelectRelation node, Void context) {
-                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
-                    if (selectListItem.isStar()) {
-                        // `select *` expr
-                        for (Expr expr : node.getOutputExpression()) {
-                            if (expr instanceof SlotRef) {
-                                SlotRef slot = (SlotRef) expr;
-                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                    return slot;
-                                }
-                            } else if (expr instanceof FieldReference) {
-                                FieldReference fieldReference = (FieldReference) expr;
-                                Field field = node.getScope().getRelationFields()
-                                        .getFieldByIndex(fieldReference.getFieldIndex());
-                                if (field.getName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                    return new SlotRef(field.getRelationAlias(), field.getName());
-                                }
-                            }
-                        }
-                        return null;
-                    } else {
-                        if (selectListItem.getAlias() == null) {
-                            if (selectListItem.getExpr() instanceof SlotRef) {
-                                SlotRef slot = (SlotRef) selectListItem.getExpr();
-                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                    return slot;
-                                }
-                            }
-                        } else {
-                            if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
-                                return selectListItem.getExpr();
-                            }
-                        }
-                    }
-                }
-                return null;
-            }
-
-            @Override
-            public Expr visitSetOp(SetOperationRelation node, Void context) {
-                for (Relation relation : node.getRelations()) {
-                    Expr resolved = relation.accept(this, null);
-                    if (resolved != null) {
-                        return resolved;
-                    }
-                }
-                return null;
-            }
-
-            @Override
-            public SlotRef visitValues(ValuesRelation node, Void context) {
-                return null;
-            }
-        };
-        return queryStatement.getQueryRelation().accept(slotRefResolver, null);
-    }
-
     public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
         for (String current : list) {
             if (current.equalsIgnoreCase(soughtFor)) {
@@ -1347,4 +1385,24 @@ public class AnalyzerUtils {
         return false;
     }
 
+    // rename slotRef in expr to newColName
+    public static Expr renameSlotRef(Expr expr, String newColName) {
+        if (expr instanceof FunctionCallExpr) {
+            for (int i = 0; i < expr.getChildren().size(); i++) {
+                Expr child = expr.getChildren().get(i);
+                if (child instanceof SlotRef) {
+                    expr.setChild(i, new SlotRef(null, newColName));
+                    break;
+                }
+            }
+            return expr;
+        } else if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                return renameSlotRef(child, newColName);
+            }
+        }
+        return expr;
+    }
 }

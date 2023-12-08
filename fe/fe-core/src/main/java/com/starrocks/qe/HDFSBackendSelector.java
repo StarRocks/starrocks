@@ -53,7 +53,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 /**
@@ -86,7 +85,7 @@ public class HDFSBackendSelector implements BackendSelector {
     // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
-    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
+    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 128;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -173,9 +172,7 @@ public class HDFSBackendSelector implements BackendSelector {
             }
         }
         if (node == null) {
-            Random rand = new Random(System.currentTimeMillis());
-            int i = rand.nextInt(backends.size());
-            node = backends.get(i);
+            node = backends.get(0);
         }
         return node;
     }

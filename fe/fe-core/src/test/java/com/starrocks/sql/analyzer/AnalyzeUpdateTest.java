@@ -14,8 +14,32 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageMedium;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -65,5 +89,55 @@ public class AnalyzeUpdateTest {
     @Test
     public void testSelectBeSchemaTable() {
         analyzeSuccess("select * from information_schema.be_tablets");
+    }
+
+    @Test
+    public void testColumnWithRowUpdate() {
+        analyzeFail("update tmcwr set name = 22",
+                "column with row table must specify where clause for update");
+    }
+
+    @Test
+    public void testLake() {
+        new MockUp<GlobalStateMgr>() {
+
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getTable(ConnectContext session, TableName tableName) {
+                long dbId = 1L;
+                long tableId = 2L;
+                long partitionId = 3L;
+                long indexId = 4L;
+                long tabletId = 10L;
+                // Schema
+                List<Column> columns = Lists.newArrayList();
+                Column k1 = new Column("k1", Type.INT, true, null, "0", "");
+                columns.add(k1);
+                columns.add(new Column("k2", Type.BIGINT, true, null, "0", ""));
+                columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+                // Tablet
+                Tablet tablet = new LakeTablet(tabletId);
+
+                // Index
+                MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                index.addTablet(tablet, tabletMeta);
+
+                // Partition
+                DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+                PartitionInfo partitionInfo = new SinglePartitionInfo();
+                partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+                // Lake table
+                LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+                return table;
+            }
+        };
+
+        String sql = "update t1 set v2 = v2 + 1";
+        analyzeFail(sql, "must specify where clause to prevent full table update");
     }
 }

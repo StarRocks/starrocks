@@ -14,7 +14,13 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -22,8 +28,8 @@ import org.junit.Test;
 public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         prepareDatas();
     }
@@ -347,6 +353,86 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             PlanTestBase.assertNotContains(plan, "rollup: test_mv2");
         }
         starRocksAssert.dropMaterializedView("test_mv2");
+    }
+
+    @Test
+    public void testRuleExhausted_SingleTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM " +
+                "tbl_1 AS p1 ");
+        String query = "select sum(p1.p1_col4) from tbl_1 p1";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testRuleExhausted_MultiTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM tbl_1 AS p1 " +
+                "JOIN tbl_2 AS p2");
+        String query = "select sum(p1.p1_col4) from tbl_1 p1 JOIN tbl_2 AS p2";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testRuleExhausted_SameTablePermutation() throws Exception {
+        String mvName = "test_exhaused";
+
+        for (int numTables : ImmutableList.of(4, 10)) {
+            StringBuilder sb = new StringBuilder("select sum(p1.p1_col4) from tbl_1 p1 ");
+            for (int i = 2; i < numTables; i++) {
+                String alias = "p" + i;
+                sb.append(String.format(" LEFT JOIN tbl_2 AS %s on %s.p2_col1 = p1_col1", alias, alias));
+            }
+            String query = sb.toString();
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\"=\"1\"\n" +
+                    ")\n" +
+                    "AS " + query);
+
+            int limit = SessionVariable.DEFAULT_SESSION_VARIABLE.getMaterializedViewJoinSameTablePermutationLimit();
+            if (numTables >= limit) {
+                starRocksAssert.query(query).explainWithout(mvName);
+            } else {
+                starRocksAssert.query(query).explainContains(mvName);
+            }
+            starRocksAssert.dropMaterializedView(mvName);
+        }
     }
 
 }

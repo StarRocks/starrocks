@@ -89,9 +89,7 @@ public class PaimonMetadataTest {
 
     @Before
     public void setUp() {
-
-        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog,
-                "filesystem", null, "hdfs://127.0.0.1:9999/warehouse");
+        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog);
 
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);

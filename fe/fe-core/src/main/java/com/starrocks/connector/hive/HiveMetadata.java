@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
@@ -148,12 +149,18 @@ public class HiveMetadata implements ConnectorMetadata {
                         " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
 
-            if (getTable(dbName, tableName) == null && stmt.isSetIfExists()) {
+            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+            if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
             }
 
+            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
+                throw new StarRocksConnectorException("Only support to drop hive managed table");
+            }
+
             hmsOps.dropTable(dbName, tableName);
+            StatisticUtils.dropStatisticsAfterDropTable(hiveTable);
         }
     }
 
@@ -304,7 +311,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 Preconditions.checkState(partitionColNames.size() == partitionValues.size(),
                         "Partition columns names size doesn't equal partition values size. %s vs %s",
                         partitionColNames.size(), partitionValues.size());
-                if (hmsOps.partitionExists(dbName, tableName, partitionValues)) {
+                if (hmsOps.partitionExists(table, partitionValues)) {
                     mode = isOverwrite ? UpdateMode.OVERWRITE : UpdateMode.APPEND;
                 } else {
                     mode = PartitionUpdate.UpdateMode.NEW;

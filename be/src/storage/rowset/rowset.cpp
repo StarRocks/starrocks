@@ -51,6 +51,7 @@
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -77,20 +78,18 @@ Rowset::~Rowset() {
 }
 
 Status Rowset::load() {
+    // before lock, if rowset state is ROWSET_UNLOADING, maybe it is doing do_close in release
+    std::lock_guard<std::mutex> load_lock(_lock);
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
     if (_rowset_state_machine.rowset_state() == ROWSET_LOADED) {
         return Status::OK();
     }
-    {
-        // before lock, if rowset state is ROWSET_UNLOADING, maybe it is doing do_close in release
-        std::lock_guard<std::mutex> load_lock(_lock);
-        // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
-        if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
-            // first do load, then change the state
-            RETURN_IF_ERROR(do_load());
-            RETURN_IF_ERROR(_rowset_state_machine.on_load());
-        }
+    // after lock, if rowset state is ROWSET_UNLOADING, it is ok to return
+    if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
+        // first do load, then change the state
+        RETURN_IF_ERROR(do_load());
+        RETURN_IF_ERROR(_rowset_state_machine.on_load());
     }
     VLOG(1) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
             << ", state from ROWSET_UNLOADED to ROWSET_LOADED. tabletid:" << _rowset_meta->tablet_id();
@@ -201,6 +200,24 @@ Status Rowset::reload_segment(int32_t segment_id) {
     size_t footer_size_hint = 16 * 1024;
     std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
     auto res = Segment::open(fs, seg_path, segment_id, _schema, &footer_size_hint);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+        return res.status();
+    }
+    _segments[segment_id] = std::move(res).value();
+    return Status::OK();
+}
+
+Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema) {
+    DCHECK(_segments.size() > segment_id);
+    if (_segments.size() <= segment_id) {
+        LOG(WARNING) << "Error segment id: " << segment_id;
+        return Status::InternalError("Error segment id");
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    size_t footer_size_hint = 16 * 1024;
+    std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
+    auto res = Segment::open(fs, seg_path, segment_id, schema, &footer_size_hint);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
         return res.status();
@@ -580,7 +597,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
-    seg_options.short_key_ranges = options.short_key_ranges;
+    if (options.short_key_ranges_option != nullptr) { // logical split.
+        seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
+    }
+    seg_options.asc_hint = options.asc_hint;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
@@ -607,11 +627,18 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             continue;
         }
 
-        if (options.rowid_range_option != nullptr) {
-            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
-            if (seg_options.rowid_range_option == nullptr) {
+        if (options.rowid_range_option != nullptr) { // physical split.
+            auto [rowid_range, is_first_split_of_segment] =
+                    options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+            if (rowid_range == nullptr) {
                 continue;
             }
+            seg_options.rowid_range_option = std::move(rowid_range);
+            seg_options.is_first_split_of_segment = is_first_split_of_segment;
+        } else if (options.short_key_ranges_option != nullptr) { // logical split.
+            seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+        } else {
+            seg_options.is_first_split_of_segment = true;
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);
@@ -643,9 +670,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     return Status::OK();
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema, KVStore* meta,
-                                                                       int64_t version, OlapReaderStatistics* stats,
-                                                                       KVStore* dcg_meta) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema,
+                                                                       const TabletSchemaCSPtr& tablet_schema,
+                                                                       KVStore* meta, int64_t version,
+                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta) {
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
@@ -655,6 +683,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
+    seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
 

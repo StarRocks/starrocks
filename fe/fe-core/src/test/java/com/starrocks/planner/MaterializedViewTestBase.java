@@ -15,20 +15,23 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -44,14 +47,29 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
 
+    // You can set it in each unit test for trace mv log: mv/all/"", default is "" which will output nothing.
+    private  String traceLogModule = "";
+
+    public void setTracLogModule(String module) {
+        this.traceLogModule = module;
+    }
+
+    public void resetTraceLogModule() {
+        this.traceLogModule = "";
+    }
+
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -60,6 +78,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
@@ -69,8 +89,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
-                return Sets.newHashSet();
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
             }
         };
 
@@ -218,6 +239,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private String rewritePlan;
         private Exception exception;
         private String properties;
+        private String traceLog;
 
         public MVRewriteChecker(String query) {
             this.query = query;
@@ -253,11 +275,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                Pair<ExecPlan, String> planAndTrace =
+                        UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+                this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                this.traceLog = planAndTrace.second;
             } catch (Exception e) {
-                LOG.warn("test rewwrite failed:", e);
+                LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(traceLog);
+                }
                 if (mv != null && !mv.isEmpty()) {
                     try {
                         starRocksAssert.dropMaterializedView("mv0");
@@ -267,6 +295,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
             }
             return this;
+        }
+
+        public String getTraceLog() {
+            return this.traceLog;
+        }
+
+        Exception getException() {
+            return this.exception;
         }
 
         public MVRewriteChecker ok() {
@@ -296,15 +332,35 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        public MVRewriteChecker contains(String expect) {
+        private MVRewriteChecker contains(String expect, boolean isIgnoreColRef) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = this.rewritePlan.contains(expect);
+            boolean contained = false;
+            if (isIgnoreColRef) {
+                expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
+                        .map(str -> str.replaceAll("\\d+", "").trim())
+                        .collect(Collectors.joining("\n"));
+                String actual = Stream.of(this.rewritePlan.split("\n")).filter(s -> !s.contains("tabletList"))
+                        .map(str -> str.replaceAll("\\d+", "").trim())
+                        .collect(Collectors.joining("\n"));
+                contained = actual.contains(expect);
+            } else {
+                contained = this.rewritePlan.contains(expect);
+            }
+
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
             }
             Assert.assertTrue(contained);
             return this;
+        }
+
+        public MVRewriteChecker containsIgnoreColRefs(String expect) {
+            return contains(expect, true);
+        }
+
+        public MVRewriteChecker contains(String expect) {
+            return contains(expect, false);
         }
 
         public MVRewriteChecker notContain(String expect) {
@@ -342,9 +398,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         return testRewriteOK(mv, query, null);
     }
 
-    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
         MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().ok();
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw new RuntimeException(checker.getException());
+        }
+        return checker.ok();
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
@@ -359,6 +419,15 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
         return fixture.rewrite().nonMatch();
+    }
+
+    protected MVRewriteChecker rewrite(String mv, String query, String properties) throws Exception {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw checker.getException();
+        }
+        return checker;
     }
 
     protected static Table getTable(String dbName, String mvName) {
@@ -397,5 +466,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         String tableName = matcher.group(1);
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
+    }
+
+    public void runFileUnitTestWithNormalizedResult(String fileName) {
+        QueryDebugOptions debugOptions = new QueryDebugOptions();
+        debugOptions.setEnableNormalizePredicateAfterMVRewrite(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+        runFileUnitTest(fileName);
+        connectContext.getSessionVariable().setQueryDebugOptions("");
     }
 }

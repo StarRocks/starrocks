@@ -2477,7 +2477,8 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
         std::sort(rowids.begin(), rowids.end());
         rowids_by_rssid.emplace(i, rowids);
     }
-    tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns, nullptr);
+    tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns, nullptr,
+                                         tablet->tablet_schema());
     auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
         std::stringstream ss;
         ss << "[";
@@ -2497,7 +2498,8 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     for (const auto& read_column : read_columns) {
         read_column->reset_column();
     }
-    tablet->updates()->get_column_values(read_column_ids, 0, true, rowids_by_rssid, &read_columns, nullptr);
+    tablet->updates()->get_column_values(read_column_ids, 0, true, rowids_by_rssid, &read_columns, nullptr,
+                                         tablet->tablet_schema());
     ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
     ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }
@@ -2541,6 +2543,16 @@ TEST_F(TabletUpdatesTest, get_missing_version_ranges) {
     test_get_missing_version_ranges({}, {2});
     test_get_missing_version_ranges({2, 3, 4, 5}, {6});
     test_get_missing_version_ranges({3, 4, 5}, {2, 2, 6});
+}
+
+TEST_F(TabletUpdatesTest, column_with_row_update) {
+    auto tablet = create_tablet_column_with_row(rand(), rand());
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(1, create_rowset_column_with_row(tablet, keys)).ok());
 }
 
 void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& versions,
@@ -2814,6 +2826,55 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         }
     }
     ASSERT_TRUE(count == keys.size());
+}
+
+TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        int32_t version = 2;
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    {
+        int32_t version = 3;
+        _tablet->updates()->stop_apply(true);
+        std::vector<int32_t> column_indexes = {0, 1};
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
+        StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), partial_rowset.get());
+        auto st = _tablet->rowset_commit(version, partial_rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        TabletSchemaSPtr new_tablet_schema = std::make_shared<TabletSchema>();
+        new_tablet_schema->copy_from(_tablet->tablet_schema());
+        auto cur_schema_version = new_tablet_schema->schema_version();
+        TabletColumn add_col;
+        add_col.set_unique_id(3);
+        add_col.set_name("v3");
+        add_col.set_type(LogicalType::TYPE_INT);
+        add_col.set_default_value("0");
+        add_col.set_length(4);
+        add_col.set_is_nullable(true);
+        new_tablet_schema->append_column(add_col);
+        new_tablet_schema->set_schema_version(cur_schema_version + 1);
+        _tablet->update_max_version_schema(new_tablet_schema);
+
+        _tablet->updates()->stop_apply(false);
+        _tablet->updates()->check_for_apply();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
 }
 
 } // namespace starrocks

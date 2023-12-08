@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFuncti
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
@@ -135,6 +136,7 @@ import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
@@ -204,13 +206,13 @@ public class RuleSet {
     static {
         REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
                 new PushDownProjectLimitRule(),
+                new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
                 new PushDownLimitCTEAnchor(),
                 new PushDownLimitUnionRule(),
                 new MergeLimitWithLimitRule(),
-                new EliminateLimitZeroRule(),
                 PushDownLimitDirectRule.PROJECT,
                 PushDownLimitDirectRule.ASSERT_ONE_ROW,
                 PushDownLimitDirectRule.CTE_CONSUME,
@@ -345,7 +347,8 @@ public class RuleSet {
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule(),
                 new RewriteSimpleAggToMetaScanRule(),
-                new RewriteSumByAssociativeRule()
+                new RewriteSumByAssociativeRule(),
+                new RewriteCountIfFunction()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
@@ -399,6 +402,19 @@ public class RuleSet {
                 new PruneEmptyExceptRule(),
                 new PruneEmptyWindowRule()
         ));
+
+        REWRITE_RULES.put(RuleSetType.SHORT_CIRCUIT_SET, ImmutableList.of(
+                new PruneTrueFilterRule(),
+                new PushDownPredicateProjectRule(),
+                PushDownPredicateScanRule.OLAP_SCAN,
+                new CastToEmptyRule(),
+                PruneScanColumnRule.OLAP_SCAN,
+                new PruneProjectEmptyRule(),
+                new MergeTwoProjectRule(),
+                new PruneProjectRule(),
+                new PartitionPruneRule(),
+                new DistributionPruneRule(),
+                new MergeProjectWithChildRule()));
     }
 
     public RuleSet() {
@@ -438,8 +454,16 @@ public class RuleSet {
         return implementRules;
     }
 
-    public List<Rule> getRewriteRulesByType(RuleSetType type) {
+    public static List<Rule> getRewriteRulesByType(RuleSetType type) {
         return REWRITE_RULES.get(type);
+    }
+
+    public static List<Rule> getRewriteRulesByType(List<RuleSetType> types) {
+        List<Rule> allRules = Lists.newArrayList();
+        for (RuleSetType ruleSetType : types) {
+            allRules.addAll(REWRITE_RULES.get(ruleSetType));
+        }
+        return allRules;
     }
 
     public void addRealtimeMVRules() {

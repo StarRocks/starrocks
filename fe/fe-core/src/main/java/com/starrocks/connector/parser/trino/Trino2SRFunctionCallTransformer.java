@@ -133,6 +133,9 @@ public class Trino2SRFunctionCallTransformer {
         // filter(array, lambda) -> array_filter(array, lambda)
         registerFunctionTransformer("filter", 2, "array_filter",
                 ImmutableList.of(Expr.class, Expr.class));
+        // contains_sequence -> array_contains_seq
+        registerFunctionTransformer("contains_sequence", 2, "array_contains_seq",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerDateFunctionTransformer() {
@@ -194,16 +197,34 @@ public class Trino2SRFunctionCallTransformer {
 
         // length -> char_length
         registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
+
+        // str_to_map(str, del1, del2) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 3, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new PlaceholderExpr(3, Expr.class))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 2, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new StringLiteral(":"))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 1, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new StringLiteral(","))), new StringLiteral(":"))));
+
+        // replace(string, search) -> replace(string, search, '')
+        registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                        new StringLiteral(""))));
     }
 
     private static void registerRegexpFunctionTransformer() {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 ImmutableList.of(Expr.class, Expr.class));
-
-        // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
-        registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
-                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
     }
 
     private static void registerJsonFunctionTransformer() {

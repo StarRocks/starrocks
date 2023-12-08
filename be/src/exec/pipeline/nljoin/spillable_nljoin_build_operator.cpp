@@ -62,14 +62,14 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
-    spiller->set_flush_all_call_back(
+    RETURN_IF_ERROR(spiller->set_flush_all_call_back(
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
                 _is_finished = true;
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
 
     return Status::OK();
 }

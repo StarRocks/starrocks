@@ -109,7 +109,9 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
-    DCHECK(!output_chunk_by_bucket() || !scan_ranges_per_driver_seq.empty());
+    // if scan range is empty, we don't have to check for per-bucket-optimize
+    // if we enable per-bucket-optimize, each scan_operator should be assign scan range by FE planner
+    DCHECK(global_scan_ranges.empty() || !output_chunk_by_bucket() || !scan_ranges_per_driver_seq.empty());
     if (scan_ranges_per_driver_seq.empty()) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,

@@ -173,7 +173,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
     TimezoneHsScan timezone_hsscan;
-    timezone_hsscan.compile();
+    RETURN_IF_ERROR(timezone_hsscan.compile());
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row) || from_str.is_null(row) || to_str.is_null(row)) {
             result.append_null();
@@ -192,8 +192,8 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         int64_t timestamp;
         int64_t offset;
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
-            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second);
-            ts.from_unix_second(ts.to_unix_second() + offset);
+            TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
+            ts.from_unix_second(ts.to_unix_second() + offset, usec);
             result.append(ts);
             continue;
         }
@@ -206,14 +206,13 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
 
         DateTimeValue ts_value2;
         if (!ts_value2.from_cctz_timezone(timezone_hsscan, to_format, ctz) ||
-            !ts_value2.from_unixtime(timestamp, ctz)) {
+            !ts_value2.from_unixtime(timestamp, ts_value.microsecond(), ctz)) {
             result.append_null();
             continue;
         }
-
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), 0);
+                          ts_value2.second(), ts_value2.microsecond());
         result.append(ts);
     }
 
@@ -246,14 +245,13 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
         }
         DateTimeValue ts_value2;
         // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, to)) {
+        if (!ts_value2.from_unixtime(timestamp, ts_value.microsecond(), to)) {
             result.append_null();
             continue;
         }
-
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), 0);
+                          ts_value2.second(), ts_value2.microsecond());
         result.append(ts);
     }
 
@@ -521,6 +519,37 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_yearImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year, TYPE_DATETIME, TYPE_INT);
 
+DEFINE_UNARY_FN_WITH_IMPL(year_week_with_default_modeImpl, t) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+    uint to_year = 0;
+    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0 | 2), &to_year);
+    return to_year * 100 + week;
+}
+DEFINE_TIME_UNARY_FN(year_week_with_default_mode, TYPE_DATETIME, TYPE_INT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(year_week_with_modeImpl, t, m) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+    uint to_year = 0;
+    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m | 2), &to_year);
+
+    if (week == 53 && day >= 29 && !(m & 4)) {
+        int monday_first = m & WEEK_MONDAY_FIRST;
+        int daynr_of_last_day = TimeFunctions::compute_daynr(year, 12, 31);
+        int weekday_of_last_day = TimeFunctions::compute_weekday(daynr_of_last_day, !monday_first);
+
+        if (weekday_of_last_day - monday_first < 2) {
+            ++to_year;
+            week = 1;
+        }
+    }
+    return to_year * 100 + week;
+}
+DEFINE_TIME_BINARY_FN(year_week_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
+
 uint TimeFunctions::week_mode(uint mode) {
     uint week_format = (mode & 7);
     if (!(week_format & WEEK_MONDAY_FIRST)) week_format ^= WEEK_FIRST_WEEKDAY;
@@ -575,7 +604,7 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
     return (delsum + static_cast<int>(y) / 4 - temp);
 }
 
-int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour) {
+int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour, uint* to_year) {
     uint days;
     ulong daynr = TimeFunctions::compute_daynr((uint)year, (uint)month, (uint)day);
     ulong first_daynr = TimeFunctions::compute_daynr((uint)year, 1, 1);
@@ -585,13 +614,14 @@ int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_b
 
     uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);
     uint year_local = year;
-
+    *to_year = year;
     if (month == 1 && day <= 7 - weekday) {
         if (!week_year && ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4))) {
             return 0;
         }
         week_year = true;
         year_local--;
+        (*to_year)--;
         first_daynr -= (days = TimeFunctions::compute_days_in_year(year_local));
         weekday = (weekday + 53 * 7 - days) % 7;
     }
@@ -606,6 +636,7 @@ int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_b
         weekday = (weekday + TimeFunctions::compute_days_in_year(year_local)) % 7;
         if ((!first_weekday && weekday < 4) || (first_weekday && weekday == 0)) {
             year_local++;
+            (*to_year)++;
             return 1;
         }
     }
@@ -616,8 +647,8 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
-
-    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0));
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0), &to_year);
 }
 DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
 
@@ -625,8 +656,8 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_isoImpl, t) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
-
-    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(3));
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(3), &to_year);
 }
 
 DEFINE_TIME_UNARY_FN(week_of_year_iso, TYPE_DATETIME, TYPE_INT);
@@ -635,8 +666,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
-
-    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m));
+    uint to_year = 0;
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m), &to_year);
 }
 DEFINE_TIME_BINARY_FN(week_of_year_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
 
@@ -855,7 +886,11 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     if (boundary->type == LogicalType::TYPE_DATETIME) {
         // floor specify START as the result time.
         if (time_base == "floor") {
-            if (period_unit == "second") {
+            if (period_unit == "microsecond") {
+                function = &TimeFunctions::time_slice_datetime_start_microsecond;
+            } else if (period_unit == "millisecond") {
+                function = &TimeFunctions::time_slice_datetime_start_millisecond;
+            } else if (period_unit == "second") {
                 function = &TimeFunctions::time_slice_datetime_start_second;
             } else if (period_unit == "minute") {
                 function = &TimeFunctions::time_slice_datetime_start_minute;
@@ -873,12 +908,17 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
                 function = &TimeFunctions::time_slice_datetime_start_quarter;
             } else {
                 return Status::InternalError(
-                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+                        "period unit must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                        "quarter}");
             }
         } else {
             // ceil specify END as the result time.
             DCHECK_EQ(time_base, "ceil");
-            if (period_unit == "second") {
+            if (period_unit == "microsecond") {
+                function = &TimeFunctions::time_slice_datetime_end_microsecond;
+            } else if (period_unit == "millisecond") {
+                function = &TimeFunctions::time_slice_datetime_end_millisecond;
+            } else if (period_unit == "second") {
                 function = &TimeFunctions::time_slice_datetime_end_second;
             } else if (period_unit == "minute") {
                 function = &TimeFunctions::time_slice_datetime_end_minute;
@@ -896,7 +936,8 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
                 function = &TimeFunctions::time_slice_datetime_end_quarter;
             } else {
                 return Status::InternalError(
-                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+                        "period unit must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                        "quarter}");
             }
         }
     } else {
@@ -981,6 +1022,12 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 // time_slice_to_second
+DEFINE_TIME_SLICE_FN(microsecond);
+
+// time_slice_to_second
+DEFINE_TIME_SLICE_FN(millisecond);
+
+// time_slice_to_second
 DEFINE_TIME_SLICE_FN(second);
 
 // time_slice_to_minute
@@ -1029,12 +1076,17 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
 
     int year = (year1 - year2);
 
+    const auto func = [](int month, int day, int hour, int minute, int second, int usec) -> int64_t {
+        return int64_t(month) * 100'000'000'000'000LL + day * 1'000'000'000'000LL + hour * 10'000'000'000LL +
+               minute * 100'000'000LL + second * 1'000'000LL + usec;
+    };
+
     if (year >= 0) {
-        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+        year -= (func(month1, day1, hour1, minute1, second1, usec1) <
+                 func(month2, day2, hour2, minute2, second2, usec2));
     } else {
-        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+        year += (func(month1, day1, hour1, minute1, second1, usec1) >
+                 func(month2, day2, hour2, minute2, second2, usec2));
     }
     return year;
 }
@@ -1099,19 +1151,21 @@ DEFINE_TIME_BINARY_FN(years_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // months_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
-    int year1, month1, day1, hour1, mintue1, second1, usec1;
-    int year2, month2, day2, hour2, mintue2, second2, usec2;
-    l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    l.to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    r.to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
 
     int month = (year1 - year2) * 12 + (month1 - month2);
+    const auto func = [](int day, int hour, int minute, int second, int usec) -> int64_t {
+        return int64_t(day) * 1'000'000'000'000LL + hour * 10'000'000'000LL + minute * 100'000'000LL +
+               second * 1'000'000LL + usec;
+    };
 
     if (month >= 0) {
-        month -= (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
-                  day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        month -= (func(day1, hour1, minute1, second1, usec1) < func(day2, hour2, minute2, second2, usec2));
     } else {
-        month += (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
-                  day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        month += (func(day1, hour1, minute1, second1, usec1) > func(day2, hour2, minute2, second2, usec2));
     }
 
     return month;
@@ -2417,7 +2471,11 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
                    [](unsigned char c) { return std::tolower(c); });
 
     ScalarFunction function;
-    if (format_value == "second") {
+    if (format_value == "microsecond") {
+        function = &TimeFunctions::datetime_trunc_microsecond;
+    } else if (format_value == "millisecond") {
+        function = &TimeFunctions::datetime_trunc_millisecond;
+    } else if (format_value == "second") {
         function = &TimeFunctions::datetime_trunc_second;
     } else if (format_value == "minute") {
         function = &TimeFunctions::datetime_trunc_minute;
@@ -2434,7 +2492,9 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     } else if (format_value == "quarter") {
         function = &TimeFunctions::datetime_trunc_quarter;
     } else {
-        return Status::InternalError("format value must in {second, minute, hour, day, month, year, week, quarter}");
+        return Status::InternalError(
+                "format value must in {microsecond, millisecond, second, minute, hour, day, month, year, week, "
+                "quarter}");
     }
 
     auto fc = new DateTruncCtx();
@@ -2442,6 +2502,18 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     context->set_function_state(scope, fc);
     return Status::OK();
 }
+
+DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_microsecondImpl, v) {
+    return v;
+}
+DEFINE_TIME_UNARY_FN_EXTEND(datetime_trunc_microsecond, TYPE_DATETIME, TYPE_DATETIME, 1);
+
+DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_millisecondImpl, v) {
+    TimestampValue result = v;
+    result.trunc_to_millisecond();
+    return result;
+}
+DEFINE_TIME_UNARY_FN_EXTEND(datetime_trunc_millisecond, TYPE_DATETIME, TYPE_DATETIME, 1);
 
 DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_secondImpl, v) {
     TimestampValue result = v;

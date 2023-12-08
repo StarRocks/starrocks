@@ -14,8 +14,6 @@
 
 #include "formats/parquet/file_reader.h"
 
-#include <parquet/metadata.h>
-
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -27,6 +25,7 @@
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
@@ -35,19 +34,52 @@
 
 namespace starrocks::parquet {
 
-FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
           _file(file),
           _file_size(file_size),
+          _file_mtime(file_mtime),
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
-FileReader::~FileReader() = default;
+FileReader::~FileReader() {
+    if (!_is_metadata_cached && _file_metadata) {
+        delete _file_metadata;
+    }
+}
+
+void FileReader::_build_metacache_key() {
+    auto& filename = _file->filename();
+    _metacache_key.resize(14);
+    char* data = _metacache_key.data();
+    const std::string footer_suffix = "ft";
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    memcpy(data + 8, footer_suffix.data(), footer_suffix.length());
+    // The modification time is more appropriate to indicate the different file versions.
+    // While some data source, such as Hudi, have no modification time because their files
+    // cannot be overwritten. So, if the modification time is unsupported, we use file size instead.
+    // Also, to reduce memory usage, we only use the high four bytes to represent the second timestamp.
+    if (_file_mtime > 0) {
+        uint32_t mtime_s = (_file_mtime >> 9) & 0x00000000FFFFFFFF;
+        memcpy(data + 10, &mtime_s, sizeof(mtime_s));
+    } else {
+        uint32_t size = _file_size;
+        memcpy(data + 10, &size, sizeof(size));
+    }
+}
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    RETURN_IF_ERROR(_parse_footer());
+#ifdef WITH_STARCACHE
+    // Only support file metacache in starcache engine
+    if (ctx->use_file_metacache && config::datacache_enable) {
+        _build_metacache_key();
+        _cache = BlockCache::instance();
+    }
+#endif
+    RETURN_IF_ERROR(_get_footer());
 
     if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // If we want read this parquet file with iceberg schema,
@@ -72,11 +104,11 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     return Status::OK();
 }
 
-std::shared_ptr<FileMetaData> FileReader::get_file_metadata() {
+FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata;
 }
 
-Status FileReader::_parse_footer() {
+Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -106,8 +138,51 @@ Status FileReader::_parse_footer() {
     RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
                                                    PARQUET_FOOTER_SIZE - metadata_length,
                                            &metadata_length, TProtocolType::COMPACT, &t_metadata));
-    _file_metadata.reset(new FileMetaData());
-    RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+    int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+    *file_metadata = new FileMetaData();
+    RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
+    *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+#ifdef BE_TEST
+    *file_metadata_size = sizeof(FileMetaData);
+#endif
+
+    return Status::OK();
+}
+
+Status FileReader::_get_footer() {
+    _is_metadata_cached = false;
+    if (!_cache) {
+        int64_t file_metadata_size = 0;
+        return _parse_footer(&_file_metadata, &file_metadata_size);
+    }
+
+    {
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
+        Status st = _cache->read_object(_metacache_key, &_cache_handle);
+        if (st.ok()) {
+            _file_metadata = (FileMetaData*)_cache_handle.ptr();
+            _scanner_ctx->stats->footer_cache_read_count += 1;
+            _is_metadata_cached = true;
+            return st;
+        }
+    }
+
+    int64_t file_metadata_size = 0;
+    FileMetaData* file_metadata = nullptr;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
+    if (file_metadata_size > 0) {
+        auto deleter = [file_metadata]() { delete file_metadata; };
+        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
+        if (st.ok()) {
+            _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
+            _scanner_ctx->stats->footer_cache_write_count += 1;
+            _is_metadata_cached = true;
+        }
+    } else {
+        LOG(ERROR) << "Parsing unexpected parquet file metadata size";
+    }
+
+    _file_metadata = file_metadata;
     return Status::OK();
 }
 
@@ -211,21 +286,6 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             if (discard) {
                 return true;
             }
-
-            // skip topn runtime filter, because it has taken effect on min/max filtering
-            // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
-            if (!filter->always_true() && min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
-                ColumnPtr& chunk_part_column = min_chunk->columns()[0];
-                JoinRuntimeFilter::RunningContext ctx;
-                ctx.use_merged_selection = false;
-                auto& selection = ctx.selection;
-                selection.assign(chunk_part_column->size(), 1);
-                filter->compute_hash({chunk_part_column.get()}, &ctx);
-                filter->evaluate(chunk_part_column.get(), &ctx);
-                if (selection[0] == 0) {
-                    return true;
-                }
-            }
         }
     }
 
@@ -305,9 +365,11 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
                                           ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
+
     // We need to make sure min_max column append value succeed
     bool ret = true;
-    if (!_can_use_min_max_stats(column_meta, column_order)) {
+    auto sort_order = sort_order_of_logical_type(type.type);
+    if (!_has_correct_min_max_stats(column_meta, sort_order)) {
         *decode_ok = false;
         return Status::OK();
     }
@@ -406,63 +468,9 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     return Status::OK();
 }
 
-// Reference: arrow/cpp/src/parquet/metadata.cc
-bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) const {
-    // created_by is not populated, which could have been caused by
-    // parquet-mr during the same time as PARQUET-251, see PARQUET-297
-    if (!_file_metadata->t_metadata().__isset.created_by) {
-        return true;
-    }
-
-    auto application_version = ::parquet::ApplicationVersion(_file_metadata->t_metadata().created_by);
-    auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-                           column_meta.statistics.min_value == column_meta.statistics.max_value) ||
-                          (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-                           column_meta.statistics.min == column_meta.statistics.max);
-
-    // disregard column sort order if statistics max/min are equal
-    if (min_equals_max) {
-        if (column_meta.type != tparquet::Type::BYTE_ARRAY &&
-            column_meta.type != tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
-            return true;
-        }
-        // PARQUET-251: stats are incorrect for binary columns
-        return !application_version.VersionLt(::parquet::ApplicationVersion::PARQUET_251_FIXED_VERSION());
-    }
-
-    if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    if (column_meta.statistics.__isset.min && _can_use_deprecated_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    return false;
-}
-
-bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order) {
-    // If column order is not set, only statistics for numeric types can be trusted.
-    if (column_order == nullptr) {
-        // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-    }
-    // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
-    return column_order->__isset.TYPE_ORDER;
-}
-
-bool FileReader::_can_use_deprecated_stats(const tparquet::Type::type& type,
-                                           const tparquet::ColumnOrder* column_order) {
-    // If column order is set to something other than TypeDefinedOrder, we shall not use the
-    // stats (see parquet.thrift).
-    if (column_order != nullptr && !column_order->__isset.TYPE_ORDER) {
-        return false;
-    }
-    return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-}
-
-bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
-    return type == tparquet::Type::type::INT32 || type == tparquet::Type::type::INT64 ||
-           type == tparquet::Type::type::INT96;
+bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta,
+                                            const SortOrder& sort_order) const {
+    return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 void FileReader::_prepare_read_columns() {
@@ -496,7 +504,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = nullptr;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
 
@@ -519,7 +527,14 @@ Status FileReader::_init_group_readers() {
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
-            _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
+            int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
+            // for iceberg v2 pos delete
+            if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
+                auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
+                auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+                num_rows -= std::distance(start_iter, end_iter);
+            }
+            _total_row_count += num_rows;
         } else {
             continue;
         }
@@ -582,7 +597,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
                 _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
-                _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
+                _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -611,7 +626,7 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
         _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
-        _scanner_ctx->update_partition_column_of_chunk(chunk, read_size);
+        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();
     }

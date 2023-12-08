@@ -228,6 +228,7 @@ public class FunctionSet {
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
+    public static final String COUNT_IF = "count_if";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MAX_BY = "max_by";
@@ -288,11 +289,13 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
+    public static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
+    public static final String ARRAY_UNIQUE_AGG = "array_unique_agg";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -455,6 +458,9 @@ public class FunctionSet {
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
 
+    //user and role function
+    public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
@@ -467,6 +473,20 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+
+    public static final String CONNECTION_ID = "connection_id";
+
+    public static final String CATALOG = "catalog";
+
+    public static final String DATABASE = "database";
+
+    public static final String SCHEMA = "schema";
+
+    public static final String USER = "user";
+
+    public static final String CURRENT_USER = "current_user";
+
+    public static final String CURRENT_ROLE = "current_role";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -533,6 +553,7 @@ public class FunctionSet {
     public static final Set<String> alwaysReturnNonNullableFunctions =
             ImmutableSet.<String>builder()
                     .add(FunctionSet.COUNT)
+                    .add(FunctionSet.COUNT_IF)
                     .add(FunctionSet.MULTI_DISTINCT_COUNT)
                     .add(FunctionSet.NULL_OR_EMPTY)
                     .add(FunctionSet.HLL_HASH)
@@ -624,6 +645,16 @@ public class FunctionSet {
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
+            .build();
+
+    public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
+            .add(CONNECTION_ID)
+            .add(CATALOG)
+            .add(DATABASE)
+            .add(SCHEMA)
+            .add(USER)
+            .add(CURRENT_USER)
+            .add(CURRENT_ROLE)
             .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
@@ -845,6 +876,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT_IF,
+                Lists.newArrayList(Type.BOOLEAN), Type.BIGINT, Type.BIGINT, true, true, true));
+
         // EXCHANGE_BYTES/_SPEED with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.BIGINT, Type.BIGINT, true,
@@ -953,6 +987,8 @@ public class FunctionSet {
 
         // array_agg(distinct)
         registerBuiltinArrayAggDistinctFunction();
+
+        registerBuiltinArrayUniqueAggFunction();
 
         // Avg
         registerBuiltinAvgAggFunction();
@@ -1173,6 +1209,32 @@ public class FunctionSet {
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
     }
+
+    private void registerBuiltinArrayUniqueAggFunction() {
+        // array_unique_agg mapping array_agg_distinct while array as input.
+        for (ScalarType type : Type.getNumericTypes()) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.STRING_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.DATE_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+    }
+
+
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type : Type.FLOAT_TYPES) {

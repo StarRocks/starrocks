@@ -103,6 +103,8 @@ message RowsetTxnMetaPB {
     optional int32 auto_increment_partial_update_column_id = 5;
     // recode partial update mode
     optional PartialUpdateMode partial_update_mode = 6;
+    // auto increment column unique id
+    optional int32 auto_increment_partial_update_column_uid = 7;
 }
 
 message RowsetMetaPB {
@@ -285,6 +287,7 @@ message TabletMetaPB {
     optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
+    optional string storage_type = 54; // storage layout type: column[default]|column_with_row|row
     optional bool enable_shortcut_compaction = 60 [default = true];
     optional int32 primary_index_cache_expire_sec = 61 [default = 0];
 }

@@ -70,7 +70,8 @@ public class TPCDS1TTestBase extends TPCDSPlanTestBase {
     }
 
     @BeforeEach
-    public void setUp() throws Exception {
+    public void setUp() {
+        super.setUp();
         origin = GlobalStateMgr.getCurrentStatisticStorage();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
         setTPCDSTableStats(ROW_COUNT_MAP);

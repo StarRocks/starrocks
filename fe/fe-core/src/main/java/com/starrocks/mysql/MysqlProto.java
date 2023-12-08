@@ -91,7 +91,6 @@ public class MysqlProto {
             }
         }
 
-
         context.setCurrentUserIdentity(currentUser);
         if (!currentUser.isEphemeral()) {
             context.setCurrentRoleIds(currentUser);
