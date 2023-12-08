@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 本文介绍 StarRocks CBO 优化器（Cost-based Optimizer）的基本概念，以及如何为 CBO 优化器采集统计信息来优化查询计划。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
 
-3.2 之前版本支持对 StarRocks 内表收集统计信息。从 3.2 版本起，支持收集 Hive，Iceberg，Hudi 表的统计信息，无需依赖其他系统。
+3.2 之前版本支持对 StarRocks 内表采集统计信息。从 3.2 版本起，支持采集 Hive，Iceberg，Hudi 表的统计信息，无需依赖其他系统。
 
 ## 什么是 CBO 优化器
 
@@ -125,7 +125,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 - 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
 
-- 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
+- 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
 自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
@@ -472,9 +472,9 @@ KILL ANALYZE <ID>
 
 `statistic_collect_parallel` 用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快收集任务的执行速度。
 
-## 收集 Hive/Iceberg/Hudi 表的统计信息
+## 采集 Hive/Iceberg/Hudi 表的统计信息
 
-从 3.2 版本起，支持收集 Hive, Iceberg, Hudi 表的统计信息。**收集的语法和内表相同，但是只支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
+从 3.2 版本起，支持采集 Hive, Iceberg, Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
 查询时，会返回如下信息：
 
@@ -498,18 +498,19 @@ partition_name:
 
 ### 使用限制
 
-对 Hive、Iceberg、Hudi 表收集统计信息时，有如下限制：
+对 Hive、Iceberg、Hudi 表采集统计信息时，有如下限制：
 
-1. 目前只支持全量采集，不支持抽样采集和直方图采集。
-2. 目前只支持收集 Hive、Iceberg、Hudi 表的统计信息。
-3. 对于自动收集任务，只支持收集指定表的统计信息，不支持收集所有数据库、数据库下所有表的统计信息。
-4. 对于自动收集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据收集间隔周期性全表采集。
+1. 目前只支持采集 Hive、Iceberg、Hudi 表的统计信息。
+2. 目前只支持全量采集，不支持抽样采集和直方图采集。
+3. 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
+4. 对于自动采集任务，只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
+5. 对于自动采集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据采集间隔周期性全表采集。
 
-以下示例默认在 External Catalog 指定数据库下收集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
+以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 
-### 手动收集
+### 手动采集
 
-#### 创建手动收集任务
+#### 创建手动采集任务
 
 语法：
 
@@ -574,7 +575,7 @@ SHOW STATS META where `table` = 'ex_hive_tbl';
 
 #### 取消采集任务
 
-取消正在运行中（Running）的统计信息收集任务。
+取消正在运行中（Running）的统计信息采集任务。
 
 语法：
 
@@ -584,29 +585,31 @@ KILL ANALYZE <ID>
 
 任务 ID 可以在 SHOW ANALYZE STATUS 中查看。
 
-### 自动收集
+### 自动采集
 
-创建一个自动收集任务，StarRocks 会周期性检查收集任务是否需要执行，默认检查时间为 5min。Hive 和 Iceberg 发现有数据更新时，才会自动执行一次采集任务。Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由收集线程的时间间隔和用户设置的采集间隔决定，参考下面的 FE 参数调整）。
+对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
+
+Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由采集线程的时间间隔和用户设置的采集间隔决定，参考下面的属性进行调整）。
 
 - statistic_collect_interval_sec
 
-  自动定期任务中，检查是否需要收集统计信息的间隔周期，默认 5 分钟。
+  自动定期任务中，检查是否需要采集统计信息的间隔周期，默认 5 分钟。
 
 - statistic_auto_collect_small_table_rows
 
-  自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
+  自动采集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
 
 - statistic_auto_collect_small_table_interval
 
-  自动收集中小表的收集间隔，单位：秒。默认值：0。
+  自动采集中小表的采集间隔，单位：秒。默认值：0。
 
 - statistic_auto_collect_large_table_interval
 
-  自动收集中大表的收集间隔，单位：秒。默认值：43200 (12 小时)。
+  自动采集中大表的采集间隔，单位：秒。默认值：43200 (12 小时)。
 
-自动收集线程每间隔 `statistic_collect_interval_sec` 时间就会进行一次任务检查，发现是否有需要执行的任务，当表中行数小于 `statistic_auto_collect_small_table_rows` 时，则将收集间隔设置为小表的收集间隔，否则设置为大表的收集间隔。如果 `上次更新时间 + 收集间隔 > 当前时间`，则需要更新，否则无需更新，这样可以避免频繁为大表执行 Analyze 任务。
+自动采集线程每间隔 `statistic_collect_interval_sec` 时间就会进行一次任务检查，发现是否有需要执行的任务，当表中行数小于 `statistic_auto_collect_small_table_rows` 时，则将采集间隔设置为小表的采集间隔，否则设置为大表的采集间隔。如果 `上次更新时间 + 采集间隔 > 当前时间`，则需要更新，否则无需更新，这样可以避免频繁为大表执行 Analyze 任务。
 
-#### 创建自动收集任务
+#### 创建自动采集任务
 
 语法：
 
@@ -628,11 +631,11 @@ Query OK, 0 rows affected (0.01 sec)
 
 #### 查看 Analyze 任务执行状态
 
-同手动收集。
+同手动采集。
 
 #### 查看统计信息元数据
 
-同手动收集。
+同手动采集。
 
 #### 查看自动采集任务
 
@@ -652,9 +655,9 @@ Empty set (0.00 sec)
 
 #### 取消采集任务
 
-同手动收集。
+同手动采集。
 
-### 删除 Hive/Iceberg/Hudi 表统计信息
+#### 删除 Hive/Iceberg/Hudi 表统计信息
 
 ```sql
 DROP STATS tbl_name

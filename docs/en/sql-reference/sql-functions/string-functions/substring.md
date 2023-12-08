@@ -22,7 +22,7 @@ VARCHAR substr(VARCHAR str, pos[, len])
 
 - `str`: the string to extract characters, required. It must be a VARCHAR value.
 - `pos`: the start position, required. The first position in the string is 1.
-- `length`: the number of characters to extract, optional. It must be a positive integer.
+- `length`: optional, the number of characters to extract, optional. It must be a positive integer.
 
 ## Return value
 
