@@ -14,6 +14,7 @@
 
 #include "exprs/cast_expr.h"
 
+#include <llvm/ADT/APInt.h>
 #include <ryu/ryu.h>
 
 #include <stdexcept>
@@ -34,6 +35,10 @@
 #include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Value.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
@@ -1130,7 +1135,9 @@ public:
         return result_column;
     };
 
-    bool is_compilable() const override { return IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType); }
+    bool is_compilable() const override {
+        return !AllowThrowException && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
@@ -1147,6 +1154,23 @@ public:
         } else {
             LLVMDatum datum(b);
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
+
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
+                                                                               lt_is_float<ToType>)) {
+                if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
+                              std::numeric_limits<RunTimeCppType<FromType>>::max()) {
+                    // Check overflow.
+                    ASSIGN_OR_RETURN(auto cast_l, IRHelper::cast_to_type(b, datum.value, ToType, FromType));
+                    llvm::Value* is_overflow = nullptr;
+                    if constexpr (lt_is_integer<FromType>) {
+                        is_overflow = b.CreateICmpNE(l, cast_l);
+                    } else if constexpr (lt_is_float<FromType>) {
+                        is_overflow = b.CreateFCmpONE(l, cast_l);
+                    }
+                    b.CreateOr(datum.null_flag, is_overflow);
+                }
+            }
+
             return datum;
         }
     }

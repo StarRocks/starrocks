@@ -45,7 +45,11 @@ INSERT INTO jit_cast (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) VALUES
 (7, -14, 21, -28, 35, -42, 49, -56, 63, -70,  77, TRUE),
 (9876543, -9876543, -13579246,  124, 2468642, -2468642, 86420964, -86420964, 11111, -11111, 99999, FALSE),
 (1234,  -645,  9223372036854775807, 512, 1, 2, 3, 0, -1, -2,  -3, TRUE),
-(144,  -112344,  123441234, -12, -1, -1, -1, -1, -1,  -1, -1, NULL),
+(144,  -112344,  123441234, -12, -1, -1, -1, -1, -1,  -1, -1, TRUE),
+(2134,  -123,  -1, -1, -1, -2147483648, -1, -1, -1,  -1, -1, FALSE),
+(829,  -6723,  -1, -1, -1, -2147483648, -9223372036854775808, -1, -1,  -1, -1, TRUE),
+(215,  -12,  0, 0, 0, 322, 0, 14, 0, 1234, 0, TRUE),
+(12,  -732,  233, 23, 0, 0, 234, 0, 0, 0, 0, TRUE),
 (754,  -14,  9223372036854775807, 1234, 0, 0, 0, 0, 0,  0, 0, FALSE);
 
 set enable_jit = true;
@@ -81,17 +85,45 @@ SELECT v1 - v3 * v5 * v7 - v9 as result FROM jit_cast ORDER BY result;
 SELECT v1 * v2 - v3 * v4 * v5 - v6 as result FROM jit_cast ORDER BY result;
 SELECT v1 + v2 * 568.585656 - v3 * v4 * v5 - v6 + 622 as result FROM jit_cast ORDER BY result;
 SELECT k1 * v4 - v5 + v6 as result FROM jit_cast ORDER BY result;
+-- /
+SELECT k1 / k2 DIV v1 as result FROM jit_cast ORDER BY result;
+SELECT v6 / v4 DIV v3 / v10 as result FROM jit_cast ORDER BY result;
+SELECT v4 / v4 / v9 / v3 / v1 DIV v2 / v8 / v10 / v5 as result FROM jit_cast ORDER BY result;
+SELECT v10 / v4 DIV -1 / v6 / 0 as result FROM jit_cast ORDER BY result;
+SELECT v2 / v8 / v4 / -1.0 / v9 as result FROM jit_cast ORDER BY result;
+SELECT v6 / v10 / v9 / v1 / v8 as result FROM jit_cast ORDER BY result;
+SELECT v5 / v7 / v2 as result FROM jit_cast ORDER BY result;
+SELECT v10 DIV v6 / v3 as result FROM jit_cast ORDER BY result;
+-- %
+SELECT k1 % k2 % v1 as result FROM jit_cast ORDER BY result;
+SELECT v6 % v4 % v3 % v10 as result FROM jit_cast ORDER BY result;
+SELECT v4 % v4 % v9 % v3 % v1 % v2 % v8 % v10 % v5 as result FROM jit_cast ORDER BY result;
+SELECT v10 % v4 % -1 % v6 % 0 as result FROM jit_cast ORDER BY result;
+SELECT v2 % v8 % v4 % -1.0 % v9 as result FROM jit_cast ORDER BY result;
+SELECT v6 % v10 % v9 % v1 % v8 as result FROM jit_cast ORDER BY result;
+SELECT v5 % v7 % v2 as result FROM jit_cast ORDER BY result;
+SELECT v10 % v6 % v3 as result FROM jit_cast ORDER BY result;
 -- mix
 SELECT v1 + v2 + v3 * 124 - 854 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v2 + v3 / 124 - 854 as result FROM jit_cast ORDER BY result;
 SELECT v1 - 123.123 - v2 + v3 * 2 as result FROM jit_cast ORDER BY result;
 SELECT v1 * v2 + v3 + 0 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result;
+SELECT v1 * v2 DIV v3 + 142 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result;
 SELECT (v1 + v2) * v3 - 1124 as result FROM jit_cast ORDER BY result;
+SELECT (v1 + v2) * v3 % 1124 as result FROM jit_cast ORDER BY result;
+SELECT (v3 + v5 + v6) / v8 % 643.122 as result FROM jit_cast ORDER BY result;
 SELECT (v1 * v4) - (v3 + 0) - (v5 * 0) as result FROM jit_cast ORDER BY result;
-SELECT (v2 + v4) + (v6 - 0.142) * v3 + 213 as result FROM jit_cast ORDER BY result;
+SELECT (v2 + v4) + (v5 - 4732) * v3 + 7673099837 as result FROM jit_cast ORDER BY result;
+SELECT (v3 + v4) DIV (v6 - 123) * v3 + 213 as result FROM jit_cast ORDER BY result;
 SELECT v2 + v3 * v4 as result FROM jit_cast ORDER BY result;
+SELECT v3 + v5 / v6 as result FROM jit_cast ORDER BY result;
 SELECT (v8 * v9 + v1) * (k1 - v2) as result FROM jit_cast ORDER BY result;
+SELECT (v8 + v9 * v1) DIV (k1 - v2) as result FROM jit_cast ORDER BY result;
 SELECT v4 + v10 - v1 * v8 + v3 as result FROM jit_cast ORDER BY result;
+SELECT v4 + v10 - v1 % v8 + v3 * v2 as result FROM jit_cast ORDER BY result;
 SELECT (v2 - v5 * v1) * (v7 + v5 - v3) as result FROM jit_cast ORDER BY result;
+SELECT (v3 - v2 * v1) / (v6 - v5 + v3) as result FROM jit_cast ORDER BY result;
 SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + 142 as result FROM jit_cast ORDER BY result;
+SELECT (v1 + v2) * (v3 + v4) * (v5 + v6) * (v7 + v8) % (v9 + v10) as result FROM jit_cast ORDER BY result;
 
 DROP TABLE IF EXISTS `jit_cast`;
