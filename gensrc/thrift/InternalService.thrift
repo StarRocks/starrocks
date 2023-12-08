@@ -234,6 +234,7 @@ struct TQueryOptions {
   107: optional bool enable_hdfs_file_metacache;
 
   110: optional TQueryQueueOptions query_queue_options;
+  113: optional bool enable_hyperscan_vec;
 }
 
 
