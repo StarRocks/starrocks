@@ -58,6 +58,7 @@ netstat -tunlp | grep 8060
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN bRPC 端口（`brpc_port`）
+- `9070`：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。（`starlet_port`）
 
 在 CN 实例上执行如下命令查看这些端口是否被占用：
 
