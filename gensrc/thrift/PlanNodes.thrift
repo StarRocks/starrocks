@@ -356,6 +356,10 @@ struct THdfsScanRange {
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
+
+    19: optional bool use_odps_jni_reader
+
+    20: optional map<string, string> odps_split_info
 }
 
 struct TBinlogScanRange {
