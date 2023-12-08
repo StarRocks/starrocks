@@ -46,10 +46,6 @@ public class TableFunction extends Function {
     private List<Type> tableFnReturnTypes;
     @SerializedName(value = "symbolName")
     private String symbolName = "";
-
-    @SerializedName(value = "argumentNames")
-    private List<String> argNames;
-
     // only used for serialization
     protected TableFunction() {
     }
@@ -61,16 +57,15 @@ public class TableFunction extends Function {
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        this(fnName, Lists.newArrayList(""), defaultColumnNames, argTypes, tableFnReturnTypes, false);
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, false);
     }
 
-    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
-                         List<Type> tableFnReturnTypes, boolean varArgs) {
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, boolean varArgs) {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
-        this.argNames = argNames;
-
+        setArgNames(argNames);
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -79,7 +74,6 @@ public class TableFunction extends Function {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
-
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -88,7 +82,6 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
-        argNames = other.argNames;
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
@@ -159,7 +152,6 @@ public class TableFunction extends Function {
         this.symbolName = tableFunction.symbolName;
         this.tableFnReturnTypes = tableFunction.getTableFnReturnTypes();
         this.defaultColumnNames = tableFunction.getDefaultColumnNames();
-        this.argNames = tableFunction.argNames;
     }
 
     @Override

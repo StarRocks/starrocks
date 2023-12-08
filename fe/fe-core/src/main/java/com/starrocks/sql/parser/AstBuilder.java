@@ -4586,7 +4586,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Expr node = (Expr) visit(context.expression());
         if (node == null) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be empty"));
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
         }
         return new NamedArgument(name, node);
     }
@@ -4611,6 +4611,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).collect(toList()).size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
         FunctionCallExpr functionCallExpr =
                 new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters, createPos(context));
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);

@@ -838,7 +838,7 @@ public class FunctionSet {
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
-            fns = fns.stream().filter(f -> f.hasNamedArg()).collect(Collectors.toList());
+            fns = fns.stream().filter(Function::hasNamedArg).collect(Collectors.toList());
         }
         if (fns == null || fns.isEmpty()) {
             return null;
