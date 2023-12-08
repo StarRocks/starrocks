@@ -134,8 +134,8 @@ public:
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
-    void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1, int64_t spill_mem_limit = -1,
-                          workgroup::WorkGroup* wg = nullptr);
+    void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
+                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);

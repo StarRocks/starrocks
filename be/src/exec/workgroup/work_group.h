@@ -118,8 +118,8 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
 class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
-    WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency, double spill_mem_limit_threshold,
-              WorkGroupType type);
+    WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency,
+              double spill_mem_limit_threshold, WorkGroupType type);
     WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 

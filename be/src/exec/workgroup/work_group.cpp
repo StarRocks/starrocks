@@ -601,15 +601,16 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     int64_t cpu_limit = ExecEnv::GetInstance()->max_executor_threads();
     const double memory_limit = 1.0;
     const double spill_mem_limit_threshold = 1.0; // not enable spill mem limit threshold
-    auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION,
-                                                  cpu_limit, memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_DEFAULT);
+    auto default_wg =
+            std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, cpu_limit,
+                                        memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
 
     int64_t mv_cpu_limit = config::default_mv_resource_group_cpu_limit;
     double mv_memory_limit = config::default_mv_resource_group_memory_limit;
-    auto default_mv_wg =
-            std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID, WorkGroup::DEFAULT_MV_VERSION,
-                                        mv_cpu_limit, mv_memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_MV);
+    auto default_mv_wg = std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID,
+                                                     WorkGroup::DEFAULT_MV_VERSION, mv_cpu_limit, mv_memory_limit, 0,
+                                                     spill_mem_limit_threshold, WorkGroupType::WG_MV);
     WorkGroupManager::instance()->add_workgroup(default_mv_wg);
 }
 

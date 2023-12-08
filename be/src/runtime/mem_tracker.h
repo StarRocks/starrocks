@@ -304,17 +304,11 @@ public:
 
     bool has_limit() const { return _limit >= 0; }
 
-    void set_reserve_limit(int64_t reserve_limit) {
-        _reserve_limit = reserve_limit;
-    }
+    void set_reserve_limit(int64_t reserve_limit) { _reserve_limit = reserve_limit; }
 
-    int64_t reserve_limit() const {
-        return _reserve_limit;
-    }
+    int64_t reserve_limit() const { return _reserve_limit; }
 
-    bool has_reserve_limit() const {
-        return _reserve_limit >= 0;
-    }
+    bool has_reserve_limit() const { return _reserve_limit >= 0; }
 
     const std::string& label() const { return _label; }
 
@@ -384,7 +378,7 @@ private:
 
     Type _type{NO_SET};
 
-    int64_t _limit; // in bytes
+    int64_t _limit;              // in bytes
     int64_t _reserve_limit = -1; // only used in spillable query
 
     std::string _label;
