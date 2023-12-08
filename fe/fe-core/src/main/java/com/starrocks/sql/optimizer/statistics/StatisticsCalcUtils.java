@@ -111,7 +111,7 @@ public class StatisticsCalcUtils {
                 // The purpose of this is to make the statistics of the number of rows more accurate.
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
-
+                long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
                     TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
@@ -120,12 +120,12 @@ public class StatisticsCalcUtils {
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
                         if (updateDatetime.isAfter(lastWorkTimestamp)) {
-                            partitionRowCount += deltaRows(table, basicStatsMeta.getUpdateRows());
+                            partitionRowCount += deltaRows;
                         }
                     } else {
                         partitionRowCount = tableStatistic.getRowCount();
                         if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                            partitionRowCount += deltaRows(table, basicStatsMeta.getUpdateRows());
+                            partitionRowCount += deltaRows;
                         }
                     }
                     updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
