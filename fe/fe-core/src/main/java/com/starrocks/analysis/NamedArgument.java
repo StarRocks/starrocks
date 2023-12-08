@@ -60,6 +60,6 @@ public class NamedArgument extends Expr {
 
     @Override
     public String toString() {
-        return toSqlImpl();
+        return name + "=>" + expr.toString();
     }
 }
