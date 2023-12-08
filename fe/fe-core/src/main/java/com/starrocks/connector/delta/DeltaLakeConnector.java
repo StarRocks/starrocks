@@ -47,14 +47,6 @@ public class DeltaLakeConnector implements Connector {
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         // TODO extract to ConnectorConfigFactory
-        validate();
-        onCreate();
-    }
-
-    public void validate() {
-        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     @Override
@@ -68,7 +60,7 @@ public class DeltaLakeConnector implements Connector {
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
-                properties.get(HIVE_METASTORE_URIS),
+                properties,
                 internalMgr.getHdfsEnvironment()
         );
     }
