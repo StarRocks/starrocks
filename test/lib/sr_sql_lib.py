@@ -1348,3 +1348,12 @@ class StarrocksSQLApiLib(object):
             counter = counter + 1
 
         tools.assert_true(finished, "analyze timeout")
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
