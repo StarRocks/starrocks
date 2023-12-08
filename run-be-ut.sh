@@ -65,6 +65,7 @@ OPTS=$(getopt \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
