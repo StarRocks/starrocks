@@ -67,7 +67,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -1718,7 +1717,7 @@ public class MaterializedViewRewriter {
         return createUnion(queryInput, viewInput, rewriteContext);
     }
 
-    // the queryExpression may contains LogicalViewScanOperators,
+    /*// the queryExpression may contains LogicalViewScanOperators,
     // should replace them to view's original plan after mv rewrite
     private OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
         if (optimizerContext.getViewPlanMap() == null) {
@@ -1749,21 +1748,21 @@ public class MaterializedViewRewriter {
                 return;
             }
             OptExpression viewPlan = viewPlanMap.get(op);
-            /*if (op.getPredicate() != null) {
+            *//*if (op.getPredicate() != null) {
                 // update predicates
                 Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
                 builder.withOperator(viewPlan.getOp());
                 builder.setPredicate(Utils.compoundAnd(viewPlan.getOp().getPredicate(), op.getPredicate()));
                 Operator newOperator = builder.build();
                 viewPlan = OptExpression.create(newOperator, viewPlan.getInputs());
-            }*/
+            }*//*
             parent.setChild(index, viewPlan);
         } else {
             for (int i = 0; i < queryExpression.getInputs().size(); i++) {
                 doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
             }
         }
-    }
+    }*/
 
     // retry to rewrite the rewritten failed predicates by enforcing the columns not exists in query
     private Pair<ScalarOperator, OptExpression> tryRewritePredicates(
@@ -1831,7 +1830,8 @@ public class MaterializedViewRewriter {
 
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
-        queryExpression = replaceLogicalViewScanOperator(queryExpression);
+        queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression,
+                materializationContext.getOptimizerContext().getViewPlanMap());
         if (queryExpression == null) {
             return null;
         }
