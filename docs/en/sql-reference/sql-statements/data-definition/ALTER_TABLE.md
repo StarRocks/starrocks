@@ -568,6 +568,7 @@ Currently, StarRocks supports modifying the following table properties:
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
+- `bucket_size` (supported since 3.2)
 
 Syntax:
 

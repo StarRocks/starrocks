@@ -46,7 +46,7 @@ alter_clause1[, alter_clause2, ...]
 
 :::note
 
-- partition、bucket、column 和 rollup index <!--是否包含compaction-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
 :::
@@ -590,6 +590,7 @@ SET ("key" = "value",...)
   - `enable_persistent_index`
   - `bloom_filter_columns`
   - `colocate_with`
+  - `bucket_size`（自 3.2 版本支持）
 
 注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
 
