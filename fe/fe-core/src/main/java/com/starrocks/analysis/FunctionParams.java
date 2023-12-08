@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.io.Writable;
@@ -150,23 +151,31 @@ public class FunctionParams implements Writable {
     }
 
     public void reorderNamedArg(String[] names) {
+        Preconditions.checkState(names.length == exprsNames.size());
         String[] newNames = new String[exprsNames.size()];
-        Expr[] newExprs = new Expr[exprs.size()];
+        Expr[] newExprs = new Expr[exprsNames.size()];
         for (int i = 0; i < exprsNames.size(); i++) {
-            if (exprsNames.get(i).equals("")) {
-                newNames[i] = exprsNames.get(i);
-                newExprs[i] = exprs.get(i);
-            } else {
-                for (int j = 0; j < names.length; j++) {
-                    if (exprsNames.get(i).equals(names[j])) {
-                        newNames[j] = exprsNames.get(i);
-                        newExprs[j] = exprs.get(i);
-                    }
+            for (int j = 0; j < names.length; j++) {
+                if (exprsNames.get(i).equals(names[j])) {
+                    newNames[j] = exprsNames.get(i);
+                    newExprs[j] = exprs.get(i);
                 }
             }
         }
         exprs = Arrays.asList(newExprs);
         exprsNames = Arrays.asList(newNames);
+    }
+
+    public String getNamedArgStr() {
+        Preconditions.checkState(exprs.size() == exprsNames.size());
+        String result = "";
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                result = result.concat(",");
+            }
+            result = result.concat(exprsNames.get(i) + "=>" + exprs.get(i).toSql());
+        }
+        return result;
     }
 
     public void setIsDistinct(boolean v) {
