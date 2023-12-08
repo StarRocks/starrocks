@@ -160,6 +160,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
 | [url_decode](./string-functions/url_decode.md) | 将字符串从 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式转换回来。 |
 | [url_encode](./string-functions/url_encode.md)  | 将字符串根据 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式进行编码。  |
+| [url_extract_parameter](./string-functions/url_extract_parameter.md)   | 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。  |
 
 ## 聚合函数
 
