@@ -567,6 +567,13 @@ DROP INDEX index_name;
 
 ### Modify table properties
 
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
+```
+
 Currently, StarRocks supports modifying the following table properties:
 
 - `replication_num`
@@ -579,15 +586,8 @@ Currently, StarRocks supports modifying the following table properties:
 - `colocate_with`
 - `bucket_size` (supported since 3.2)
 
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
-```
-
 Note:
-You can also modify the properties by merging into the above schema change operation. See the following examples.
+You can also modify the properties by merging into the above operation on column. See the following examples.
 
 ### Swap
 
@@ -910,7 +910,7 @@ The `be_compactions` table in the `information_schema` database records compacti
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### Index
+### bitmap index
 
 1. Create a bitmap index for column `siteid` in `table1`.
 
