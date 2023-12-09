@@ -3616,13 +3616,8 @@ Status PersistentIndex::flush_advance() {
 }
 
 Status PersistentIndex::_flush_l0() {
-<<<<<<< HEAD
-    // when l2 exist, must flush l0 with Delete Flag
-    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty(), nullptr);
-=======
     // when l1 or l2 exist, must flush l0 with Delete Flag
-    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty());
->>>>>>> be4f6ff2fc ([BugFix] fix delete flag lost in persistent index minor compact (#36731))
+    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty(), nullptr);
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
@@ -4221,11 +4216,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 1 : 0, _l1_vec.size(), false));
         // keep delete flag when l2 or older l1 exist
         RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
-<<<<<<< HEAD
-                                                   _usage_and_size_by_key_length, !_l2_vec.empty(), nullptr));
-=======
-                                                   _usage_and_size_by_key_length, !_l2_vec.empty() || _has_l1));
->>>>>>> be4f6ff2fc ([BugFix] fix delete flag lost in persistent index minor compact (#36731))
+                                                   _usage_and_size_by_key_length, !_l2_vec.empty() || _has_l1,
+                                                   nullptr));
         RETURN_IF_ERROR(writer->finish());
         LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
                   << ", output: " << new_l1_filename;
