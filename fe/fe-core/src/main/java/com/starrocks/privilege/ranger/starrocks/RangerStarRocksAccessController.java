@@ -240,7 +240,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             throws AccessDeniedException {
         Database database = GlobalStateMgr.getCurrentState().getDb(db);
         for (Table table : database.getTables()) {
-            if (table.isView()) {
+            if (table.isOlapView()) {
                 checkViewAction(userIdentity, roleIds, new TableName(database.getFullName(), table.getName()), privilegeType);
             } else if (table.isMaterializedView()) {
                 checkMaterializedViewAction(userIdentity, roleIds,
