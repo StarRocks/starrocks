@@ -1423,7 +1423,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *
      * @return : partitioned materialized view's all need updated partition names.
      */
-    private boolean getPartitionedMVRefreshPartitions(Set<String> toRefreshedPartitioins,
+    private boolean getPartitionedMVRefreshPartitions(Set<String> toRefreshPartitions,
                                                       boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
         // If non-partition-by table has changed, should refresh all mv partitions
@@ -1446,8 +1446,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // skip external table that is not supported for query rewrite, return all partition ?
             // skip check external table if the external does not support rewrite.
             if (!baseTable.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+=======
+                if (tableProperty.getForceExternalTableQueryRewrite() ==
+                        TableProperty.QueryRewriteConsistencyMode.DISABLE) {
+                    toRefreshPartitions.addAll(getVisiblePartitionNames());
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
                     return false;
                 }
             }
@@ -1458,7 +1464,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Set<String> partitionNames =
                     getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite, partitionExpr);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
                 return true;
             }
         }
@@ -1467,6 +1473,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // - deleted partitions.
         // - added partitions.
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+<<<<<<< HEAD
         Map<String, Range<PartitionKey>> basePartitionNameToRangeMap;
         try {
             basePartitionNameToRangeMap =
@@ -1475,6 +1482,31 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             toRefreshedPartitioins.addAll(getVisiblePartitionNames());
             return false;
+=======
+        Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap = Maps.newHashMap();
+        Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
+        Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
+        for (Map.Entry<Table, Column> entry : partitionInfos.entrySet()) {
+            Table table = entry.getKey();
+            try {
+                basePartitionNameToRangeMap.put(table,
+                        PartitionUtil.getPartitionKeyRange(table, entry.getValue(), partitionExpr));
+            } catch (UserException e) {
+                LOG.warn("Materialized view compute partition difference with base table failed.", e);
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
+                return false;
+            }
+
+            // step1.2: check ref base table's updated partition names by checking its ref tables recursively.
+            Set<String> baseChangedPartition =
+                    getUpdatedPartitionNamesOfTable(table, true, isQueryRewrite, partitionExpr);
+            if (baseChangedPartition == null) {
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
+                return true;
+            } else {
+                baseChangedPartitionNames.put(table, baseChangedPartition);
+            }
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
@@ -1513,7 +1545,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
         }
-        toRefreshedPartitioins.addAll(needRefreshMvPartitionNames);
+        toRefreshPartitions.addAll(needRefreshMvPartitionNames);
         return true;
     }
 

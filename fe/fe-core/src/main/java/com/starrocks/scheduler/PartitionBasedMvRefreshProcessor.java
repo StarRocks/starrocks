@@ -1530,7 +1530,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
 
+<<<<<<< HEAD
                 if (table.isOlapTable()) {
+=======
+            Table table = baseTableInfo.getTable();
+            if (table == null) {
+                LOG.warn("table {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getTableInfoStr(), materializedView.getName());
+                throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
+            }
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                if (table.isView()) {
+                    // skip to collect snapshots for views
+                } else if (table.isOlapTable()) {
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
                     Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());

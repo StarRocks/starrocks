@@ -51,8 +51,12 @@ public class ViewPEntryObject extends TablePEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
+<<<<<<< HEAD
                 Table table = mgr.getMetadataMgr().getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         database.getFullName(), tokens.get(1));
+=======
+                Table table = database.getTable(tokens.get(1));
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
                 if (table == null || !table.isOlapView()) {
                     throw new PrivObjNotFoundException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
                 }

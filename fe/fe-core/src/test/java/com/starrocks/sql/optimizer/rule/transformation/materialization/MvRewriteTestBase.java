@@ -103,6 +103,20 @@ public class MvRewriteTestBase {
         return s;
     }
 
+<<<<<<< HEAD
+=======
+    public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> result =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+        Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        String traceLog = execPlanWithQuery.second;
+        if (!Strings.isNullOrEmpty(traceLog)) {
+            System.out.println(traceLog);
+        }
+        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+    }
+
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
     public static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);

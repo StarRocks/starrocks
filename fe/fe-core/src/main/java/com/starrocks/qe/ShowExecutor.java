@@ -945,8 +945,42 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
+<<<<<<< HEAD
         db.readLock();
         try {
+=======
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                for (Table tbl : db.getTables()) {
+                    if (matcher != null && !matcher.match(tbl.getName())) {
+                        continue;
+                    }
+
+                    try {
+                        if (tbl.isOlapView()) {
+                            Authorizer.checkAnyActionOnView(
+                                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                    new TableName(db.getFullName(), tbl.getName()));
+                        } else if (tbl.isMaterializedView()) {
+                            Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
+                        } else {
+                            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
+                        }
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    tableMap.put(tbl.getName(), tbl.getMysqlType());
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+        } else {
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
 
             for (String tableName : tableNames) {

@@ -101,10 +101,38 @@ public class TablePEntryObject implements PEntryObject {
         }
 
         if (Objects.equals(tokens.get(0), "*")) {
+<<<<<<< HEAD
             return new TablePEntryObject(
                     catalogId,
                     PrivilegeBuiltinConstants.ALL_DATABASES_UUID,
                     PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+=======
+            dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
+            tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
+        } else {
+            Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
+            if (database == null) {
+                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
+            }
+            dbUUID = database.getUUID();
+
+            if (Objects.equals(tokens.get(1), "*")) {
+                tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
+            } else {
+                Table table = null;
+                try {
+                    table = mgr.getMetadataMgr().getTable(catalogName, tokens.get(0), tokens.get(1));
+                } catch (StarRocksConnectorException e) {
+                    throw new PrivObjNotFoundException("cannot find table " +
+                            tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());
+                }
+                if (table == null || table.isOlapView() || table.isMaterializedView()) {
+                    throw new PrivObjNotFoundException("cannot find table " +
+                            tokens.get(1) + " in db " + tokens.get(0));
+                }
+                tblUUID = table.getUUID();
+            }
+>>>>>>> b7a3a24cca ([BugFix] Fix refresh materaizlied view failed when parition column is  date_trunc(str2_date(dt))  (#36673))
         }
 
         String dbUUID = DbPEntryObject.getDatabaseUUID(mgr, catalogName, tokens.get(0));
