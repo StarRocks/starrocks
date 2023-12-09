@@ -342,8 +342,8 @@ public class MvRewriteTestBase {
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
-        String traceLog = result.first;
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
             System.out.println(traceLog);
         }

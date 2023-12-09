@@ -51,7 +51,7 @@ public class ViewPEntryObject extends TablePEntryObject {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
                 Table table = database.getTable(tokens.get(1));
-                if (table == null || !table.isView()) {
+                if (table == null || !table.isOlapView()) {
                     throw new PrivObjNotFoundException("cannot find view " + tokens.get(1) + " in db " + tokens.get(0));
                 }
                 tblUUID = table.getUUID();
