@@ -24,6 +24,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/semaphore.h"
 #include "util/stack_trace_mutex.h"
 
 namespace starrocks::lake {
@@ -33,11 +34,13 @@ class AsyncDeltaWriterImpl {
 
 public:
     using Callback = AsyncDeltaWriter::Callback;
+    using Options = AsyncDeltaWriter::Options;
 
     // Undocumented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
-    AsyncDeltaWriterImpl(std::unique_ptr<DeltaWriter> writer) : _writer(std::move(writer)) {
+    AsyncDeltaWriterImpl(std::unique_ptr<DeltaWriter> writer)
+            : _writer(std::move(writer)), _sem(AsyncDeltaWriter::kMaxPendingTasks) {
         CHECK(_writer != nullptr) << "delta writer is null";
     }
 
@@ -47,11 +50,11 @@ public:
 
     [[nodiscard]] Status open();
 
-    void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
+    void write(const Options& options, const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
-    void flush(Callback cb);
+    void flush(const Options& options, Callback cb);
 
-    void finish(Callback cb);
+    void finish(const Options& options, Callback cb);
 
     void close();
 
@@ -75,6 +78,8 @@ private:
         // If chunk == nullptr, this is a finish task
         const Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
+        // 0 means no timeout, measured as the number of milliseconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC).
+        int64_t timeout_deadline_ms = 0;
         uint32_t indexes_size = 0;
         bool finish_after_write = false;
         bool flush_after_write = false;
@@ -84,9 +89,11 @@ private:
 
     Status do_open();
     bool closed();
+    Status submit_task(const Options& options, const Task& task);
 
     std::unique_ptr<DeltaWriter> _writer{};
     bthread::ExecutionQueueId<Task> _queue_id{kInvalidQueueId};
+    bthreads::CountingSemaphore<> _sem;
     StackTraceMutex<bthread::Mutex> _mtx{};
     // _status、_opened and _closed are protected by _mtx
     Status _status{};
@@ -115,13 +122,31 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto st = Status{};
     bool flush_after_write = false;
     for (; iter; ++iter) {
-        // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
-        if (async_writer->closed()) {
-            st.permit_unchecked_error();
-            iter->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
+        DeferOp defer([&]() {
+            iter->cb(st);
+            async_writer->_sem.release();
+        });
+
+        TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriterImpl::execute:2", &st);
+
+        if (!st.ok()) {
             continue;
         }
-        if (st.ok() && iter->chunk != nullptr && iter->indexes_size > 0) {
+
+        auto timeout_deadline = iter->timeout_deadline_ms;
+        if (timeout_deadline > 0 && butil::gettimeofday_ms() >= timeout_deadline) {
+            st = Status::TimedOut(fmt::format("async delta writer task reached timeout={} now={}", timeout_deadline,
+                                              butil::gettimeofday_ms()));
+            continue;
+        }
+
+        // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
+        if (async_writer->closed()) {
+            st = Status::InternalError("AsyncDeltaWriter has been closed");
+            continue;
+        }
+
+        if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = delta_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
             LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
@@ -135,7 +160,6 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
-        iter->cb(st);
     }
     if (flush_after_write) {
         st = delta_writer->flush_async();
@@ -174,45 +198,43 @@ inline Status AsyncDeltaWriterImpl::do_open() {
     return _writer->open();
 }
 
-inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size,
-                                        Callback cb) {
+inline void AsyncDeltaWriterImpl::write(const Options& options, const Chunk* chunk, const uint32_t* indexes,
+                                        uint32_t indexes_size, Callback cb) {
     Task task;
     task.chunk = chunk;
     task.indexes = indexes;
     task.indexes_size = indexes_size;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
-    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+    task.timeout_deadline_ms = options.timeout_ms > 0 ? butil::gettimeofday_ms() + options.timeout_ms : 0;
+    if (auto st = submit_task(options, task); !st.ok()) {
+        task.cb(st);
     }
 }
 
-inline void AsyncDeltaWriterImpl::flush(Callback cb) {
+inline void AsyncDeltaWriterImpl::flush(const Options& options, Callback cb) {
     Task task;
     task.chunk = nullptr;
     task.indexes = nullptr;
     task.indexes_size = 0;
     task.flush_after_write = true;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
-    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+    task.timeout_deadline_ms = options.timeout_ms > 0 ? butil::gettimeofday_ms() + options.timeout_ms : 0;
+    if (auto st = submit_task(options, task); !st.ok()) {
+        task.cb(st);
     }
 }
 
-inline void AsyncDeltaWriterImpl::finish(Callback cb) {
+inline void AsyncDeltaWriterImpl::finish(const Options& options, Callback cb) {
     Task task;
     task.chunk = nullptr;
     task.indexes = nullptr;
     task.indexes_size = 0;
     task.finish_after_write = true;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
-    // NOTE: the submited tasks will be executed in the thread pool `StorageEngine::instance()->async_delta_writer_executor()`,
-    // which is a thread pool of pthraed NOT bthread, so don't worry the bthread worker threads or RPC threads will be blocked
-    // by the submitted tasks.
-    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+    task.timeout_deadline_ms = options.timeout_ms > 0 ? butil::gettimeofday_ms() + options.timeout_ms : 0;
+    if (auto st = submit_task(options, task); !st.ok()) {
+        task.cb(st);
     }
 }
 
@@ -248,6 +270,28 @@ inline void AsyncDeltaWriterImpl::close() {
     }
 }
 
+inline Status AsyncDeltaWriterImpl::submit_task(const Options& options, const Task& task) {
+    if (!_sem.try_acquire_for(std::chrono::milliseconds(options.timeout_ms))) {
+        auto err_msg = fmt::format(
+                "Waiting for write slot reached timeout={}ms txn_id={} tablet_id={}. possible solution is "
+                "1.reduce your data ingestion speed 2.enlarge the config \"number_tablet_writer_threads\"(current "
+                "value "
+                "{}) or \"flush_thread_num_per_store\"(current value {}) 3. increase your ingestion job timeout",
+                txn_id(), tablet_id(), options.timeout_ms, config::number_tablet_writer_threads,
+                config::flush_thread_num_per_store);
+        return Status::ResourceBusy(err_msg);
+    }
+    // NOTE: the submitted tasks will be executed in the thread pool `StorageEngine::instance()->async_delta_writer_executor()`,
+    // which is a thread pool of pthraed NOT bthread, so don't worry the bthread worker threads or RPC threads will be blocked
+    // by the submitted tasks.
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        _sem.release();
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
+        return Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed");
+    }
+    return Status::OK();
+}
+
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     delete _impl;
 }
@@ -256,16 +300,17 @@ Status AsyncDeltaWriter::open() {
     return _impl->open();
 }
 
-void AsyncDeltaWriter::write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb) {
-    _impl->write(chunk, indexes, indexes_size, std::move(cb));
+void AsyncDeltaWriter::write(const Options& options, const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size,
+                             Callback cb) {
+    _impl->write(options, chunk, indexes, indexes_size, std::move(cb));
 }
 
-void AsyncDeltaWriter::flush(Callback cb) {
-    _impl->flush(std::move(cb));
+void AsyncDeltaWriter::flush(const Options& options, Callback cb) {
+    _impl->flush(options, std::move(cb));
 }
 
-void AsyncDeltaWriter::finish(Callback cb) {
-    _impl->finish(std::move(cb));
+void AsyncDeltaWriter::finish(const Options& options, Callback cb) {
+    _impl->finish(options, std::move(cb));
 }
 
 void AsyncDeltaWriter::close() {

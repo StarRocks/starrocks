@@ -14,13 +14,11 @@
 
 #include "runtime/lake_tablets_channel.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -29,10 +27,8 @@
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -156,9 +152,7 @@ public:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));

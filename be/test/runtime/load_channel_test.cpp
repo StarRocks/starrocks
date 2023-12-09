@@ -154,9 +154,7 @@ public:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
