@@ -2400,9 +2400,6 @@ TEST_P(PersistentIndexTest, test_l0_append_load_small_data) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-<<<<<<< HEAD
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest, ::testing::Values(PersistentIndexTestParam{false}));
-=======
 TEST_P(PersistentIndexTest, test_keep_del_in_minor_compact) {
     int64_t old_config = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 100;
@@ -2662,8 +2659,6 @@ TEST_P(PersistentIndexTest, test_snapshot_with_minor_compact) {
     config::l0_max_mem_usage = old_config;
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
->>>>>>> be4f6ff2fc ([BugFix] fix delete flag lost in persistent index minor compact (#36731))
+INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest, ::testing::Values(PersistentIndexTestParam{false}));
 
 } // namespace starrocks
