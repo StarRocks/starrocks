@@ -34,6 +34,7 @@ public class HudiScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalHudiScanOperator scan = (LogicalHudiScanOperator) input.getOp();
         PhysicalHudiScanOperator physicalHudiScan = new PhysicalHudiScanOperator(scan);
+        physicalHudiScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalHudiScan);
         return Lists.newArrayList(result);
     }

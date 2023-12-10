@@ -16,10 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -28,7 +28,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
@@ -83,7 +82,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-public class IcebergScanNode extends ScanNode {
+public class IcebergScanNode extends CatalogScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
     private IcebergTable srIcebergTable; // table definition in starRocks
@@ -100,16 +99,16 @@ public class IcebergScanNode extends ScanNode {
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
-    private CloudConfiguration cloudConfiguration = null;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
-        setupCloudCredential();
     }
 
-    private void setupCloudCredential() {
-        String catalogName = srIcebergTable.getCatalogName();
+    @Override
+    protected void setupCloudCredential(Table table) {
+        IcebergTable iceTable = (IcebergTable) table;
+        String catalogName = iceTable.getCatalogName();
         if (catalogName == null) {
             return;
         }
@@ -117,7 +116,7 @@ public class IcebergScanNode extends ScanNode {
         // Hard coding here
         // Try to get tabular signed temporary credential
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
+                buildCloudConfigurationForTabular(iceTable.getNativeTable().io().properties());
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
             cloudConfiguration = tabularTempCloudConfiguration;
@@ -360,13 +359,7 @@ public class IcebergScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainCatalogComplexTypePrune(prefix));
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(srIcebergTable.getCatalogName())) {
@@ -411,8 +404,9 @@ public class IcebergScanNode extends ScanNode {
 
         msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 

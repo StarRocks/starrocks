@@ -14,19 +14,17 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class StructTypePlanTest extends PlanTestBase {
+public class ComplexTypePrunePlanTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("create table test(c0 INT, " +
                 "c1 struct<a int, b array<struct<a int, b int>>>," +
                 "c2 struct<a int, b int>," +
@@ -40,18 +38,10 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        starRocksAssert.withTable("create table array_struct_nest(c1 int, " +
-                "c2 array<struct<c2_sub1 int, c2_sub2 int>>, " +
-                "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
-                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
-                "properties('replication_num'='1');");
-        FeConstants.runningUnitTest = false;
     }
 
     @Before
     public void setup() throws Exception {
-        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
-        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
         connectContext.getSessionVariable().setCboPruneSubfield(true);
     }
 
@@ -73,15 +63,12 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSubfield() throws Exception {
         String sql = "select c1.a from test";
         assertVerbosePlanContains(sql, "[/c1/a]");
-
-        connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
     }
 
     @Test
     public void testStructMultiSelect() throws Exception {
         String sql = "select c2.a, c2.b from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a, /c2/b]");
     }
 
     @Test
@@ -108,7 +95,7 @@ public class StructTypePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[/c2/a]");
 
         sql = "select sum(c2.b) as t from test group by c2.a";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a, /c2/b]");
 
         sql = "select count(c1.b[10].a) from test";
         assertVerbosePlanContains(sql, "[/c1/b/INDEX/a]");
@@ -129,10 +116,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSelectStar() throws Exception {
         String sql = "select *, c1.b[10].a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
-        assertVerbosePlanContains(sql,
-                "Pruned type: 4 <-> [STRUCT<a int(11), b int(11), c STRUCT<a int(11), b int(11)>, d ARRAY<int(11)>>]");
+        assertVerbosePlanNotContains(sql, "ColumnAccessPath");
     }
 
     @Test
