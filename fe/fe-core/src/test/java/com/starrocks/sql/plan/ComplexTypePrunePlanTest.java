@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -43,6 +44,13 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setCboPruneSubfield(true);
+    }
+
+    @Test
+    public void testNamedStruct() throws Exception {
+        String sql = "select q.t.c0 from (select named_struct('c0', c0, 'c1', c0) as t from test)q";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
     }
 
     @Test
