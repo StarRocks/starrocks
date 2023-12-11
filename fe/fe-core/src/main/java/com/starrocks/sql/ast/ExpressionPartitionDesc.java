@@ -92,7 +92,6 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         boolean hasExprAnalyze = false;
         SlotRef slotRef;
         if (rangePartitionDesc != null) {
-            rangePartitionDesc.analyze(columnDefs, otherProperties);
             // for automatic partition table
             if (rangePartitionDesc.isAutoPartitionTable) {
                 rangePartitionDesc.setAutoPartitionTable(true);
@@ -109,6 +108,8 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                     throw new AnalysisException("Unsupported expr:" + expr.toSql());
                 }
             }
+            rangePartitionDesc.partitionType = partitionType;
+            rangePartitionDesc.analyze(columnDefs, otherProperties);
         } else {
             // for materialized view
             slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
@@ -118,6 +119,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             if (columnDef.getName().equalsIgnoreCase(slotRef.getColumnName())) {
                 slotRef.setType(columnDef.getType());
                 PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                partitionType = expr.getType();
                 hasExprAnalyze = true;
             }
         }
@@ -147,7 +149,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         }
         for (Column column : partitionColumns) {
             try {
-                RangePartitionInfo.checkRangeColumnType(column);
+                RangePartitionInfo.checkExpressionRangeColumnType(column, expr);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
