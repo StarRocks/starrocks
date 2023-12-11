@@ -640,7 +640,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 ##### lake_publish_version_max_threads
 
 - 含义：发送生效版本（Publish Version）任务的最大线程数。
-- 默认值：128
+- 默认值：512
 - 引入版本：v3.2.0
 
 ##### lake_autovacuum_parallel_partitions
