@@ -621,7 +621,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：允许同时执行的 Compaction 任务数。
 - 默认值：-1
-- 引入版本：v3.2.0
+- 引入版本：v3.1.0
 
 系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaciton 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
 
