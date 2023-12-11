@@ -1032,9 +1032,16 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+<<<<<<< HEAD
 
 // control the local persistent index in shared_data gc interval
 CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+=======
+// control the local persistent index in shared_data gc/evict interval
+CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+>>>>>>> 3bd18e245e ([Feature] Evict lake persistent index files if disk is full (#36400))
 // enable persistent index compression
 CONF_mBool(enable_pindex_compression, "false");
 
@@ -1115,5 +1122,9 @@ CONF_Int32(lake_service_max_concurrency, "0");
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
+
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 } // namespace starrocks::config

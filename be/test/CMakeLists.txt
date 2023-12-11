@@ -382,6 +382,13 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/compaction_parallelization_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/local_pk_index_manager_test.cpp
+>>>>>>> 3bd18e245e ([Feature] Evict lake persistent index files if disk is full (#36400))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
