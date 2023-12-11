@@ -702,7 +702,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 
 - **Default**: 12
 - **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/transactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 ##### lake_publish_version_max_threads
 
