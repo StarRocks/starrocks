@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -30,6 +29,8 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -37,7 +38,6 @@ public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
             new ImplicitCastRule()
     );
-
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -49,7 +49,6 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
-
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_SCAN_PREDICATE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -62,7 +61,6 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
-
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -74,7 +72,7 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
-
+    private static final Logger LOG = LogManager.getLogger(ScalarOperatorRewriter.class);
     private final ScalarOperatorRewriteContext context;
 
     public ScalarOperatorRewriter() {
@@ -89,7 +87,11 @@ public class ScalarOperatorRewriter {
         do {
             changeNums = context.changeNum();
             for (ScalarOperatorRewriteRule rule : ruleList) {
+                long begin = System.currentTimeMillis();
                 result = rewriteByRule(result, rule);
+                long end = System.currentTimeMillis();
+                long duration = end - begin;
+                LOG.info("rule:" + rule + " time:" + duration);
             }
 
             if (changeNums > Config.max_planner_scalar_rewrite_num) {

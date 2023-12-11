@@ -25,36 +25,81 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
 
+    // These two filed are used in NormalizePredicateRule to eliminate common CompoundPredicate
+    // For Expr tree like below, the CompoundTreeLeafNodeNumber is 5, and compoundTreeUniqueLeave's size is 4.
+    //           AND
+    //        /        \
+    //      AND         AND
+    //     /   \       /  \
+    // subT1   a+1  And  subT5
+    //               /   \
+    //             subT3  a+1
+    private int compoundTreeLeafNodeNumber;
+    private Set<ScalarOperator> compoundTreeUniqueLeaves;
+
     public CompoundPredicateOperator(CompoundType compoundType, ScalarOperator... arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
+        compoundTreeLeafNodeNumber = 0;
         Preconditions.checkState(arguments.length >= 1);
     }
 
     public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
+        compoundTreeLeafNodeNumber = 0;
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
+    }
+
+    public static ScalarOperator or(Collection<ScalarOperator> nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
+    }
+
+    public static ScalarOperator or(ScalarOperator... nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
+    }
+
+    public static ScalarOperator and(Collection<ScalarOperator> nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
+    }
+
+    public static ScalarOperator and(ScalarOperator... nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
+    }
+
+    public static ScalarOperator not(ScalarOperator node) {
+        return new CompoundPredicateOperator(CompoundType.NOT, node);
+    }
+
+    public int getCompoundTreeLeafNodeNumber() {
+        return compoundTreeLeafNodeNumber;
+    }
+
+    public void setCompoundTreeLeafNodeNumber(int compoundTreeLeafNodeNumber) {
+        this.compoundTreeLeafNodeNumber = compoundTreeLeafNodeNumber;
     }
 
     public CompoundType getCompoundType() {
         return type;
     }
 
+    public Set<ScalarOperator> getCompoundTreeUniqueLeaves() {
+        return compoundTreeUniqueLeaves;
+    }
+
+    public void setCompoundTreeUniqueLeaves(Set<ScalarOperator> compoundTreeUniqueLeaves) {
+        this.compoundTreeUniqueLeaves = compoundTreeUniqueLeaves;
+    }
+
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCompoundPredicate(this, context);
-    }
-
-    public enum CompoundType {
-        AND,
-        OR,
-        NOT
     }
 
     public boolean isAnd() {
@@ -133,23 +178,9 @@ public class CompoundPredicateOperator extends PredicateOperator {
         return Objects.hash(opType, type, h);
     }
 
-    public static ScalarOperator or(Collection<ScalarOperator> nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
-    }
-
-    public static ScalarOperator or(ScalarOperator... nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
-    }
-
-    public static ScalarOperator and(Collection<ScalarOperator> nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
-    }
-
-    public static ScalarOperator and(ScalarOperator... nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
-    }
-
-    public static ScalarOperator not(ScalarOperator node) {
-        return new CompoundPredicateOperator(CompoundType.NOT, node);
+    public enum CompoundType {
+        AND,
+        OR,
+        NOT
     }
 }
