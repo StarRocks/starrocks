@@ -40,7 +40,7 @@ using namespace starrocks;
 class LakeDuplicateTabletReaderTest : public TestBase {
 public:
     LakeDuplicateTabletReaderTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -84,7 +84,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -149,7 +149,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -178,7 +178,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
 class LakeAggregateTabletReaderTest : public TestBase {
 public:
     LakeAggregateTabletReaderTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -223,7 +223,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_aggregate_lake_tablet_reader";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -315,7 +315,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -341,7 +341,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
 class LakeDuplicateTabletReaderWithDeleteTest : public TestBase {
 public:
     LakeDuplicateTabletReaderWithDeleteTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -385,7 +385,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -472,7 +472,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -506,7 +506,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
 class LakeDuplicateTabletReaderWithDeleteNotInOneValueTest : public TestBase {
 public:
     LakeDuplicateTabletReaderWithDeleteNotInOneValueTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -550,7 +550,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete_not_in_one";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -613,7 +613,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));

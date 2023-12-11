@@ -47,8 +47,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    Tablet tablet(_tablet.tablet_manager(), _tablet.id());
-    TabletReader reader(tablet, _tablet.version(), schema, _input_rowsets);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;

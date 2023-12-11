@@ -125,8 +125,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -289,8 +289,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -377,8 +377,8 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
 
     // check data
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
     auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -470,8 +470,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -618,8 +618,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);

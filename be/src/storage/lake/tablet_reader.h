@@ -17,7 +17,6 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
-#include "storage/lake/tablet.h"
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks {
@@ -30,10 +29,13 @@ struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
+class TabletSchema;
 
 namespace lake {
 
 class Rowset;
+class TabletManager;
+class TabletMetadataPB;
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -49,10 +51,11 @@ class TabletReader final : public ChunkIterator {
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
-    TabletReader(Tablet tablet, int64_t version, Schema schema);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                 std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -94,8 +97,7 @@ private:
                                    const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
                                    MemPool* mempool);
 
-    Tablet _tablet;
-    int64_t _version;
+    TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
     std::shared_ptr<const TabletSchema> _tablet_schema;
 

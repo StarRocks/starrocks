@@ -103,10 +103,6 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
     }
 }
 
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Schema schema) {
-    return std::make_shared<TabletReader>(*this, version, std::move(schema));
-}
-
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
