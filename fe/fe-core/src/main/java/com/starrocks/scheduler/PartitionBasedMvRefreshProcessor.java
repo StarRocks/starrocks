@@ -439,7 +439,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     @VisibleForTesting
-    public void filterPartitionByRefreshNumber(Set<String> partitionsToRefresh, MaterializedView materializedView) {
+    public void filterPartitionByRefreshNumber(Set<String> partitionsToRefresh,
+                                               MaterializedView materializedView) {
+        // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
+        if (mvContext.executeOption != null && mvContext.executeOption.getIsSync()) {
+            return;
+        }
+        // ignore if mv is not partitioned.
+        if (!materializedView.isPartitionedTable()) {
+            return;
+        }
+        // ignore if partition_fresh_limit is not set
         int partitionRefreshNumber = materializedView.getTableProperty().getPartitionRefreshNumber();
         if (partitionRefreshNumber <= 0) {
             return;
@@ -1522,7 +1532,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                if (table.isOlapTable()) {
+                if (table.isView()) {
+                    // skip to collect snapshots for views
+                } else if (table.isOlapTable()) {
                     Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());

@@ -94,6 +94,7 @@ public class MvRewriteTestBase {
         Config.enable_new_publish_mechanism = true;
         Config.alter_scheduler_interval_millisecond = 100;
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = true;
         startSuiteTime = Instant.now().getEpochSecond();
 
         // build a small cache for test
@@ -342,8 +343,8 @@ public class MvRewriteTestBase {
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
-        String traceLog = result.first;
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
             System.out.println(traceLog);
         }
