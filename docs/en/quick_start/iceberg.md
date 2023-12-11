@@ -4,9 +4,10 @@ sidebar_position: 3
 description: Data Lakehouse with Apache Iceberg
 toc_max_heading_level: 2
 ---
+import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
+import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 # Data Lakehouse with Apache Iceberg
-import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 ## Overview
 
@@ -14,6 +15,8 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 - Load New York City Green Taxi data for the month of May 2023 into the Iceberg data lake
 - Configure StarRocks to access the Iceberg catalog
 - Query the data with StarRocks where the data sits
+
+<DataLakeIntro />
 
 ## Prerequisites
 
