@@ -136,6 +136,13 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter
 
 StreamLoadAction::~StreamLoadAction() = default;
 
+static void _send_reply(HttpRequest* req, const std::string& str) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load response: " << str;
+    }
+    HttpChannel::send_reply(req, str);
+}
+
 void StreamLoadAction::handle(HttpRequest* req) {
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
@@ -154,7 +161,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
         if (ctx->need_rollback) {
-            _exec_env->stream_load_executor()->rollback_txn(ctx);
+            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
@@ -163,7 +170,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
     }
 
     auto str = ctx->to_json();
-    HttpChannel::send_reply(req, str);
+    _send_reply(req, str);
 
     // update statstics
     streaming_load_requests_total.increment(1);
@@ -187,7 +194,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip();
-            ctx->body_sink->append(std::move(ctx->buffer));
+            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
@@ -227,27 +234,29 @@ int StreamLoadAction::on_header(HttpRequest* req) {
                 Status::ResourceBusy(fmt::format("Stream Load exceed http cuncurrent limit {}, please try again later",
                                                  config::be_http_num_workers - 1));
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         return -1;
     } else {
         LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
                   << ", tbl=" << ctx->table;
     }
 
-    VLOG(1) << "streaming load request: " << req->debug_string();
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load request: " << req->debug_string();
+    }
 
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback) {
-            _exec_env->stream_load_executor()->rollback_txn(ctx);
+            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
             ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         streaming_load_current_processing.increment(-1);
         return -1;
     }

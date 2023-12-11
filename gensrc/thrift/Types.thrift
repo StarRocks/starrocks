@@ -58,6 +58,7 @@ typedef i64 TPartitionId
 enum TStorageType {
     ROW,
     COLUMN,
+    COLUMN_WITH_ROW
 }
 
 enum TStorageMedium {
@@ -359,6 +360,7 @@ struct TFunction {
 
   // Ignore nulls
   33: optional bool ignore_nulls
+  34: optional bool isolated
 }
 
 enum TLoadJobState {

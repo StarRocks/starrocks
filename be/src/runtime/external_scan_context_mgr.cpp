@@ -122,10 +122,10 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
                 fragment_ctx->cancel(Status::Cancelled(msg.str()));
             }
         }
-        // clear the fragment instance's related result queue
-        _exec_env->result_queue_mgr()->cancel(fragment_instance_id);
         LOG(INFO) << "close scan context: context id [ " << context_id << " ], fragment instance id [ "
                   << print_id(fragment_instance_id) << " ]";
+        // clear the fragment instance's related result queue
+        RETURN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(fragment_instance_id));
     }
     return Status::OK();
 }
@@ -166,8 +166,12 @@ void ExternalScanContextMgr::gc_expired_context() {
         }
         for (const auto& expired_context : expired_contexts) {
             // must cancel the fragment instance, otherwise return thrift transport TTransportException
-            _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id);
-            _exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id);
+            WARN_IF_ERROR(
+                    _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id),
+                    strings::Substitute("Fail to cancel fragment $0", print_id(expired_context->fragment_instance_id)));
+            WARN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
+                          strings::Substitute("Fail to cancel fragment $0 in result queue mgr",
+                                              print_id(expired_context->fragment_instance_id)));
         }
     }
 #endif

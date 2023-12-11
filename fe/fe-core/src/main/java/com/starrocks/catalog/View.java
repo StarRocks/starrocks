@@ -146,18 +146,16 @@ public class View extends Table {
         try {
             node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
-            LOG.info("stmt is {}", inlineViewDef);
-            LOG.info("exception because: ", e);
-            LOG.info("msg is {}", inlineViewDef);
+            LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
             throw new UserException(
-                    String.format("Failed to parse view-definition statement of view: %s", name), e);
+                    String.format("Failed to parse view: %s. Its definition is:%n%s ", name, inlineViewDef));
         }
         // Make sure the view definition parses to a query statement.
         if (!(node instanceof QueryStatement)) {
-            throw new UserException(String.format("View definition of %s " +
-                    "is not a query statement", name));
+            throw new UserException(String.format("View %s without query statement. Its definition is:%n%s",
+                    name, inlineViewDef));
         }
         return (QueryStatement) node;
     }

@@ -294,10 +294,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return "TaskRun{" +
                 "taskId=" + taskId +
                 ", properties=" + properties +
-                ", future=" + future +
                 ", task=" + task +
-                ", runCtx=" + runCtx +
-                ", processor=" + processor +
                 ", status=" + status +
                 ", type=" + type +
                 '}';

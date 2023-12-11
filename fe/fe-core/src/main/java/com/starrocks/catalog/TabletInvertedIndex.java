@@ -46,6 +46,8 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
@@ -87,7 +89,7 @@ public class TabletInvertedIndex {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // tablet id -> tablet meta
-    private final Map<Long, TabletMeta> tabletMetaMap = Maps.newHashMap();
+    private final Map<Long, TabletMeta> tabletMetaMap = Maps.newConcurrentMap();
 
     // replica id -> tablet id
     private final Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
@@ -194,7 +196,8 @@ public class TabletInvertedIndex {
                                 replica.setSchemaHash(backendTabletInfo.getSchema_hash());
                             }
 
-                            if (needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
+                            if (!isRestoreReplica(replica, this.replicaToTabletMap, this.tabletMetaMap) &&
+                                    needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
                                 LOG.warn("replica {} of tablet {} on backend {} need recovery. "
                                                 + "replica in FE: {}, report version {}, report schema hash: {},"
                                                 + " is bad: {}",
@@ -367,10 +370,10 @@ public class TabletInvertedIndex {
 
                 // validate database
                 long dbId = tabletMeta.getDbId();
-                Database database = localMetastore.getDb(dbId);
-                if (database == null) {
-                    database = recycleBin.getDatabase(dbId);
-                    if (database != null) {
+                Database db = localMetastore.getDb(dbId);
+                if (db == null) {
+                    db = recycleBin.getDatabase(dbId);
+                    if (db != null) {
                         isInRecycleBin = true;
                     } else {
                         deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
@@ -379,12 +382,13 @@ public class TabletInvertedIndex {
                     }
                 }
 
+                Locker locker = new Locker();
                 try {
-                    database.readLock();
+                    locker.lockDatabase(db, LockType.READ);
 
                     // validate table
                     long tableId = tabletMeta.getTableId();
-                    com.starrocks.catalog.Table table = database.getTable(tableId);
+                    com.starrocks.catalog.Table table = db.getTable(tableId);
                     if (table == null) {
                         table = recycleBin.getTable(dbId, tableId);
                         if (table != null) {
@@ -452,14 +456,14 @@ public class TabletInvertedIndex {
 
                     tabletMeta.resetToBeCleanedTime();
                 } finally {
-                    database.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             } // end for tabletIds
         } // end for backendIds
 
         // logging report
         LOG.info("TabletMetaChecker has cleaned {} invalid tablet(s), scanned {} tablet(s) on {} backend(s) in {}ms," +
-                " total tablets in recycle bin: {}, total ignored tablets: {}, up to 20 of ignored tablets: {}, " +
+                        " total tablets in recycle bin: {}, total ignored tablets: {}, up to 20 of ignored tablets: {}, " +
                         "backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
                 invalidTablets.size(), scannedTabletCount, backendIds.size(),
                 System.currentTimeMillis() - startTime,
@@ -521,6 +525,32 @@ public class TabletInvertedIndex {
             return versionInFe == backendTabletInfo.getVersion() &&
                     replicaInFe.isBad();
         }
+    }
+
+    private boolean isRestoreReplica(Replica replica, Map<Long, Long> replicaToTabletMap, Map<Long, TabletMeta> tabletMetaMap) {
+        Long tabletId = replicaToTabletMap.get(replica.getId());
+        TabletMeta tabletMeta = null;
+        if (tabletId != null) {
+            tabletMeta = tabletMetaMap.get(tabletId);
+        }
+
+        if (tabletMeta != null) {
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                // getTable is thread-safe for caller, lock free
+                com.starrocks.catalog.Table tbl = db.getTable(tableId);
+                if (tbl != null && tbl instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) tbl;
+                    if (olapTable.getState() == OlapTable.OlapTableState.RESTORE) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -819,12 +849,7 @@ public class TabletInvertedIndex {
     }
 
     public long getTabletCount() {
-        readLock();
-        try {
-            return this.tabletMetaMap.size();
-        } finally {
-            readUnlock();
-        }
+        return this.tabletMetaMap.size();
     }
 
     public long getReplicaCount() {

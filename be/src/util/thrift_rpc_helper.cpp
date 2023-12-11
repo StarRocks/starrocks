@@ -86,7 +86,7 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         LOG(WARNING) << ss.str();
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
         // just reopen to disable this connection
-        client.reopen(timeout_ms);
+        (void)client.reopen(timeout_ms);
         return Status::ThriftRpcError(ss.str());
     }
     return Status::OK();

@@ -276,9 +276,9 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
 
 void SchemaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        Status::OK();
+        return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     ScanNode::close(state);

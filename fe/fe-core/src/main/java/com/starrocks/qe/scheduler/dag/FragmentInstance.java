@@ -274,6 +274,10 @@ public class FragmentInstance {
         return bucketSeqToDriverSeq.get(bucketSeq);
     }
 
+    public Map<Integer, Integer> getBucketSeqToDriverSeq() {
+        return bucketSeqToDriverSeq;
+    }
+
     public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
         node2ScanRanges.computeIfAbsent(scanId, k -> new ArrayList<>()).addAll(scanRanges);
     }

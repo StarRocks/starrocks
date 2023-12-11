@@ -145,7 +145,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
     RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids, _version, false, rowids_by_rssid,
-                                                          &read_columns, nullptr));
+                                                          &read_columns, nullptr, tablet_schema));
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();
@@ -206,7 +206,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         }
         value_column_ids.push_back(cid);
     }
-    Schema values_schema(tablet->tablet_schema()->schema(), value_column_ids);
+    Schema values_schema(tablet_schema->schema(), value_column_ids);
     auto keys_st = serde::deserialize_chunk_pb_with_schema(key_schema, keys_pb.data());
     if (!keys_st.ok()) {
         return keys_st.status();
@@ -220,7 +220,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         found_pb->Add(f);
     }
     StatusOr<ChunkPB> values_pb;
-    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize(*values, nullptr));
+    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize_without_meta(*values, nullptr));
     if (!values_pb.ok()) {
         return values_pb.status();
     }

@@ -26,6 +26,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -81,6 +83,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
         Set<Long> allCommittedBackends = new HashSet<>();
+
+        // 1. record tablet commit infos in TransactionState,
+        // so we can decide to update version in replica when finish transaction
+        if (!tabletCommitInfos.isEmpty()) {
+            txnState.setTabletCommitInfos(tabletCommitInfos);
+        }
 
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
@@ -286,7 +294,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -309,7 +318,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 

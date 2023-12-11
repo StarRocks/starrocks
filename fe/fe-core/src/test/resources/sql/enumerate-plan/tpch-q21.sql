@@ -39,7 +39,7 @@ order by
     numwait desc,
     s_name limit 100;
 [planCount]
-1
+2
 [plan-1]
 TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])
     TOP-N (order by [[77: count DESC NULLS LAST, 2: S_NAME ASC NULLS FIRST]])

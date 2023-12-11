@@ -378,7 +378,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    builder.add_values(used_values, 0);
+    (void)builder.add_values(used_values, 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));

@@ -25,11 +25,14 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -38,8 +41,10 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -48,6 +53,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -70,7 +76,6 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -260,6 +265,21 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+
+                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                session.getSessionVariable().setPreferComputeNode(false);
+                session.getSessionVariable().setUseComputeNodes(0);
+                OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+                TableName catalogDbTable = insertStmt.getTableName();
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                        catalogDbTable.getDb());
+                try {
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.complete();
+                } catch (UserException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
@@ -271,6 +291,8 @@ public class InsertPlanner {
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
+            } else if (targetTable.isBlackHoleTable()) {
+                dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
@@ -517,6 +539,29 @@ public class InsertPlanner {
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
+                if (targetColumn.getDefineExpr() == null) {
+                    Table targetTable = insertStatement.getTargetTable();
+                    // Only olap table can have the synchronized materialized view.
+                    OlapTable targetOlapTable = (OlapTable) targetTable;
+                    MaterializedIndexMeta targetIndexMeta = null;
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
+                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                            continue;
+                        }
+                        for (Column column : indexMeta.getSchema()) {
+                            if (column.getName().equals(targetColumn.getName())) {
+                                targetIndexMeta = indexMeta;
+                                break;
+                            }
+                        }
+                    }
+                    String targetIndexMetaName = targetIndexMeta == null ? "" :
+                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                    throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                            "please check the associated materialized view " + targetIndexMetaName
+                            + " of target table:" + insertStatement.getTargetTable().getName());
+                }
+
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
@@ -606,7 +651,8 @@ public class InsertPlanner {
                                                           List<ColumnRefOperator> outputColumns) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            DistributionProperty distributionProperty = DistributionProperty
+                    .createProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 
@@ -629,14 +675,15 @@ public class InsertPlanner {
                     Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
                     orderings.add(ordering);
                 }
-                SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+                SortProperty sortProperty = SortProperty.createProperty(orderings);
                 return new PhysicalPropertySet(sortProperty);
             }
         }
 
 
         if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            DistributionProperty distributionProperty = DistributionProperty
+                    .createProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 
@@ -675,7 +722,7 @@ public class InsertPlanner {
         HashDistributionDesc desc =
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
-        DistributionProperty property = new DistributionProperty(spec);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
 
         if (Config.eliminate_shuffle_load_by_replicated_storage) {
             forceReplicatedStorage = true;

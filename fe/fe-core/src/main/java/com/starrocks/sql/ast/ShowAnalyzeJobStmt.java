@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
@@ -94,8 +93,8 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
                 try {
-                    Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                            context.getCurrentRoleIds(), new TableName(db.getOriginName(), table.getName()));
+                    Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), db.getFullName(), table);
                 } catch (AccessDeniedException e) {
                     return null;
                 }

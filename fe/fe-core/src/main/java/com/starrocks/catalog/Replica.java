@@ -62,7 +62,8 @@ public class Replica implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         ALTER, // replica is under rollup or schema change
-        DECOMMISSION; // replica is ready to be deleted
+        DECOMMISSION, // replica is ready to be deleted
+        RECOVER;  // replica is recovering
 
         public boolean canLoad() {
             return this == NORMAL || this == SCHEMA_CHANGE || this == ALTER;
@@ -396,6 +397,15 @@ public class Replica implements Writable {
     public synchronized void updateVersion(long version) {
         updateReplicaInfo(version, this.lastFailedVersion,
                 this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
+    }
+
+    public synchronized void updateForRestore(long newVersion, long newDataSize,
+                                              long newRowCount) {
+        this.version = newVersion;
+        this.lastFailedVersion = -1;
+        this.lastSuccessVersion = newVersion;
+        this.dataSize = newDataSize;
+        this.rowCount = newRowCount;
     }
 
     /* last failed version:  LFV

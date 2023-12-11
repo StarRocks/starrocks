@@ -212,10 +212,9 @@ void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_me
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-Status RuntimeState::init_instance_mem_tracker() {
+void RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
-    return Status::OK();
 }
 
 ObjectPool* RuntimeState::global_obj_pool() const {
@@ -328,7 +327,7 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
 const int64_t MAX_ERROR_NUM = 50;
 
 Status RuntimeState::create_error_log_file() {
-    _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
+    RETURN_IF_ERROR(_exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path));
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
     _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);

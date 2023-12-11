@@ -109,6 +109,9 @@ public class GlobalTransactionMgrTest {
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
+    private TransactionState.TxnCoordinator transactionSourceBe =
+            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "localbe");
+
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -397,6 +400,8 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -470,6 +475,8 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -822,8 +829,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
@@ -839,8 +845,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
@@ -856,8 +861,7 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
-        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState(),
-                globalTransactionMgr.getTransactionIDGenerator()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
 
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
         doThrow(NullPointerException.class)
@@ -865,5 +869,17 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
+            BeginTransactionException, DuplicatedRequestException {
+        masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSourceBe,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
+        assertEquals(1, res);
     }
 }

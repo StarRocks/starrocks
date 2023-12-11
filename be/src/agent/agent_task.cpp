@@ -19,9 +19,11 @@
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
@@ -121,6 +123,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.emplace_back("alter failed");
         error_msgs.emplace_back("status: " + print_agent_status(status));
+        error_msgs.emplace_back(sc_status.get_error_msg());
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -222,7 +225,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-            error_msgs.emplace_back("create tablet failed");
+            error_msgs.emplace_back(create_status.to_string(false));
         } else {
             error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
         }
@@ -303,6 +306,8 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, clone_req.tablet_id);
+
     // Return result to fe
     TStatus task_status;
     TFinishTaskRequest finish_task_request;
@@ -375,6 +380,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
 void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateTaskRequest>& agent_task_req,
                                      ExecEnv* exec_env) {
     const TStorageMediumMigrateReq& storage_medium_migrate_req = agent_task_req->task_req;
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, storage_medium_migrate_req.tablet_id);
+
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
     TStatus task_status;
@@ -500,7 +508,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     for (auto tablet_id : compaction_req.tablet_ids) {
         EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
-        StorageEngine::instance()->execute_task(&engine_task);
+        (void)StorageEngine::instance()->execute_task(&engine_task);
     }
 
     task_status.__set_status_code(status_code);
@@ -723,6 +731,22 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
+    // alter meta SHARED_DATA
+    if (update_tablet_meta_req.__isset.tablet_type &&
+        update_tablet_meta_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
+        auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
+        if (!res.ok()) {
+            // TODO explict the error message and errorCode
+            error_msgs.emplace_back(res.get_error_msg());
+            status_code = TStatusCode::RUNTIME_ERROR;
+        }
+        unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
+        LOG(INFO) << "finish update tablet meta task. signature:" << agent_task_req->signature;
+        return;
+    }
+
+    // SHARED_NOTHING, tablet_type = TTabletType::TABLET_TYPE_DISK
     for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
         if (tablet == nullptr) {
@@ -773,7 +797,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // But it will be remove from index cache after apply is finished
                 update_manager->index_cache().try_remove_by_key(tablet->tablet_id());
                 break;
-            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " primary_index_cache_expire_sec:" << tablet_meta_info.primary_index_cache_expire_sec;
                 tablet->tablet_meta()->set_primary_index_cache_expire_sec(
@@ -785,6 +809,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                                                     update_manager->get_index_cache_expire_ms(*tablet));
                     update_manager->index_cache().release(index_entry);
                 }
+            } break;
+            case TTabletMetaType::STORAGE_TYPE:
+                LOG(INFO) << "change storage_type not supported";
+                break;
+            default:
                 break;
             }
         }

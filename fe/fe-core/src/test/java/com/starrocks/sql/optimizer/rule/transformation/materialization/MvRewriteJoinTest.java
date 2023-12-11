@@ -220,4 +220,35 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv2");
     }
+
+
+    @Test
+    public void testMvColocateJoinRewrite() throws Exception {
+        createAndRefreshMv("test", "test_partition_tbl1_colocate_mv1",
+                "CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv1\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                        "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
+                        "AS SELECT v2 + 1, k1, v1, v2 FROM test_partition_tbl1;");
+
+        createAndRefreshMv("test", "test_partition_tbl1_colocate_mv2",
+                "CREATE MATERIALIZED VIEW test_partition_tbl1_colocate_mv2\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                        "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
+                        "AS SELECT v2 + 1, k1, v1, v2 + 2 FROM test_partition_tbl1 where v1 > 1 ;");
+
+        String query = "select t1.v2 + 1, t2.v2 + 1 from test_partition_tbl1 t1 join " +
+                "test_partition_tbl1 t2 on t1.k1 = t2.k1 and t2.v1 > 1";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 1: k1 = 4: k1");
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv1");
+        starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv2");
+
+
+    }
 }

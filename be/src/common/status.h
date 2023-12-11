@@ -23,7 +23,8 @@ class TStatus;
 
 template <typename T>
 class StatusOr;
-#ifdef STARROCKS_STATUS_NODISCARD
+// @TODO this should be removed later after fixing compile issues in ut
+#ifndef BE_TEST
 #define STATUS_ATTRIBUTE [[nodiscard]]
 #else
 #define STATUS_ATTRIBUTE
@@ -252,6 +253,11 @@ public:
         return code() == TStatusCode::CORRUPTION;
     }
 
+    bool is_resource_busy() const {
+        mark_checked();
+        return code() == TStatusCode::RESOURCE_BUSY;
+    }
+
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const {
         mark_checked();
@@ -321,7 +327,7 @@ public:
 
     /// @return A string representation of this status suitable for printing.
     ///   Returns the string "OK" for success.
-    std::string to_string() const;
+    std::string to_string(bool with_context_info = true) const;
 
     /// @return A string representation of the status code, without the message
     ///   text or sub code information.

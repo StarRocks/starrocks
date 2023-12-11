@@ -955,7 +955,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OSS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OSS_SECRET_KEY, "");
-        String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "");
+        String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "").replaceFirst("^https?://", "");
         String disableCache = loadProperties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OSS_CONNECTION_SSL_ENABLED, "false");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
@@ -1193,7 +1193,7 @@ public class HdfsFsManager {
             throw new UserException("file not found: " + path, e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("listPath failed", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
         }
     }
 
@@ -1239,7 +1239,7 @@ public class HdfsFsManager {
                     "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("listPath failed", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
         }
         return resultFileStatus;
     }

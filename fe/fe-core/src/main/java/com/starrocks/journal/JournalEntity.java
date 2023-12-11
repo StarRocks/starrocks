@@ -81,6 +81,7 @@ import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -151,6 +152,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -361,6 +363,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_RENAME_ROLLUP_V2:
             case OperationType.OP_RENAME_PARTITION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TableInfo.class);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RENAME_COLUMN_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), ColumnRenameInfo.class);
                 isRead = true;
                 break;
             }
@@ -600,6 +607,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionState.class);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                data = TransactionStateBatch.read(in);
                 isRead = true;
                 break;
             }

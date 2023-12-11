@@ -23,16 +23,19 @@ import java.util.Objects;
 
 public class HashDistributionSpec extends DistributionSpec {
     private final HashDistributionDesc hashDistributionDesc;
+    private final EquivalentDescriptor equivDesc;
 
     public HashDistributionSpec(HashDistributionDesc distributionDesc) {
         super(DistributionType.SHUFFLE);
         this.hashDistributionDesc = distributionDesc;
-        propertyInfo.initDistributionDisjointSet(distributionDesc.getDistributionCols());
+        this.equivDesc = new EquivalentDescriptor();
+        equivDesc.initDistributionUnionFind(distributionDesc.getDistributionCols());
     }
 
-    public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
-        super(DistributionType.SHUFFLE, propertyInfo);
+    public HashDistributionSpec(HashDistributionDesc distributionDesc, EquivalentDescriptor descriptor) {
+        super(DistributionType.SHUFFLE);
         this.hashDistributionDesc = distributionDesc;
+        this.equivDesc = descriptor;
     }
 
     public HashDistributionDesc getHashDistributionDesc() {
@@ -80,7 +83,7 @@ public class HashDistributionSpec extends DistributionSpec {
             int idx = 0;
             for (; idx < requiredShuffleColumns.size(); idx++) {
                 DistributionCol requiredCol = requiredShuffleColumns.get(idx);
-                if (propertyInfo.isConnected(requiredCol, shuffleCol)) {
+                if (equivDesc.isConnected(requiredCol, shuffleCol)) {
                     break;
                 }
             }
@@ -100,7 +103,7 @@ public class HashDistributionSpec extends DistributionSpec {
         for (int i = 0; i < shuffleColumns.size(); i++) {
             DistributionCol requiredCol = requiredShuffleColumns.get(i);
             DistributionCol shuffleCol = shuffleColumns.get(i);
-            if (!propertyInfo.isConnected(requiredCol, shuffleCol)) {
+            if (!equivDesc.isConnected(requiredCol, shuffleCol)) {
                 return false;
             }
 
@@ -120,14 +123,14 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionSpec other = (HashDistributionSpec) spec;
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
 
-        // check shuffle_local PropertyInfo
+        // check shuffle_local equivalentDescriptor
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
-            long tableId = propertyInfo.tableId;
+            long tableId = equivDesc.getTableId();
             // Disable use colocate/bucket join when table with empty partition
-            boolean satisfyColocate = propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
+            boolean satisfyColocate = equivDesc.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
                     !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
-                    !propertyInfo.isEmptyPartition());
+                    !equivDesc.isEmptyPartition());
             if (!satisfyColocate) {
                 return false;
             }
@@ -140,13 +143,13 @@ public class HashDistributionSpec extends DistributionSpec {
         return hashDistributionDesc.getDistributionCols();
     }
 
-    public HashDistributionSpec getNullRelaxSpec(PropertyInfo propertyInfo) {
-        return new HashDistributionSpec(hashDistributionDesc.getNullRelaxDesc(), propertyInfo);
+    public HashDistributionSpec getNullRelaxSpec(EquivalentDescriptor descriptor) {
+        return new HashDistributionSpec(hashDistributionDesc.getNullRelaxDesc(), descriptor);
     }
 
-    public HashDistributionSpec getNullStrictSpec(PropertyInfo propertyInfo) {
+    public HashDistributionSpec getNullStrictSpec(EquivalentDescriptor descriptor) {
         if (!hashDistributionDesc.isAllNullStrict()) {
-            return new HashDistributionSpec(hashDistributionDesc.getNullStrictDesc(), propertyInfo);
+            return new HashDistributionSpec(hashDistributionDesc.getNullStrictDesc(), descriptor);
         } else {
             return this;
         }
@@ -154,6 +157,10 @@ public class HashDistributionSpec extends DistributionSpec {
 
     public boolean isAllNullStrict() {
         return hashDistributionDesc.isAllNullStrict();
+    }
+
+    public EquivalentDescriptor getEquivDesc() {
+        return equivDesc;
     }
 
     @Override

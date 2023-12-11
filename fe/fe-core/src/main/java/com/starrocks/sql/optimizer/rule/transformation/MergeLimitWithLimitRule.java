@@ -75,7 +75,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
         // l2 must global
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
-        Operator result;
+        LogicalLimitOperator result;
         if (l1.hasOffset() || l2.hasOffset()) {
             // l2 range
             long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
@@ -98,6 +98,7 @@ public class MergeLimitWithLimitRule extends TransformationRule {
             }
 
             result = LogicalLimitOperator.init(limit, offset);
+
         } else {
             if (l1.getLimit() <= l2.getLimit()) {
                 result = LogicalLimitOperator.init(l1.getLimit());
@@ -105,7 +106,14 @@ public class MergeLimitWithLimitRule extends TransformationRule {
                 result = l2;
             }
         }
+        List<OptExpression> inputs = input.getInputs().get(0).getInputs();
 
-        return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));
+        if (result.isInit()) {
+            LogicalLimitOperator global = LogicalLimitOperator.global(result.getLimit(), result.getOffset());
+            LogicalLimitOperator local = LogicalLimitOperator.local(result.getLimit() + result.getOffset());
+            return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, inputs)));
+        } else {
+            return Lists.newArrayList(OptExpression.create(result, inputs));
+        }
     }
 }

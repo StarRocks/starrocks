@@ -38,7 +38,7 @@ public:
 
     static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
 
     // The running I/O task committed by ScanOperator holds the reference of query context,
     // so it can prevent the scan operator from deconstructored, but cannot prevent it from closed.
@@ -52,9 +52,9 @@ public:
 
     bool is_finished() const override;
 
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
@@ -65,7 +65,7 @@ public:
     int64_t global_rf_wait_timeout_ns() const override;
 
     /// interface for different scan node
-    virtual Status do_prepare(RuntimeState* state) = 0;
+    [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
@@ -84,6 +84,7 @@ public:
         _op_pull_chunks += 1;
         _op_pull_rows += res->num_rows();
     }
+    bool is_asc() const { return _is_asc; }
     void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
     virtual void begin_driver_process() {}
     virtual void end_driver_process(PipelineDriver* driver) {}
@@ -111,9 +112,9 @@ protected:
 
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
-    Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
-    Status _try_to_trigger_next_scan(RuntimeState* state);
+    [[nodiscard]] virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    [[nodiscard]] Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
+    [[nodiscard]] Status _try_to_trigger_next_scan(RuntimeState* state);
     virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
@@ -133,7 +134,7 @@ protected:
         }
     }
 
-    inline Status _get_scan_status() const {
+    [[nodiscard]] inline Status _get_scan_status() const {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
         return _scan_status;
     }
@@ -143,6 +144,7 @@ protected:
     const int32_t _dop;
     const bool _output_chunk_by_bucket;
     const int _io_tasks_per_scan_operator;
+    const int _is_asc;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -210,11 +212,11 @@ public:
 
     bool with_morsels() const override { return true; }
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     // interface for different scan node
-    virtual Status do_prepare(RuntimeState* state) = 0;
+    [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 

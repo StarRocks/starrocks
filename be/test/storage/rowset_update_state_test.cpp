@@ -133,9 +133,10 @@ public:
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
 
-        writer_context.partial_update_tablet_schema = partial_schema;
-        writer_context.referenced_column_ids = column_indexes;
         writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;

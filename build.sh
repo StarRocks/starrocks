@@ -31,7 +31,7 @@
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
 ##############################################################
-
+startTime=$(date +%s)
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -66,7 +66,7 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
-    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/include/llvm/InitializePasses.h ]]; then
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVM.so ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
@@ -82,7 +82,9 @@ Usage: $0 <options>
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --clean            clean and build target
-     --use-staros       build Backend with staros
+     --enable-shared-data
+                        build Backend with shared-data feature support
+     --use-staros       DEPRECATED, an alias of --enable-shared-data option
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
@@ -115,6 +117,7 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -148,6 +151,9 @@ if [[ -z ${USE_AVX512} ]]; then
 fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
+fi
+if [[ -z ${JEMALLOC_DEBUG} ]]; then
+    JEMALLOC_DEBUG=OFF
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -187,14 +193,14 @@ fi
 
 HELP=0
 if [ $# == 1 ] ; then
-    # default
+    # default. `sh build.sh``
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
-elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
-    # default
+elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
+    # default. `sh build.sh -j 32`
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
@@ -216,7 +222,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-staros) USE_STAROS=ON; shift ;;
+            --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
@@ -249,9 +255,10 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    USE_STAROS          -- $USE_STAROS
+    ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
+    JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
@@ -331,7 +338,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
     # Once the starcache version is stable, we will turn on it by default.
     if [[ -z ${WITH_STARCACHE} ]]; then
-      WITH_STARCACHE=${USE_STAROS}
+      WITH_STARCACHE=ON
     fi
 
     if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
@@ -347,6 +354,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG  \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
@@ -429,7 +437,6 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
@@ -461,6 +468,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -487,12 +495,16 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
     cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
+    cp ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVM.so ${STARROCKS_OUTPUT}/be/lib/
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
@@ -503,9 +515,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
 
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
@@ -514,8 +525,11 @@ fi
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
 
+endTime=$(date +%s)
+totalTime=$((endTime - startTime))
+
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG}"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

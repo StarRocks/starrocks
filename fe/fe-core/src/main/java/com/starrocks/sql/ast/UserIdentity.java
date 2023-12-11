@@ -120,7 +120,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return new UserIdentity(true, user, host);
     }
 
-    public String getQualifiedUser() {
+    public String getUser() {
         return user;
     }
 
@@ -188,7 +188,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
             return false;
         }
         UserIdentity other = (UserIdentity) obj;
-        return user.equals(other.getQualifiedUser()) && host.equals(other.getHost()) && this.isDomain == other.isDomain;
+        return user.equals(other.getUser()) && host.equals(other.getHost()) && this.isDomain == other.isDomain;
     }
 
     @Override

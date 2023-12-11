@@ -173,7 +173,7 @@ public class AgentBatchTask implements Runnable {
             boolean ok = false;
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
+                if (RunMode.isSharedDataMode() && computeNode == null) {
                     computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
                 }
 
@@ -193,7 +193,6 @@ public class AgentBatchTask implements Runnable {
                     agentTaskRequests.add(toAgentTaskRequest(task));
                 }
                 client.submit_tasks(agentTaskRequests);
-                LOG.info("submit_tasks done");
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",

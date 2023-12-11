@@ -82,6 +82,8 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -160,7 +162,8 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         Map<Long, EtlTable> tables = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Map<Long, Set<Long>> tableIdToPartitionIds = Maps.newHashMap();
             Set<Long> allPartitionsTableIds = Sets.newHashSet();
@@ -202,7 +205,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         String outputFilePattern = EtlJobConfig.getOutputFilePattern(loadLabel, FilePatternVersion.V1);
@@ -668,7 +671,8 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         String msg = "BITMAP column must use bitmap function, like " + columnName + "=to_bitmap(xxx) or "
-                + columnName + "=bitmap_hash() or " + columnName + "=bitmap_dict()";
+                + columnName + "=bitmap_hash() or " + columnName + "=bitmap_dict() or "
+                + columnName + "=bitmap_from_binary()";
         if (!(expr instanceof FunctionCallExpr)) {
             throw new LoadException(msg);
         }
@@ -676,7 +680,8 @@ public class SparkLoadPendingTask extends LoadTask {
         String functionName = fn.getFnName().getFunction();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
-                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)) {
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_DICT)
+                && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_FROM_BINARY)) {
             throw new LoadException(msg);
         }
 

@@ -63,7 +63,13 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -414,6 +420,48 @@ public class RoutineLoadManagerTest {
         Assert.assertEquals(routineLoadJob1, result.get(1));
         Assert.assertEquals(routineLoadJob3, result.get(2));
 
+    }
+
+    @Test
+    public void testSetRoutineLoadJobOtherMsg() {
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L, "host:port",
+                "topic");
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
+        try {
+            routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+
+        {
+            TxnCommitAttachment txnCommitAttachment = new InsertTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+            RLTaskTxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo", txnCommitAttachment);
+        }
+
+        {
+
+            TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
+            rlTaskTxnCommitAttachment.setId(new TUniqueId());
+            rlTaskTxnCommitAttachment.setLoadedRows(100);
+            rlTaskTxnCommitAttachment.setFilteredRows(1);
+            rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
+            rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+            TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+            Map<Integer, Long> kafkaProgress = Maps.newHashMap();
+            kafkaProgress.put(1, 100L); // start from 0, so rows number is 101, and consumed offset is 100
+            tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
+            rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+            TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
+            routineLoadManager.setRoutineLoadJobOtherMsg("foo abc", txnCommitAttachment);
+            Assert.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
+        }
     }
 
     @Test

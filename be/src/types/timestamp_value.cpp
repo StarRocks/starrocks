@@ -32,6 +32,12 @@ static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday"
                                    "Friday", "Saturday", "Sunday",    nullptr};
 static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
+TimestampValue TimestampValue::create_from_unixtime(int64_t ts, const cctz::time_zone& ctz) {
+    TimestampValue value;
+    value.from_unixtime(ts, ctz);
+    return value;
+}
+
 bool TimestampValue::from_timestamp_literal(uint64_t timestamp) {
     uint64_t date = timestamp / 1000000;
     uint64_t time = timestamp % 1000000;
@@ -757,6 +763,12 @@ void TimestampValue::to_timestamp(int* year, int* month, int* day, int* hour, in
     timestamp::to_datetime(_timestamp, year, month, day, hour, minute, second, usec);
 }
 
+void TimestampValue::trunc_to_millisecond() {
+    Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
+    uint64_t microseconds = time % USECS_PER_MILLIS;
+    _timestamp -= microseconds;
+}
+
 void TimestampValue::trunc_to_second() {
     Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
     uint64_t microseconds = time % USECS_PER_SEC;
@@ -835,11 +847,11 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     return;
 }
 
-void TimestampValue::from_unix_second(int64_t second) {
+void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {
     second += timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
     Timestamp s = second % SECS_PER_DAY;
-    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
+    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC + microsecond);
 }
 
 bool TimestampValue::is_valid() const {

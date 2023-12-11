@@ -90,7 +90,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
             return glueClientBuilder.build();
         } catch (Exception e) {
             String message = "Unable to build AWSGlueClient: " + e;
-            LOGGER.error(message);
+            LOGGER.error(message, e);
             throw new MetaException(message);
         }
     }

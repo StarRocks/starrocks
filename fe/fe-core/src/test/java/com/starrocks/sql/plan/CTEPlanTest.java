@@ -99,12 +99,15 @@ public class CTEPlanTest extends PlanTestBase {
     @Test
     public void testFromUseCte() throws Exception {
         String sql = "with x0 as (select * from t0) " +
-                "select * from (with x1 as (select * from t1) select * from x1 join x0 on x1.v4 = x0.v1) tt";
+                "select * from (" +
+                "   with x1 as (select * from t1) " +
+                "   select * from x1 join x0 on x1.v4 = x0.v1" +
+                ") tt";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
+        Assert.assertTrue(plan, plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v4 = 10: v1"));
+                "  |  equal join conjunct: 1: v4 = 4: v1"));
         Assert.assertFalse(plan.contains("MultiCastDataSinks"));
     }
 
@@ -394,7 +397,7 @@ public class CTEPlanTest extends PlanTestBase {
     public void testEmptyCTE() throws Exception {
         String sql = "WITH w_t0 as (SELECT * FROM t0), " +
                 "          w_t1 as (select * from t1)\n" +
-                "SELECT v1, v2, v3 FROM  w_t0 x0 where false " +
+                "SELECT v1, v2, v3 FROM w_t0 x0 where false " +
                 "union " +
                 "select v1, v2, v3 from w_t0 x1 where abs(1) = 2 " +
                 "union " +
@@ -629,19 +632,7 @@ public class CTEPlanTest extends PlanTestBase {
     public void testAllCTEConsumePruned() throws Exception {
         String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:EMPTYSET\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:EMPTYSET");
+        assertContains(plan, "0:EMPTYSET");
     }
 
     @Test
@@ -735,7 +726,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "    EXCHANGE ID: 15\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 21\n" +
+                "    EXCHANGE ID: 22\n" +
                 "    RANDOM");
     }
 
@@ -786,16 +777,16 @@ public class CTEPlanTest extends PlanTestBase {
     @Test
     public void testMergePushdownPredicate() throws Exception {
         String sql = "with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
-                "with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
+                "          with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
                 "select v5, 1 from with_t_1 join with_t_0 left semi join\n" +
                 "(select v2 from with_t_0 where v4 = 123) subwith_t_0\n" +
                 "on with_t_0.v1 = subwith_t_0.v2 and with_t_0.v1 > 0\n" +
                 "where with_t_0.v4 < 100;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "6:SELECT\n" +
-                "  |  predicates: 19: v1 > 0, 22: v4 < 100");
+                "  |  predicates: 13: v1 > 0, 16: v4 < 100");
         assertContains(plan, "9:SELECT\n" +
-                "  |  predicates: 26: v2 > 0, 28: v4 = 123");
+                "  |  predicates: 20: v2 > 0, 22: v4 = 123");
     }
 
     @Test
@@ -807,6 +798,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "select * " +
                 "from y1 join y2" +
                 "        join t3";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(1);
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);

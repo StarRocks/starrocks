@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +42,9 @@ public class MVColumnPruner {
     private ColumnRefSet requiredOutputColumns;
 
     public OptExpression pruneColumns(OptExpression queryExpression) {
+        if (queryExpression.getOp() instanceof LogicalFilterOperator) {
+            queryExpression = queryExpression.inputAt(0);
+        }
         Projection projection = queryExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
         Preconditions.checkState(projection != null);
@@ -64,9 +66,9 @@ public class MVColumnPruner {
                     scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                             .collect(Collectors.toSet());
             outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
-            if (outputColumns.size() == 0) {
-                outputColumns.add(Utils.findSmallestColumnRef(
-                        new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
+            if (outputColumns.isEmpty()) {
+                outputColumns.add(
+                        Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
             }
 
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();

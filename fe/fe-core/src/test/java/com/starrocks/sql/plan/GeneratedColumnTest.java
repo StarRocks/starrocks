@@ -53,6 +53,10 @@ public class GeneratedColumnTest extends PlanTestBase {
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")");
+
+        starRocksAssert.withView("create view view_1 as select v3 from tmc;");
+
+        starRocksAssert.withView("create view view_2 as select v3, v4 from tmc;");
     }
 
     @Test
@@ -140,5 +144,11 @@ public class GeneratedColumnTest extends PlanTestBase {
         sql = " select tmc.v1 + 1 from tmc as v,tmc2 as tmc";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 8> : 5: v1 + 1");
+
+        sql = " select * from view_1";
+        plan = getFragmentPlan(sql);
+
+        sql = " select * from view_2";
+        plan = getFragmentPlan(sql);
     }
 }

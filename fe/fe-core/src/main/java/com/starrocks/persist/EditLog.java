@@ -113,6 +113,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -386,6 +387,11 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
+                case OperationType.OP_RENAME_COLUMN_V2: {
+                    ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
+                    globalStateMgr.replayRenameColumn(info);
+                    break;
+                }
                 case OperationType.OP_BACKUP_JOB:
                 case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
@@ -611,6 +617,12 @@ public class EditLog {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
+                    break;
+                }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
@@ -1175,7 +1187,8 @@ public class EditLog {
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
                                  GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, submit log is not allowed");
+                "Current node is not leader, but" +
+                GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1657,6 +1670,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
         }
+    }
+
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
     }
 
     public void logBackupJob(BackupJob job) {
@@ -2157,5 +2174,9 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
     }
 }

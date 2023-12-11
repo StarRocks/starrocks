@@ -25,6 +25,7 @@
 #include "exec/spill/spiller.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -87,7 +88,7 @@ public:
     bool add_last_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
         _is_working = true;
-        set_finishing();
+        auto defer = DeferOp([this]() { set_finishing_if_not_reuseable(); });
         return _spill_tasks.put(std::move(task));
     }
 
@@ -98,6 +99,14 @@ public:
     void set_finishing() { _is_finishing = true; }
     bool is_finishing() { return _is_finishing; }
     bool is_working() { return _is_working; }
+
+    void set_finishing_if_not_reuseable() {
+        if (!_is_reuseable) {
+            set_finishing();
+        }
+    }
+
+    void set_reuseable(bool reuseable) { _is_reuseable = reuseable; }
 
     auto& io_executor() { return _parent->executor(); }
 
@@ -115,6 +124,7 @@ public:
     Status execute(SpillProcessTasksBuilder& task_builder);
 
 private:
+    bool _is_reuseable = false;
     bool _is_finishing = false;
     bool _is_working = false;
     std::shared_ptr<spill::Spiller> _spiller;

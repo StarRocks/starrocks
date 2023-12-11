@@ -43,9 +43,13 @@ public class MvRewriteContext {
 
     private final List<ScalarOperator> onPredicates;
     private final Rule rule;
-    private List<ColumnRefOperator> enforcedColumns;
+    private List<ColumnRefOperator> enforcedNonExistedColumns;
 
     private List<JoinDeriveContext> joinDeriveContexts;
+
+    // Whether to compensate partition predicate from the plan's `selectedPartitionIds`,
+    // check `isNeedCompensatePartitionPredicate` to get more information.
+    private final boolean isCompensatePartitionPredicate;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -53,7 +57,9 @@ public class MvRewriteContext {
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates, Rule rule) {
+            List<ScalarOperator> onPredicates,
+            Rule rule,
+            boolean isCompensatePartitionPredicate) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -62,6 +68,7 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
+        this.isCompensatePartitionPredicate = isCompensatePartitionPredicate;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -108,11 +115,15 @@ public class MvRewriteContext {
         return joinDeriveContexts;
     }
 
-    public List<ColumnRefOperator> getEnforcedColumns() {
-        return enforcedColumns;
+    public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
+        return enforcedNonExistedColumns;
     }
 
-    public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
-        this.enforcedColumns = enforcedColumns;
+    public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
+        this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public boolean isCompensatePartitionPredicate() {
+        return this.isCompensatePartitionPredicate;
     }
 }

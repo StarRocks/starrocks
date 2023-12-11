@@ -90,6 +90,7 @@ import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
@@ -101,6 +102,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -112,6 +114,8 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -172,6 +176,7 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -216,6 +221,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -376,6 +382,8 @@ public class ShowExecutor {
             handleShowPlugins();
         } else if (stmt instanceof ShowSqlBlackListStmt) {
             handleShowSqlBlackListStmt();
+        } else if (stmt instanceof ShowDataCacheRulesStmt) {
+            handleShowDataCacheRulesStmt();
         } else if (stmt instanceof ShowAnalyzeJobStmt) {
             handleShowAnalyzeJob();
         } else if (stmt instanceof ShowAnalyzeStatusStmt) {
@@ -462,7 +470,8 @@ public class ShowExecutor {
 
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             PatternMatcher matcher = null;
             if (showMaterializedViewsStmt.getPattern() != null) {
@@ -527,7 +536,7 @@ public class ShowExecutor {
             LOG.warn("listMaterializedViews failed:", e);
             throw e;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -884,7 +893,8 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
@@ -892,7 +902,7 @@ public class ShowExecutor {
                     }
 
                     try {
-                        if (tbl.isView()) {
+                        if (tbl.isOlapView()) {
                             Authorizer.checkAnyActionOnView(
                                     connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
                                     new TableName(db.getFullName(), tbl.getName()));
@@ -910,7 +920,7 @@ public class ShowExecutor {
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         } else {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
@@ -952,7 +962,8 @@ public class ShowExecutor {
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
         ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 PatternMatcher matcher = null;
                 if (showStmt.getPattern() != null) {
@@ -1002,9 +1013,9 @@ public class ShowExecutor {
                     // Auto_increment
                     row.add(null);
                     // Create_time
-                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(table.getCreateTime(), currentTimeZoneId));
                     // Update_time
-                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(info.getUpdate_time(), currentTimeZoneId));
                     // Check_time
                     row.add(null);
                     // Collation
@@ -1019,7 +1030,7 @@ public class ShowExecutor {
                     rows.add(row);
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
@@ -1056,7 +1067,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        } else if (RunMode.isSharedDataMode()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -1149,7 +1160,8 @@ public class ShowExecutor {
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
         List<List<String>> rows = Lists.newArrayList();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(showStmt.getTable());
             if (table == null) {
@@ -1219,7 +1231,7 @@ public class ShowExecutor {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1240,7 +1252,8 @@ public class ShowExecutor {
         String dbName = showStmt.getDb();
         Database db = metadataMgr.getDb(catalogName, dbName);
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = metadataMgr.getTable(catalogName, dbName, showStmt.getTable());
             if (table == null) {
@@ -1290,7 +1303,7 @@ public class ShowExecutor {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
@@ -1301,7 +1314,8 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(showStmt.getTableName().getTbl());
             if (table == null) {
@@ -1310,16 +1324,17 @@ public class ShowExecutor {
             } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
-                    rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "", index.getIndexName(),
-                            "", String.join(",", index.getColumns()), "", "", "", "",
-                            "", index.getIndexType().name(), index.getComment()));
+                    rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "",
+                            index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
+                            "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
+                            index.getComment()));
                 }
             } else {
                 // other type view, mysql, hive, es
                 // do nothing
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
@@ -1327,59 +1342,7 @@ public class ShowExecutor {
     // Handle help statement.
     private void handleHelp() {
         HelpStmt helpStmt = (HelpStmt) stmt;
-        String mark = helpStmt.getMask();
-        HelpModule module = HelpModule.getInstance();
-
-        // Get topic
-        HelpTopic topic = module.getTopic(mark);
-        // Get by Keyword
-        if (topic == null) {
-            List<String> topics = module.listTopicByKeyword(mark);
-            if (topics.size() == 0) {
-                // assign to avoid code style problem
-                topic = null;
-            } else if (topics.size() == 1) {
-                topic = module.getTopic(topics.get(0));
-            } else {
-                // Send topic list and category list
-                List<List<String>> rows = Lists.newArrayList();
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> categories = module.listCategoryByName(mark);
-                for (String str : categories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-                return;
-            }
-        }
-        if (topic != null) {
-            resultSet = new ShowResultSet(helpStmt.getMetaData(), Lists.<List<String>>newArrayList(
-                    Lists.newArrayList(topic.getName(), topic.getDescription(), topic.getExample())));
-        } else {
-            List<String> categories = module.listCategoryByName(mark);
-            if (categories.isEmpty()) {
-                // If no category match for this name, return
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), EMPTY_SET);
-            } else if (categories.size() > 1) {
-                // Send category list
-                resultSet = new ShowResultSet(helpStmt.getCategoryMetaData(),
-                        Lists.<List<String>>newArrayList(categories));
-            } else {
-                // Send topic list and sub-category list
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> topics = module.listTopicByCategory(categories.get(0));
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> subCategories = module.listCategoryByCategory(categories.get(0));
-                for (String str : subCategories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-            }
-        }
+        resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), EMPTY_SET);
     }
 
     // Show load statement.
@@ -1684,6 +1647,9 @@ public class ShowExecutor {
         if (procNodeI instanceof SchemaChangeProcDir) {
             rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
+        } else if (procNodeI instanceof OptimizeProcDir) {
+            rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
+                    showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
         } else {
             rows = procNodeI.fetchResult().getRows();
         }
@@ -1731,7 +1697,8 @@ public class ShowExecutor {
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             String tableName = showStmt.getTableName();
             List<List<String>> totalRows = showStmt.getResultRows();
@@ -1804,8 +1771,8 @@ public class ShowExecutor {
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getQualifiedUser(),
-                            connectContext.getRemoteIP(),
+                            connectContext.getCurrentUserIdentity().getUser(),
+                            connectContext.getCurrentUserIdentity().getHost(),
                             tableName);
                 }
 
@@ -1871,7 +1838,7 @@ public class ShowExecutor {
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), showStmt.getResultRows());
     }
@@ -1913,7 +1880,8 @@ public class ShowExecutor {
                 }
                 dbName = db.getFullName();
 
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     Table table = db.getTable(tableId);
                     if (!(table instanceof OlapTable)) {
@@ -1963,7 +1931,7 @@ public class ShowExecutor {
                     }
 
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             } while (false);
 
@@ -1977,7 +1945,8 @@ public class ShowExecutor {
             Database db = globalStateMgr.getDb(showStmt.getDbName());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 Table table = db.getTable(showStmt.getTableName());
                 if (table == null) {
@@ -2069,7 +2038,7 @@ public class ShowExecutor {
                     rows.add(oneTablet);
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -2422,7 +2391,8 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         Database db = connectContext.getGlobalStateMgr().getDb(showDynamicPartitionStmt.getDb());
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table tbl : db.getTables()) {
                     if (!(tbl instanceof OlapTable)) {
@@ -2472,7 +2442,7 @@ public class ShowExecutor {
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             resultSet = new ShowResultSet(showDynamicPartitionStmt.getMetaData(), rows);
         }
@@ -2520,6 +2490,11 @@ public class ShowExecutor {
             rows.add(oneSql);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
+    private void handleShowDataCacheRulesStmt() {
+        ShowDataCacheRulesStmt showStmt = (ShowDataCacheRulesStmt) stmt;
+        resultSet = new ShowResultSet(showStmt.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
     }
 
     private void handleShowAnalyzeJob() {
@@ -2760,6 +2735,16 @@ public class ShowExecutor {
             if (pipe.getPipeId().getDbId() != dbId) {
                 continue;
             }
+
+            // check privilege
+            try {
+                Authorizer.checkAnyActionOnPipe(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), new PipeName(dbName, pipe.getName()));
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            // execute
             List<Comparable> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);

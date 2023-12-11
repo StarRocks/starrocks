@@ -214,4 +214,5 @@ public class DynamicPartitionSchedulerTest {
         Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
         Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
     }
+
 }

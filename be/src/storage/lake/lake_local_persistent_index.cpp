@@ -18,11 +18,13 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/rowset.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
 
+// TODO refactor load from lake tablet, use same path with load from local tablet.
 Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
                                                        int64_t base_version, const MetaFileBuilder* builder) {
     if (!is_primary_key(metadata)) {
@@ -41,7 +43,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
 
     // persistent_index_dir has been checked
     Status status = TabletMetaManager::get_persistent_index_meta(
-            StorageEngine::instance()->get_persistent_index_store(), tablet->id(), &index_meta);
+            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), &index_meta);
     if (!status.ok() && !status.is_not_found()) {
         LOG(ERROR) << "get tablet persistent index meta failed, tablet: " << tablet->id()
                    << "version: " << base_version;
@@ -69,12 +71,12 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         // here just use version.major_number so that PersistentIndexMetaPB need't to be modified,
         // the minor_number is meaningless
         if (version.major_number() == base_version) {
-            // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
-            // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
             if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
-                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
-                LOG(WARNING) << "different format version, we need to rebuild persistent index";
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3 &&
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_4) {
+                LOG(WARNING) << "different format version, we need to rebuild persistent index, version: "
+                             << index_meta.format_version();
                 status = Status::InternalError("different format version");
             } else {
                 status = load(index_meta);
@@ -84,8 +86,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                           << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
                           << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-                          << " status: " << status.to_string() << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet->id() << ", status: " << status;
@@ -180,7 +183,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
     _version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
@@ -285,16 +288,17 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         return status;
     }
     // write pesistent index meta
-    status = TabletMetaManager::write_persistent_index_meta(StorageEngine::instance()->get_persistent_index_store(),
-                                                            tablet->id(), index_meta);
+    status = TabletMetaManager::write_persistent_index_meta(
+            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), index_meta);
     if (!status.ok()) {
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
-                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            _version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     _dump_snapshot = false;
     _flushed = false;
 
@@ -302,8 +306,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
               << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-              << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 

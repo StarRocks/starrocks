@@ -156,6 +156,15 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year);
 
     /**
+     * Get yearweek.
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn year_week:
+     */
+    DEFINE_VECTORIZED_FN(year_week_with_default_mode);
+    DEFINE_VECTORIZED_FN(year_week_with_mode);
+
+    /**
      * Get week of the year.
      * @param context
      * @param column[0] [TimestampColumn] Columns that hold timestamps.
@@ -233,6 +242,8 @@ public:
      * Called by datetime_trunc
      * Truncate to the corresponding part
      */
+    DEFINE_VECTORIZED_FN(datetime_trunc_microsecond);
+    DEFINE_VECTORIZED_FN(datetime_trunc_millisecond);
     DEFINE_VECTORIZED_FN(datetime_trunc_second);
     DEFINE_VECTORIZED_FN(datetime_trunc_minute);
     DEFINE_VECTORIZED_FN(datetime_trunc_hour);
@@ -256,6 +267,8 @@ public:
      * Called by time_slice
      * Floor to the corresponding period
      */
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_microsecond);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_millisecond);
     DEFINE_VECTORIZED_FN(time_slice_datetime_start_second);
     DEFINE_VECTORIZED_FN(time_slice_datetime_start_minute);
     DEFINE_VECTORIZED_FN(time_slice_datetime_start_hour);
@@ -265,6 +278,8 @@ public:
     DEFINE_VECTORIZED_FN(time_slice_datetime_start_week);
     DEFINE_VECTORIZED_FN(time_slice_datetime_start_quarter);
 
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_microsecond);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_millisecond);
     DEFINE_VECTORIZED_FN(time_slice_datetime_end_second);
     DEFINE_VECTORIZED_FN(time_slice_datetime_end_minute);
     DEFINE_VECTORIZED_FN(time_slice_datetime_end_hour);
@@ -274,6 +289,8 @@ public:
     DEFINE_VECTORIZED_FN(time_slice_datetime_end_week);
     DEFINE_VECTORIZED_FN(time_slice_datetime_end_quarter);
 
+    DEFINE_VECTORIZED_FN(time_slice_date_start_microsecond);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_millisecond);
     DEFINE_VECTORIZED_FN(time_slice_date_start_second);
     DEFINE_VECTORIZED_FN(time_slice_date_start_minute);
     DEFINE_VECTORIZED_FN(time_slice_date_start_hour);
@@ -283,6 +300,8 @@ public:
     DEFINE_VECTORIZED_FN(time_slice_date_start_week);
     DEFINE_VECTORIZED_FN(time_slice_date_start_quarter);
 
+    DEFINE_VECTORIZED_FN(time_slice_date_end_microsecond);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_millisecond);
     DEFINE_VECTORIZED_FN(time_slice_date_end_second);
     DEFINE_VECTORIZED_FN(time_slice_date_end_minute);
     DEFINE_VECTORIZED_FN(time_slice_date_end_hour);
@@ -760,7 +779,7 @@ public:
     static int compute_weekday(long daynr, bool sunday_first_day_of_week);
     static uint32_t compute_days_in_year(uint year);
     static uint week_mode(uint mode);
-    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
+    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour, uint* year_local);
 
     /**
      * calculate a date by year and day of year

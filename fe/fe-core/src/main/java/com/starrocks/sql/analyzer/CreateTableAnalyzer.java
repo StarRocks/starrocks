@@ -38,6 +38,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.elasticsearch.EsUtil;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -149,13 +151,14 @@ public class CreateTableAnalyzer {
         Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
 
         // check if table exists in db
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
@@ -178,7 +181,7 @@ public class CreateTableAnalyzer {
                 for (String column : statement.getSortKeys()) {
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
-                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                        throw new SemanticException("Unknown column '%s' does not exist", column);
                     }
                     sortKeyIdxes.add(idx);
                 }
@@ -440,7 +443,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("Generated Column only support olap table");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
@@ -517,7 +520,8 @@ public class CreateTableAnalyzer {
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                        indexDef.getComment()));
+                        indexDef.getComment(), indexDef.getProperties()));
+
                 distinct.add(indexDef.getIndexName());
                 distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
             }

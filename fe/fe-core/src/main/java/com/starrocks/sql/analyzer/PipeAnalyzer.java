@@ -64,7 +64,7 @@ public class PipeAnalyzer {
                     .add(PROPERTY_BATCH_FILES)
                     .build();
 
-    private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
             if (Strings.isNullOrEmpty(context.getDatabase())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
@@ -116,7 +116,7 @@ public class PipeAnalyzer {
                     }
                     if (value < 0) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                                PROPERTY_BATCH_SIZE + " should be greater than 0");
                     }
                     break;
                 }

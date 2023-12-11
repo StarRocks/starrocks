@@ -75,13 +75,6 @@ public class AggregateFunctionRewriter {
         if (aggFuncName.equals(FunctionSet.AVG)) {
             return true;
         }
-        // BITMAP
-        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
-            return true;
-        }
-        if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
-            return true;
-        }
         // HLL
         if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
                 aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
@@ -96,10 +89,7 @@ public class AggregateFunctionRewriter {
 
     public CallOperator rewriteAggFunction(CallOperator aggFunc) {
         String aggFuncName = aggFunc.getFnName();
-        if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) ||
-                aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
-            return rewriteCountDistinct(aggFunc);
-        } else if (aggFuncName.equals(FunctionSet.AVG)) {
+        if (aggFuncName.equals(FunctionSet.AVG)) {
             return rewriteAvg(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
                 aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
@@ -160,43 +150,6 @@ public class AggregateFunctionRewriter {
             newColumnRefToAggFuncMap.put(countCallOp.first, countCallOp.second);
         }
         return newAvg;
-    }
-
-    private CallOperator rewriteCountDistinct(CallOperator aggFunc) {
-        // What if bitmap_union aggregate table?
-        Type childType = aggFunc.getChild(0).getType();
-        List<ScalarOperator> aggChild = aggFunc.getChildren();
-        if (!childType.isBitmapType()) {
-            // add `to_bitmap` function for input
-            CallOperator toBitmapOp = new CallOperator(FunctionSet.TO_BITMAP,
-                    Type.BITMAP,
-                    aggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] { aggChild.get(0).getType() },
-                            IS_IDENTICAL));
-            toBitmapOp = (CallOperator) scalarRewriter.rewrite(toBitmapOp,
-                    Lists.newArrayList(new ImplicitCastRule()));
-            aggChild = Lists.newArrayList(toBitmapOp);
-        }
-
-        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
-        CallOperator bitmapUnionOp = new CallOperator(FunctionSet.BITMAP_UNION,
-                Type.BITMAP,
-                aggChild,
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP},
-                        IS_IDENTICAL));
-        List<ScalarOperator> newAggFunc = Lists.newArrayList(bitmapUnionOp);
-        if (newColumnRefToAggFuncMap != null) {
-            ColumnRefOperator newColRef =
-                    queryColumnRefFactory.create(bitmapUnionOp, bitmapUnionOp.getType(), bitmapUnionOp.isNullable());
-            newColumnRefToAggFuncMap.put(newColRef, bitmapUnionOp);
-            newAggFunc = Lists.newArrayList(newColRef);
-        }
-
-        return new CallOperator(FunctionSet.BITMAP_COUNT,
-                aggFunc.getType(),
-                newAggFunc,
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] { Type.BITMAP },
-                        IS_IDENTICAL));
     }
 
     private CallOperator rewriteApproxCount(CallOperator aggFunc) {

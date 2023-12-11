@@ -22,6 +22,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -109,14 +110,33 @@ struct IOTaskExecutor {
 struct SyncTaskExecutor {
     template <class Func>
     Status submit(Func&& func) {
-        std::forward<Func>(func)();
+        workgroup::YieldContext yield_ctx;
+        do {
+            std::forward<Func>(func)(yield_ctx);
+        } while (!yield_ctx.is_finished());
         return Status::OK();
     }
 };
+
+#define BREAK_IF_YIELD(wg, yield, time_spent_ns)                                                \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }
+
+#define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
     spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
+
+#define TRACKER_WITH_SPILLER_READER_GUARD(state, spiller) \
+    RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this(), std::weak_ptr((spiller)->reader()))
 
 } // namespace starrocks::spill

@@ -20,6 +20,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
@@ -61,7 +62,7 @@ public:
                 const MetaFileBuilder* builder, bool need_check_conflict);
 
     Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                           std::vector<std::string>* orphan_files);
+                           std::map<int, std::string>* replace_segments, std::vector<std::string>* orphan_files);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }

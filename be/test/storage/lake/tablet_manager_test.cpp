@@ -22,17 +22,16 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
-#include "gen_cpp/AgentService_types.h"
+#include "fs/fs_util.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/filesystem_util.h"
-#include "util/lru_cache.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
@@ -102,61 +101,67 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->tablet_id(), 12345);
     EXPECT_EQ(res.value()->txn_id(), 2);
-    EXPECT_OK(_tablet_manager->delete_txn_log(12345, 2));
-    res = _tablet_manager->get_txn_log(12345, 2);
-    EXPECT_TRUE(res.status().is_not_found());
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
+TEST_F(LakeTabletManagerTest, create_tablet) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
     TCreateTabletReq req;
-    req.tablet_id = 65535;
+    req.tablet_id = tablet_id;
     req.__set_version(1);
     req.__set_version_hash(0);
-    req.tablet_schema.__set_id(next_id());
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
     req.tablet_schema.__set_schema_hash(270068375);
     req.tablet_schema.__set_short_key_column_count(2);
     req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
     EXPECT_OK(_tablet_manager->create_tablet(req));
-    auto res = _tablet_manager->get_tablet(65535);
-    EXPECT_TRUE(res.ok());
-
-    starrocks::lake::TxnLog txnLog;
-    txnLog.set_tablet_id(65535);
-    txnLog.set_txn_id(2);
-    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-    EXPECT_OK(_tablet_manager->delete_tablet(65535));
-
-    auto st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 1));
-    EXPECT_TRUE(st.is_not_found());
-    st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 2));
-    EXPECT_TRUE(st.is_not_found());
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeTabletManagerTest, create_and_delete_pk_tablet) {
-    TCreateTabletReq req;
-    req.tablet_id = 65535;
-    req.__set_version(1);
-    req.__set_version_hash(0);
-    req.tablet_schema.__set_id(next_id());
-    req.tablet_schema.__set_schema_hash(270068375);
-    req.tablet_schema.__set_short_key_column_count(2);
-    req.tablet_schema.__set_keys_type(TKeysType::PRIMARY_KEYS);
-    EXPECT_OK(_tablet_manager->create_tablet(req));
-    auto res = _tablet_manager->get_tablet(65535);
-    EXPECT_TRUE(res.ok());
+TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
+    auto fs = FileSystem::Default();
 
-    starrocks::lake::TxnLog txnLog;
-    txnLog.set_tablet_id(65535);
-    txnLog.set_txn_id(2);
-    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-    EXPECT_OK(_tablet_manager->delete_tablet(65535));
+    for (auto create_schema_file : {false, true}) {
+        auto tablet_id = next_id();
+        auto schema_id = next_id();
 
-    auto st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 1));
-    EXPECT_TRUE(st.is_not_found());
-    st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 2));
-    EXPECT_TRUE(st.is_not_found());
+        TCreateTabletReq req;
+        req.tablet_id = tablet_id;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.tablet_schema.__set_id(schema_id);
+        req.tablet_schema.__set_schema_hash(270068375);
+        req.tablet_schema.__set_short_key_column_count(2);
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        req.__set_create_schema_file(create_schema_file);
+        EXPECT_OK(_tablet_manager->create_tablet(req));
+        EXPECT_TRUE(_tablet_manager->get_tablet(tablet_id).ok());
+        EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+        auto st = fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id));
+        if (create_schema_file) {
+            EXPECT_TRUE(st.ok()) << st;
+        } else {
+            EXPECT_TRUE(st.is_not_found()) << st;
+        }
+    }
 }
 
 // NOLINTNEXTLINE
@@ -207,51 +212,6 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     EXPECT_TRUE(iter != objects.end());
     iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
     EXPECT_TRUE(iter != objects.end());
-}
-
-// NOLINTNEXTLINE
-TEST_F(LakeTabletManagerTest, list_txn_log) {
-    starrocks::lake::TxnLog txnLog;
-    txnLog.set_tablet_id(12345);
-    txnLog.set_txn_id(2);
-    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-
-    txnLog.set_txn_id(3);
-    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-
-    txnLog.set_tablet_id(23456);
-    txnLog.set_txn_id(3);
-    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-
-    ASSIGN_OR_ABORT(auto metaIter, _tablet_manager->list_txn_log(23456, false));
-
-    std::vector<std::string> txnlogs;
-    while (metaIter.has_next()) {
-        ASSIGN_OR_ABORT(auto txnlog_ptr, metaIter.next());
-        txnlogs.emplace_back(fmt::format("{:016X}_{:016X}.log", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
-    }
-
-    EXPECT_EQ(txnlogs.size(), 3);
-    auto iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000002.log");
-    EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000003.log");
-    EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000005BA0_0000000000000003.log");
-    EXPECT_TRUE(iter != txnlogs.end());
-
-    ASSIGN_OR_ABORT(metaIter, _tablet_manager->list_txn_log(12345, true));
-
-    txnlogs.clear();
-    while (metaIter.has_next()) {
-        ASSIGN_OR_ABORT(auto txnlog_ptr, metaIter.next());
-        txnlogs.emplace_back(fmt::format("{:016X}_{:016X}.log", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
-    }
-
-    EXPECT_EQ(txnlogs.size(), 2);
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000002.log");
-    EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000003.log");
-    EXPECT_TRUE(iter != txnlogs.end());
 }
 
 // TODO: enable this test.
@@ -501,6 +461,95 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, create_tablet_with_cloud_native_persistent_index) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::PRIMARY_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::CLOUD_NATIVE, metadata->persistent_index_type());
+}
+
+namespace {
+class PartitionedLocationProvider : public lake::LocationProvider {
+public:
+    PartitionedLocationProvider(std::string root_dir, int num_partition)
+            : _root_dir(std::move(root_dir)), _num_partition(num_partition) {
+        for (int i = 0; i < _num_partition; i++) {
+            auto dir = lake::join_path(_root_dir, std::to_string(i));
+            CHECK_OK(fs::create_directories(lake::join_path(dir, lake::kMetadataDirectoryName)));
+        }
+    }
+
+    std::string root_location(int64_t tablet_id) const override {
+        return lake::join_path(_root_dir, std::to_string(tablet_id % _num_partition));
+    }
+
+private:
+    std::string _root_dir;
+    const int _num_partition;
+};
+
+TCreateTabletReq build_create_tablet_request(int64_t tablet_id, int64_t index_id) {
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.tablet_schema.__set_id(index_id);
+    req.tablet_schema.__set_schema_hash(0);
+    req.tablet_schema.__set_short_key_column_count(1);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+    auto& c0 = req.tablet_schema.columns.emplace_back();
+    c0.column_name = "c0";
+    c0.is_key = true;
+    c0.column_type.type = TPrimitiveType::BIGINT;
+    c0.is_allow_null = false;
+
+    return req;
+}
+
+} // namespace
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, test_multi_partition_schema_file) {
+    const static int kNumPartition = 4;
+    const static int64_t kIndexId = 123454321;
+    auto lp = std::make_unique<PartitionedLocationProvider>(_test_dir, kNumPartition);
+    _tablet_manager->TEST_set_location_provider(lp.get());
+    for (int i = 0; i < 10; i++) {
+        auto req = build_create_tablet_request(next_id(), kIndexId);
+        ASSERT_OK(_tablet_manager->create_tablet(req));
+    }
+    for (int i = 0; i < kNumPartition; i++) {
+        auto partition_dir = lake::join_path(_test_dir, std::to_string(i));
+        auto schema_file_path = lake::join_path(partition_dir, lake::schema_filename(kIndexId));
+        EXPECT_TRUE(fs::path_exist(schema_file_path)) << schema_file_path;
+    }
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -540,7 +589,7 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     // prepare fake shard_info returned by mocked `_fetch_shard_info_from_remote()`
     staros::starlet::ShardInfo shard_info;
     shard_info.id = tablet_id;
-    shard_info.properties.emplace(std::make_pair("indexId", std::to_string(schema_id)));
+    shard_info.properties.emplace("indexId", std::to_string(schema_id));
 
     // preserve original g_worker value, and reset it to our MockedWorker
     std::shared_ptr<StarOSWorker> origin_worker = g_worker;

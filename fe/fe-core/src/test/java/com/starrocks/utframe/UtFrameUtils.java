@@ -57,9 +57,11 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
@@ -411,7 +413,10 @@ public class UtFrameUtils {
 
     private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
                                    GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.setThreadLocalInfo();
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
@@ -450,6 +455,28 @@ public class UtFrameUtils {
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            try {
+                Tracers.register(connectContext);
+                Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                Tracers.close();
+            }
         }
     }
 
@@ -751,7 +778,6 @@ public class UtFrameUtils {
                 }
             }
 
-            Tracers.init(connectContext, statementBase.getTraceMode(), statementBase.getTraceModule());
             try (Timer st1 = Tracers.watchScope("Analyze")) {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
@@ -937,6 +963,25 @@ public class UtFrameUtils {
             }
         }
 
+        public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {
+            int count = followerJournalQueue.size();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                JournalEntity je = new JournalEntity();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    je.readFields(dis);
+                    EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+                    // System.out.println("replayed journal type: " + je.getOpCode());
+                } catch (JournalInconsistentException e) {
+                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    e.printStackTrace();
+                    Assert.fail();
+                }
+            }
+            System.out.println("replayed " + count + " journal(s) from begin to end");
+        }
+
         protected static synchronized void tearDown() {
             if (fakeJournalWriter != null) {
                 try {
@@ -954,7 +999,7 @@ public class UtFrameUtils {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        ctx.setQualifiedUser(userIdentity.getUser());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);

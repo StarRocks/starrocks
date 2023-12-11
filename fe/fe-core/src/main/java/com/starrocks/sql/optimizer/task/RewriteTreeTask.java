@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
@@ -68,6 +67,9 @@ public class RewriteTreeTask extends OptimizerTask {
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
 
         for (Rule rule : rules) {
+            if (rule.exhausted(context.getOptimizerContext())) {
+                continue;
+            }
             if (!match(rule.getPattern(), root) || !rule.check(root, context.getOptimizerContext())) {
                 continue;
             }
@@ -101,6 +103,10 @@ public class RewriteTreeTask extends OptimizerTask {
             return false;
         }
 
+        if (pattern.children().size() > 0 && pattern.children().size() != root.getInputs().size() &&
+                pattern.children().stream().noneMatch(Pattern::isPatternMultiLeaf)) {
+            return false;
+        }
         int patternIndex = 0;
         int childIndex = 0;
 

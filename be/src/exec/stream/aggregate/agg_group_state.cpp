@@ -250,7 +250,7 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
 
             // record each column's map count which is used to expand group by columns.
             auto result_count = Int64Column::create();
-            agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get());
+            RETURN_IF_ERROR(agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get()));
 
             auto result_count_data = reinterpret_cast<Int64Column*>(result_count.get())->get_data();
             std::vector<uint32_t> replicate_offsets;

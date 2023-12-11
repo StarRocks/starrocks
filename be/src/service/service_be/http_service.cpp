@@ -147,7 +147,7 @@ Status HttpServiceBE::start() {
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
-        fs::create_directories(config::pprof_profile_dir);
+        RETURN_IF_ERROR(fs::create_directories(config::pprof_profile_dir));
     }
 
     auto* heap_action = new HeapAction();
@@ -179,6 +179,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
     _http_handlers.emplace_back(symbol_action);
+
+    auto* ioprofile_action = new IOProfileAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/ioprofile", ioprofile_action);
+    _http_handlers.emplace_back(ioprofile_action);
 
     // register metrics
     {

@@ -67,6 +67,8 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -103,6 +105,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -479,19 +483,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = Strings.nullToEmpty(otherMsg);
+        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + ": " + Strings.nullToEmpty(otherMsg);
     }
 
     public String getDbFullName() throws MetaNotFoundException {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (database == null) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        database.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
-            return database.getFullName();
+            return db.getFullName();
         } finally {
-            database.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -504,16 +510,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        database.readLock();
-        try {
-            Table table = database.getTable(tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
-            }
-            return table.getName();
-        } finally {
-            database.readUnlock();
+        Table table = database.getTable(tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
         }
+        return table.getName();
     }
 
     public JobState getState() {
@@ -600,6 +601,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public RoutineLoadProgress getProgress() {
         return progress;
     }
+
+    protected abstract String getSourceProgressString();
 
     public double getMaxFilterRatio() {
         return maxFilterRatio;
@@ -822,7 +825,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(this.tableId);
             if (table == null) {
@@ -871,7 +875,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
             return planParams;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1079,6 +1083,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
                         entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
                 if (!routineLoadTaskInfoOptional.isPresent()) {
+                    //  The task of the timed-out transaction will be detected by the transaction checker thread
+                    //  and subsequently aborted. Here, we need to update the abortedTaskNum.
+                    ++abortedTaskNum;
                     // task will not be update when task has been aborted by fe
                     return;
                 }
@@ -1093,6 +1100,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 }
                 routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
+                setOtherMsg(txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
@@ -1177,14 +1185,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
-        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
-                                            TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
+        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) ==
+                TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
             updateState(JobState.PAUSED,
-                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
-                        false /* not replay */);
+                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
+                    false /* not replay */);
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
-                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
+                    name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
             return;
         }
 
@@ -1344,8 +1352,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public void update() throws UserException {
         // check if db and table exist
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (database == null) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                     .add("db_id", dbId)
                     .add("msg", "The database has been deleted. Change job state to cancelled").build());
@@ -1363,12 +1371,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         // check table belong to database
-        database.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         Table table;
         try {
-            table = database.getTable(tableId);
+            table = db.getTable(tableId);
         } finally {
-            database.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
@@ -1423,15 +1432,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected abstract String getStatistic();
 
+
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 tbl = db.getTable(tableId);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -1472,6 +1483,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 row.add("");
             }
             row.add(otherMsg);
+            row.add(getSourceProgressString());
             return row;
         } finally {
             readUnlock();
@@ -1611,6 +1623,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public abstract String dataSourcePropertiesToSql();
+
     abstract String dataSourcePropertiesJsonToString();
 
     abstract String customPropertiesJsonToString();
@@ -1877,11 +1890,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 tbl = db.getTable(tableId);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         readLock();

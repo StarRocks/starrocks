@@ -20,9 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -99,7 +101,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // if this expr contains only one column that already exists in the grouping key,
                 // it won't affect the grouping result, just remove it.
                 // Otherwise, we should reserve it.
-                if (usedColumns.size() == 1) {
+                if (usedColumns.size() == 1 && !Utils.hasNonDeterministicFunc(groupingExpr)) {
                     int columnId = usedColumns.getColumnIds()[0];
                     if (!existedColumnIds.contains(columnId)) {
                         newGroupingKeys.add(groupingKey);
@@ -147,10 +149,17 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // for queries with all constant in project and group by keys,
                 // like `select 'a','b' from table group by 'c','d'`,
                 // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
+                // This rule may be invoked after MERGE_LIMIT rule. So we need split the init limitOperator
+                // and merge the local limit its child here to avoid not processing init limitOperator
+                // in the plan.
+                Operator op = input.inputAt(0).inputAt(0).getOp();
+                if (!op.hasLimit() || op.getLimit() > 1) {
+                    op.setLimit(1);
+                }
                 OptExpression result = OptExpression.create(
-                        LogicalLimitOperator.init(1),
+                        LogicalLimitOperator.global(1, 0),
                         OptExpression.create(
-                                projectOperator, input.getInputs().get(0).getInputs()));
+                                projectOperator, input.inputAt(0).getInputs()));
                 return Lists.newArrayList(result);
             }
         }

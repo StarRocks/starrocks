@@ -228,6 +228,7 @@ protected:
             for (auto& column : chunk->columns()) {
                 column->remove_first_n_values(i);
             }
+            chunk->check_or_die();
         }
     }
 
@@ -352,6 +353,7 @@ protected:
                 for (auto& column : chunk->columns()) {
                     column->remove_first_n_values(i);
                 }
+                chunk->check_or_die();
             }
         }
     }

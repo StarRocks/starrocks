@@ -18,9 +18,9 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
@@ -93,7 +93,7 @@ public class TaskRunManager {
         }
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
-            runCtx.kill(false);
+            runCtx.kill(false, "kill TaskRun");
             return true;
         }
         return false;

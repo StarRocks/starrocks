@@ -236,6 +236,43 @@ select split_part(c1, "##", -3) from t1;
 abc
 -- !result
 
+-- name: test_url_extract_host
+select url_extract_host('https://starrocks.com/test/api/v1');
+-- result:
+starrocks.com
+-- !result
+select url_extract_host('https://starrocks.快速.com/test/api/v1');
+-- result:
+starrocks.快速.com
+-- !result
+select url_extract_host(NULL);
+-- result:
+None
+-- !result
+select url_extract_host('https://starrocks.com/doc?k1=10&k2=3&k1=100');
+-- result:
+starrocks.com
+-- !result
+CREATE TABLE IF NOT EXISTS `test_url_extract_host` (
+  `id` varchar(10),
+  `url` varchar(100)
+)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_url_extract_host(id,url)
+values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
+       ('2', 'https://starrocks.快速.com/doc?k1=10&k2=3&k1=100');
+-- result:
+-- !result
+select url_extract_host(url) from test_url_extract_host;
+-- result:
+starrocks.com
+starrocks.快速.com
+-- !result
+
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 -- result:

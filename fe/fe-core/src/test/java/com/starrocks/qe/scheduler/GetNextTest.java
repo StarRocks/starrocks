@@ -34,7 +34,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
-import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,7 +45,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.utframe.MockedBackend.MockPBackendService;
@@ -117,6 +115,10 @@ public class GetNextTest extends SchedulerTestBase {
             }
         });
 
+        SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlacklist(backend2.getId());
+        SimpleScheduler.removeFromBlacklist(backend3.getId());
+
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
@@ -140,9 +142,6 @@ public class GetNextTest extends SchedulerTestBase {
         DefaultCoordinator scheduler = startScheduling(sql);
 
         Assert.assertThrows("rpc failed: test runtime exception", RpcException.class, scheduler::getNext);
-        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
-                !SimpleScheduler.isInBlacklist(BACKEND1_ID) && !SimpleScheduler.isInBlacklist(backend2.getId()) &&
-                        !SimpleScheduler.isInBlacklist(backend3.getId()));
     }
 
     @Test
@@ -159,6 +158,10 @@ public class GetNextTest extends SchedulerTestBase {
                 });
             }
         });
+
+        SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlacklist(backend2.getId());
+        SimpleScheduler.removeFromBlacklist(backend3.getId());
 
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler;
@@ -242,7 +245,7 @@ public class GetNextTest extends SchedulerTestBase {
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
-        scheduler.cancel();
+        scheduler.cancel("Cancelled");
 
         Assert.assertThrows("Cancelled", UserException.class, scheduler::getNext);
 

@@ -86,7 +86,7 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     BufferControlBlock control_block(TUniqueId(), 1024);
     ASSERT_TRUE(control_block.init().ok());
 
-    ASSERT_TRUE(control_block.cancel().ok());
+    control_block.cancel();
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.emplace_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());

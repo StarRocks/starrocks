@@ -42,9 +42,12 @@
 #include <string>
 #include <unordered_set>
 
+#include "common/config.h"
 #include "common/status.h"
+#include "fs/fs_util.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -53,6 +56,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
+#include "tablet_meta_manager.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
@@ -96,6 +100,12 @@ Status StorageEngine::start_bg_threads() {
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
+#ifdef USE_STAROS
+    _local_pk_index_shared_data_gc_evict_thread =
+            std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
+    Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pk_index_shared_data_gc_evict");
+#endif
+
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
@@ -122,7 +132,7 @@ Status StorageEngine::start_bg_threads() {
             max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
             max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
         }
-        Compaction::init(max_compaction_concurrency);
+        (void)Compaction::init(max_compaction_concurrency);
 
         _base_compaction_threads.reserve(base_compaction_num_threads);
         // The config::tablet_map_shard_size is preferably a multiple of `base_compaction_num_threads_per_disk`,
@@ -182,7 +192,7 @@ Status StorageEngine::start_bg_threads() {
             max_task_num = config::max_compaction_concurrency;
         }
 
-        Compaction::init(max_task_num);
+        (void)Compaction::init(max_task_num);
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
@@ -395,6 +405,35 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
     return nullptr;
 }
 
+#ifdef USE_STAROS
+void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
+    if (is_as_cn()) {
+        return nullptr;
+    }
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    auto lake_update_manager = ExecEnv::GetInstance()->lake_update_manager();
+
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::pindex_shared_data_gc_evict_interval_seconds);
+        for (DataDir* data_dir : get_stores()) {
+            auto pk_path = data_dir->get_persistent_index_path();
+            std::set<std::string> tablet_ids;
+            Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
+            if (!ret.ok()) {
+                LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
+                continue;
+            }
+            lake::LocalPkIndexManager::gc(lake_update_manager, data_dir, tablet_ids);
+            lake::LocalPkIndexManager::evict(lake_update_manager, data_dir, tablet_ids);
+        }
+    }
+
+    return nullptr;
+}
+#endif
+
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -407,7 +446,9 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
         } else {
             status = Status::InternalError("data dir out of capacity");
         }
-        if (status.ok()) {
+        if (status.ok() && !_options.compaction_mem_tracker->any_limit_exceeded() &&
+            !_options.update_mem_tracker->any_limit_exceeded()) {
+            // keep schedule compaction if memory is fine.
             continue;
         }
 
@@ -418,7 +459,8 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
         }
         do {
             SLEEP_IN_BG_WORKER(interval);
-            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+            if (!_options.compaction_mem_tracker->any_limit_exceeded() &&
+                !_options.update_mem_tracker->any_limit_exceeded()) {
                 break;
             }
         } while (true);
@@ -617,10 +659,12 @@ void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::finish_publish_version_internal;
         {
+            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
+            auto wait_timeout = std::chrono::seconds(1);
             std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
             while (!_publish_version_manager->has_pending_task() &&
                    !_bg_worker_stopped.load(std::memory_order_consume)) {
-                _finish_publish_version_cv.wait(wl);
+                _finish_publish_version_cv.wait_for(wl, wait_timeout);
             }
             _publish_version_manager->finish_publish_version_task();
             if (interval <= 0) {

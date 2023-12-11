@@ -32,6 +32,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -77,6 +79,7 @@ public class ExportStmt extends StatementBase {
     // may catalog.db.table
     private TableRef tableRef;
     private long exportStartTime;
+    private boolean sync;
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
@@ -85,6 +88,11 @@ public class ExportStmt extends StatementBase {
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
+        this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
+    }
+
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+                      Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
         super(pos);
         this.tableRef = tableRef;
         this.columnNames = columnNames;
@@ -96,6 +104,15 @@ public class ExportStmt extends StatementBase {
         this.columnSeparator = DEFAULT_COLUMN_SEPARATOR;
         this.rowDelimiter = DEFAULT_LINE_DELIMITER;
         this.includeQueryId = true;
+        this.sync = sync;
+    }
+
+    public boolean getSync() {
+        return sync;
+    }
+
+    public void setSync(boolean sync) {
+        this.sync = sync;
     }
 
     public long getExportStartTime() {
@@ -168,7 +185,8 @@ public class ExportStmt extends StatementBase {
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tblName.getTbl());
             if (table == null) {
@@ -220,7 +238,7 @@ public class ExportStmt extends StatementBase {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

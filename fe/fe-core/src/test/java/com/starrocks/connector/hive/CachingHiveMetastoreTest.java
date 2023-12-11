@@ -16,11 +16,14 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
@@ -31,6 +34,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -49,7 +53,7 @@ public class CachingHiveMetastoreTest {
     @Before
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         executor = Executors.newFixedThreadPool(5);
     }
 
@@ -159,6 +163,38 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testRefreshHiveView() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            cachingHiveMetastore.refreshView("db1", "hive_view");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "hive_view")));
+
+        new Expectations(metastore) {
+            {
+                metastore.getTable(anyString, "notExistView");
+                minTimes = 0;
+                Throwable targetException = new NoSuchObjectException("no such obj");
+                Throwable e = new InvocationTargetException(targetException);
+                result = new StarRocksConnectorException("table not exist", e);
+            }
+        };
+        try {
+            cachingHiveMetastore.refreshView("db1", "notExistView");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("invalidated cache"));
+        }
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
@@ -257,7 +293,7 @@ public class CachingHiveMetastoreTest {
     public void testPartitionExist() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        Assert.assertTrue(cachingHiveMetastore.partitionExists("db", "tbl", Lists.newArrayList()));
+        Assert.assertTrue(cachingHiveMetastore.partitionExists(metastore.getTable("db", "table"), Lists.newArrayList()));
     }
 
     @Test
@@ -328,5 +364,26 @@ public class CachingHiveMetastoreTest {
                 HivePartitionName.of("db1", "table1", "col1=1"),
                 HivePartitionName.of("db1", "table1", "col1=2"));
         cachingHiveMetastore.refreshPartition(partitionNames);
+    }
+
+    @Test
+    public void testAddPartitionFailed() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        HivePartition hivePartition = HivePartition.builder()
+                // Unsupported type
+                .setColumns(Lists.newArrayList(new Column("c1", Type.BITMAP)))
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setDatabaseName("db")
+                .setTableName("table")
+                .setLocation("location")
+                .setValues(Lists.newArrayList("p1=1"))
+                .setParameters(new HashMap<>()).build();
+
+        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
+        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
+        Assert.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingHiveMetastore.addPartitions("db", "table", Lists.newArrayList(hivePartitionWithStats));
+        });
     }
 }

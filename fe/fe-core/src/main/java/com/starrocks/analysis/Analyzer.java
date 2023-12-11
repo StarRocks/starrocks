@@ -367,10 +367,6 @@ public class Analyzer {
         return globalState.context.getCurrentCatalog();
     }
 
-    public String getQualifiedUser() {
-        return globalState.context.getQualifiedUser();
-    }
-
     public ConnectContext getContext() {
         return globalState.context;
     }

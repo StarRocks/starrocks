@@ -74,6 +74,8 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -105,6 +107,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -134,11 +137,16 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class AlterJobMgr {
     private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
+    public static final String MANUAL_INACTIVE_MV_REASON = "user use alter materialized view set status to inactive";
 
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
@@ -173,7 +181,8 @@ public class AlterJobMgr {
         // check db quota
         db.checkQuota();
 
-        if (!db.writeLockAndCheckExist()) {
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -204,7 +213,7 @@ public class AlterJobMgr {
 
             materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -215,7 +224,8 @@ public class AlterJobMgr {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        if (!db.writeLockAndCheckExist()) {
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("drop materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -264,46 +274,85 @@ public class AlterJobMgr {
                 throw e;
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+        LOG.info("process change materialized view {} status to {}, isReplay: {}",
+                materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-            String viewDefineSql = materializedView.getViewDefineSql();
             ConnectContext context = new ConnectContext();
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-            List<StatementBase> statementBaseList = SqlParser.parse(viewDefineSql, context.getSessionVariable());
-            QueryStatement queryStatement = (QueryStatement) statementBaseList.get(0);
+            String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
+            QueryStatement mvQueryStatement = null;
             try {
-                Analyzer.analyze(queryStatement, context);
+                mvQueryStatement = recreateMVQuery(materializedView, context);
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [" + materializedView.getName() +
-                        "] because analyze materialized view define sql: \n\n" + viewDefineSql +
-                        "\n\nCause an error: " + e.getDetailMsg());
+                        "] because analyze materialized view define sql: \n\n" + createMvSql +
+                        "\n\nCause an error: " + e.getDetailMsg(), e);
             }
 
             // Skip checks to maintain eventual consistency when replay
             List<BaseTableInfo> baseTableInfos =
-                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay));
+                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
+            materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
         }
+    }
+
+    /*
+     * Recreate the MV query and validate the correctness of syntax and schema
+     */
+    private static QueryStatement recreateMVQuery(MaterializedView materializedView, ConnectContext context) {
+        // If we could parse the MV sql successfully, and the schema of mv does not change,
+        // we could reuse the existing MV
+        String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
+        Optional<Database> mayDb = GlobalStateMgr.getCurrentState().mayGetDb(materializedView.getDbId());
+
+        // check database existing
+        String dbName = mayDb.orElseThrow(() ->
+                new SemanticException("database " + materializedView.getDbId() + " not exists")).getFullName();
+        context.setDatabase(dbName);
+
+        // Try to parse and analyze the creation sql
+        List<StatementBase> statementBaseList = SqlParser.parse(createMvSql, context.getSessionVariable());
+        CreateMaterializedViewStatement createStmt = (CreateMaterializedViewStatement) statementBaseList.get(0);
+        Analyzer.analyze(createStmt, context);
+
+        // validate the schema
+        List<Column> newColumns = createStmt.getMvColumnItems().stream()
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
+        List<Column> existedColumns = materializedView.getColumns().stream()
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
+        if (!Objects.equals(newColumns, existedColumns)) {
+            String msg = String.format("mv schema changed: [%s] does not match [%s]",
+                    existedColumns, newColumns);
+            materializedView.setInactiveAndReason(msg);
+            throw new SemanticException(msg);
+        }
+
+        return createStmt.getQueryStatement();
     }
 
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         long dbId = log.getDbId();
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         MaterializedView mv = null;
         try {
             mv = (MaterializedView) db.getTable(tableId);
@@ -314,7 +363,7 @@ public class AlterJobMgr {
                 mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -323,8 +372,8 @@ public class AlterJobMgr {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         MaterializedView oldMaterializedView = null;
         try {
             oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
@@ -340,7 +389,7 @@ public class AlterJobMgr {
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -361,7 +410,8 @@ public class AlterJobMgr {
         if (db == null) {
             return;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         MaterializedView oldMaterializedView = null;
         try {
             final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
@@ -383,13 +433,14 @@ public class AlterJobMgr {
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                            "interval step to {}, timeunit to {}, id: {}",
+                            "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
-                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
                 oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());
@@ -397,7 +448,7 @@ public class AlterJobMgr {
                         oldMaterializedView.getName(), e);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -407,7 +458,8 @@ public class AlterJobMgr {
         Map<String, String> properties = log.getProperties();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         MaterializedView mv = null;
         try {
             mv = (MaterializedView) db.getTable(tableId);
@@ -425,7 +477,7 @@ public class AlterJobMgr {
                 LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -454,7 +506,8 @@ public class AlterJobMgr {
         String tableName = dbTableName.getTbl();
 
         boolean isSynchronous = true;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         OlapTable olapTable;
         try {
             Table table = db.getTable(tableName);
@@ -462,8 +515,8 @@ public class AlterJobMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
+            if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+                throw new DdlException("Do not support alter non-native table/materialized-view[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 
@@ -474,6 +527,10 @@ public class AlterJobMgr {
             if (currentAlterOps.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
                 schemaChangeHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
+            } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC) &&
+                    olapTable.isCloudNativeTable()) {
+                schemaChangeHandler.processLakeTableAlterMeta(alterClauses, db, olapTable);
                 isSynchronous = false;
             } else if (currentAlterOps.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);
@@ -539,7 +596,7 @@ public class AlterJobMgr {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // the following ops should done outside db lock. because it contain synchronized create operation
@@ -572,11 +629,11 @@ public class AlterJobMgr {
                 schemaChangeHandler.updatePartitionsInMemoryMeta(
                         db, tableName, partitionNames, properties);
 
-                db.writeLock();
+                locker.lockDatabase(db, LockType.WRITE);
                 try {
                     modifyPartitionsProperty(db, olapTable, partitionNames, properties);
                 } finally {
-                    db.writeUnlock();
+                    locker.unLockDatabase(db, LockType.WRITE);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = alterClause.getProperties();
@@ -593,10 +650,6 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
 
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isCloudNativeTable()) {
-                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
-                }
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                     schemaChangeHandler.updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
@@ -701,7 +754,8 @@ public class AlterJobMgr {
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             View view = (View) db.getTable(tableId);
             String viewName = view.getName();
@@ -719,7 +773,7 @@ public class AlterJobMgr {
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -772,7 +826,8 @@ public class AlterJobMgr {
                                          List<String> partitionNames,
                                          Map<String, String> properties)
             throws DdlException, AnalysisException {
-        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTableState.NORMAL) {
@@ -879,7 +934,8 @@ public class AlterJobMgr {
 
     public void replayModifyPartition(ModifyPartitionInfo info) {
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getDbId());
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -896,7 +952,7 @@ public class AlterJobMgr {
             }
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

@@ -19,14 +19,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -34,7 +35,6 @@ import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -50,13 +50,25 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(QueryRuntimeProfile.class);
+
+    /**
+     * Set the queue size to a large value. The decision to execute the profile process task asynchronously
+     * occurs when a listener is added to {@link QueryRuntimeProfile#profileDoneSignal}. The function
+     * {@link QueryRuntimeProfile#addListener} will then determine if the size of the queued task exceeds
+     * {@link Config#profile_process_blocking_queue_size}.
+     */
+    private static final ThreadPoolExecutor EXECUTOR =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
+                    Integer.MAX_VALUE, "profile-worker", false);
 
     /**
      * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
@@ -75,7 +87,7 @@ public class QueryRuntimeProfile {
      */
     private boolean profileAlreadyReported = false;
 
-    private final RuntimeProfile queryProfile;
+    private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
 
     /**
@@ -85,7 +97,7 @@ public class QueryRuntimeProfile {
     private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = null;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private Supplier<ExecPlan> execPlanSupplier;
+    private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     // ------------------------------------------------------------------------------------
@@ -163,8 +175,8 @@ public class QueryRuntimeProfile {
         this.topProfileSupplier = topProfileSupplier;
     }
 
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        this.execPlanSupplier = execPlanSupplier;
+    public void setExecPlan(ExecPlan execPlan) {
+        this.execPlan = execPlan;
     }
 
     public void clearExportStatus() {
@@ -205,6 +217,17 @@ public class QueryRuntimeProfile {
         return profileDoneSignal.getCount() == 0;
     }
 
+    public boolean addListener(Consumer<Boolean> task) {
+        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+            return false;
+        }
+        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
+        profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+            task.accept(true);
+        }));
+        return true;
+    }
+
     public boolean waitForProfileFinished(long timeout, TimeUnit unit) {
         boolean res = false;
         try {
@@ -242,16 +265,16 @@ public class QueryRuntimeProfile {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlanSupplier != null && connectContext != null &&
-                connectContext.getSessionVariable().isEnableProfile() &&
+        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
+                connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlanSupplier.get();
-            profile.addChild(buildMergedQueryProfile());
+            ExecPlan plan = execPlan;
+            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
@@ -288,20 +311,8 @@ public class QueryRuntimeProfile {
         }
     }
 
-    public RuntimeProfile buildMergedQueryProfile() {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-        if (!sessionVariable.isEnableProfile()) {
-            return queryProfile;
-        }
-
-        if (!jobSpec.isEnablePipeline()) {
-            return queryProfile;
-        }
-
-        int profileLevel = sessionVariable.getPipelineProfileLevel();
-        if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
-            // We don't guarantee the detail level profile can work well with visualization feature.
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (!needMerge || !jobSpec.isEnablePipeline()) {
             return queryProfile;
         }
 
@@ -434,13 +445,18 @@ public class QueryRuntimeProfile {
                     }
 
                     if (commonMetrics.containsInfoString("IsFinalSink")) {
-                        Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
+                        long resultDeliverTime = 0;
+                        Counter outputFullTime = pipelineProfile.getMaxCounter("OutputFullTime");
                         if (outputFullTime != null) {
-                            long resultDeliverTime = outputFullTime.getValue();
-                            Counter resultDeliverTimer =
-                                    newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                            resultDeliverTimer.setValue(resultDeliverTime);
+                            resultDeliverTime += outputFullTime.getValue();
                         }
+                        Counter pendingFinishTime = pipelineProfile.getMaxCounter("PendingFinishTime");
+                        if (pendingFinishTime != null) {
+                            resultDeliverTime += pendingFinishTime.getValue();
+                        }
+                        Counter resultDeliverTimer =
+                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                        resultDeliverTimer.setValue(resultDeliverTime);
                     }
 
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
@@ -489,8 +505,8 @@ public class QueryRuntimeProfile {
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
         querySpillBytes.setValue(maxQuerySpillBytes);
 
-        if (execPlanSupplier != null) {
-            newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
+        if (execPlan != null) {
+            newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
         }
         Counter processTimer =
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);

@@ -32,7 +32,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/hive_table_sink_operator.h"
@@ -44,9 +44,9 @@
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
@@ -62,7 +62,6 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
-#include "util/pretty_printer.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -132,8 +131,14 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.enable_pipeline_level_shuffle) {
+        _query_ctx->set_enable_pipeline_level_shuffle(query_options.enable_pipeline_level_shuffle);
+    }
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_enable_profile();
+    }
+    if (query_options.__isset.big_query_profile_second_threshold) {
+        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_second_threshold);
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
@@ -189,7 +194,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
         wg = WorkGroupManager::instance()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
-    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
+
+    const auto& query_options = request.common().query_options;
+    bool enable_group_level_query_queue = false;
+    if (query_options.__isset.query_queue_options) {
+        const auto& queue_options = query_options.query_queue_options;
+        enable_group_level_query_queue =
+                queue_options.__isset.enable_group_level_query_queue && queue_options.enable_group_level_query_queue;
+    }
+    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get(), enable_group_level_query_queue));
+
     _fragment_ctx->set_workgroup(wg);
     _wg = wg;
 
@@ -232,9 +246,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_be_number(request.backend_num());
 
     // RuntimeFilterWorker::open_query is idempotent
-    if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
+    const TRuntimeFilterParams* runtime_filter_params = nullptr;
+    if (request.unique().params.__isset.runtime_filter_params &&
+        !request.unique().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.unique().params.runtime_filter_params;
+    } else if (request.common().params.__isset.runtime_filter_params &&
+               !request.common().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.common().params.runtime_filter_params;
+    }
+    if (runtime_filter_params != nullptr) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, query_options, params.runtime_filter_params, true);
+        exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
@@ -543,7 +565,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         const auto& tsink = request.output_sink();
         if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
             tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK || tsink.type == TDataSinkType::ICEBERG_TABLE_SINK ||
-            tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK) {
+            tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK ||
+            tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK) {
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
@@ -680,6 +703,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
+    _query_ctx->mark_prepared();
     prepare_success = true;
 
     return Status::OK();
@@ -707,7 +731,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
-    _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
+    (void)_fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
         executor->submit(driver.get());
         return Status::OK();
     });
@@ -737,11 +761,13 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     bool is_dest_merge = stream_sink.__isset.is_merge && stream_sink.is_merge;
 
     bool is_pipeline_level_shuffle = false;
-    int32_t dest_dop = -1;
-    if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        dest_dop = stream_sink.dest_dop;
+    int32_t dest_dop = 1;
+    bool enable_pipeline_level_shuffle = context->runtime_state()->query_ctx()->enable_pipeline_level_shuffle();
+    if (enable_pipeline_level_shuffle &&
+        (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+         sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED)) {
         is_pipeline_level_shuffle = true;
+        dest_dop = stream_sink.dest_dop;
         DCHECK_GT(dest_dop, 0);
     }
 
@@ -781,6 +807,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::BlackHoleTableSink)) {
+        OpFactoryPtr op = std::make_shared<BlackHoleTableSinkOperatorFactory>(context->next_operator_id());
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         auto* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());

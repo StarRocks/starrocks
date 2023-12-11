@@ -44,16 +44,25 @@ public class ReplacePartitionOperationLog implements Writable {
     private boolean strictRange;
     @SerializedName(value = "useTempPartitionName")
     private boolean useTempPartitionName;
+    @SerializedName(value = "unPartitionedTable")
+    private boolean unPartitionedTable;
 
     public ReplacePartitionOperationLog(long dbId, long tblId, List<String> partitionNames,
                                         List<String> tempPartitonNames, boolean strictRange,
-                                        boolean useTempPartitionName) {
+                                        boolean useTempPartitionName, boolean unPartitionedTable) {
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitions = partitionNames;
         this.tempPartitions = tempPartitonNames;
         this.strictRange = strictRange;
         this.useTempPartitionName = useTempPartitionName;
+        this.unPartitionedTable = unPartitionedTable;
+    }
+
+    public ReplacePartitionOperationLog(long dbId, long tblId, List<String> partitionNames,
+                                        List<String> tempPartitonNames, boolean strictRange,
+                                        boolean useTempPartitionName) {
+        this(dbId, tblId, partitionNames, tempPartitonNames, strictRange, useTempPartitionName, false);
     }
 
     public long getDbId() {
@@ -78,6 +87,10 @@ public class ReplacePartitionOperationLog implements Writable {
 
     public boolean useTempPartitionName() {
         return useTempPartitionName;
+    }
+
+    public boolean isUnPartitionedTable() {
+        return unPartitionedTable;
     }
 
     public static ReplacePartitionOperationLog read(DataInput in) throws IOException {

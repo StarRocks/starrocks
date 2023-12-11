@@ -14,6 +14,10 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -21,16 +25,24 @@ import org.junit.Test;
 
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
-       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+
+        int scale = 1;
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
+        OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+        setTableStatistics(t7, 6000000 * scale);
     }
 
     @Test
@@ -65,7 +77,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        runFileUnitTest("materialized-view/tpch/q7");
+        runFileUnitTestWithNormalizedResult("materialized-view/tpch/q7");
     }
 
     @Test

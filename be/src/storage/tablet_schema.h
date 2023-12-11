@@ -262,6 +262,7 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     size_t num_columns() const { return _cols.size(); }
@@ -277,6 +278,7 @@ public:
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
+    void set_schema_version(int32_t version) { _schema_version = version; }
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
@@ -316,8 +318,8 @@ public:
 
     Schema* schema() const;
 
-    void build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
-                                     const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
+    Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+                                       const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
 
 private:
     friend class SegmentReaderWriterTest;
@@ -344,12 +346,13 @@ private:
     mutable uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
     std::vector<ColumnId> _sort_key_idxes;
-    std::unordered_set<ColumnId> _sort_key_idxes_set;
+    std::vector<ColumnUID> _sort_key_uids;
+    std::unordered_set<ColumnUID> _sort_key_uids_set;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 
-    std::unordered_map<int32_t, int32_t> _field_id_to_index;
+    std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 
     bool _has_bf_fpp = false;
 

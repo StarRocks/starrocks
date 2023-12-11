@@ -262,6 +262,12 @@ statement
     | showSqlBlackListStatement
     | showWhiteListStatement
 
+    // Data Cache management statement
+    | createDataCacheRuleStatement
+    | showDataCacheRulesStatement
+    | dropDataCacheRuleStatement
+    | clearDataCacheRulesStatement
+
     // Export Statement
     | exportStatement
     | cancelExportStatement
@@ -400,7 +406,7 @@ generatedColumnDesc
     ;
 
 indexDesc
-    : INDEX indexName=identifier identifierList indexType? comment?
+    : INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 engineDesc
@@ -486,7 +492,7 @@ alterTableStatement
 
 createIndexStatement
     : CREATE INDEX indexName=identifier
-        ON qualifiedName identifierList indexType?
+        ON qualifiedName identifierList (indexType propertyList?)?
         comment?
     ;
 
@@ -495,7 +501,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING BITMAP
+    : USING (BITMAP | GIN)
     ;
 
 showTableStatement
@@ -603,7 +609,7 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
-    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
     withRowAccessPolicy*
     comment?
     materializedViewDesc*
@@ -758,7 +764,7 @@ resumeWarehouseStatement
 
 createStorageVolumeStatement
     : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
-          comment? properties
+          comment? properties?
     ;
 
 typeDesc
@@ -922,7 +928,7 @@ cleanTabletSchedQClause
 // ---------Alter table clause---------
 
 createIndexClause
-    : ADD INDEX indexName=identifier identifierList indexType? comment?
+    : ADD INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 dropIndexClause
@@ -946,11 +952,11 @@ modifyCommentClause
     ;
 
 optimizeClause
-    : keyDesc?
+    : partitionNames?
+      keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
-      partitionNames?
      ;
 
 addColumnClause
@@ -970,7 +976,7 @@ modifyColumnClause
     ;
 
 columnRenameClause
-    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    : RENAME COLUMN oldColumn=identifier TO newColumn=identifier
     ;
 
 reorderColumnsClause
@@ -1027,17 +1033,17 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
+    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE setVarHint* qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE setVarHint* FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -1252,12 +1258,12 @@ typeList
 // ------------------------------------------- Load Statement ----------------------------------------------------------
 
 loadStatement
-    : LOAD LABEL label=labelName
+    : LOAD setVarHint* LABEL label=labelName
         data=dataDescList?
         broker=brokerDesc?
         (BY system=identifierOrString)?
         (PROPERTIES props=propertyList)?
-    | LOAD LABEL label=labelName
+    | LOAD setVarHint* LABEL label=labelName
         data=dataDescList?
         resource=resourceDesc
         (PROPERTIES props=propertyList)?
@@ -1609,18 +1615,21 @@ privilegeType
     : ALL PRIVILEGES?
     | ALTER | APPLY | BLACKLIST
     | CREATE (
-        DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME)
+        DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME
+        | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
+    | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
     ;
 
 // ---------------------------------------- Security Policy Statement ---------------------------------------------------
@@ -1739,10 +1748,32 @@ showWhiteListStatement
     : SHOW WHITELIST
     ;
 
+// -------------------------------------- DataCache Management Statement --------------------------------------------
+
+dataCacheTarget
+    : identifierOrStringOrStar '.' identifierOrStringOrStar '.' identifierOrStringOrStar
+    ;
+
+createDataCacheRuleStatement
+    : CREATE DATACACHE RULE dataCacheTarget (WHERE expression)? PRIORITY '=' MINUS_SYMBOL? INTEGER_VALUE properties?
+    ;
+
+showDataCacheRulesStatement
+    : SHOW DATACACHE RULES
+    ;
+
+dropDataCacheRuleStatement
+    : DROP DATACACHE RULE INTEGER_VALUE
+    ;
+
+clearDataCacheRulesStatement
+    : CLEAR DATACACHE RULES
+    ;
+
 // ------------------------------------------- Export Statement --------------------------------------------------------
 
 exportStatement
-    : EXPORT TABLE tableDesc columnAliases? TO string properties? brokerDesc?
+    : EXPORT TABLE tableDesc columnAliases? TO string (WITH (SYNC | ASYNC) MODE)? properties? brokerDesc?
     ;
 
 cancelExportStatement
@@ -1937,8 +1968,8 @@ sortItem
     ;
 
 limitElement
-    : LIMIT limit =INTEGER_VALUE (OFFSET offset=INTEGER_VALUE)?
-    | LIMIT offset =INTEGER_VALUE ',' limit=INTEGER_VALUE
+    : LIMIT limit =(INTEGER_VALUE|PARAMETER) (OFFSET offset=(INTEGER_VALUE|PARAMETER))?
+    | LIMIT offset =(INTEGER_VALUE|PARAMETER) ',' limit=(INTEGER_VALUE|PARAMETER)
     ;
 
 querySpecification
@@ -2025,6 +2056,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
+    | '[' identifier '|' primaryExpression literalExpressionList']'
     ;
 
 setVarHint
@@ -2379,6 +2411,10 @@ stringList
     : '(' string (',' string)* ')'
     ;
 
+literalExpressionList
+    : '(' literalExpression (',' literalExpression)* ')'
+    ;
+
 rangePartitionDesc
     : singleRangePartition
     | multiRangePartition
@@ -2499,7 +2535,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
 unitBoundary
@@ -2625,12 +2661,12 @@ number
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | ARRAY_AGG
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
-    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -2644,11 +2680,11 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME

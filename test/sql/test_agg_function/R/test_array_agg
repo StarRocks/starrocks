@@ -205,6 +205,90 @@ select array_agg(distinct name order by 1, score), count(distinct id), array_agg
 ["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
 ["李四大闹天空"]	1	["李四大闹天空"]
 -- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom","Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","Tom","王武程咬金"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金",null,null]
+-- !result
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
 -- result:
 [null,"物理Phy"]
@@ -547,9 +631,9 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
 -- result:
-["李四大闹天空",null,null,"欧阳诸葛方程","May","Tom","Tom","王武程咬金","张三掩耳盗铃","Tom","Tom","张三此地无银三百两","Ti","Ti"]	["李四大闹天空",null,"欧阳诸葛方程","May","Tom","王武程咬金","张三掩耳盗铃","张三此地无银三百两","Ti"]
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
 select array_agg( null order by score,4.00) from ss order by 1;
 -- result:
@@ -922,9 +1006,9 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
 -- result:
-["李四大闹天空","May","Tom","Tom",null,null,"欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Tom","Tom","Ti","张三此地无银三百两","Ti"]	["李四大闹天空","May","Tom","欧阳诸葛方程",null,"王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
 select array_agg( null order by score,4.00) from ss order by 1;
 -- result:
@@ -941,6 +1025,90 @@ select array_agg( score order by 1,name) from ss order by 1;
 select array_agg(distinct 1 order by 1) from ss order by 1;
 -- result:
 [1]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom","Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 asc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["Tom","Tom","王武程咬金"]
+["欧阳诸葛方程","Ti","May"]	["May","Ti","欧阳诸葛方程"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","Tom","王武程咬金"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金",null,null]
 -- !result
 set new_planner_agg_stage = 0;
 -- result:
@@ -1300,9 +1468,9 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+select array_agg( name order by 1,score,4.00),array_agg(distinct name order by 1,score,4.00) from ss order by 1;
 -- result:
-[null,"Tom","Tom",null,"李四大闹天空","欧阳诸葛方程","May","王武程咬金","张三掩耳盗铃","Tom","Tom","Ti","张三此地无银三百两","Ti"]	[null,"Tom","李四大闹天空","欧阳诸葛方程","May","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
 -- !result
 select array_agg( null order by score,4.00) from ss order by 1;
 -- result:
@@ -1319,6 +1487,90 @@ select array_agg( score order by 1,name) from ss order by 1;
 select array_agg(distinct 1 order by 1) from ss order by 1;
 -- result:
 [1]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom","Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","Tom","王武程咬金"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金",null,null]
 -- !result
 set enable_query_cache = true;
 -- result:
@@ -1428,6 +1680,90 @@ select array_agg(distinct name order by 1) from ss order by 1;
 select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
 -- result:
 9
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom","Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	["Ti",null]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+["Tom"]	["Tom"]
+["Tom","王武程咬金"]	["王武程咬金","Tom"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["王武程咬金","Tom","Tom"]
+["May","Ti","欧阳诸葛方程"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["王武程咬金","Tom","Tom"]	["王武程咬金","Tom","Tom"]
+["欧阳诸葛方程","Ti","May"]	["欧阳诸葛方程","Ti","May"]
+[null]	[null]
+["张三此地无银三百两","张三掩耳盗铃"]	["张三此地无银三百两","张三掩耳盗铃"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss group by id order by id;
+-- result:
+[null,"Ti"]	["Ti",null]
+["Tom","Tom"]	["Tom","Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","Tom","王武程咬金"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+[null]	[null]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(distinct name order by 1 asc), array_agg(distinct name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]
+-- !result
+select array_agg(name order by 1 asc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 desc nulls last) from ss order by 1;
+-- result:
+[null,null,"王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金",null,null]
 -- !result
 select array_agg();
 -- result:

@@ -28,7 +28,7 @@ public:
     const std::string hs_reg_pattern = R"(^[+|-]{1}\d{2}\:\d{2}$)";
 
     // compile pattern in hyper scan, we just need compile 1 times, then hs_scan multi times.
-    Status compile() {
+    [[nodiscard]] Status compile() {
         if (hs_compile(hs_reg_pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                        HS_MODE_BLOCK, nullptr, &database, &compile_err) != HS_SUCCESS) {
             std::stringstream error;

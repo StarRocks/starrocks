@@ -72,14 +72,13 @@ static Status add_nullable_numeric_column(Column* column, const TypeDescriptor& 
                                           simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
     try {
-        auto& null_column = nullable_column->null_column();
-        auto& data_column = nullable_column->data_column();
-
         if (value->is_null()) {
-            data_column->append_default(1);
-            null_column->append(1);
+            nullable_column->append_nulls(1);
             return Status::OK();
         }
+
+        auto& null_column = nullable_column->null_column();
+        auto& data_column = nullable_column->data_column();
 
         RETURN_IF_ERROR(add_numeric_column<T>(data_column.get(), type_desc, name, value));
 

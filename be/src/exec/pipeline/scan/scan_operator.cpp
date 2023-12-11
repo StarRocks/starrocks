@@ -42,6 +42,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
           _dop(dop),
           _output_chunk_by_bucket(scan_node->output_chunk_by_bucket()),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _is_asc(scan_node->is_asc_hint()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
           _chunk_sources(_io_tasks_per_scan_operator) {
@@ -172,7 +173,10 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
-        return true;
+        auto status_or_is_ready = _morsel_queue->ready_for_next();
+        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            return true;
+        }
     }
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
@@ -375,7 +379,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano]() {
+                          io_task_start_nano](auto& ctx) {
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
@@ -509,7 +513,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             auto status = _chunk_sources[chunk_source_index]->prepare(state);
             if (!status.ok()) {
                 _chunk_sources[chunk_source_index] = nullptr;
-                set_finishing(state);
+                static_cast<void>(set_finishing(state));
                 return status;
             }
         }

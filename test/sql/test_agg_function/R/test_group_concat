@@ -1651,3 +1651,47 @@ TomEnglish,王武程咬金语文北京上海
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
+-- name: testLegacyGroupConcat
+CREATE TABLE t1 (
+    id        tinyint(4)      NULL,
+    value   varchar(65533)  NULL
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+(1,'fruit'),
+(1,'fruit'),
+(1,'fruit'),
+(2,'fruit'),
+(2,'fruit'),
+(2,'fruit');
+-- result:
+-- !result
+set group_concat_max_len = 1024;
+-- result:
+-- !result
+set sql_mode = 'GROUP_CONCAT_LEGACY';
+-- result:
+-- !result
+select id, group_concat( value ) from t1 group by id order by id;
+-- result:
+1	fruit, fruit, fruit
+2	fruit, fruit, fruit
+-- !result
+select id, group_concat( value, '-' ) from t1 group by id order by id;
+-- result:
+1	fruit-fruit-fruit
+2	fruit-fruit-fruit
+-- !result
+select group_concat( value ) from t1;
+-- result:
+fruit, fruit, fruit, fruit, fruit, fruit
+-- !result
+select group_concat( value, '-' ) from t1;
+-- result:
+fruit-fruit-fruit-fruit-fruit-fruit
+-- !result

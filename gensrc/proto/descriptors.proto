@@ -63,11 +63,17 @@ message PTupleDescriptor {
     optional int32 num_null_slots = 5;
 };
 
+message POlapTableColumnParam {
+    repeated ColumnPB columns_desc = 1;
+    repeated int32 sort_key_uid = 2;
+    required int32 short_key_column_count = 3;
+};
+
 message POlapTableIndexSchema {
     required int64 id = 1;
     repeated string columns = 2;
     required int32 schema_hash = 3;
-    repeated ColumnPB columns_desc = 4;
+    optional POlapTableColumnParam column_param = 4;
 };
 
 message POlapTableSchemaParam {

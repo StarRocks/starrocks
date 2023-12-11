@@ -41,6 +41,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
@@ -70,6 +71,8 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
+import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -78,8 +81,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -89,6 +93,7 @@ import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -100,6 +105,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
@@ -122,8 +128,6 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.sparkproject.guava.collect.Maps;
 
-import java.io.IOException;
-import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -951,70 +955,6 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testHelp() throws AnalysisException, IOException, UserException {
-        HelpModule module = new HelpModule();
-        URL help = getClass().getClassLoader().getResource("test-help-resource-show-help.zip");
-        module.setUpByZip(help.getPath());
-        new Expectations(module) {
-            {
-                HelpModule.getInstance();
-                minTimes = 0;
-                result = module;
-            }
-        };
-
-        // topic
-        HelpStmt stmt = new HelpStmt("ADD");
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("ADD", resultSet.getString(0));
-        Assert.assertEquals("add function\n", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
-
-        // topic
-        stmt = new HelpStmt("logical");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("OR", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // keywords
-        stmt = new HelpStmt("MATH");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("ADD", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("MINUS", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // category
-        stmt = new HelpStmt("functions");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("HELP", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("binary function", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("bit function", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // empty
-        stmt = new HelpStmt("empty");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertFalse(resultSet.next());
-    }
-
-    @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -1085,6 +1025,14 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
+    }
+
+    @Test
+    public void testShowAlterTable() throws AnalysisException, DdlException {
+        ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        executor.execute();
     }
 
     @Test
@@ -1241,7 +1189,7 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
+                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
@@ -1276,5 +1224,26 @@ public class ShowExecutorTest {
                 "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
                 "\"type\"  =  \"hive\"\n" +
                 ")", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowDataCacheRules() throws DdlException, AnalysisException {
+        DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
+        dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test1", "test1", "test1")), null, -1, null);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("hello", "world");
+        properties.put("ni", "hao");
+        StringLiteral stringLiteral = new StringLiteral("hello");
+        dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test2", "test2", "test2")),
+                stringLiteral, -1, properties);
+
+        ShowDataCacheRulesStmt stmt = new ShowDataCacheRulesStmt(NodePosition.ZERO);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        List<String> row1 = resultSet.getResultRows().get(0);
+        List<String> row2 = resultSet.getResultRows().get(1);
+        Assert.assertEquals("[0, test1, test1, test1, -1, NULL, NULL]", row1.toString());
+        Assert.assertEquals("[1, test2, test2, test2, -1, 'hello', \"hello\"=\"world\", \"ni\"=\"hao\"]", row2.toString());
     }
 }

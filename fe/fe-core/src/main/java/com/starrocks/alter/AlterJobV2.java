@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -43,6 +44,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import io.opentelemetry.api.trace.Span;
@@ -78,7 +81,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobType {
         // DECOMMISSION_BACKEND is for compatible with older versions of metadata
-        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE 
+        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE
     }
 
     @SerializedName(value = "type")
@@ -231,7 +234,9 @@ public abstract class AlterJobV2 implements Writable {
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
         long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
-        db.readLock();
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -241,10 +246,10 @@ public abstract class AlterJobV2 implements Writable {
             unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
@@ -258,7 +263,7 @@ public abstract class AlterJobV2 implements Writable {
                 return true;
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -314,4 +319,27 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public abstract Optional<Long> getTransactionId();
+
+
+    /**
+     * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
+     * into it from original index meta. Otherwise, some necessary metas will be lost after fe restart.
+     *
+     * @param orgIndexMeta  : index meta before schema change.
+     * @param indexMeta     : new index meta after schema change.
+     */
+    protected void rebuildMaterializedIndexMeta(MaterializedIndexMeta orgIndexMeta,
+                                                MaterializedIndexMeta indexMeta) {
+        indexMeta.setViewDefineSql(orgIndexMeta.getViewDefineSql());
+        indexMeta.setColocateMVIndex(orgIndexMeta.isColocateMVIndex());
+        indexMeta.setDefineStmt(orgIndexMeta.getDefineStmt());
+        if (indexMeta.getDefineStmt() != null) {
+            try {
+                indexMeta.gsonPostProcess();
+            } catch (IOException e) {
+                LOG.warn("rebuild defined stmt of index meta {}(org)/{}(new) failed :",
+                        orgIndexMeta.getIndexId(), indexMeta.getIndexId(), e);
+            }
+        }
+    }
 }

@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -596,6 +608,12 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int http_max_chunk_size = 8192;
+
+    /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
 
     /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
@@ -707,7 +725,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
@@ -748,6 +766,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int publish_version_interval_ms = 10;
 
+    @ConfField(mutable = true)
+    public static boolean lake_enable_batch_publish_version  = false;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_max_version_num = 10;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_min_version_num = 1;
+
     /**
      * The thrift server max worker threads
      */
@@ -786,6 +813,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int load_checker_interval_second = 5;
+
+    @ConfField(mutable = true)
+    public static long lock_checker_interval_second = 30;
+
+    /**
+     * Check of deadlock is time consuming. Open it only when tracking problems.
+     */
+    @ConfField(mutable = true)
+    public static boolean lock_checker_enable_deadlock_check = false;
 
     /**
      * Default broker load timeout
@@ -829,6 +865,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_batch_size_mb = 100;
+
+    /**
+     * Stream load max txn num per BE, less than 0 means no limit
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_max_txn_num_per_be = -1;
 
     /**
      * Default prepared transaction timeout
@@ -992,6 +1034,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+
+    /**
+     * max num of thread to handle task runs in task runs executor thread-pool.
+     */
+    @ConfField
+    public static int max_task_runs_threads_num = 512;
+
     /**
      * Default timeout of export jobs.
      */
@@ -1072,11 +1121,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_backup_materialized_view = true;
 
-    @ConfField
-    public static boolean enable_udf = false;
+    /**
+     * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
+     * to determine which strategy you choose:
+     *  N <0      : always use non lock optimization and no copy related materialized views which
+     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     *  N = 0    : always not use non lock optimization
+     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     */
+    @ConfField(mutable = true)
+    public static int skip_whole_phase_lock_mv_limit = 5;
 
     @ConfField
-    public static boolean enable_remote_script = false;
+    public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
@@ -1346,6 +1403,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
+    @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
+    public static long tablet_report_drop_tablet_delay_sec = 120;
 
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
@@ -1641,6 +1701,12 @@ public class Config extends ConfigBase {
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
+
+    /**
      * Check expire partition statistics data when StarRocks start up
      */
     @ConfField(mutable = true)
@@ -1653,10 +1719,10 @@ public class Config extends ConfigBase {
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
     /**
-     * Num of thread to handle statistic collect
+     * Num of thread to handle statistic collect(analyze command)
      */
     @ConfField(mutable = true)
-    public static int statistic_collect_concurrency = 3;
+    public static int statistic_analyze_task_pool_size = 3;
 
     /**
      * statistic collect query timeout
@@ -1709,6 +1775,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
@@ -1802,7 +1871,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -1899,7 +1968,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 512L * 1024L * 1024L;
+    public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
@@ -1948,7 +2017,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = 64;
+    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool
@@ -2011,12 +2080,6 @@ public class Config extends ConfigBase {
     public static long es_state_sync_interval_second = 10;
 
     /**
-     * If set to true, StarRocks will check if the compiled and running versions of Java are compatible
-     */
-    @ConfField
-    public static boolean check_java_version = true;
-
-    /**
      * connection and socket timeout for broker client
      */
     @ConfField
@@ -2064,6 +2127,14 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
+
+    /**
+     *  StarRocks-manager pull queries every 1 second
+     *  metrics calculate query latency every 15 second
+     *  do not set cacheTime lower than these time
+     */
+    @ConfField(mutable = true)
+    public static long query_detail_cache_time_nanosecond = 30000000000L;
 
     /**
      * Min lag of routine load job to show in metrics
@@ -2281,6 +2352,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
+
+    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
+    public static int lake_publish_version_max_threads = 512;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -2509,12 +2583,27 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = false;
+    public static boolean enable_fast_schema_evolution = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
+
+    /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -2547,4 +2636,27 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
+
+    /**
+     * Checking the connectivity of port opened by FE,
+     * mainly used for checking edit log port currently.
+     */
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_interval_sec = 60;
+
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int port_connectivity_check_timeout_ms = 10000;
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static boolean use_lock_manager = false;
 }

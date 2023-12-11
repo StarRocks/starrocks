@@ -314,7 +314,7 @@ public class ReportHandlerTest {
     @Test
     public void testHandleMigration() throws TException {
         List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         for (Long tabletId : tabletIds) {
             tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
         }
@@ -353,6 +353,7 @@ public class ReportHandlerTest {
                 replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
             }
         }
+        Config.tablet_sched_max_migration_task_sent_once = 1000000;
         Config.primary_key_disk_schedule_time = 0;
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
     }
@@ -370,7 +371,7 @@ public class ReportHandlerTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getDb("test").getTable("binlog_report_handler_test");
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -394,5 +395,31 @@ public class ReportHandlerTest {
         Config.tablet_sched_max_migration_task_sent_once = 30;
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
         Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+    }
+
+    @Test
+    public void testTabletDropDelay() throws InterruptedException {
+        long tabletId = 100001;
+        long backendId = 100002;
+        Config.tablet_report_drop_tablet_delay_sec = 3;
+
+        boolean ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(1000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(3000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
+
+        // check map is cleaned
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertFalse(ready);
+
+        Thread.sleep(4000);
+        ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
+        Assert.assertTrue(ready);
     }
 }

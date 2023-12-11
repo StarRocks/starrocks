@@ -35,6 +35,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -50,10 +51,12 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -187,6 +190,48 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+        }
+
+        // materialized_view_rewrite_mode
+        if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
+                throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
+                                "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal}", baseType));
+            }
+        }
+
+        // follower_query_forward_mode
+        if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
+            String queryFollowerForwardMode = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
+                throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
+                        "supported list is %s", queryFollowerForwardMode, supportedList));
+            }
+        }
+
+        // query_debug_options
+        if (variable.equalsIgnoreCase(SessionVariable.QUERY_DEBUG_OPTIONS)) {
+            String queryDebugOptions = resolvedExpression.getStringValue();
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported query_debug_options: %s, " +
+                        "it should be the `QueryDebugOptions` class's json deserialized string", queryDebugOptions));
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

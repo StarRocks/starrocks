@@ -42,15 +42,12 @@ public:
     void SetUp() override {
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
     const std::string kSegmentDir = "/segment_test";
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
 namespace test {
@@ -311,7 +308,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
 
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
@@ -497,7 +494,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
