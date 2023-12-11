@@ -647,7 +647,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
 - 默认值：8
-- 引入版本：v3.2.0
+- 引入版本：v3.1.0
 
 ##### lake_autovacuum_partition_naptime_seconds
 
