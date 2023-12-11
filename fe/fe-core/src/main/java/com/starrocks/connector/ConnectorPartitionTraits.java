@@ -37,6 +37,8 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
+import com.starrocks.catalog.OdpsPartitionKey;
+import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
@@ -80,6 +82,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.HUDI, HudiPartitionTraits::new)
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
+                    .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
@@ -482,6 +485,19 @@ public abstract class ConnectorPartitionTraits {
                                                     MaterializedView.AsyncRefreshContext context) {
             // TODO: implement
             return null;
+        }
+    }
+
+    static class OdpsPartitionTraits extends DefaultTraits {
+
+        @Override
+        public String getDbName() {
+            return ((OdpsTable) table).getDbName();
+        }
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new OdpsPartitionKey();
         }
     }
 
