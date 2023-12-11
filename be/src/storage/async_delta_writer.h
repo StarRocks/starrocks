@@ -128,7 +128,6 @@ private:
     std::shared_ptr<DeltaWriter> _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
     std::atomic<bool> _closed;
-    std::unique_ptr<starrocks::SegmentFlushToken> _segment_flush_executor = nullptr;
 };
 
 class CommittedRowsetInfo {

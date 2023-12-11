@@ -137,6 +137,8 @@ public:
 
     const ReplicateToken* replicate_token() const { return _replicate_token.get(); }
 
+    SegmentFlushToken* segment_flush_token() const { return _segment_flush_token.get(); }
+
     // REQUIRE: has successfully `commit()`ed
     const DictColumnsValidMap& global_dict_columns_valid_info() const {
         CHECK_EQ(kCommitted, _state);
@@ -200,6 +202,7 @@ private:
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
+    std::unique_ptr<SegmentFlushToken> _segment_flush_token;
     bool _with_rollback_log;
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
