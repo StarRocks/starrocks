@@ -40,6 +40,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -102,7 +103,7 @@ public class JobSpec {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
 
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTime(),
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
@@ -131,7 +132,7 @@ public class JobSpec {
                                                        TDescriptorTable descTable) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
 
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTime(),
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
@@ -156,7 +157,7 @@ public class JobSpec {
 
             TQueryOptions queryOptions = createBrokerLoadQueryOptions(loadPlanner);
 
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTime(),
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
@@ -196,7 +197,7 @@ public class JobSpec {
             setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
             queryOptions.setMem_limit(execMemLimit);
 
-            TQueryGlobals queryGlobals = genQueryGlobals(startTime, timezone);
+            TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
 
             return new JobSpec.Builder()
                     .loadJobId(loadJobId)
@@ -237,7 +238,7 @@ public class JobSpec {
             queryOptions.setMem_limit(execMemLimit);
             queryOptions.setLoad_mem_limit(execMemLimit);
 
-            TQueryGlobals queryGlobals = genQueryGlobals(startTime, timezone);
+            TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
 
             return new Builder()
                     .loadJobId(loadJobId)
@@ -280,7 +281,7 @@ public class JobSpec {
                                           List<ScanNode> scanNodes) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
 
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTime(),
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
