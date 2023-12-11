@@ -58,7 +58,7 @@ mysql> select substring("starrocks",-2);
 -- 指定的位数 8 超过了 "apple" 字符串的总位数，返回空字符串。
 MySQL > select substring("apple", 8, 2);
 +--------------------------------+
-| substring('apple', 8, 1048577) |
+| substring('apple', 8, 2) |
 +--------------------------------+
 |                                |
 +--------------------------------+

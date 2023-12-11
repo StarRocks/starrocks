@@ -52,7 +52,7 @@ MySQL > select substring("starrocks", -5, 5);
 -- The position exceeds the length of the string and an empty string is returned.
 MySQL > select substring("apple", 8, 2);
 +--------------------------------+
-| substring('apple', 8, 1048577) |
+| substring('apple', 8, 2) |
 +--------------------------------+
 |                                |
 +--------------------------------+
