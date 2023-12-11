@@ -721,7 +721,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Unit**: Seconds
 - **Default**: 180
 - **Description**: The minimum interval between AutoVacuum operations on the same partition.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 ##### lake_autovacuum_grace_period_minutes
 
