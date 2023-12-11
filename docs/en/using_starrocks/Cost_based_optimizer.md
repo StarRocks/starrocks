@@ -4,7 +4,9 @@ displayed_sidebar: "English"
 
 # Gather statistics for CBO
 
-This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics. Since v3.2.0, StarRocks supports collecting statistics from Hive, Iceberg, and Hudi tables, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
+This topic describes the basic concept of StarRocks cost-based optimizer (CBO) and how to collect statistics for the CBO to select an optimal query plan. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics.
+
+Since v3.2.0, StarRocks supports collecting statistics from Hive, Iceberg, and Hudi tables, reducing the dependency on other metastore systems. The syntax is similar to collecting StarRocks internal tables.
 
 ## What is CBO
 
@@ -447,7 +449,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## Other FE configuration items
 
-| **FE** **configuration item**        | **Type** | **Default value** | **Description**                                              |
+| **FE configuration item**        | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | statistic_manager_sleep_time_sec     | LONG     | 60                | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:Create tables for storing statistics.Delete statistics that have been deleted.Delete expired statistics. |
@@ -459,7 +461,7 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 ## Collect statistics of Hive/Iceberg/Hudi tables
 
-Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual and automatic full collection are supported. Sampled collection or histogram collection is not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual and automatic full collection are supported. Sampled collection and histogram collection are not supported.** The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
 Following is an example of querying statistics data from `external_column_statistics`.
 
@@ -485,14 +487,17 @@ partition_name:
 
 The following limits apply when you collect statistics for Hive, Iceberg, Hudi tables:
 
-1. Only full collection is supported. Sampled collection and histogram collection are not supported.
-2. You can collect statistics of only Hive, Iceberg, and Hudi tables.
-3. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
-4. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
+1. You can collect statistics of only Hive, Iceberg, and Hudi tables.
+2. Only full collection is supported. Sampled collection and histogram collection are not supported.
+3. For the system to automatically collect full statistics, you must create an Analyze job, which is different from collecting statistics of StarRocks internal tables where the system does this in the background by default.
+4. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
+5. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
 
 The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
 
 ### Manual collection
+
+You can create an Analyze job on demand and the job runs immediately after you create it.
 
 #### Create a manual collection task
 
@@ -569,7 +574,9 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 ### Automatic collection
 
-When you create an automatic collection task, StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. StarRocks runs a collection task only when data in Hive and Iceberg tables are updated. However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval specified by users. You can use the following FE parameters:
+For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
+
+However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following properties when you create an Analyze job:
 
 - statistic_collect_interval_sec
 
@@ -637,7 +644,7 @@ Empty set (0.00 sec)
 
 Same as manual collection.
 
-### Delete statistics
+#### Delete statistics
 
 ```sql
 DROP STATS tbl_name
