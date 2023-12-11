@@ -71,7 +71,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.ADAPTIVE_DECREASE;
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -1407,7 +1407,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboDeriveRangeJoinPredicate = false;
 
     @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
-    private String chooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
+    private String chooseExecuteInstancesMode = LOCALITY.name();
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
