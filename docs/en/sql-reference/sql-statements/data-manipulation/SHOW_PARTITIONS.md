@@ -46,6 +46,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataSize                 | The size of data in the partition.                          |
 | IsInMemory               | Whether all data in the partition is stored in memory.          |
 | RowCount                 | The number of data rows of the partition.                    |
+| MaxCS                    | The maximum Compaction Score of the partition. For shared-data clusters only.                    |
 
 ## Examples
 
