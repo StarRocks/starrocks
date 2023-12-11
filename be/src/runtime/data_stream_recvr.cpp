@@ -191,12 +191,13 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     }
 }
 
-void DataStreamRecvr::bind_profile(int32_t driver_sequence, RuntimeProfile* profile) {
+void DataStreamRecvr::bind_profile(int32_t driver_sequence, const std::shared_ptr<RuntimeProfile>& profile) {
     DCHECK(profile != nullptr);
     DCHECK_GE(driver_sequence, 0);
     DCHECK_LT(driver_sequence, _metrics.size());
     auto& statistics = _metrics[driver_sequence];
 
+    statistics.runtime_profile = profile;
     statistics.bytes_received_counter = ADD_COUNTER(profile, "BytesReceived", TUnit::BYTES);
     statistics.bytes_pass_through_counter = ADD_COUNTER(profile, "BytesPassThrough", TUnit::BYTES);
     statistics.request_received_counter = ADD_COUNTER(profile, "RequestReceived", TUnit::UNIT);
