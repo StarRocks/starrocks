@@ -8,6 +8,7 @@
 #include "exprs/agg/aggregate.h"
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
