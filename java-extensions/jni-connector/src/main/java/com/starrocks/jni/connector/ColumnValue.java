@@ -33,7 +33,6 @@ public interface ColumnValue {
     double getDouble();
 
     String getString(ColumnType.TypeValue type);
-    String getTimestamp(ColumnType.TypeValue type);
     byte[] getBytes();
 
     void unpackArray(List<ColumnValue> values);

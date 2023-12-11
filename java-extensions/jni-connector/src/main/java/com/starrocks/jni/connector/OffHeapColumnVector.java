@@ -449,8 +449,8 @@ public class OffHeapColumnVector {
     }
 
     private void putDate(int rowId, LocalDate v) {
-        long date = convertToDate(v.getYear(), v.getMonthValue(), v.getDayOfMonth());
-        Platform.putLong(null, data + rowId * 16L, date);
+        int date = convertToDate(v.getYear(), v.getMonthValue(), v.getDayOfMonth());
+        Platform.putInt(null, data + rowId * 4L, date);
     }
 
     public int appendDateTime(LocalDateTime v) {
@@ -462,7 +462,7 @@ public class OffHeapColumnVector {
     private void putDateTime(int rowId, LocalDateTime v) {
         long time = convertToDateTime(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), v.getHour(),
                 v.getMinute(), v.getSecond(), v.getNano() / 1000);
-        Platform.putLong(null, data + rowId * 16L, time);
+        Platform.putLong(null, data + rowId * 8L, time);
     }
 
     public void updateMeta(OffHeapColumnVector meta) {
@@ -724,9 +724,9 @@ public class OffHeapColumnVector {
         return bytes;
     }
 
-    public static long convertToDate(int year, int month, int day) {
-        long century;
-        long julianDate;
+    public static int convertToDate(int year, int month, int day) {
+        int century;
+        int julianDate;
 
         if (month > 2) {
             month += 1;
@@ -746,10 +746,11 @@ public class OffHeapColumnVector {
     public static long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
         int secsPerMinute = 60;
         int minsPerHour = 60;
-        int usecsPerSec = 1000000;
+        long usecsPerSec = 1000000;
         int timeStampBits = 40;
         long julianDate = convertToDate(year, month, day);
-        long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec) + microsecond;
+        long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec)
+                + microsecond;
         return julianDate << timeStampBits | timestamp;
     }
 }

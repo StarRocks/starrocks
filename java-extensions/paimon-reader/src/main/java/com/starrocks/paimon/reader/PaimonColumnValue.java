@@ -78,11 +78,6 @@ public class PaimonColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
-        return fieldData.toString();
-    }
-
-    @Override
     public byte[] getBytes() {
         return (byte[]) fieldData;
     }
