@@ -338,6 +338,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        }
+
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
@@ -366,10 +370,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         KeysType originalKeysType = olapTable.getKeysType();
         KeysDesc keysDesc = clause.getKeysDesc();
         if (keysDesc != null) {
-            if (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS || originalKeysType != KeysType.UNIQUE_KEYS) {
-                throw new SemanticException("not support optimize %s to %s keys type",
-                        originalKeysType.toSql(), keysDesc.getKeysType().toSql());
-            }
+            throw new SemanticException("not support change keys type when optimize table");
         }
         KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
 

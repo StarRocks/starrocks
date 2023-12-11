@@ -39,7 +39,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TableIdentifier;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
@@ -67,6 +66,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.meta.lock.LockType;
@@ -517,39 +517,10 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Set<TableIdentifier> collectAllTableIdentifier(StatementBase statementBase) {
-        Set<TableIdentifier> tableIdentifiers = Sets.newHashSet();
-        new TableIdentifierCollector(tableIdentifiers).visit(statementBase);
-        return tableIdentifiers;
-    }
-
-    private static class TableIdentifierCollector extends AstTraverser<Void, Void> {
-        Set<TableIdentifier> tableIdentifiers;
-
-        public TableIdentifierCollector(Set<TableIdentifier> tableIdentifiers) {
-            this.tableIdentifiers = tableIdentifiers;
-        }
-
-        @Override
-        public Void visitQueryStatement(QueryStatement statement, Void context) {
-            return visit(statement.getQueryRelation());
-        }
-
-        @Override
-        public Void visitTable(TableRelation node, Void context) {
-            if (node.isSyncMVQuery()) {
-                tableIdentifiers.add(new TableIdentifier(node.getName(), TableRelation.TableHint._SYNC_MV_));
-            } else {
-                tableIdentifiers.add(new TableIdentifier(node.getName(), null));
-            }
-            return null;
-        }
-
-        public Void visitView(ViewRelation node, Void context) {
-            tableIdentifiers.add(new TableIdentifier(node.getName(), null));
-            node.getQueryStatement().accept(this, null);
-            return null;
-        }
+    public static List<Pair<Expr, Relation[]>> collectAllJoinPredicatesRelations(StatementBase statementBase) {
+        List<Pair<Expr, Relation[]>> joinPredicates = Lists.newArrayList();
+        new AnalyzerUtils.JoinPredicateRelationCollector(joinPredicates).visit(statementBase);
+        return joinPredicates;
     }
 
     private static class TableAndViewCollector extends TableCollector {
@@ -776,6 +747,30 @@ public class AnalyzerUtils {
                 return null;
             }
             allTableAndViewRelations.put(node.getName(), node);
+            return null;
+        }
+    }
+
+    private static class JoinPredicateRelationCollector extends TableCollector {
+        private final List<Pair<Expr, Relation[]>> joinPredicates;
+
+        public JoinPredicateRelationCollector(List<Pair<Expr, Relation[]>> joinPredicates) {
+            super(null);
+            this.joinPredicates = joinPredicates;
+        }
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            Relation[] relations = new Relation[2];
+            relations[0] = node.getLeft();
+            relations[1] = node.getRight();
+            joinPredicates.add(Pair.create(node.getOnPredicate(), relations));
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
             return null;
         }
     }

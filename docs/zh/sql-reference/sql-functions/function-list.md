@@ -445,6 +445,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [current_role](./utility-functions/current_role.md)| 获取当前用户激活的角色。  |
 |  [current_version](./utility-functions/current_version.md)| 获取当前 StarRocks 的版本 |
 | [database](./utility-functions/database.md)| 查询当前会话所在的数据库。 |
+| [get_query_profile](./utility-functions/get_query_profile.md)| 获取指定查询的 Profile。|
 |  [host_name](./utility-functions/host_name.md)| 获取计算所在节点的主机名。|
 |  [isnull](./utility-functions/isnull.md)| 判断输入值是否为 NULL。|
 | [is_role_in_session](./utility-functions/is_role_in_session.md) | 检查指定的角色（包括嵌套角色）在当前会话下是否已经激活。 |

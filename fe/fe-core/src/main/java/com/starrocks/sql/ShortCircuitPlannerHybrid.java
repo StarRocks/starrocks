@@ -18,6 +18,7 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -42,7 +43,7 @@ public class ShortCircuitPlannerHybrid {
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             Table table = scanOp.getTable();
-            if (!(table instanceof OlapTable)) {
+            if (!(table instanceof OlapTable) && !(((OlapTable) table).getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 return false;
             }
 

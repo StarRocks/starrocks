@@ -162,6 +162,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
 - 默认值：TRUE
 
+##### http_slow_request_threshold_ms
+
+- 含义：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 单位：毫秒
+- 默认值：5000
+- 引入版本：2.5.15，3.1.5
+
 ##### max_partitions_in_one_batch
 
 - 含义：批量创建分区时，分区数目的最大值。
@@ -276,6 +283,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。
 - 默认值：3
+
+##### statistic_auto_collect_small_table_rows
+
+- 含义：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
+- 默认值：10000000
+- 引入版本：v3.2
 
 ##### enable_local_replica_selection
 
@@ -684,8 +697,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### allow_system_reserved_names
 
-- **默认值**: FALSE
-- 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 含义：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 默认值: FALSE
+
+##### enable_backup_materialized_view
+
+- 含义：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+##### enable_colocate_mv_index
+
+- 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
 
 ### 配置 FE 静态参数
 
@@ -1491,12 +1514,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：5000
 
-#### txn_commit_rpc_timeout_ms
-
-- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
-- 单位：毫秒
-- 默认值：20000
-
 #### max_consumer_num_per_group
 
 - 含义：Routine load 中，每个consumer group 内最大的 consumer 数量。
@@ -1688,7 +1705,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_port
 
-- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 含义：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
 - 默认值：9070
 
 #### heartbeat_service_port
@@ -1956,36 +1973,36 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 Store 用以 Flush MemTable 的线程数。
 - 默认值：2
 
-#### block_cache_enable
+#### datacache_enable
 
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### datacache_disk_path  
 
-- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
+- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### datacache_meta_path  
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
 
-#### block_cache_block_size
+#### datacache_block_size
 
 - 含义：单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。
 - 默认值：1048576
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- 含义：内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。
-- 单位：字节
-- 默认值：2147483648
+- 含义：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 单位：N/A
+- 默认值：10%
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
-- 含义：单个磁盘缓存数据量的上限。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 单位：字节
+- 含义：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 单位：N/A
 - 默认值：0
 
 #### jdbc_connection_pool_size

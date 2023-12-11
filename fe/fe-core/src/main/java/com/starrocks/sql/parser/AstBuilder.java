@@ -97,6 +97,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -1715,6 +1716,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     createPos(context));
             stmt.setOptHints(visitVarHints(context.setVarHint()));
             return stmt;
+        }
+
+        if (context.BLACKHOLE() != null) {
+            return new InsertStmt(queryStatement, createPos(context));
         }
 
         // INSERT INTO FILES(...)
@@ -4465,7 +4470,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.LATERAL() != null, createPos(context));
         joinRelation.setUsingColNames(usingColNames);
         if (context.bracketHint() != null) {
-            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier().get(0))).getValue());
+            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier(0))).getValue());
+            if (context.bracketHint().primaryExpression() != null) {
+                joinRelation.setSkewColumn((Expr) visit(context.bracketHint().primaryExpression()));
+            }
+            if (context.bracketHint().literalExpressionList() != null) {
+                joinRelation.setSkewValues(visit(context.bracketHint().literalExpressionList().literalExpression(),
+                        Expr.class));
+            }
         }
 
         return joinRelation;
@@ -5713,6 +5725,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         NodePosition pos = createPos(context);
         String functionName;
         boolean isGroupConcat = false;
+        boolean isLegacyGroupConcat = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5726,6 +5739,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
+            ConnectContext session = ConnectContext.get();
+            if (session != null && session.getSessionVariable() != null) {
+                long sqlMode = session.getSessionVariable().getSqlMode();
+                isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
+            }
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -5749,10 +5767,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
         if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
-            Expr sepExpr;
-            String sep = ",";
-            sepExpr = new StringLiteral(sep, pos);
-            exprs.add(sepExpr);
+            if (isLegacyGroupConcat) {
+                if (exprs.size() == 1) {
+                    Expr sepExpr;
+                    String sep = ", ";
+                    sepExpr = new StringLiteral(sep, pos);
+                    exprs.add(sepExpr);
+                }
+            } else {
+                Expr sepExpr;
+                String sep = ",";
+                sepExpr = new StringLiteral(sep, pos);
+                exprs.add(sepExpr);
+            }
         }
         if (!orderByElements.isEmpty()) {
             int exprSize = exprs.size();

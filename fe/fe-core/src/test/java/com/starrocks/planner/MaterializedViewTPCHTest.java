@@ -25,9 +25,9 @@ import org.junit.Test;
 
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
@@ -77,9 +77,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        FeConstants.isCanonizePredicateAfterMVRewrite = true;
-        runFileUnitTest("materialized-view/tpch/q7");
-        FeConstants.isCanonizePredicateAfterMVRewrite = false;
+        runFileUnitTestWithNormalizedResult("materialized-view/tpch/q7");
     }
 
     @Test

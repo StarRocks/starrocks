@@ -266,13 +266,13 @@ However, if there are some hotspot tablets, this feature may degrade the query p
 
 Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, 3.1.4, and 3.2.0.
 
-### enable_scan_block_cache (2.5 and later)
+### enable_scan_datacache (2.5 and later)
 
-Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md).
+Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 
-### enable_populate_block_cache (2.5 and later)
+### enable_populate_datacache (2.5 and later)
 
-Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 
 ### enable_tablet_internal_parallel (2.3 and later)
 
@@ -603,6 +603,10 @@ Used for MySQL client compatibility. No practical usage.
 ### sql_select_limit
 
 Used for MySQL client compatibility. No practical usage.
+
+### statistic_collect_parallel
+
+Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
 
 ### storage_engine
 

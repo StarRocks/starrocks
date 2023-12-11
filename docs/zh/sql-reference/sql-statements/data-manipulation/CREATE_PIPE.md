@@ -26,6 +26,10 @@ Pipe 所属的数据库的名称。
 
 Pipe 的名称。该名称在 Pipe 所在的数据库内必须唯一。
 
+> **NOTICE**
+>
+> 每个 Pipe 从属于一个数据库。删除 Pipe 所在的数据库后，该 Pipe 也会随之删除，并且该 Pipe 不会随数据库的恢复而恢复。
+
 ### INSERT_SQL
 
 INSERT INTO SELECT FROM FILES 语句，用于从指定的源数据文件导入数据到目标表。

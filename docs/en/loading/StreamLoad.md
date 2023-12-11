@@ -31,7 +31,7 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 ## Loading from a local file system via Stream Load
 
-Stream Load is an HTTP PUT-based synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
+Stream Load is an HTTP PUT-based synchronous loading method. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
 > **NOTICE**
 >
@@ -113,7 +113,6 @@ Run the following command to load the data of `example1.csv` into `table1`:
 curl --location-trusted -u <username>:<password> -H "label:123" \
     -H "Expect:100-continue" \
     -H "column_separator:," \
-    -H "Expect:100-continue" \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load

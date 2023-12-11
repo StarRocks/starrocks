@@ -24,9 +24,9 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.wildfly.common.Assert;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -80,6 +80,24 @@ public class CatalogMgrTest {
         catalogMgr.replayCreateCatalog(catalog);
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
+
+        config.put("type", "paimon");
+        final ExternalCatalog catalog1 = new ExternalCatalog(10000, "catalog_3", "", config);
+        Assert.assertThrows(DdlException.class, () -> {
+            catalogMgr.replayCreateCatalog(catalog1);
+        });
+    }
+
+    @Test
+    public void testCreate() throws DdlException {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        Map<String, String> config = new HashMap<>();
+
+        config.put("type", "paimon");
+        final ExternalCatalog catalog = new ExternalCatalog(10000, "catalog_0", "", config);
+        Assert.assertThrows(DdlException.class, () -> {
+            catalogMgr.replayCreateCatalog(catalog);
+        });
     }
 
     @Test

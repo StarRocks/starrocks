@@ -164,6 +164,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: TRUE
 - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
 
+##### http_slow_request_threshold_ms
+
+- Unit: ms
+- Default: 5000
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: 2.5.15，3.1.5
+
 ##### max_partitions_in_one_batch
 
 - Unit: -
@@ -304,6 +311,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+
+##### statistic_auto_collect_small_table_rows
+
+- Unit: -
+- Default: 10000000
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
 
 ##### enable_local_replica_selection
 
@@ -769,7 +783,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - **Default**: FALSE
-- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+- **Description**: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feaure, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+
+##### enable_backup_materialized_view
+
+- **Default**: TRUE
+- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+
+##### enable_colocate_mv_index
+
+- **Default**: TRUE
+- **Description**: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views. This item is supported from v3.2.0 onwards.
 
 ### Configure FE static parameters
 
@@ -1548,11 +1572,6 @@ BE dynamic parameters are as follows.
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
-#### txn_commit_rpc_timeout_ms
-
-- **Default:** 60,000 ms
-- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
-
 #### max_consumer_num_per_group
 
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
@@ -1721,7 +1740,7 @@ BE static parameters are as follows.
 
 - **Default**: 9070
 - **Unit**: N/A
-- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+- **Description**: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
 
 #### heartbeat_service_thread_count
 
@@ -2060,35 +2079,35 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Number of threads that are used for flushing MemTable in each store.
 
-#### block_cache_enable
+#### datacache_enable
 
 - **Default**: false
 - **Unit**: N/A
 - **Description**: Whether to enable Data Cache. TRUE indicates Data Cache is enabled, and FALSE indicates Data Cache is disabled.
 
-#### block_cache_disk_path
+#### datacache_disk_path
 
 - **Default**: N/A
 - **Unit**: N/A
-- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named cachelib_data to cache blocks.
+- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
 
-#### block_cache_meta_path
+#### datacache_meta_path
 
 - **Default**: N/A
 - **Unit**: N/A
 - **Description**: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the $STARROCKS_HOME path.
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- **Default**: 2147483648
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
+- **Default**: 10%
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). The default value is `10%`. We recommend that you set the value of this parameter to at least 10 GB.
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
 - **Default**: 0
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data. Unit: bytes.
 
 #### jdbc_connection_pool_size
 
@@ -2139,11 +2158,11 @@ BE static parameters are as follows.
 | bitmap_max_filter_items | 30 | N/A | |
 | bitmap_max_filter_ratio | 1000 | N/A | |
 | bitmap_serialize_version | 1 | N/A | |
-| block_cache_block_size | 1048576 | N/A | |
-| block_cache_disk_path |  | N/A | |
-| block_cache_disk_size | 21474836480 | N/A | |
-| block_cache_enable | 0 | N/A | |
-| block_cache_mem_size | 2147483648 | N/A | |
+| datacache_block_size | 1048576 | N/A | |
+| datacache_disk_path |  | N/A | |
+| datacache_disk_size | 21474836480 | N/A | |
+| datacache_enable | 0 | N/A | |
+| datacache_mem_size | 2147483648 | N/A | |
 | broker_write_timeout_seconds | 30 | N/A | |
 | brpc_socket_max_unwritten_bytes | 1073741824 | N/A | |
 | cardinality_of_inject | 10 | N/A | |

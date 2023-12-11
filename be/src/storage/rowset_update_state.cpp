@@ -307,8 +307,8 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 }
 // update_column_ids needed read by rowset
 Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
-                                                                const std::vector<uint32_t>& update_column_ids) {
-    auto tablet_schema = tablet->tablet_schema();
+                                                                const std::vector<uint32_t>& update_column_ids,
+                                                                const TabletSchemaCSPtr& tablet_schema) {
     if (_partial_update_value_column_ids.empty()) {
         // need to init
         for (uint32_t cid : update_column_ids) {
@@ -422,7 +422,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     if (tablet->is_column_with_row_store()) {
-        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids));
+        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids, tablet_schema));
     }
     int64_t t_end = MonotonicMillis();
     _partial_update_states[idx].update_byte_size();

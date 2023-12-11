@@ -53,6 +53,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -99,8 +100,9 @@ public class DesensitizedSQLBuilder {
         return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).visit(statement);
     }
 
-    public static String desensitizeViewDef(View view, Map<String, String> desensitizedDict) {
+    public static String desensitizeViewDef(View view, Map<String, String> desensitizedDict, ConnectContext connectContext) {
         QueryStatement stmt = view.getQueryStatement();
+        new QueryAnalyzer(connectContext).analyze(stmt);
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(stmt);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
         return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).desensitizeViewDef(stmt);
