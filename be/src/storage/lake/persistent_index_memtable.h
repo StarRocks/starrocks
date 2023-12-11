@@ -21,7 +21,7 @@
 
 namespace starrocks::lake {
 class PersistentIndexSStablePB;
-class Tablet;
+class TabletManager;
 
 struct SstableInfo {
     std::string filename;
@@ -32,7 +32,7 @@ class PersistentIndexMemtable {
 public:
     PersistentIndexMemtable() = default;
 
-    PersistentIndexMemtable(Tablet* tablet);
+    PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id);
 
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexesInfo* not_found, size_t* num_found);
@@ -53,7 +53,8 @@ public:
 
 private:
     phmap::btree_map<std::string, IndexValue, std::less<>> _map;
-    Tablet* _tablet{nullptr};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id;
 };
 
 } // namespace starrocks::lake

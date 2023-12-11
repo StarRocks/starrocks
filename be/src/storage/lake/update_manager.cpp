@@ -99,33 +99,40 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
     return index_entry;
 }
 
-Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet, MetaFileBuilder* builder,
-                                           int64_t base_version) {
+Status UpdateManager::commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata,
+                                           MetaFileBuilder* builder, int64_t base_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (index_entry != nullptr) {
         auto& index = index_entry->value();
         if (index.enable_persistent_index()) {
-            ASSIGN_OR_RETURN(auto index_type, tablet->get_persistent_index_type(base_version));
-            if (index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+            auto index_type = metadata->persistent_index_type();
+            switch (index_type) {
+            case PersistentIndexTypePB::CLOUD_NATIVE: {
                 auto lake_persistent_index = dynamic_cast<LakePersistentIndex*>(index.get_persistent_index());
                 auto pindex_sstable = std::make_shared<PersistentIndexSStablePB>();
                 lake_persistent_index->commit(pindex_sstable.get());
                 builder->set_pindex_sstable(pindex_sstable);
-            } else {
+                return Status::OK();
+            }
+            case PersistentIndexTypePB::LOCAL: {
                 // only take affect in local persistent index
                 PersistentIndexMetaPB index_meta;
-                DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
-                RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
+                DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(metadata->id());
+                RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, metadata->id(), &index_meta));
                 RETURN_IF_ERROR(index.commit(&index_meta));
-                RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
+                RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, metadata->id(), index_meta));
                 // Call `on_commited` here, which will remove old files is safe.
                 // Because if publish version fail after `on_commited`, index will be rebuild.
                 RETURN_IF_ERROR(index.on_commited());
                 TRACE("commit primary index");
+                return Status::OK();
+            }
+            default:
+                LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
+                return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
             }
         }
     }
-
     return Status::OK();
 }
 
@@ -197,7 +204,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
     for (const auto& one_delete : state.deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
-    }
+                    }
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
     }

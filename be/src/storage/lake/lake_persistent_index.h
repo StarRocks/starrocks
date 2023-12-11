@@ -21,14 +21,14 @@ namespace starrocks::lake {
 
 class PersistentIndexMemtable;
 class PersistentIndexSStablePB;
-class Tablet;
+class TabletManager;
 struct SstableInfo;
 
 class LakePersistentIndex : public PersistentIndex {
 public:
     explicit LakePersistentIndex(std::string path);
 
-    LakePersistentIndex(Tablet* tablet);
+    LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
     ~LakePersistentIndex() override;
 
@@ -90,7 +90,8 @@ private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     std::vector<SstableInfo> _sstables;
-    Tablet* _tablet{nullptr};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
     int64_t _version{0};
     int64_t _txn_id{0};
 };

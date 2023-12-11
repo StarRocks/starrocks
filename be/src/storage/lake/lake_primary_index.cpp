@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -105,6 +106,11 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
+        }
+        case PersistentIndexTypePB::CLOUD_NATIVE: {
+            LOG(INFO) << "use cloud native persistent index";
+            _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
+            return Status::OK();
         }
         default:
             LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";

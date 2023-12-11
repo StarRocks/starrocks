@@ -21,8 +21,8 @@ namespace starrocks {
 
 namespace lake {
 
-Status LakePersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValue>& memtable, WritableFile* wf,
-                                                 uint64_t* filesz) {
+Status LakePersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValue, std::less<>>& memtable,
+                                                 WritableFile* wf, uint64_t* filesz) {
     sstable::Options options;
     sstable::TableBuilder builder(options, wf);
     for (const auto& pair : memtable) {

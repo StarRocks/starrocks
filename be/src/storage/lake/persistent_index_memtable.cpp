@@ -21,7 +21,8 @@
 
 namespace starrocks::lake {
 
-PersistentIndexMemtable::PersistentIndexMemtable(Tablet* tablet) : _tablet(tablet) {}
+PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id)
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                        KeyIndexesInfo* not_found, size_t* num_found) {
@@ -119,7 +120,7 @@ size_t PersistentIndexMemtable::memory_usage() {
 
 Status PersistentIndexMemtable::flush(SstableInfo* sstable, int64_t txn_id) {
     auto name = gen_sst_filename(txn_id);
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet->sst_location(name)));
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_id, name)));
     uint64_t filesz;
     RETURN_IF_ERROR(LakePersistentIndexSstable::build_sstable(_map, wf.get(), &filesz));
     RETURN_IF_ERROR(wf->close());

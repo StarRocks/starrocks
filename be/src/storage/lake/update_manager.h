@@ -136,7 +136,7 @@ public:
                                                 std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
     // commit primary index, only take affect when it is persistent index
-    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet, MetaFileBuilder* builder,
+    Status commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                 int64_t base_version);
 
     // release index entry if it isn't nullptr

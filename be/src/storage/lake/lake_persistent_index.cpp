@@ -23,9 +23,10 @@ LakePersistentIndex::LakePersistentIndex(std::string path) : PersistentIndex(std
     _memtable = std::make_unique<PersistentIndexMemtable>();
 }
 
-LakePersistentIndex::LakePersistentIndex(Tablet* tablet) : PersistentIndex("") {
-    _tablet = tablet;
-    _memtable = std::make_unique<PersistentIndexMemtable>(tablet);
+LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id) : PersistentIndex("") {
+    _tablet_mgr = tablet_mgr;
+    _tablet_id = tablet_id;
+    _memtable = std::make_unique<PersistentIndexMemtable>(tablet_mgr, tablet_id);
 }
 
 LakePersistentIndex::~LakePersistentIndex() {
@@ -85,7 +86,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 
 void LakePersistentIndex::flush_to_immutable_memtable() {
     _immutable_memtable = std::move(_memtable);
-    _memtable = std::make_unique<PersistentIndexMemtable>(_tablet);
+    _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id);
 }
 
 Status LakePersistentIndex::minor_compact() {
