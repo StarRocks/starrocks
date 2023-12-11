@@ -728,7 +728,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Unit**: Minutes
 - **Default**: 5
 - **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold
 
