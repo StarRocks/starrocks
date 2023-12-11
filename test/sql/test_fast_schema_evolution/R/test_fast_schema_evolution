@@ -54,8 +54,8 @@ insert into t1 values(2, 2, 3);
 select * from t1 order by k;
 -- result:
 1	None	None
-2	3	5
 2	2	3
+2	3	5
 -- !result
 alter table t1 add column k2 int key;
 -- result:
@@ -67,8 +67,8 @@ None
 select * from t1 order by k;
 -- result:
 1	None	None	None
-2	None	3	5
 2	None	2	3
+2	None	3	5
 -- !result
 insert into t1 values(3, 2, 3, 4);
 -- result:
@@ -76,8 +76,8 @@ insert into t1 values(3, 2, 3, 4);
 select * from t1 order by k;
 -- result:
 1	None	None	None
-2	None	3	5
 2	None	2	3
+2	None	3	5
 3	2	3	4
 -- !result
 delete from t1 where v3>4;
@@ -629,5 +629,96 @@ drop table tab1;
 -- result:
 -- !result
 drop database test_fast_schema_evolution_and_mv;
+-- result:
+-- !result
+-- name: test_fast_schema_evolution_add_column_with_expr
+create database test_fast_schema_evolution_add_column_with_expr;
+-- result:
+-- !result
+use test_fast_schema_evolution_add_column_with_expr;
+-- result:
+-- !result
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+-- result:
+-- !result
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+-- result:
+-- !result
+insert into tab1 values (300, "k2_300", 300, 300, 300, "v4_300", "v5_300");
+-- result:
+-- !result
+insert into tab1 values (400, "k2_400", 400, 400, 400, "v4_400", "v5_400");
+-- result:
+-- !result
+insert into tab1 values (500, "k2_500", 500, 500, 500, "v4_500", "v5_500");
+-- result:
+-- !result
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
+-- result:
+-- !result
+select * from tab1;
+-- result:
+100	k2_100	100	100	100	v4_100	v5_100
+200	k2_200	200	200	200	v4_200	v5_200
+300	k2_300	300	300	300	v4_300	v5_300
+400	k2_400	400	400	400	v4_400	v5_400
+500	k2_500	500	500	500	v4_500	v5_500
+600	k2_600	600	600	600	v4_600	v5_600
+-- !result
+alter table tab1 add column c1 datetime default current_timestamp;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from tab1 where c1 is NULL;
+-- result:
+0
+-- !result
+alter table tab1 add column c2 datetime not null default current_timestamp;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from tab1 where c2 is NULL;
+-- result:
+0
+-- !result
+alter table tab1 add column c3 datetime;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from tab1 where c3 is NULL;
+-- result:
+6
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_fast_schema_evolution_add_column_with_expr;
 -- result:
 -- !result

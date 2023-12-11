@@ -238,6 +238,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         alterClauses.add(new ModifyTablePropertiesClause(properties));
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
+        olapTable.setUseFastSchemaEvolution(false);
         schemaChangeHandler.process(alterClauses, db, olapTable);
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExist());
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
