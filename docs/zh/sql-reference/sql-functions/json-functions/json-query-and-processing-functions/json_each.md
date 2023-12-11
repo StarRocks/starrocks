@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# JSON_EACH
+# json_each
 
 ## 功能
 
