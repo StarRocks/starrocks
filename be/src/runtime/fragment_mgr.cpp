@@ -422,8 +422,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
-    return exec_plan_fragment(
-            params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); }, cb);
+    return exec_plan_fragment(params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); }, cb);
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
@@ -858,7 +857,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
