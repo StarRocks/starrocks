@@ -680,7 +680,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Default**: 10.0
 - **Description**: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 The Compaction Score indicates whether a partition needs Compaction and is scored based on the number of files in the partition. Excessive number of files can impact query performance, so the system periodically performs Compaction to merge small files and reduce the file count. You can check the Compaction Score for a partition based on the `MaxCS` column in the result returned by running [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md).
 
