@@ -714,7 +714,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 
 - **Default**: 8
 - **Description**: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVaccum is the Garbage Collection after Compactions.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 ##### lake_autovacuum_partition_naptime_seconds
 
