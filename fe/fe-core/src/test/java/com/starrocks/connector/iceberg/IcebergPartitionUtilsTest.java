@@ -15,16 +15,35 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.iceberg.ChangelogOperation;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.Set;
 
 public class IcebergPartitionUtilsTest {
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+    private static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+    }
+
     @Test
     public void testIcebergPartition() {
         PartitionSpec spec = PartitionSpec.unpartitioned();
@@ -51,5 +70,20 @@ public class IcebergPartitionUtilsTest {
 
         Set<IcebergPartitionUtils.IcebergPartition> set = ImmutableSet.of(partition1, partition2, partition3);
         Assert.assertEquals(2, set.size());
+    }
+
+    @Test
+    public void testIcebergGetAllPartition() {
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+
+        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("iceberg0",
+                "partitioned_db", "t1");
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-03");
+        Set<IcebergPartitionUtils.IcebergPartition> partitions = IcebergPartitionUtils.
+                getAllPartition(icebergTable.getNativeTable());
+        Assert.assertEquals(2, partitions.size());
     }
 }

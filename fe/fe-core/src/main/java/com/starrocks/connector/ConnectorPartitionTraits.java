@@ -455,10 +455,14 @@ public abstract class ConnectorPartitionTraits {
                 }
 
                 long basePartitionVersion = basePartitionInfo.getVersion();
+<<<<<<< HEAD
                 if (basePartitionVersion < currentVersion) {
                     baseTable.setRefreshSnapshotTime(currentVersion);
+=======
+                if (basePartitionVersion != currentVersion) {
+>>>>>>> 53c9f4a503 ([BugFix] Fix iceberg mv refresh NPE when snapshot is expired (#36473))
                     result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
-                            basePartitionVersion));
+                            basePartitionVersion, snapshot));
                 }
             }
             return result;
