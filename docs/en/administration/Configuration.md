@@ -727,7 +727,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 
 - **Unit**: Minutes
 - **Default**: 5
-- **Description**: The time range for retaining historical data versions. Historical data versions after Compactions within this time range are not automatically cleaned via AutoVacuum. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
 - **Introduced in**: v3.2.0
 
 ##### lake_autovacuum_stale_partition_threshold
@@ -759,7 +759,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Description**: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
 - **Introduced in**: v3.2.0
 
-Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The slowdown ratio is calculated with the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which is equivalent to doubling the average loading speed.
+Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
 
 > **Note**
 >
