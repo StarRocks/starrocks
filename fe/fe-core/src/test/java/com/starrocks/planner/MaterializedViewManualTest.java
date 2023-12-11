@@ -23,6 +23,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
     }
 
     @Test

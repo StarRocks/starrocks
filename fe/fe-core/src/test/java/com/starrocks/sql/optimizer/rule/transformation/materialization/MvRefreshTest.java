@@ -21,21 +21,19 @@ public class MvRefreshTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+        starRocksAssert.withTable(cluster, "test_base_part");
+        starRocksAssert.withTable(cluster, "table_with_partition");
     }
 
     @Test
     public void testMvWithComplexNameRefresh() throws Exception {
-        createAndRefreshMv("test", "`aa.bb.cc`",
-                "create materialized view `aa.bb.cc`" +
+        createAndRefreshMv("create materialized view `cc`" +
                         " partition by id_date" +
                         " distributed by hash(`t1a`)" +
                         " as" +
                         " select t1a, id_date, t1b from table_with_partition");
 
-        createAndRefreshMv("test",
-                "`LEAF_NO_ACC_CUBE_SHADOW_VIEW_.default.luchen_order_8e2c65ba-1c30`",
-                "create materialized view `LEAF_NO_ACC_CUBE_SHADOW_VIEW_.default.luchen_order_8e2c65ba-1c30`" +
+        createAndRefreshMv("create materialized view `luchen_order_8e2c65ba_1c30`" +
                         " partition by id_date" +
                         " distributed by hash(`t1a`)" +
                         " as" +
