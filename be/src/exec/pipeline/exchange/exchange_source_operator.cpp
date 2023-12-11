@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics.get());
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     return Status::OK();
 }
 
