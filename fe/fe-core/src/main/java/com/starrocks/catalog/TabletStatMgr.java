@@ -41,6 +41,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -324,7 +325,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private void sendTasks() {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
-                ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+                ComputeNode node = Utils.chooseNode((LakeTablet) tablet, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                     return;

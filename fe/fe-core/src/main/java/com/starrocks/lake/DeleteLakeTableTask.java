@@ -92,7 +92,7 @@ class DeleteLakeTableTask implements Runnable {
     private void removePartitionDirectory(String path, Tablet tablet) {
         DropTableRequest request = new DropTableRequest();
         request.tabletId = tablet.getId();
-        ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+        ComputeNode node = Utils.chooseNode((LakeTablet) tablet, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         if (node == null) {
             LOG.warn("Fail to remove {}: no alive node", path);
             return;
