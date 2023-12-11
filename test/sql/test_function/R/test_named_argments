@@ -6,6 +6,23 @@ select * from TABLE(generate_series(start=>2, end=>5));
 4
 5
 -- !result
+select * from TABLE(generate_series(end=>5, start=>2));
+-- result:
+2
+3
+4
+5
+-- !result
+select * from TABLE(generate_series(start=>2, end=>5, step=>2));
+-- result:
+2
+4
+-- !result
+select * from TABLE(generate_series(step=>2, start=>2, end=>5));
+-- result:
+2
+4
+-- !result
 select * from TABLE(generate_series(start=>2, stop=>5));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(start=>2,stop=>5)', the function doesn't support named arguments or has invalid arguments.")
