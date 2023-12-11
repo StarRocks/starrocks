@@ -531,12 +531,7 @@ public:
             }
             parsed_paths.emplace_back(std::move(pair.first));
         }
-        std::vector<std::string_view> parsed_path_views;
-        parsed_path_views.reserve(parsed_paths.size());
-        for (auto& parsed_path : parsed_paths) {
-            parsed_path_views.emplace_back(parsed_path);
-        }
-        return to_status(fs->delete_files(parsed_path_views));
+        return to_status(fs->delete_files(parsed_paths));
     }
 
 private:
