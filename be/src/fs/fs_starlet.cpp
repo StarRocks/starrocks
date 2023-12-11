@@ -156,6 +156,21 @@ public:
         }
     }
 
+    StatusOr<std::string> read_all() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        auto res = (*stream_st)->read_all();
+        if (res.ok()) {
+            g_starlet_io_num_reads << 1;
+            g_starlet_io_read << res.value().size();
+            return std::move(res).value();
+        } else {
+            return to_status(res.status());
+        }
+    }
+
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
