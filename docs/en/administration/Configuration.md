@@ -706,7 +706,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 
 ##### lake_publish_version_max_threads
 
-- **Default**: 128
+- **Default**: 512
 - **Description**: The maximum number of threads for Version Publish tasks.
 - **Introduced in**: v3.2.0
 
