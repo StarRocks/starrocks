@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -31,6 +32,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class OptimizerContext {
@@ -46,6 +48,8 @@ public class OptimizerContext {
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
+
+    private Set<OlapTable>  queryTables;
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
@@ -174,6 +178,14 @@ public class OptimizerContext {
     public boolean reachTimeout() {
         long timeout = getSessionVariable().getOptimizerExecuteTimeout();
         return optimizerElapsedMs() > timeout;
+    }
+
+    public Set<OlapTable> getQueryTables() {
+        return queryTables;
+    }
+
+    public void setQueryTables(Set<OlapTable> queryTables) {
+        this.queryTables = queryTables;
     }
 
     /**

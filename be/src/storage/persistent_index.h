@@ -43,7 +43,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
     PERSISTENT_INDEX_VERSION_2,
-    PERSISTENT_INDEX_VERSION_3
+    PERSISTENT_INDEX_VERSION_3,
+    PERSISTENT_INDEX_VERSION_4
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -190,7 +191,7 @@ public:
     virtual Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
     virtual Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) = 0;
+                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) = 0;
 
     // load wals
     // |n|: size of key/value array
@@ -369,6 +370,7 @@ private:
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
     uint64_t _page_size = 0;
+    uint32_t _checksum = 0;
     std::string _path;
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
@@ -504,11 +506,13 @@ private:
         uint32_t value_size;
         uint32_t nbucket;
         uint64_t data_size;
+        uint64_t uncompressed_size;
     };
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
     std::map<size_t, std::unique_ptr<BloomFilter>> _bf_map;
+    CompressionTypePB _compression_type;
 };
 
 class ImmutableIndexWriter {

@@ -47,7 +47,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
                 .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             builder.add("StarletPort").add("WorkerId");
         }
         TITLE_NAMES = builder.build();
@@ -134,7 +134,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));

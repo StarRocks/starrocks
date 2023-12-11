@@ -487,12 +487,12 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
+            if (RunMode.isSharedDataMode() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+            if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
                 isChanged = true;
                 this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
