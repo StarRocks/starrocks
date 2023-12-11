@@ -674,7 +674,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: `15 * 60 * 100`
 - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
 
-#### Shared-data compaction
+#### Shared-data specific
 
 ##### lake_compaction_score_selector_min_score
 
