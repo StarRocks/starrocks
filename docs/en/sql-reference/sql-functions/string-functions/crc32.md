@@ -24,6 +24,15 @@ MySQL [(none)]> select crc32("starrocks");
 |         2312449062 |
 +--------------------+
 ```
+```Plain Text
+MySQL [(none)]> select crc32(null);
++-------------+
+| crc32(NULL) |
++-------------+
+|        NULL |
++-------------+
+1 row in set (0.18 sec)
+```
 
 ## keyword
 

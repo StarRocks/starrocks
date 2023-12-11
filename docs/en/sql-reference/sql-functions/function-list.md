@@ -293,6 +293,7 @@ You can find a function based on the following categories:
 - [character_length](./string-functions/character_length.md)
 - [concat](./string-functions/concat.md)
 - [concat_ws](./string-functions/concat_ws.md)
+- [crc32](./string-functions/crc32.md)
 - [ends_with](./string-functions/ends_with.md)
 - [find_in_set](./string-functions/find_in_set.md)
 - [group_concat](./string-functions/group_concat.md)
@@ -330,7 +331,6 @@ You can find a function based on the following categories:
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
-- [crc32](./string-functions/crc32.md)
 
 ## Map functions
 
