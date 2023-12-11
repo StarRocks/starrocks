@@ -147,7 +147,14 @@ public class LakePublishBatchTest {
         };
 
         String sql = "create table " + TABLE +
-                " ( pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3" +
+                " (dt date NOT NULL, pk bigint NOT NULL, v0 string not null) primary KEY (dt, pk) " +
+                "PARTITION BY RANGE(`dt`) (\n" +
+                "    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),\n" +
+                "    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),\n" +
+                "    PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),\n" +
+                "    PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))\n" +
+                ")" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
                 "\", \"storage_medium\" = \"SSD\")";
         starRocksAssert.withTable(sql);
@@ -157,7 +164,77 @@ public class LakePublishBatchTest {
     public void testNormal() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+                for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    if (num % 2 == 0) {
+                        transTablets1.add(tabletCommitInfo);
+                    } else {
+                        transTablets2.add(tabletCommitInfo);
+                    }
+                }
+            }
+            num++;
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets1,
+                Lists.newArrayList(), null);
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable2,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets2,
+                Lists.newArrayList(), null);
+
+        long transactionId3 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable3,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets1,
+                Lists.newArrayList(), null);
+
+        long transactionId4 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        GlobalStateMgrTestUtil.testTxnLable4,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter4 = globalTransactionMgr.commitTransaction(db.getId(), transactionId4, transTablets2,
+                Lists.newArrayList(), null);
+
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+
+        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void testPublishTransactionState() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
+        Table table = db.getTable(TABLE);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
+
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
@@ -168,50 +245,21 @@ public class LakePublishBatchTest {
             }
         }
 
+        // test publish transactionStateBatch which size is one
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-        long transactionId1 = globalTransactionMgr.
+        Config.lake_batch_publish_min_version_num = 1;
+        long transactionId9 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable1,
+                        GlobalStateMgrTestUtil.testTxnLable9,
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets,
-                Lists.newArrayList(), null);
-
-        long transactionId2 = globalTransactionMgr.
-                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable2,
-                        transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        // commit a transaction
-        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets,
-                Lists.newArrayList(), null);
-
-        long transactionId3 = globalTransactionMgr.
-                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable3,
-                        transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        // commit a transaction
-        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets,
-                Lists.newArrayList(), null);
-
-        long transactionId4 = globalTransactionMgr.
-                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        GlobalStateMgrTestUtil.testTxnLable4,
-                        transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        // commit a transaction
-        VisibleStateWaiter waiter4 = globalTransactionMgr.commitTransaction(db.getId(), transactionId4, transTablets,
+        VisibleStateWaiter waiter9 = globalTransactionMgr.commitTransaction(db.getId(), transactionId9, transTablets,
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
-
-        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
-        Assert.assertTrue(waiter4.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter9.await(10, TimeUnit.SECONDS));
     }
 
     @Test
