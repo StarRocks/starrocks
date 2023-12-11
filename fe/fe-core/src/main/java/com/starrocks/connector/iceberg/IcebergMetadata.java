@@ -399,7 +399,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
-            FileScanTask scanTask = fileScanTaskIterator.next();
+            FileScanTask scanTask = fileScanTasks.next();
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
