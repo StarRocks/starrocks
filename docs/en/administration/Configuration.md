@@ -701,12 +701,6 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - **Introduced in**: v3.1.0
 
-##### lake_publish_version_max_threads
-
-- **Default**: 512
-- **Description**: The maximum number of threads for Version Publish tasks.
-- **Introduced in**: v3.2.0
-
 ##### lake_autovacuum_parallel_partitions
 
 - **Default**: 8
@@ -733,42 +727,6 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Default**: 12
 - **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - **Introduced in**: v3.1.0
-
-##### lake_enable_ingest_slowdown
-
-- **Default**: false
-- **Description**: Whether to enable Data Ingestion Slowdown. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down.
-- **Introduced in**: v3.2.0
-
-##### lake_ingest_slowdown_threshold
-
-- **Default**: 100
-- **Description**: The Compaction Score threshold that triggers Data Ingestion Slowdown. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
-- **Introduced in**: v3.2.0
-
-> **Note**
->
-> When `lake_ingest_slowdown_threshold` is less than `lake_compaction_score_selector_min_score`, the effective threshold will be `lake_compaction_score_selector_min_score`.
-
-##### lake_ingest_slowdown_ratio
-
-- **Default**: 0.1
-- **Description**: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
-- **Introduced in**: v3.2.0
-
-Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
-
-> **Note**
->
-> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
-> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
-> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
-
-##### lake_compaction_score_upper_bound
-
-- **Default**: 0
-- **Description**: The upper limit of the Compaction Score for a partition. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
-- **Introduced in**: v3.2.0
 
 #### Other FE dynamic parameters
 
