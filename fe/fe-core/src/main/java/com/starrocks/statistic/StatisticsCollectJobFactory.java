@@ -118,7 +118,122 @@ public class StatisticsCollectJobFactory {
                 analyzeType, scheduleType, properties);
     }
 
+<<<<<<< HEAD
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
+=======
+    private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
+                                                 Database db, Table table, List<String> columns)  {
+        if (table == null) {
+            return;
+        }
+
+        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
+        if (StringUtils.isNotBlank(regex)) {
+            Pattern checkRegex = Pattern.compile(regex);
+            String name = db.getFullName() + "." + table.getName();
+            if (checkRegex.matcher(name).find()) {
+                LOG.info("statistics job exclude pattern {}, hit table: {}", regex, name);
+                return;
+            }
+        }
+
+        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap()
+                .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
+        if (basicStatsMeta != null) {
+            // check table last update time, if last collect time is after last update time, skip this table
+            LocalDateTime statisticsUpdateTime = basicStatsMeta.getUpdateTime();
+            LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+            if (tableUpdateTime != null) {
+                if (statisticsUpdateTime.isAfter(tableUpdateTime)) {
+                    LOG.info("statistics job doesn't work on non-update table: {}, " +
+                                    "last update time: {}, last collect time: {}",
+                            table.getName(), tableUpdateTime, statisticsUpdateTime);
+                    return;
+                }
+            }
+
+            // check table row count
+            if (columns == null || columns.isEmpty()) {
+                columns = StatisticUtils.getCollectibleColumns(table);
+            }
+            List<ConnectorTableColumnStats> columnStatisticList =
+                    GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+            List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
+                    filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
+
+            // use small table row count as default table row count
+            long tableRowCount = Config.statistic_auto_collect_small_table_rows - 1;
+            if (!validColumnStatistics.isEmpty()) {
+                tableRowCount = validColumnStatistics.get(0).getRowCount();
+            }
+            long defaultInterval = tableRowCount < Config.statistic_auto_collect_small_table_rows ?
+                    Config.statistic_auto_collect_small_table_interval :
+                    Config.statistic_auto_collect_large_table_interval;
+
+            long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
+                    Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
+                    defaultInterval;
+            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+                LOG.info("statistics job doesn't work on the interval table: {}, " +
+                                "last collect time: {}, interval: {}, table rows: {}",
+                        table.getName(), tableUpdateTime, timeInterval, tableRowCount);
+                return;
+            }
+        }
+
+        if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
+            if (basicStatsMeta == null) {
+                createExternalFullStatsJob(allTableJobMap, LocalDateTime.MIN, job, db, table, columns);
+            } else {
+                createExternalFullStatsJob(allTableJobMap, basicStatsMeta.getUpdateTime(), job, db, table, columns);
+            }
+        } else {
+            LOG.warn("Do not support analyze type: {} for external table: {}",
+                    job.getAnalyzeType(), table.getName());
+        }
+    }
+
+    private static void createExternalFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
+                                                   LocalDateTime statisticsUpdateTime,
+                                                   ExternalAnalyzeJob job,
+                                                   Database db, Table table, List<String> columns) {
+        // get updated partitions
+        List<String> updatedPartitions = Lists.newArrayList();
+        if (table.isHiveTable()) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (!hiveTable.isUnPartitioned()) {
+                List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                        hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
+                List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                        getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
+
+                Preconditions.checkState(partitions.size() == partitionNames.size());
+                for (int index = 0; index < partitions.size(); index++) {
+                    LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()),
+                            Clock.systemDefaultZone().getZone());
+                    if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
+                        updatedPartitions.add(partitionNames.get(index));
+                    }
+                }
+            }
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
+                updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
+                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        icebergTable.getNativeTable().currentSnapshot()));
+            }
+        }
+        LOG.info("create external full statistics job for table: {}, partitions: {}",
+                table.getName(), updatedPartitions);
+        allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
+                updatedPartitions.isEmpty() ? null : updatedPartitions,
+                columns, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
+    }
+
+    private static void createJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
+>>>>>>> 53c9f4a503 ([BugFix] Fix iceberg mv refresh NPE when snapshot is expired (#36473))
                                   Database db, Table table, List<String> columns) {
         if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             return;

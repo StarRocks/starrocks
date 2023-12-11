@@ -66,12 +66,20 @@ public class IcebergPartitionUtils {
         }
     }
 
+<<<<<<< HEAD
     public static Set<String> getChangedPartitionNames(Table table, long from) {
         Set<IcebergPartition> changedPartition = getChangedPartition(table, from);
+=======
+    public static Set<String> getChangedPartitionNames(Table table, long fromTimestampMillis,
+                                                       Snapshot toSnapshot) {
+        Set<IcebergPartition> changedPartition = getChangedPartition(table, fromTimestampMillis,
+                toSnapshot);
+>>>>>>> 53c9f4a503 ([BugFix] Fix iceberg mv refresh NPE when snapshot is expired (#36473))
         return changedPartition.stream().map(partition -> PartitionUtil.
                 convertIcebergPartitionToPartitionName(table.spec(), partition.data)).collect(Collectors.toSet());
     }
 
+<<<<<<< HEAD
     public static Set<IcebergPartition> getChangedPartition(Table table, long from) {
         ImmutableSet.Builder<IcebergPartition> builder = ImmutableSet.builder();
         Snapshot snapShot = table.currentSnapshot();
@@ -83,8 +91,26 @@ public class IcebergPartitionUtils {
                 }
             }
             if (snapShot.timestampMillis() <= from) {
+=======
+    public static Set<IcebergPartition> getChangedPartition(Table table, long fromExclusiveTimestampMillis,
+                                                            Snapshot toSnapshot) {
+        ImmutableSet.Builder<IcebergPartition> builder = ImmutableSet.builder();
+        Snapshot snapShot = toSnapshot;
+        if (toSnapshot.timestampMillis() >= fromExclusiveTimestampMillis) {
+            // find the first snapshot which it's timestampMillis is less than or equals fromExclusiveTimestampMillis
+            while (snapShot.parentId() != null) {
+                snapShot = table.snapshot(snapShot.parentId());
+                // snapshot is null when it's expired
+                if (snapShot == null || snapShot.timestampMillis() <= fromExclusiveTimestampMillis) {
+                    break;
+                }
+            }
+            // get incremental changelog scan when find the first snapshot
+            // which it's timestampMillis is less than fromExclusiveTimestampMillis
+            if (snapShot != null && snapShot.timestampMillis() <= fromExclusiveTimestampMillis) {
+>>>>>>> 53c9f4a503 ([BugFix] Fix iceberg mv refresh NPE when snapshot is expired (#36473))
                 IncrementalChangelogScan incrementalChangelogScan = table.newIncrementalChangelogScan().
-                        fromSnapshotExclusive(snapShot.snapshotId());
+                        fromSnapshotExclusive(snapShot.snapshotId()).toSnapshot(toSnapshot.snapshotId());
                 try (CloseableIterable<ChangelogScanTask> tasks = incrementalChangelogScan.planFiles()) {
                     for (ChangelogScanTask task : tasks) {
                         ChangelogOperation operation = task.operation();
@@ -103,18 +129,25 @@ public class IcebergPartitionUtils {
                     }
                 } catch (Exception e) {
                     LOG.warn("get incrementalChangelogScan failed", e);
+                    return getAllPartition(table);
                 }
-            } else {
-                try (CloseableIterable<FileScanTask> tasks = table.newScan().planFiles()) {
-                    for (FileScanTask task : tasks) {
-                        PartitionSpec spec = task.spec();
-                        StructLike data = task.partition();
-                        builder.add(new IcebergPartition(spec, data, ChangelogOperation.INSERT));
-                    }
-                } catch (Exception e) {
-                    LOG.warn("get all iceberg partition failed", e);
-                }
+                return builder.build();
             }
+        }
+
+        return getAllPartition(table);
+    }
+
+    public static Set<IcebergPartition> getAllPartition(Table table) {
+        ImmutableSet.Builder<IcebergPartition> builder = ImmutableSet.builder();
+        try (CloseableIterable<FileScanTask> tasks = table.newScan().planFiles()) {
+            for (FileScanTask task : tasks) {
+                PartitionSpec spec = task.spec();
+                StructLike data = task.partition();
+                builder.add(new IcebergPartition(spec, data, ChangelogOperation.INSERT));
+            }
+        } catch (Exception e) {
+            LOG.warn("get all iceberg partition failed", e);
         }
         return builder.build();
     }
