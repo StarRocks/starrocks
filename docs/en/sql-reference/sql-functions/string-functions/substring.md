@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Extracts characters staring from the specified position of a string and returns a substring of specified length.
+Extracts characters staring from the specified position and returns a substring of specified length.
 
 ## Syntax
 
@@ -21,8 +21,7 @@ VARCHAR substr(VARCHAR str, pos[, len])
   - If `pos` is 0, an empty string is returned.
   - `pos` can be a negative integer. In this case, this function extracts characters starting from the end of the string. See Example 2.
   - If the position specified by `pos` exceeds the range of the string, an empty string is returned. See Example 3.
-- `length`: optional, a positive integer that specifies the number of characters to extract.
-
+- `len`: optional, a positive integer that specifies the number of characters to extract.
   - If `len` is specified, this function extracts `len` characters starting from the position specified by `pos`.
   - If `len` is not specified, this function extracts all the characters starting at `pos`. See Example 1.
   - If `len` exceeds the actual length of the matching characters, all the matching characters are returned. See Example 4.
