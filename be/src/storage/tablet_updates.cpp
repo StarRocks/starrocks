@@ -1938,7 +1938,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     Status st;
-    bool rebuild_index = (version_info.rowsets.size() == 1);
+    bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
         st = index.reset();
