@@ -19,12 +19,14 @@
 #include <random>
 
 #include "column/array_column.h"
+#include "exprs/anyval_util.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/large_int_value.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

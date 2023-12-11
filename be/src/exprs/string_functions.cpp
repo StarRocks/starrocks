@@ -47,6 +47,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
 #include "storage/olap_define.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
@@ -4172,6 +4174,75 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
     } else {
         return url_extract_parameter_general(columns);
     }
+}
+
+Status StringFunctions::compress_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
+    auto* state = new CompressState();
+    context->set_function_state(scope, state);
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::OK();
+    }
+
+    auto column = context->get_constant_column(1);
+    auto compress_method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    std::string compress_method_str = compress_method.to_string();
+    return state->get_compress_codec(compress_method_str);
+}
+
+Status StringFunctions::compress_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::THREAD_LOCAL) {
+        auto* state = reinterpret_cast<CompressState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+        delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::compress(FunctionContext* context, const starrocks::Columns& columns) {
+    auto state = reinterpret_cast<CompressState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    raw::RawString compression_scratch;
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        const Slice str_slice = str_viewer.value(row);
+        int max_compressed_size = state->compress_codec->max_compressed_len(str_slice.get_size());
+        if (compression_scratch.size() < max_compressed_size) {
+            compression_scratch.resize(max_compressed_size);
+        }
+        Slice compressed_slice{compression_scratch.data(), compression_scratch.size()};
+        RETURN_IF_ERROR(state->compress_codec->compress(str_slice, &compressed_slice));
+        result.append(compressed_slice);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::uncompress(FunctionContext* context, const starrocks::Columns& columns) {
+    auto state = reinterpret_cast<CompressState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto binary_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (binary_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }    
+        const Slice binary_slice = binary_viewer.value(row);
+        std::string uncompressed_str;
+        // Should be large enough for decompressed data.
+        uncompressed_str.resize(binary_slice.size * 10);
+        Slice uncompressed_slice(uncompressed_str);
+        RETURN_IF_ERROR(state->compress_codec->decompress(binary_slice, &uncompressed_slice));
+        result.append(uncompressed_slice);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
