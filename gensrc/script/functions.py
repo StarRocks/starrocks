@@ -326,6 +326,7 @@ vectorized_functions = [
 
     [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
+    [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
 
     # Binary Functions
     # to_binary
