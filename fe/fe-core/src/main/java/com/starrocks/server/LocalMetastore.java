@@ -4960,6 +4960,11 @@ public class LocalMetastore implements ConnectorMetadata {
             if (olapTable == null) {
                 return;
             }
+            if (replaceTempPartitionLog.isUnPartitionedTable()) {
+                olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
+                        replaceTempPartitionLog.getTempPartitions().get(0));
+                return;
+            } 
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),
