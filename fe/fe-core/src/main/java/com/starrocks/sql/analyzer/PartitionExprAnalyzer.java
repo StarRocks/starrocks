@@ -92,6 +92,16 @@ public class PartitionExprAnalyzer {
                 builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
                         str2DateType, Function.CompareMode.IS_IDENTICAL);
                 targetColType = Type.DATE;
+            } else if (functionName.equalsIgnoreCase(FunctionSet.FROM_UNIXTIME)) {
+                Type[] fromUnixTimeStampType = {partitionSlotRef.getType()};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        fromUnixTimeStampType, Function.CompareMode.IS_IDENTICAL);
+                if (builtinFunction == null) {
+                    String msg = String.format("Unsupported partition expression %s for column %s type %s",
+                            FunctionSet.FROM_UNIXTIME, partitionSlotRef.getColumnName(), partitionSlotRef.getType());
+                    throw new SemanticException(msg, expr.getPos());
+                }
+                targetColType = Type.VARCHAR;
             }
             if (builtinFunction == null) {
                 String msg = String.format("Unsupported partition type %s for function %s", targetColType,

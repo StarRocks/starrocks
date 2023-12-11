@@ -42,6 +42,8 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
+    // For automatically created partitioned tables, the partition column type and expression type may be inconsistent.
+    protected Type partitionType;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -128,7 +130,11 @@ public class RangePartitionDesc extends PartitionDesc {
                 }
                 PartitionConvertContext context = new PartitionConvertContext();
                 context.setAutoPartitionTable(isAutoPartitionTable);
-                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                if (partitionType != null) {
+                    context.setFirstPartitionColumnType(partitionType);
+                } else {
+                    context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                }
                 context.setProperties(otherProperties);
 
                 this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
