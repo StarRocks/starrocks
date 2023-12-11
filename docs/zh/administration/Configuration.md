@@ -668,7 +668,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
 - 单位：小时
 - 默认值：12
-- 引入版本：v3.2.0
+- 引入版本：v3.1.0
 
 ##### lake_enable_ingest_slowdown
 
