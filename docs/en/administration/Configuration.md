@@ -688,7 +688,7 @@ The Compaction Score indicates whether a partition needs Compaction and is score
 
 - **Default**: -1
 - **Description**: The maximum number of concurrent Compaction tasks allowed.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 The system calculates the number of Compaction tasks based on the number of tablets in a partition. For example, if a partition has 10 tablets, performing one Compaction on that partition creates 10 Compaction tasks. If the number of concurrently executing Compaction tasks exceeds this threshold, the system will not create new Compaction tasks. Setting this item to `0` disables Compaction, and setting it to `-1` allows the system to automatically calculate this value based on an adaptive strategy.
 
