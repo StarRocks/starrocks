@@ -648,7 +648,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     return scanner;
 }
 
-HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
+HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) {
     const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
     std::string required_fields;
     for (auto slot : _tuple_desc->slots()) {
