@@ -46,6 +46,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -598,6 +599,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.sink = sink;
     }
 
+    public TDataSink sinkToThrift() {
+        return sink != null ? sink.toThrift() : null;
+    }
+
     public PlanFragmentId getFragmentId() {
         return fragmentId;
     }
@@ -750,6 +755,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public ArrayList<Expr> getOutputExprs() {
         return outputExprs;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 
     public void setShortCircuit(boolean shortCircuit) {
