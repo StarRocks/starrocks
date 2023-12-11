@@ -135,7 +135,7 @@ public:
 
     size_t key_size() { return _key_size; }
 
-    Status reset();
+    Status reset(Tablet* tablet, EditVersion version);
 
     void reset_cancel_major_compaction();
 

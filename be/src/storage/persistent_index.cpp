@@ -2094,6 +2094,17 @@ void ShardByLengthMutableIndex::clear() {
     }
 }
 
+Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
+    if (_index_file != nullptr) {
+        std::string msg = strings::Substitute("l0 index file already exist: $0", _index_file->filename());
+        return Status::InternalError(msg);
+    }
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, path));
+    return Status::OK();
+}
+
 #ifdef __SSE2__
 
 #include <emmintrin.h>
@@ -4903,9 +4914,9 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         // already in compaction
         return Status::OK();
     }
-    DeferOp defer([&]() { 
+    DeferOp defer([&]() {
         _major_compaction_running.store(false);
-        _cancel_major_compaction = false; 
+        _cancel_major_compaction = false;
     });
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
@@ -5013,9 +5024,22 @@ double PersistentIndex::get_write_amp_score() const {
     }
 }
 
-Status PersistentIndex::reset() {
+Status PersistentIndex::reset(Tablet* tablet, EditVersion version) {
     std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
+
+    auto tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (_l0) {
+        _l0.reset();
+    }
+    RETURN_IF_ERROR(create(fix_size, version));
 
     _l1_vec.clear();
     _usage_and_size_by_key_length.clear();
@@ -5023,13 +5047,12 @@ Status PersistentIndex::reset() {
     _l2_versions.clear();
     _l2_vec.clear();
     _has_l1 = false;
-    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
-    if (!st.ok()) {
-        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
-        return st.status();
-    }
-    _l0 = std::move(st).value();
-    
+    _dump_snapshot = true;
+
+    std::string file_path = get_l0_index_file_name(_path, version);
+    RETURN_IF_ERROR(_l0->create_index_file(file_path));
+    RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(0, 0, false));
+
     return Status::OK();
 }
 

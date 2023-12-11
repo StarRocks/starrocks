@@ -1941,11 +1941,11 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
-        st = index.reset();
+        st = index.reset(&_tablet, version_info.version);
     } else {
         st = index.load(&_tablet);
     }
-    
+
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta

@@ -361,6 +361,8 @@ public:
 
     void clear();
 
+    Status create_index_file(std::string& path);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -745,7 +747,7 @@ public:
         return res;
     }
 
-    Status reset();
+    Status reset(Tablet* tablet, EditVersion version);
 
     void reset_cancel_major_compaction();
 
@@ -853,7 +855,7 @@ protected:
     std::vector<EditVersionWithMerge> _l2_versions;
     // all l2
     std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
-    
+
     bool _cancel_major_compaction = false;
 
 private:
