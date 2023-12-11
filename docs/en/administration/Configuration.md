@@ -164,6 +164,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: TRUE
 - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
 
+##### http_slow_request_threshold_ms
+
+- Unit: ms
+- Default: 5000
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: 2.5.15，3.1.5
+
 ##### max_partitions_in_one_batch
 
 - Unit: -
@@ -304,6 +311,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+
+##### statistic_auto_collect_small_table_rows
+
+- Unit: -
+- Default: 10000000
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
 
 ##### enable_local_replica_selection
 
@@ -1558,11 +1572,6 @@ BE dynamic parameters are as follows.
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
-#### txn_commit_rpc_timeout_ms
-
-- **Default:** 60,000 ms
-- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
-
 #### max_consumer_num_per_group
 
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
@@ -1731,7 +1740,7 @@ BE static parameters are as follows.
 
 - **Default**: 9070
 - **Unit**: N/A
-- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+- **Description**: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
 
 #### heartbeat_service_thread_count
 

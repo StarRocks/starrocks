@@ -162,6 +162,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
 - 默认值：TRUE
 
+##### http_slow_request_threshold_ms
+
+- 含义：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 单位：毫秒
+- 默认值：5000
+- 引入版本：2.5.15，3.1.5
+
 ##### max_partitions_in_one_batch
 
 - 含义：批量创建分区时，分区数目的最大值。
@@ -276,6 +283,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。
 - 默认值：3
+
+##### statistic_auto_collect_small_table_rows
+
+- 含义：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
+- 默认值：10000000
+- 引入版本：v3.2
 
 ##### enable_local_replica_selection
 
@@ -1501,12 +1514,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：5000
 
-#### txn_commit_rpc_timeout_ms
-
-- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
-- 单位：毫秒
-- 默认值：20000
-
 #### max_consumer_num_per_group
 
 - 含义：Routine load 中，每个consumer group 内最大的 consumer 数量。
@@ -1698,7 +1705,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_port
 
-- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 含义：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
 - 默认值：9070
 
 #### heartbeat_service_port

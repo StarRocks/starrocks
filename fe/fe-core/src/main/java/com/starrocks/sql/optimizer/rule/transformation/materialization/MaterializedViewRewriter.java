@@ -39,7 +39,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.StringUtils;
@@ -1279,7 +1278,7 @@ public class MaterializedViewRewriter {
 
                 ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
                 // Canonize predicates to make uts more stable.
-                if (FeConstants.runningUnitTest && FeConstants.isCanonizePredicateAfterMVRewrite) {
+                if (optimizerContext.getSessionVariable().getQueryDebugOptions().isEnableNormalizePredicateAfterMVRewrite()) {
                     normalizedPredicate = MvUtils.canonizePredicateForRewrite(normalizedPredicate);
                 }
                 newScanOpBuilder.setPredicate(normalizedPredicate);
@@ -1765,13 +1764,13 @@ public class MaterializedViewRewriter {
             ColumnRefSet originalRefSet,
             boolean isEqual,
             boolean isUnion,
-            List<ScalarOperator> rewrittenFailedPredciates) {
+            List<ScalarOperator> rewrittenFailedPredicates) {
         final EquationRewriter equationRewriter = isEqual ?
                 buildEquationRewriter(exprMap, rewriteContext, false, false) :
                 buildEquationRewriter(exprMap, rewriteContext, true, false);
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         final List<ScalarOperator> rewrittens =
-                rewriteScalarOpToTarget(conjuncts, equationRewriter, null, originalRefSet, isUnion, rewrittenFailedPredciates);
+                rewriteScalarOpToTarget(conjuncts, equationRewriter, null, originalRefSet, isUnion, rewrittenFailedPredicates);
         if (rewrittens == null || rewrittens.isEmpty()) {
             logMVRewrite(mvRewriteContext, "rewrite scalar operator failed. isEqual:{}, isUnion:{}, predicate:{},",
                     isEqual, isUnion, predicate);
@@ -2303,7 +2302,7 @@ public class MaterializedViewRewriter {
             EquationRewriter equationRewriter,
             Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
             ColumnRefSet originalColumnSet, boolean isUnion,
-            List<ScalarOperator> rewrittenFailedPredciates) {
+            List<ScalarOperator> rewrittenFailedPredicates) {
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
         equationRewriter.setOutputMapping(outputMapping);
         for (ScalarOperator expr : exprsToRewrites) {
@@ -2311,7 +2310,7 @@ public class MaterializedViewRewriter {
             if (expr.isVariable() && expr == rewritten) {
                 // it means it can not be rewritten  by target
                 if (isUnion) {
-                    rewrittenFailedPredciates.add(expr);
+                    rewrittenFailedPredicates.add(expr);
                     continue;
                 } else {
                     logMVRewrite(mvRewriteContext, "Rewrite scalar operator failed: {} cannot be rewritten",
@@ -2321,7 +2320,7 @@ public class MaterializedViewRewriter {
             }
             if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
                 if (isUnion) {
-                    rewrittenFailedPredciates.add(expr);
+                    rewrittenFailedPredicates.add(expr);
                     continue;
                 } else {
                     // it means there is some column that can not be rewritten by outputs of mv

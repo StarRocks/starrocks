@@ -1720,6 +1720,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return stmt;
         }
 
+        if (context.BLACKHOLE() != null) {
+            return new InsertStmt(queryStatement, createPos(context));
+        }
+
         // INSERT INTO FILES(...)
         Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
@@ -4468,7 +4472,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.LATERAL() != null, createPos(context));
         joinRelation.setUsingColNames(usingColNames);
         if (context.bracketHint() != null) {
-            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier().get(0))).getValue());
+            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier(0))).getValue());
+            if (context.bracketHint().primaryExpression() != null) {
+                joinRelation.setSkewColumn((Expr) visit(context.bracketHint().primaryExpression()));
+            }
+            if (context.bracketHint().literalExpressionList() != null) {
+                joinRelation.setSkewValues(visit(context.bracketHint().literalExpressionList().literalExpression(),
+                        Expr.class));
+            }
         }
 
         return joinRelation;

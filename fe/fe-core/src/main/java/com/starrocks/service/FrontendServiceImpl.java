@@ -504,10 +504,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                if (tableName.getCatalog() != null &&
-                                        !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(tableName.getCatalog())) {
-                                    continue;
-                                }
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
@@ -1305,6 +1301,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
+        // check txn
+        long limit = Config.stream_load_max_txn_num_per_be;
+        if (limit >= 0) {
+            long txnNumBe = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
+            LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
+            if (txnNumBe >= limit) {
+                throw new UserException("streamload txn num per be exceeds limit, be: "
+                        + clientIp + ", txn_num: " + txnNumBe + ", limit: " + limit);
+            }
+        }
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
             throw new UserException("empty label in begin request");

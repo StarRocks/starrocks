@@ -45,6 +45,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -85,29 +86,73 @@ public class MvRewritePreprocessor {
 
     public void prepare(OptExpression optExpression) {
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
+            // MV Rewrite will be used when cbo is enabled.
+            if (context.getOptimizerConfig().isRuleBased()) {
+                return;
+            }
+
             Set<Table> queryTables = MvUtils.getAllTables(optExpression).stream().collect(Collectors.toSet());
-            logMVPrepare(connectContext, "Query input tables: {}", queryTables);
-            logMVPrepare(connectContext, "Materialized views params, " +
-                            "enable_experimental_mv:{}, enable_materialized_view_rewrite:{}," +
-                            "isRuleBased:{}",
-                    Config.enable_experimental_mv,
-                    connectContext.getSessionVariable().isEnableMaterializedViewRewrite(),
-                    context.getOptimizerConfig().isRuleBased());
-            logMVPrepare(connectContext, "QueryID:", context.getQueryId());
+            logMVParams(connectContext, queryTables);
+;
             try {
                 Set<MaterializedView> relatedMVs =
                         getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
                 Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
                 prepareRelatedMVs(queryTables, validMVs);
             } catch (Exception e) {
-                // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
-                throw e;
+                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
             }
         }
     }
+    private void logMVParams(ConnectContext connectContext, Set<Table> queryTables) {
+        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
+            return;
+        }
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        logMVPrepare(connectContext, "Query input tables: {}", queryTables);
 
+        // enable or not
+        logMVPrepare(connectContext, "---------------------------------");
+        logMVPrepare(connectContext, "Materialized View Enable/Disable Params: ");
+        logMVPrepare(connectContext, "  enable_experimental_mv: {}", Config.enable_experimental_mv);
+        logMVPrepare(connectContext, "  enable_materialized_view_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_union_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewUnionRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_view_delta_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewViewDeltaRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_single_table_view_delta_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_plan_cache: {}",
+                sessionVariable.isEnableMaterializedViewPlanCache());
+        logMVPrepare(connectContext, "  mv_auto_analyze_async: {}",
+                Config.mv_auto_analyze_async);
+        logMVPrepare(connectContext, "  enable_mv_automatic_active_check: {}",
+                Config.enable_mv_automatic_active_check);
+        logMVPrepare(connectContext, "  enable_sync_materialized_view_rewrite: {}",
+                sessionVariable.isEnableSyncMaterializedViewRewrite());
+
+        // limit
+        logMVPrepare(connectContext, "---------------------------------");
+        logMVPrepare(connectContext, "Materialized View Limit Params: ");
+        logMVPrepare(connectContext, "  optimizer_materialized_view_timelimit: {}",
+                sessionVariable.getOptimizerMaterializedViewTimeLimitMillis());
+        logMVPrepare(connectContext, "  materialized_view_join_same_table_permutation_limit: {}",
+                sessionVariable.getMaterializedViewJoinSameTablePermutationLimit());
+        logMVPrepare(connectContext, "  skip_whole_phase_lock_mv_limit: {}",
+                Config.skip_whole_phase_lock_mv_limit);
+
+        // config
+        logMVPrepare(connectContext, "---------------------------------");
+        logMVPrepare(connectContext, "Materialized View Config Params: ");
+        logMVPrepare(connectContext, "  analyze_mv: {}", sessionVariable.getAnalyzeForMV());
+        logMVPrepare(connectContext, "  query_excluding_mv_names: {}", sessionVariable.getQueryExcludingMVNames());
+        logMVPrepare(connectContext, "  query_including_mv_names: {}", sessionVariable.getQueryIncludingMVNames());
+        logMVPrepare(connectContext, "  materialized_view_rewrite_mode: {}",
+                sessionVariable.getMaterializedViewRewriteMode());
+        logMVPrepare(connectContext, "---------------------------------");
+    }
     private MaterializedView copyOnlyMaterializedView(MaterializedView mv) {
         // TODO: add read lock?
         // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
@@ -343,12 +388,17 @@ public class MvRewritePreprocessor {
             // then it can not be a candidate
 
             StringBuilder sb = new StringBuilder();
-            for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
-                sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+            try {
+                for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+                }
+            } catch (Exception e) {
+                // ignore exception for `getPartitions` is only supported for hive/jdbc.
             }
             logMVPrepare(connectContext, mv, "MV {} is outdated and all its partitions need to be " +
-                    "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
+                    "refreshed: {}, refreshed mv partitions: {}, base table detailed info: {}", mv.getName(),
+                    partitionNamesToRefresh, mv.getPartitionNames(), sb.toString());
             return;
         }
 
