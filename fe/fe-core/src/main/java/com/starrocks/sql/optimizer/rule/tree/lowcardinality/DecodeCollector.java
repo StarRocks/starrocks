@@ -115,7 +115,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
             }
             List<ScalarOperator> dictExprList = stringExpressions.getOrDefault(cid, Collections.emptyList());
             long allExprNum = dictExprList.size();
+            // only query original string-column
             long worthless = dictExprList.stream().filter(ScalarOperator::isColumnRef).count();
+            // we believe that the more complex expressions using the dict-column, and the preformance will be better
             if (worthless == 0 && allExprNum != 0) {
                 context.allStringColumns.add(cid);
             } else if (allExprNum > worthless && allExprNum >= worthless * 2) {
