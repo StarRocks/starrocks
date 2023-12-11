@@ -2082,35 +2082,16 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 8388608L;
 
     /**
-     * enable iceberg ScanTasks number limit, default false
+     * iceberg ScanTasks number limit, default -1(no limit)
      */
     @ConfField(mutable = true)
-    public static boolean enable_iceberg_scan_tasks_limit = false;
-
-    /**
-     * iceberg ScanTasks number limit, default 500 * 1000
-     */
-    @ConfField(mutable = true)
-    public static long iceberg_scan_tasks_num = 500L * 1000L;
+    public static long iceberg_scan_tasks_num = -1;
 
     /**
      * enable iceberg query reserved memory defense, default false
      */
     @ConfField(mutable = true)
     public static boolean enable_iceberg_query_memory_defense = false;
-
-    /**
-     * iceberg table query FE reserved memory percentage, default 10
-     */
-    @ConfField(mutable = true)
-    public static long iceberg_query_fe_reserved_mem_percentage = 10;
-
-    /**
-     * iceberg planFiles method runtime defensive check threshold, default 1000
-     */
-    @ConfField(mutable = true)
-    public static long iceberg_plan_files_defensive_check_threshold = 1000;
-
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs

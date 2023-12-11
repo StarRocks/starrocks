@@ -119,6 +119,10 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+
+    // Iceberg tables planFiles method runtime defensive check threshold
+    private static final int ICEBERG_PLAN_FILES_DEFENSIVE_CHECK_THRESHOLD = 5000;
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
@@ -446,7 +450,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             icebergScanTasks.add(icebergSplitScanTask);
 
-            if (++loopCount >= Config.iceberg_plan_files_defensive_check_threshold) {
+            if (++loopCount >= ICEBERG_PLAN_FILES_DEFENSIVE_CHECK_THRESHOLD) {
                 performIcebergPlanFilesDefensiveCheck(key, icebergScanTasks);
                 loopCount = 0L;
             }
@@ -555,14 +559,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private void performIcebergPlanFilesDefensiveCheck(IcebergFilter key, List<FileScanTask> tasks) {
-        if (Config.enable_iceberg_scan_tasks_limit && tasks.size() > Config.iceberg_scan_tasks_num) {
+        if (Config.iceberg_scan_tasks_num > 0 && tasks.size() > Config.iceberg_scan_tasks_num) {
             throw new StarRocksPlannerException(
                     "The number of the Iceberg ScanTasks for query(" + key + ") has exceeded the limit(" +
                             Config.iceberg_scan_tasks_num + ")", ErrorType.INTERNAL_ERROR);
         }
         if (Config.enable_iceberg_query_memory_defense && Util.isReservedMemoryNotSufficient()) {
-            throw new StarRocksPlannerException("The memory reserved(" +
-                    Config.iceberg_query_fe_reserved_mem_percentage + "%) of the Iceberg Table query(" + key +
+            throw new StarRocksPlannerException("The memory reserved(10%) of the Iceberg Table query(" + key +
                     ") is not sufficient. " + "{Free: " + Util.getFreeMemory() + ", Max: " + Util.getMaxMemory() +
                     "}", ErrorType.INTERNAL_ERROR);
         }

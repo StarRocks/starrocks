@@ -40,7 +40,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -77,6 +76,9 @@ public class Util {
 
     private static final String[] ORDINAL_SUFFIX =
             new String[] {"th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"};
+
+    // Iceberg tables query FE reserved memory percentage
+    private static final int ICEBERG_QUERY_FE_RESERVED_MEM_PERCENTAGE = 10;
 
     static {
         TYPE_STRING_MAP.put(PrimitiveType.TINYINT, "tinyint(4)");
@@ -484,7 +486,7 @@ public class Util {
         long maxMemory = r.maxMemory();
 
         double memoryReservedPercentage = ((double) (maxMemory - usedMemory) / maxMemory) * 100;
-        return memoryReservedPercentage < Config.iceberg_query_fe_reserved_mem_percentage;
+        return memoryReservedPercentage < ICEBERG_QUERY_FE_RESERVED_MEM_PERCENTAGE;
     }
 
     private static String formatBytes(long sizeInBytes) {
