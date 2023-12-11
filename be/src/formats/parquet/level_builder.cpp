@@ -108,7 +108,9 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
         break;
     }
     case TYPE_CHAR:
-    case TYPE_VARCHAR: {
+    case TYPE_VARCHAR:
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
         _write_varchar_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
