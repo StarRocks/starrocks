@@ -16,7 +16,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
                        bool is_dest_merge, size_t num_sinkers)
         : _fragment_ctx(fragment_ctx),
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
+          _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
