@@ -360,15 +360,17 @@ StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t
 
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
+    bool in_worker = true;
     if (g_worker != nullptr) {
         auto shard_info_or = g_worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
-            return false;
+            in_worker = false;
         }
     }
+    TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:1", &in_worker);
     // think the tablet is assigned to this worker by default,
     // for we may take action if tablet is not in the worker
-    return true;
+    return in_worker;
 }
 #endif // USE_STAROS
 
