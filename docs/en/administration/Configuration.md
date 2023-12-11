@@ -735,7 +735,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Unit**: Hours
 - **Default**: 12
 - **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.1.0
 
 ##### lake_enable_ingest_slowdown
 
