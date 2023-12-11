@@ -654,7 +654,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：对同一个表分区进行垃圾数据清理的最小间隔时间。
 - 单位：秒
 - 默认值：180
-- 引入版本：v3.2.0
+- 引入版本：v3.1.0
 
 ##### lake_autovacuum_grace_period_minutes
 
