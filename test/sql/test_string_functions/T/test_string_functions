@@ -129,3 +129,18 @@ select substring_index(c1, ".", 3) from t2;
 select substring_index(c1, ".", -1) from t2;
 select substring_index(c1, ".", -2) from t2;
 select substring_index(c1, ".", -3) from t2;
+
+-- function: crc32
+select crc32("starrocks");
+select crc32("STARROCKS");
+select crc32("中文");
+
+create table crc01(c0 varchar(20), c1 varchar(20), c2 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into crc01 values ('hello world', 'com.mysql.com', "镜舟科技");
+select crc32(c0) from crc01;
+select crc32(c1) from crc01;
+select crc32(c2) from crc01;

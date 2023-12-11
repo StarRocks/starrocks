@@ -484,6 +484,8 @@ public:
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
+    DEFINE_VECTORIZED_FN(crc32);
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
