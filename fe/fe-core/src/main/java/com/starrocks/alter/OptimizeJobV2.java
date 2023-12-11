@@ -38,12 +38,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.PartitionUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplacePartitionOperationLog;
->>>>>>> c2c67f1f53 ([BugFix] Fix optimize job replay fail when partial partition fail (#36732))
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
