@@ -157,12 +157,9 @@ public class TableAddOrDropColumnsInfo implements Writable {
         sb.append(" indexSchemaMap: ").append(indexSchemaMap);
         sb.append(" indexes: ").append(indexes);
         sb.append(" jobId: ").append(jobId);
-<<<<<<< HEAD
-=======
         sb.append(" txnId: ").append(txnId);
         sb.append(" startTime: ").append(startTime);
         sb.append(" addColumnsName: ").append(addColumnsName);
->>>>>>> b3f3edecd4 ([BugFix] Fast schema evolution task lost default expr (#36563))
         return sb.toString();
     }
 }
