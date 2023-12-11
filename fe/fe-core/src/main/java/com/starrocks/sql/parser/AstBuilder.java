@@ -769,7 +769,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (FunctionSet.SUBSTR.equals(functionName) || FunctionSet.SUBSTRING.equals(functionName)) {
+            if (FunctionSet.SUBSTR.equals(functionName)
+                    || FunctionSet.SUBSTRING.equals(functionName)
+                    || FunctionSet.FROM_UNIXTIME.equals(functionName)) {
                 List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
