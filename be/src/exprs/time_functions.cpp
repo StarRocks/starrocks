@@ -300,18 +300,54 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
     return columns[0];
 }
 
+static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
+
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
+    int64_t timestamp_us = state->timestamp_us();
     DateTimeValue dtv;
-    auto timestamp_ms = state->timestamp_ms();
-    if (dtv.from_unixtime(timestamp_ms / 1000, state->timezone_obj())) {
-        TimestampValue ts;
-        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
-                          timestamp_ms % 1000);
-        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
-    } else {
+    if (!dtv.from_unixtime(timestamp_us / 1000000, state->timezone_obj())) {
         return ColumnHelper::create_const_null_column(1);
     }
+    if (columns.empty()) {
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+    }
+
+    if (context->is_constant_column(1)) {
+        auto col = context->get_constant_column(1);
+        if (col->only_null()) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int precision = ColumnHelper::get_const_value<TYPE_INT>(col);
+        if (precision < 0 || precision > 6) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_us % 1000000 / NOW_PRECISION_FACTORS[precision] * NOW_PRECISION_FACTORS[precision]);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+    }
+
+    auto size = columns[0]->size();
+    auto precision_viewer = ColumnViewer<TYPE_INT>(columns[0]);
+    ColumnBuilder<TYPE_DATETIME> result(size);
+    for (int row = 0; row < size; row++) {
+        if (precision_viewer.is_null(row)) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int precision = precision_viewer.value(row);
+        if (precision < 0 || precision > 6) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int factor = NOW_PRECISION_FACTORS[precision];
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_us % 1000000 / factor * factor);
+        result.append(ts);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
