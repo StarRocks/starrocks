@@ -55,12 +55,7 @@ public class MvTaskRunContext extends TaskRunContext {
     private int partitionTTLNumber = TableProperty.INVALID;
 
     public MvTaskRunContext(TaskRunContext context) {
-        this.ctx = context.ctx;
-        this.definition = context.definition;
-        this.remoteIp = context.remoteIp;
-        this.properties = context.properties;
-        this.type = context.type;
-        this.status = context.status;
+        super(context);
     }
 
     public Map<String, Set<String>> getRefBaseTableMVIntersectedPartitions() {
