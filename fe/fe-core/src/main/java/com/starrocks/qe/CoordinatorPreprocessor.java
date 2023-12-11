@@ -202,7 +202,7 @@ public class CoordinatorPreprocessor {
         this.connectContext = StatisticUtils.buildConnectContext();
         this.queryId = connectContext.getExecutionId();
         this.queryGlobals =
-                genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
+                genQueryGlobals(Instant.now(), connectContext.getSessionVariable().getTimeZone());
         this.queryOptions = connectContext.getSessionVariable().toThrift();
         this.usePipeline = true;
         this.descriptorTable = null;
@@ -233,11 +233,12 @@ public class CoordinatorPreprocessor {
                         : ResourceGroupClassifier.QueryType.SELECT);
     }
 
-    public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
+    public static TQueryGlobals genQueryGlobals(Instant startTime, String timezone) {
         TQueryGlobals queryGlobals = new TQueryGlobals();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        String nowString = DATE_FORMAT.format(startTime.atZone(ZoneId.of(timezone)));
         queryGlobals.setNow_string(nowString);
-        queryGlobals.setTimestamp_ms(startTime);
+        queryGlobals.setTimestamp_ms(startTime.toEpochMilli());
+        queryGlobals.setTimestamp_us(startTime.getEpochSecond() * 1000000 + startTime.getNano() / 1000);
         if (timezone.equals("CST")) {
             queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {

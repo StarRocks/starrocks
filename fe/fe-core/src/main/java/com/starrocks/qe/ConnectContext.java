@@ -70,6 +70,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -159,8 +160,8 @@ public class ConnectContext {
     protected StmtExecutor executor;
     // Command this connection is processing.
     protected MysqlCommand command;
-    // Timestamp in millisecond last command starts at
-    protected long startTime = System.currentTimeMillis();
+    // last command start time
+    protected Instant startTime = Instant.now();
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -410,11 +411,15 @@ public class ConnectContext {
     }
 
     public long getStartTime() {
+        return startTime.toEpochMilli();
+    }
+
+    public Instant getStartTimeInstant() {
         return startTime;
     }
 
     public void setStartTime() {
-        startTime = System.currentTimeMillis();
+        startTime = Instant.now();
         returnRows = 0;
     }
 
@@ -723,11 +728,12 @@ public class ConnectContext {
     }
 
     public void checkTimeout(long now) {
-        if (startTime <= 0) {
+        long startTimeMillis = getStartTime();
+        if (startTimeMillis <= 0) {
             return;
         }
 
-        long delta = now - startTime;
+        long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
         if (command == MysqlCommand.COM_SLEEP) {
@@ -834,7 +840,7 @@ public class ConnectContext {
             // connection start Time
             row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
-            row.add("" + (nowMs - startTime) / 1000);
+            row.add("" + (nowMs - getStartTime()) / 1000);
             // State
             row.add(state.toString());
             // Info
