@@ -30,6 +30,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
