@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 This statement is used to create databases.
 
+:::tip
+
+This operation requires the CREATE DATABASE privilege on the target catalog. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```sql

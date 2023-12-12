@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 该语句用于安装一个插件。
 
+:::tip
+
+该操作需要 SYSTEM 级 PLUGIN 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```sql

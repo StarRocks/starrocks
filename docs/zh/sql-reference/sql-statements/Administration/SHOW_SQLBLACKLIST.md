@@ -10,6 +10,12 @@ displayed_sidebar: "Chinese"
 
 有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/Blacklist.md)。
 
+:::tip
+
+该操作需要 SYSTEM 级 BLACKLIST 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```SQL

@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the usage information of resource groups. This feature is supported from v3.1.4 onwards.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

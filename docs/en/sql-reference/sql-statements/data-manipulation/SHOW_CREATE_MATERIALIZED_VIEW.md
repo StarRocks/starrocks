@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the definition of a specific asynchronous materialized view.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

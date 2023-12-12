@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Cancels a refresh task for an asynchronous materialized view.
 
+:::tip
+
+This operation requires the REFRESH privilege on the target materialized view.
+
+:::
+
 ## Syntax
 
 ```SQL

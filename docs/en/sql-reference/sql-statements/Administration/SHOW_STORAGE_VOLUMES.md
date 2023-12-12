@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the storage volumes in your StarRocks cluster. This feature is supported from v3.1.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

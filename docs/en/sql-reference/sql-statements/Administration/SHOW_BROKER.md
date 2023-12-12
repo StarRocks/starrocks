@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to view broker that currently exists.
 
-Syntax:
+:::tip
+
+Only users with the SYSTEM-level OPERATE privilege or the `cluster_admin` role can perform this operation.
+
+:::
+
+## Syntax
 
 ```sql
 SHOW BROKER

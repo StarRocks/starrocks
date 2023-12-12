@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 创建索引，当前仅支持创建 bitmap 索引。有关 bitmap 索引的使用说明和适用场景，参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md)。
 
+:::tip
+
+该操作需要对应表的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```SQL
@@ -45,7 +51,7 @@ PROPERTIES (
 );
 ```
 
-为表`sales_records`中的`item_id`列创建 bitmap 索引，索引名称为`index3`。
+为表 `sales_records` 中的 `item_id` 列创建 bitmap 索引，索引名称为`index3`。
 
 ```SQL
 CREATE INDEX index3 ON sales_records (item_id) USING BITMAP COMMENT '';

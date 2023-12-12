@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to try and fix the specified tables or partitions first.
 
-Syntax:
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
 ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)]

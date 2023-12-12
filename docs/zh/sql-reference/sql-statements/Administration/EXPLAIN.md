@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 显示输入查询语句的逻辑或物理执行计划。
 
+:::tip
+
+该操作不需要权限。
+
+:::
+
 ## 语法
 
 ```SQL

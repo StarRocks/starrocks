@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Terminates a connection or a query currently being performed by threads executing within StarRocks.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

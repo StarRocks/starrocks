@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 This statement is used to cancel repairing specified tables or partitions with high priority.
 
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```sql

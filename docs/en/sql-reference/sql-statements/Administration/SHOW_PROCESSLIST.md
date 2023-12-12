@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Lists the operations currently being performed by threads executing within the server. The current version of StarRocks only supports listing queries.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

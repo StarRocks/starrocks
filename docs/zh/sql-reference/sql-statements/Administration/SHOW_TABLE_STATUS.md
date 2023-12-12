@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 该语句用于查看 Table 的一些信息。
 
+:::tip
+
+该操作不需要权限。
+
+:::
+
 ## 语法
 
 ```sql

@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to check a group of tablets.
 
-Syntax:
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
 ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
