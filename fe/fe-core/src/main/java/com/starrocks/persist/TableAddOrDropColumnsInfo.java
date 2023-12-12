@@ -49,6 +49,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * PersistInfo for Table properties
@@ -65,14 +66,24 @@ public class TableAddOrDropColumnsInfo implements Writable {
     private List<Index> indexes;
     @SerializedName(value = "jobId")
     private long jobId;
+    @SerializedName(value = "txnId")
+    private long txnId;
+    @SerializedName(value = "startTime")
+    private long startTime;
+    @SerializedName(value = "addColumnsName")
+    private Set<String> addColumnsName;
 
     public TableAddOrDropColumnsInfo(long dbId, long tableId,
-            Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes, long jobId) {
+            Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes, long jobId,
+            long txnId, long startTime, Set<String> addColumnsName) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.indexSchemaMap = indexSchemaMap;
         this.indexes = indexes;
         this.jobId = jobId;
+        this.txnId = txnId;
+        this.startTime = startTime;
+        this.addColumnsName = addColumnsName;
     }
 
     public long getDbId() {
@@ -93,6 +104,18 @@ public class TableAddOrDropColumnsInfo implements Writable {
 
     public long getJobId() {
         return jobId;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    public Set<String> getAddColumnsName() {
+        return addColumnsName;
     }
 
     @Override
@@ -134,6 +157,9 @@ public class TableAddOrDropColumnsInfo implements Writable {
         sb.append(" indexSchemaMap: ").append(indexSchemaMap);
         sb.append(" indexes: ").append(indexes);
         sb.append(" jobId: ").append(jobId);
+        sb.append(" txnId: ").append(txnId);
+        sb.append(" startTime: ").append(startTime);
+        sb.append(" addColumnsName: ").append(addColumnsName);
         return sb.toString();
     }
 }
