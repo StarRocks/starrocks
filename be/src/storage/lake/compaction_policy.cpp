@@ -124,8 +124,7 @@ public:
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets(const TabletMetadataPtr& tablet_metadata,
-                                                  std::vector<bool>* has_dels);
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, std::vector<bool>* has_dels);
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
@@ -142,7 +141,7 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t v
     return pick_rowsets(tablet_metadata, nullptr);
 }
 
-StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const TabletMetadataPtr& tablet_metadata,
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMetadataPtr tablet_metadata,
                                                                        std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet->update_mgr();
