@@ -1,6 +1,8 @@
 ---
 displayed_sidebar: "English"
 ---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Iceberg catalog
 
@@ -35,7 +37,10 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 Before you create an Iceberg catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Iceberg cluster.
 
-### AWS IAM
+### Storage
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
 If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
 
@@ -49,7 +54,9 @@ Of the above-mentioned three authentication methods, instance profile is the mos
 
 For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
 
-### HDFS
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
@@ -63,12 +70,16 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
 >
 > If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
 
-### Kerberos authentication
+#### Kerberos authentication
 
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
 - Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
 - Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
+
+</TabItem>
+
+</Tabs>
 
 ## Create an Iceberg catalog
 
@@ -106,6 +117,9 @@ The type of your data source. Set the value to `iceberg`.
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
+<Tabs groupId="metastore">
+<TabItem value="HIVE" label="Hive metastore" default>
+
 ##### Hive metastore
 
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
@@ -125,6 +139,9 @@ The following table describes the parameter you need to configure in `MetastoreP
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
 | iceberg.catalog.type                | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. |
 | hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+
+</TabItem>
+<TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
 
@@ -170,6 +187,8 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
+</TabItem>
+<TabItem value="TABULAR" label="Tabular">
 ##### Tabular
 
 If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
@@ -203,6 +222,9 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
+</TabItem>
+
+</Tabs>
 
 #### `StorageCredentialParams`
 
@@ -213,6 +235,9 @@ Note the following points:
 - If you use HDFS as storage, you do not need to configure `StorageCredentialParams` and can skip this section. If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
 
 - If you use Tabular as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
+
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
 
@@ -254,6 +279,16 @@ The following table describes the parameters you need to configure in `StorageCr
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+
+When using HDFS storage skip the storage credentials.
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
+
 ##### S3-compatible storage system
 
 Iceberg catalogs support S3-compatible storage systems from v2.5 onwards.
@@ -277,6 +312,10 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
+
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
 
 ##### Microsoft Azure Storage
 
@@ -398,6 +437,10 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
+
 ##### Google GCS
 
 Iceberg catalogs support Google GCS from v3.0 onwards.
@@ -466,23 +509,17 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
 
+</TabItem>
+
+</Tabs>
+
 ### Examples
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
-#### HDFS
 
-If you use HDFS as storage, run a command like below:
-
-```SQL
-CREATE EXTERNAL CATALOG iceberg_catalog_hms
-PROPERTIES
-(
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
-);
-```
+<Tabs groupId="storage">
+<TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
 
@@ -587,6 +624,27 @@ PROPERTIES
       "aws.s3.region" = "us-west-2"
   );
   ```
+</TabItem>
+
+<TabItem value="HDFS" label="HDFS" >
+
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
+</TabItem>
+
+<TabItem value="MINIO" label="MinIO" >
 
 #### S3-compatible storage system
 
@@ -606,6 +664,9 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+</TabItem>
+
+<TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
 
 #### Microsoft Azure Storage
 
@@ -716,6 +777,10 @@ PROPERTIES
   );
   ```
 
+</TabItem>
+
+<TabItem value="GCS" label="Google GCS" >
+
 #### Google GCS
 
 - If you choose the VM-based authentication method, run a command like below:
@@ -777,6 +842,9 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+</TabItem>
+
+</Tabs>
 
 ## View Iceberg catalogs
 
