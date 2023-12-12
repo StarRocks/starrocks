@@ -2868,9 +2868,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
-        if (queryMemLimit > 0) {
-            tResult.setQuery_mem_limit(queryMemLimit);
-        }
+        tResult.setQuery_mem_limit(queryMemLimit);
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
