@@ -30,7 +30,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into operations on: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap and compaction.
+`alter_clause` is classified into operations, including rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap and compaction.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - comment: modifies the table comment (supported from **v3.1 onwards**).
@@ -216,57 +216,53 @@ PARTITION BY date_trunc('day', event_time)
 DISTRIBUTED BY HASH(user_id);
 
 -- Insert data of several days
--- Data of November 26th
 INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
+-- Data of November 26th
 ('2023-11-26 08:00:00', 1, 101, 12345, 2),
 ('2023-11-26 09:15:00', 2, 102, 54321, 3),
-('2023-11-26 10:30:00', 1, 103, 98765, 1);
-
+('2023-11-26 10:30:00', 1, 103, 98765, 1),
 -- Data of November 27th
-INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-27 08:30:00', 1, 104, 11111, 2),
 ('2023-11-27 09:45:00', 2, 105, 22222, 3),
-('2023-11-27 11:00:00', 1, 106, 33333, 1);
-
+('2023-11-27 11:00:00', 1, 106, 33333, 1),
 -- Data of November 28th
-INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALUES
 ('2023-11-28 08:00:00', 1, 107, 44444, 2),
 ('2023-11-28 09:15:00', 2, 108, 55555, 3),
 ('2023-11-28 10:30:00', 1, 109, 66666, 1);
 ```
 
-#### Modify only the bucketing method
+#### Modify the bucketing method only
 
 > **NOTICE**
 >
 > - The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
-> - Although you only want to modify the bucketing method and do not want to change the number of buckets, you still need to specify the number of buckets in the command using `BUCKETS <num>`. If `BUCKETS <num>` is not unspecified, it means that the number of buckets is automatically determined by StarRocks.
+> - Although only the bucketing method needs to be modified, the number of buckets still needs to be specified in the command using `BUCKETS <num>`. If `BUCKETS <num>` is not specified, it means that the number of buckets is automatically determined by StarRocks.
 
-- The bucketing method is modified to random bucketing and the number of buckets is still automatically set by StarRocks.
+- The bucketing method is modified to random bucketing from hash bucketing and the number of buckets remains automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- Modify the keys for hash bucketing to `user_id, event_time` from the `event_time, event_type`. And the number of buckets is still automatically set by StarRocks.
+- The keys for hash bucketing is modified to `user_id, event_time` from the `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
   ```
 
-#### Modify only the number of buckets
+#### Modify the number of buckets only
 
 > **NOTICE**
 >
-> Although you only want to modify the number of buckets, you still need to specify the bucketing method in the statement, for example, as in the example `HASH(user_id)`.
+> Although only the number of buckets needs to be modified, the bucketing method still needs to be specified in the command, for example, `HASH(user_id)`.
 
-- Modify the number of buckets for all partitions to 10.
+- Modify the number of buckets for all partitions to 10 from being automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
 
-- Modify the number of buckets for specified partitions to 15.
+- Modify the number of buckets for specified partitions to 15 from being automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15 ;
@@ -282,13 +278,13 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 >
 > The modification is applied to all partitions in the table and cannot be applied to specific partitions only.
 
-- Modify the bucketing method from hash bucketing to random bucketing, and change the number of buckets to 10.
+- Modify the bucketing method from hash bucketing to random bucketing, and change the number of buckets to 10 from being automatically set by StarRocks.
 
    ```SQL
    ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
    ```
 
-- Modify the key for hash bucketing, and change the number of buckets to 10.
+- Modify the key for hash bucketing, and change the number of buckets to 10 from being automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
@@ -557,7 +553,7 @@ Note:
 2. A BITMAP index is created only in a single column.
 ```
 
-#### Drop an index
+#### Drop an bitmap index
 
 Syntax:
 
@@ -587,7 +583,7 @@ Currently, StarRocks supports modifying the following table properties:
 - `bucket_size` (supported since 3.2)
 
 Note:
-You can also modify the properties by merging into the above operation on column. See the following examples.
+You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
 
 ### Swap
 
@@ -719,9 +715,9 @@ The `be_compactions` table in the `information_schema` database records compacti
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### Rollup
+### Rollup index
 
-1. Create an index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
+1. Create an rollup index `example_rollup_index` based on the base index (k1,k2,k3,v1,v2). Column-based storage is used.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -752,7 +748,7 @@ The `be_compactions` table in the `information_schema` database records compacti
     DROP ROLLUP example_rollup_index2;
     ```
 
-### Schema Change
+### Column
 
 1. Add a key column `new_col` (non-aggregate column) after the `col1` column of `example_rollup_index`.
 
@@ -856,21 +852,16 @@ The `be_compactions` table in the `information_schema` database records compacti
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-13. Alter the Colocate property of the table.
+### Table property
+
+1. Alter the Colocate property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("colocate_with" = "t1");
      ```
 
-14. Alter the bucketing mode of the table from Random Distribution to Hash Distribution.
-
-     ```sql
-     ALTER TABLE example_db.my_table
-     SET ("distribution_type" = "hash");
-     ```
-
-15. Alter the dynamic partition property of the table.
+2. Alter the dynamic partition property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -910,7 +901,7 @@ The `be_compactions` table in the `information_schema` database records compacti
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### bitmap index
+### Bitmap index
 
 1. Create a bitmap index for column `siteid` in `table1`.
 
@@ -934,7 +925,7 @@ Atomic swap between `table1` and `table2`.
 ALTER TABLE table1 SWAP WITH table2
 ```
 
-### Example of manual compaction
+### Manual compaction
 
 ```sql
 CREATE TABLE compaction_test( 
