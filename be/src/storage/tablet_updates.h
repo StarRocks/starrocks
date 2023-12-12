@@ -232,7 +232,8 @@ public:
                         ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                         const std::string& err_msg_header = "");
 
-    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
+    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
+                         bool save_source_schema = false);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 

@@ -76,12 +76,20 @@ TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
 }
 
-RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+const RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(
+        const std::vector<RowsetMetaSharedPtr>& rowsets) {
     return *std::max_element(
             rowsets.begin(), rowsets.end(), [](const RowsetMetaSharedPtr& a, const RowsetMetaSharedPtr& b) {
                 return !a->tablet_schema() || (b->tablet_schema() && a->tablet_schema()->schema_version() <
                                                                              b->tablet_schema()->schema_version());
             });
+}
+
+const RowsetMetaPB& TabletMeta::rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets) {
+    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetMetaPB& a, const RowsetMetaPB& b) {
+        return !a.has_tablet_schema() ||
+               (b.has_tablet_schema() && a.tablet_schema().schema_version() < b.tablet_schema().schema_version());
+    });
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
@@ -322,6 +330,10 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
     _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
+
+    if (tablet_meta_pb.has_source_schema()) {
+        _source_schema = std::make_shared<const TabletSchema>(tablet_meta_pb.source_schema());
+    }
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -384,6 +396,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
     tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
+
+    if (_source_schema != nullptr) {
+        _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
+    }
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {

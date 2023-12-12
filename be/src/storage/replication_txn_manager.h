@@ -44,10 +44,16 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
+    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                     const TRemoteSnapshotInfo& src_snapshot_info,
+                                     const std::string& tablet_snapshot_dir_path, Tablet* tablet);
+
     Status convert_snapshot_for_none_primary(const std::string& tablet_snapshot_path,
+                                             const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
                                              const TReplicateSnapshotRequest& request);
 
     Status convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
+                                        const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
                                         const TReplicateSnapshotRequest& request);
 
     Status publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
