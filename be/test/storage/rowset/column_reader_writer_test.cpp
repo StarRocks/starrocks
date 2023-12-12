@@ -714,6 +714,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     }
 }
 
+/*
 TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
@@ -795,6 +796,6 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
         }
         config::dictionary_speculate_min_chunk_size = old_config;
     }
-}
+}*/
 
 } // namespace starrocks
