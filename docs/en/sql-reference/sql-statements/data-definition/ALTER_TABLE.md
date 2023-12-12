@@ -244,7 +244,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY RANDOM;
   ```
 
-- The keys for hash bucketing is modified to `user_id, event_time` from the `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
+- The keys for hash bucketing is modified to `user_id, event_time` from `event_time, event_type`. And the number of buckets remains automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time);
@@ -383,7 +383,7 @@ Note:
 
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
-3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8).
+3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8 in the [column](#column) part).
 4. The partition column cannot be modified.
 5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
@@ -844,7 +844,7 @@ The `be_compactions` table in the `information_schema` database records compacti
      SET ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-     This operation can also be merged into the above schema change operation (note that the syntax of multiple clauses is slightly different).
+     This operation can also be merged into the above column operation (note that the syntax of multiple clauses is slightly different).
 
      ```sql
      ALTER TABLE example_db.my_table

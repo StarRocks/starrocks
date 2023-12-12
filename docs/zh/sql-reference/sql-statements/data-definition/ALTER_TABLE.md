@@ -559,7 +559,7 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 1. 目前仅支持修改 bitmap index。
 2. bitmap index 仅在单列上创建。
 
-#### 删除索引 (DROP INDEX)
+#### 删除 bitmap index (DROP INDEX)
 
 语法：
 
@@ -637,7 +637,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 ## 示例
 
-### table
+### Table
 
 1. 修改表的默认副本数量，新建分区副本数量默认使用此值。
 
@@ -662,7 +662,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
     以上示例表示将多副本的写入和同步方式设置为 leaderless replication，即数据同时写入到多个副本，不区分主从副本。更多信息，参见 [CREATE TABLE](CREATE_TABLE.md) 的 `replicated_storage` 参数描述。
 
-### partition
+### Partition
 
 1. 增加分区，现有分区 [MIN, 2013-01-01)，增加分区 [2013-01-01, 2014-01-01)，使用默认分桶方式。
 
@@ -722,7 +722,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ADD PARTITION p1 VALUES [("2014-01-01"), ("2014-02-01"));
     ```
 
-### rollup index
+### Rollup index
 
 1. 创建 index `example_rollup_index`，基于 base index（k1, k2, k3, v1, v2），列式存储。
 
@@ -859,7 +859,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
     ```
 
-### table property
+### Table property
 
 1. 修改表的 Colocate 属性。
 
@@ -888,7 +888,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
         );
     ```
 
-### rename
+### Rename
 
 1. 将表 `table1` 的名称修改为 `table2`。
 
@@ -908,7 +908,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ALTER TABLE example_table RENAME PARTITION p1 p2;
     ```
 
-### bitmap index
+### Bitmap index
 
 1. 在 `table1` 上为 `siteid` 创建 bitmap index。
 
@@ -923,7 +923,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     ALTER TABLE table1 DROP INDEX index_name;
     ```
 
-### swap
+### Swap
 
 将 `table1` 与 `table2` 原子替换。
 
