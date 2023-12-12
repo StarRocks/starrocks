@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -23,22 +24,26 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 public class ShowCreateMaterializedViewStmtTest {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         FeConstants.default_scheduler_interval_millisecond = 100;
@@ -138,6 +143,7 @@ public class ShowCreateMaterializedViewStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws Exception {
         ShowCreateTableStmt stmt =
                 new ShowCreateTableStmt(new TableName("test", "mv1"),
@@ -369,6 +375,8 @@ public class ShowCreateMaterializedViewStmtTest {
     }
 
     @Test
+=======
+>>>>>>> 53d3e05a1f ([BugFix] fix display colocate_with property (#36809))
     public void testShowExternalTableCreateMvSql() throws Exception {
         MetadataMgr oldMetadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
 
@@ -382,6 +390,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+<<<<<<< HEAD
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -392,21 +401,50 @@ public class ShowCreateMaterializedViewStmtTest {
                 ")\n" +
                 "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
                 "FROM `hive0`.`tpch`.`lineitem`;");
+=======
+        Assert.assertEquals(createTableStmt.get(0),
+                "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
+                        "FROM `hive0`.`tpch`.`lineitem`;");
+>>>>>>> 53d3e05a1f ([BugFix] fix display colocate_with property (#36809))
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
-    @Test
-    public void testShowCreateDeferredMv() throws Exception {
-        String createMvSql = "create materialized view deferred_mv4 " +
-                "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) buckets 10 " +
-                "refresh deferred manual " +
-                "as select k1 as k3, k2 from tbl1;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("test").getTable("deferred_mv4");
+    @ParameterizedTest
+    @MethodSource("genTestArguments")
+    public void testEntrance(String refreshClause,
+                             String orderBy,
+                             String property,
+                             String partitionBy,
+                             String distribute,
+                             String select) throws Exception {
+        final String mvName = "test_mv_show_create";
+        starRocksAssert.ddl("drop materialized view if exists " + mvName);
+        String createSql = String.format("CREATE MATERIALIZED VIEW %s " +
+                        " %s -- distribute \n" +
+                        " %s -- partition by\n" +
+                        " %s -- refresh \n" + " %s -- order by \n" +
+                        " PROPERTIES( %s ) -- properties\n" +
+                        " AS %s",
+                mvName, distribute, partitionBy, refreshClause, orderBy, property, select);
+
+        // colocate is conflicted with random distribution
+        if (property.contains("colocate_with") && distribute.equalsIgnoreCase("")) {
+            Assertions.assertThrows(SemanticException.class, () -> starRocksAssert.withMaterializedView(createSql));
+            return;
+        }
+        starRocksAssert.withMaterializedView(createSql);
+
+        MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
         List<String> createTableStmt = Lists.newArrayList();
+<<<<<<< HEAD
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
@@ -430,3 +468,55 @@ public class ShowCreateMaterializedViewStmtTest {
         Assert.fail("No Exception throws.");
     }
 }
+=======
+        GlobalStateMgr.getDdlStmt(mv, createTableStmt, null, null, false, true);
+
+        Assertions.assertTrue(createTableStmt.get(0).contains(refreshClause), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(orderBy), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(property), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(partitionBy), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(distribute), createTableStmt.get(0));
+    }
+
+    public static Stream<Arguments> genTestArguments() {
+        List<String> refreshArgumentsList = Lists.newArrayList(
+                "REFRESH MANUAL",
+                "REFRESH DEFERRED MANUAL",
+                "REFRESH ASYNC",
+                "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)",
+                "REFRESH ASYNC START(\"1998-01-01 00:00:00\") EVERY(INTERVAL 1 HOUR)"
+        );
+        List<String> orderByList = Lists.newArrayList("", "ORDER BY (k3)");
+        List<String> propertiesList = Lists.newArrayList(
+                "\"colocate_with\" = \"g1\"",
+                "\"replicated_storage\" = \"true\"",
+                "\"mv_rewrite_staleness_second\" = \"60\""
+        );
+        List<String> partitionList = Lists.newArrayList("",
+                "PARTITION BY (`k3`)",
+                "PARTITION BY (date_trunc('month', `k3`))");
+        List<String> distributeList = Lists.newArrayList(
+                "",
+                "DISTRIBUTED BY HASH(`k3`)",
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10");
+        List<String> selectList = Lists.newArrayList(
+                "select k1 as k3, k2 from tbl1"
+        );
+
+        // basic combinations
+        StarRocksAssert.TestCaseEnumerator enumerator = new StarRocksAssert.TestCaseEnumerator(Lists.newArrayList(
+                refreshArgumentsList.size(),
+                orderByList.size(),
+                propertiesList.size(),
+                partitionList.size(),
+                distributeList.size(),
+                selectList.size()
+        ));
+        return enumerator.enumerate().map(permutation ->
+                StarRocksAssert.TestCaseEnumerator.ofArguments(permutation,
+                        refreshArgumentsList, orderByList, propertiesList,
+                        partitionList, distributeList, selectList));
+    }
+
+}
+>>>>>>> 53d3e05a1f ([BugFix] fix display colocate_with property (#36809))
