@@ -67,6 +67,31 @@ public class PseudoClusterTest {
     }
 
     @Test
+    public void testPreparedStatement() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            stmt.execute("prepare stmt1 from insert overwrite test values (?,?)");
+            stmt.execute("set @i = 1");
+            stmt.executeUpdate("execute stmt1 using @i,@i");
+            try {
+                stmt.executeUpdate("execute stmt1 using @i,@i");
+                Assert.fail("expected exception was not occured.");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("maybe table partition changed after prepared statement creation"));
+            }
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
     public void testCreateLakeTable() throws Exception {
         new MockUp<RunMode>() {
             @Mock
