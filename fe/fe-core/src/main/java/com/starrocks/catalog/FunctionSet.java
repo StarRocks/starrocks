@@ -65,6 +65,7 @@ public class FunctionSet {
     // Date functions:
     public static final String CONVERT_TZ = "convert_tz";
     public static final String CURDATE = "curdate";
+    public static final String CURRENT_DATE = "current_date";
     public static final String CURRENT_TIMESTAMP = "current_timestamp";
     public static final String CURTIME = "curtime";
     public static final String CURRENT_TIME = "current_time";
@@ -94,6 +95,9 @@ public class FunctionSet {
     public static final String TO_DAYS = "to_days";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String UTC_TIME = "utc_time";
+    public static final String LOCALTIME = "localtime";
+    public static final String LOCALTIMESTAMP = "localtimestamp";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -113,6 +117,10 @@ public class FunctionSet {
     public static final String YEARS_SUB = "years_sub";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
+<<<<<<< HEAD
+=======
+    public static final String ADD_MONTHS = "add_months";
+>>>>>>> 7b3ea741cd ([BugFix] Not use query cache if the plan contains non-deterministic time function (#36854))
     public static final String DAYS_ADD = "days_add";
     public static final String DAYS_SUB = "days_sub";
     public static final String ADDDATE = "adddate";
@@ -414,7 +422,13 @@ public class FunctionSet {
     public static final String MAP_APPLY = "map_apply";
     public static final String MAP_FILTER = "map_filter";
     public static final String MAP_VALUES = "map_values";
+<<<<<<< HEAD
     public static final String MAP_CONCAT= "map_concat";
+=======
+
+    public static final String MAP_CONCAT = "map_concat";
+
+>>>>>>> 7b3ea741cd ([BugFix] Not use query cache if the plan contains non-deterministic time function (#36854))
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_SIZE = "map_size";
@@ -561,6 +575,25 @@ public class FunctionSet {
                     .add(RANDOM)
                     .add(UUID)
                     .add(SLEEP)
+                    .build();
+
+    // Only use query cache if these time function can be reduced into a constant
+    // date/datetime value after applying FoldConstantRule, otherwise BE would yield
+    // non-deterministic result when these function is delivered to BE.
+    public static final Set<String> nonDeterministicTimeFunctions =
+            ImmutableSet.<String>builder()
+                    .add(CURTIME)
+                    .add(CURDATE)
+                    .add(CURRENT_DATE)
+                    .add(CURRENT_TIMESTAMP)
+                    .add(CURRENT_TIME)
+                    .add(NOW)
+                    .add(UNIX_TIMESTAMP)
+                    .add(UTC_TIMESTAMP)
+                    .add(UTC_TIME)
+                    .add(LOCALTIME)
+                    .add(LOCALTIMESTAMP)
+                    .add()
                     .build();
 
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
