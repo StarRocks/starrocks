@@ -8,9 +8,11 @@ displayed_sidebar: "Chinese"
 
 该语句用于设置指定数据库的属性。
 
-> **注意**
->
-> 只有拥有该数据库 ALTER 权限的用户才可以执行该操作。
+:::tip
+
+该操作需要对应数据库的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

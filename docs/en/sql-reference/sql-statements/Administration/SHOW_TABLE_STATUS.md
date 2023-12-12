@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to view some of the information in Table.
 
-Syntax:
+:::tip
+
+This operation does not require privileges.
+
+:::
+
+## Syntax
 
 ```sql
 SHOW TABLE STATUS

@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the logical or physical execution plans for a query statement.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL
