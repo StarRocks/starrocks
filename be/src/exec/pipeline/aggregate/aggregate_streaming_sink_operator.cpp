@@ -55,7 +55,7 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vec
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
     SCOPED_TIMER(_aggregator->streaming_timer());
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _aggregator->output_chunk_by_streaming(&chunk);
+    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(&chunk));
     _aggregator->offer_chunk_to_buffer(chunk);
     return Status::OK();
 }
@@ -64,9 +64,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->compute_single_agg_state(chunk_size);
+        RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk_size));
     } else {
-        _aggregator->compute_batch_agg_states(chunk_size);
+        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk_size));
     }
 
     _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -89,9 +89,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
         if (_aggregator->is_none_group_by_exprs()) {
-            _aggregator->compute_single_agg_state(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk_size));
         } else {
-            _aggregator->compute_batch_agg_states(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk_size));
         }
 
         _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -109,23 +109,23 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         if (zero_count == 0) {
             SCOPED_TIMER(_aggregator->streaming_timer());
             vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-            _aggregator->output_chunk_by_streaming(&chunk);
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(&chunk));
             _aggregator->offer_chunk_to_buffer(chunk);
         }
         // very high aggregation
         else if (zero_count == _aggregator->streaming_selection().size()) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            _aggregator->compute_batch_agg_states(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk_size));
         } else {
             // middle cases, first aggregate locally and output by stream
             {
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                _aggregator->compute_batch_agg_states_with_selection(chunk_size);
+                RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(chunk_size));
             }
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
                 vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-                _aggregator->output_chunk_by_streaming_with_selection(&chunk);
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(&chunk));
                 _aggregator->offer_chunk_to_buffer(chunk);
             }
         }

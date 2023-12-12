@@ -199,10 +199,10 @@ public:
                                           int64_t ht_rows) const;
 
     // For aggregate without group by
-    void compute_single_agg_state(size_t chunk_size);
+    Status compute_single_agg_state(size_t chunk_size);
     // For aggregate with group by
-    void compute_batch_agg_states(size_t chunk_size);
-    void compute_batch_agg_states_with_selection(size_t chunk_size);
+    Status compute_batch_agg_states(size_t chunk_size);
+    Status compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
@@ -211,14 +211,14 @@ public:
 
     Status evaluate_exprs(vectorized::Chunk* chunk);
 
-    void output_chunk_by_streaming(vectorized::ChunkPtr* chunk);
+    Status output_chunk_by_streaming(vectorized::ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
+    Status output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
