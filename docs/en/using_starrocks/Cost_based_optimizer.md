@@ -110,6 +110,8 @@ Conditions that trigger automatic collection:
 
 - The collection time falls within the range of the configured collection period. (The default collection period is all day.)
 
+  *It should be noted that after the data is changed, manually triggering the sampling collection task will make condition one take effect and will not trigger automatic full collection.*
+
 Automatic full collection is enabled by default and run by the system using the default settings.
 
 The following table describes the default settings. If you need to modify them, run the **ADMIN SET CONFIG** command.
