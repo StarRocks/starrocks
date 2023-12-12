@@ -79,7 +79,7 @@ class DecodeContext {
 
     // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
-    Map<Operator, DecodeNodeInfo> operatorDecodeInfo = Maps.newIdentityHashMap();
+    Map<Operator, DecodeInfo> operatorDecodeInfo = Maps.newIdentityHashMap();
 
     // global dict expressions
     Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();

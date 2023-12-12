@@ -69,7 +69,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         }
         context.initRewriteExpressions();
         // check output need decode
-        DecodeNodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeNodeInfo.EMPTY);
+        DecodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeInfo.EMPTY);
         // compute the fragment used dict expr
         optExpression = rewriteImpl(optExpression, new ColumnRefSet());
         if (!decodeInfo.outputStringColumns.isEmpty()) {
@@ -84,7 +84,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     // compute which expressions & dict should save in the fragment
     private OptExpression rewriteImpl(OptExpression optExpression, ColumnRefSet fragmentUsedDictExprs) {
         // should get DecodeInfo before rewrite operator
-        DecodeNodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeNodeInfo.EMPTY);
+        DecodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeInfo.EMPTY);
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
@@ -93,7 +93,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         for (int i = 0; i < optExpression.arity(); i++) {
             OptExpression child = optExpression.inputAt(i);
 
-            DecodeNodeInfo childDecodeInfo = context.operatorDecodeInfo.getOrDefault(child.getOp(), DecodeNodeInfo.EMPTY);
+            DecodeInfo childDecodeInfo = context.operatorDecodeInfo.getOrDefault(child.getOp(), DecodeInfo.EMPTY);
             child = rewriteImpl(child, childFragmentUsedDictExpr);
             if (decodeInfo.decodeStringColumns.isIntersect(childDecodeInfo.outputStringColumns)) {
                 // if child's output dict column required decode, insert decode node
@@ -143,7 +143,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     @Override
     public OptExpression visit(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalOperator op = optExpression.getOp().cast();
-        DecodeNodeInfo info = context.operatorDecodeInfo.getOrDefault(op, DecodeNodeInfo.EMPTY);
+        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(op, DecodeInfo.EMPTY);
         op.setPredicate(rewritePredicate(op.getPredicate(), info.inputStringColumns));
         op.setProjection(rewriteProjection(op.getProjection(), info.inputStringColumns));
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
@@ -153,7 +153,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         // rewrite multi-stage aggregate
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
-        DecodeNodeInfo info = context.operatorDecodeInfo.getOrDefault(aggregate, DecodeNodeInfo.EMPTY);
+        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(aggregate, DecodeInfo.EMPTY);
         ColumnRefSet inputStringRefs = new ColumnRefSet();
         inputStringRefs.union(info.inputStringColumns);
 
@@ -197,7 +197,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (!context.operatorDecodeInfo.containsKey(exchange)) {
             return optExpression;
         }
-        DecodeNodeInfo info = context.operatorDecodeInfo.get(exchange);
+        DecodeInfo info = context.operatorDecodeInfo.get(exchange);
         // compute the dicts and expressions used by in the fragment
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
         for (int sid : info.inputStringColumns.getColumnIds()) {
@@ -242,7 +242,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     @Override
     public OptExpression visitPhysicalTopN(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalTopNOperator topN = optExpression.getOp().cast();
-        DecodeNodeInfo info = context.operatorDecodeInfo.get(topN);
+        DecodeInfo info = context.operatorDecodeInfo.get(topN);
 
         List<Ordering> newOrdering = Lists.newArrayList();
         for (Ordering orderDesc : topN.getOrderSpec().getOrderDescs()) {
@@ -275,7 +275,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     @Override
     public OptExpression visitPhysicalOlapScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
-        DecodeNodeInfo info = context.operatorDecodeInfo.get(scanOperator);
+        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
 
         Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
         List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();

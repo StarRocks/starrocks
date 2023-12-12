@@ -249,7 +249,6 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
 
         dict_opt_ctx->convert_column = builder.build(false);
 
-        // DCHECK_EQ(_mutable_dict_maps->count(targetSlotId), 0);
         if (_mutable_dict_maps->count(targetSlotId) == 0) {
             _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
         }

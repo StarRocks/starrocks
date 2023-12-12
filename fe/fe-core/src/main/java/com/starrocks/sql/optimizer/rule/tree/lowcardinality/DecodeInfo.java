@@ -20,8 +20,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 /*
  * For record the string columns on operator
  */
-class DecodeNodeInfo {
-    public static final DecodeNodeInfo EMPTY = new DecodeNodeInfo();
+class DecodeInfo {
+    public static final DecodeInfo EMPTY = new DecodeInfo();
     OptExpression parent = null;
 
     // operator's input string columns
@@ -33,23 +33,23 @@ class DecodeNodeInfo {
     // operator's output string columns
     ColumnRefSet outputStringColumns = new ColumnRefSet();
 
-    public DecodeNodeInfo createOutputInfo() {
+    public DecodeInfo createOutputInfo() {
         if (this.outputStringColumns.isEmpty()) {
             return EMPTY;
         }
 
-        DecodeNodeInfo info = new DecodeNodeInfo();
+        DecodeInfo info = new DecodeInfo();
         info.inputStringColumns.union(this.outputStringColumns);
         info.outputStringColumns.union(this.outputStringColumns);
         return info;
     }
 
-    public DecodeNodeInfo createDecodeInfo() {
+    public DecodeInfo createDecodeInfo() {
         if (this.outputStringColumns.isEmpty()) {
             return EMPTY;
         }
 
-        DecodeNodeInfo info = new DecodeNodeInfo();
+        DecodeInfo info = new DecodeInfo();
         info.decodeStringColumns.union(this.outputStringColumns);
         return info;
     }
@@ -59,7 +59,7 @@ class DecodeNodeInfo {
                 this.decodeStringColumns.isEmpty();
     }
 
-    public void addChildInfo(DecodeNodeInfo other) {
+    public void addChildInfo(DecodeInfo other) {
         this.outputStringColumns.union(other.outputStringColumns);
     }
 

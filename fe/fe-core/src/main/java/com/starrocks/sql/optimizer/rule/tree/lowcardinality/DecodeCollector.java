@@ -66,7 +66,7 @@ import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
  * 3. compute new string column which one is generated from dict-expression.
  * 4. compute string column optimize benefit
  */
-public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, DecodeNodeInfo> {
+public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo> {
     private static final Logger LOG = LogManager.getLogger(DecodeCollector.class);
 
     public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS =
@@ -85,7 +85,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     // These fields are the same as the fields in the DecodeContext,
     // the difference: these fields store all string information, the
     // DecodeContext only stores the ones that need to be optimized.
-    private final Map<Operator, DecodeNodeInfo> allOperatorDecodeInfo = Maps.newIdentityHashMap();
+    private final Map<Operator, DecodeInfo> allOperatorDecodeInfo = Maps.newIdentityHashMap();
 
     private final Map<Integer, ColumnDict> globalDicts = Maps.newHashMap();
 
@@ -167,7 +167,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         ColumnRefSet alls = new ColumnRefSet();
         context.allStringColumns.forEach(alls::union);
         for (Operator operator : allOperatorDecodeInfo.keySet()) {
-            DecodeNodeInfo info = allOperatorDecodeInfo.get(operator);
+            DecodeInfo info = allOperatorDecodeInfo.get(operator);
             info.outputStringColumns.intersect(alls);
             info.decodeStringColumns.intersect(alls);
             info.inputStringColumns.intersect(alls);
@@ -196,13 +196,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         return true;
     }
 
-    private DecodeNodeInfo collectImpl(OptExpression optExpression, OptExpression parent) {
-        DecodeNodeInfo context;
+    private DecodeInfo collectImpl(OptExpression optExpression, OptExpression parent) {
+        DecodeInfo context;
         if (optExpression.arity() == 1) {
             OptExpression child = optExpression.inputAt(0);
             context = collectImpl(child, optExpression);
         } else {
-            context = new DecodeNodeInfo();
+            context = new DecodeInfo();
             for (int i = 0; i < optExpression.arity(); ++i) {
                 OptExpression child = optExpression.inputAt(i);
                 context.addChildInfo(collectImpl(child, optExpression));
@@ -210,7 +210,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         }
 
         context.parent = parent;
-        DecodeNodeInfo info = optExpression.getOp().accept(this, optExpression, context);
+        DecodeInfo info = optExpression.getOp().accept(this, optExpression, context);
         if (info.isEmpty()) {
             return info;
         }
@@ -233,27 +233,27 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     }
 
     @Override
-    public DecodeNodeInfo visit(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visit(OptExpression optExpression, DecodeInfo context) {
         return context.createDecodeInfo();
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalLimit(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalLimit(OptExpression optExpression, DecodeInfo context) {
         return context.createOutputInfo();
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalTopN(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalTopN(OptExpression optExpression, DecodeInfo context) {
         return context.createOutputInfo();
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
         PhysicalJoinOperator join = optExpression.getOp().cast();
-        DecodeNodeInfo result = context.createOutputInfo();
+        DecodeInfo result = context.createOutputInfo();
         if (join.getOnPredicate() == null) {
             return result;
         }
@@ -274,12 +274,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
-        DecodeNodeInfo info = context.createOutputInfo();
+        DecodeInfo info = context.createOutputInfo();
 
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
@@ -339,12 +339,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
-        DecodeNodeInfo result = context.createOutputInfo();
-        // join on-predicate don't support low-cardinality optimization, must decode before shuffle
+        DecodeInfo result = context.createOutputInfo();
+        // 1. join on-predicate don't support low-cardinality optimization, must decode before shuffle
+        // 2. if parent don't need dict column, `parent` will null, it's unlikely, but to check is better
         if (context.parent != null && context.parent.getOp() instanceof PhysicalJoinOperator) {
             return visitPhysicalJoin(context.parent, context);
         }
@@ -352,21 +353,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
     }
 
     @Override
-    public DecodeNodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeNodeInfo context) {
+    public DecodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeInfo context) {
         PhysicalOlapScanOperator scan = optExpression.getOp().cast();
         OlapTable table = (OlapTable) scan.getTable();
         long version =
                 table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
 
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
         if (table.hasForbitGlobalDict()) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
 
         // check dict column
-        DecodeNodeInfo info = new DecodeNodeInfo();
+        DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             if (!column.getType().isVarchar()) {
                 continue;
@@ -403,13 +404,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         }
 
         if (info.outputStringColumns.isEmpty()) {
-            return DecodeNodeInfo.EMPTY;
+            return DecodeInfo.EMPTY;
         }
 
         return info;
     }
 
-    private void collectPredicate(Operator operator, DecodeNodeInfo info) {
+    private void collectPredicate(Operator operator, DecodeInfo info) {
         if (operator.getPredicate() == null) {
             return;
         }
@@ -425,7 +426,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeNodeInfo, Decode
         });
     }
 
-    private void collectProjection(Operator operator, DecodeNodeInfo info) {
+    private void collectProjection(Operator operator, DecodeInfo info) {
         if (operator.getProjection() == null) {
             return;
         }
