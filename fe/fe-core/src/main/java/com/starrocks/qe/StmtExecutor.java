@@ -197,7 +197,6 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -746,7 +745,7 @@ public class StmtExecutor {
         if (parsedStmt == null) {
             return;
         }
-        Map<String, String> optHints = visitVarHintFromStatement();
+        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
 
         if (MapUtils.isNotEmpty(optHints)) {
             SessionVariable sessionVariable = (SessionVariable) variables.clone();
@@ -791,7 +790,9 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 this.hints.putAll(node.getOptHints());
             }
-            visit(node.getQueryStatement(), context);
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
             return null;
         }
 
@@ -800,7 +801,9 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 this.hints.putAll(node.getOptHints());
             }
-            visit(node.getQueryStatement(), context);
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
             return null;
         }
 
@@ -809,7 +812,9 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 this.hints.putAll(node.getOptHints());
             }
-            visit(node.getQueryStatement(), context);
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
             return null;
         }
 
@@ -820,13 +825,6 @@ public class StmtExecutor {
             }
             return null;
         }
-    }
-
-    @Nullable
-    private Map<String, String> visitVarHintFromStatement() {
-        Map<String, String> optHints = null;
-        optHints = VarHintVisitor.extractAllHints(parsedStmt);
-        return optHints;
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
