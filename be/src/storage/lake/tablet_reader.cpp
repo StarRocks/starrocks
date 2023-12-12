@@ -74,7 +74,10 @@ TabletReader::~TabletReader() {
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_metadata, _tablet.get_metadata(_version));
     CHECK_EQ(_version, _tablet_metadata->version());
-    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    _tablet_schema =
+            _tablet_metadata->schema().has_id() && _tablet_metadata->schema().id() != TabletSchema::invalid_id()
+                    ? GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first
+                    : std::make_shared<const TabletSchema>(_tablet_metadata->schema());
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");
     }

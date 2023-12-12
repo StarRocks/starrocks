@@ -25,7 +25,10 @@
 namespace starrocks::lake {
 
 VersionedTablet::TabletSchemaPtr VersionedTablet::get_schema() const {
-    return GlobalTabletSchemaMap::Instance()->emplace(_metadata->schema()).first;
+    if (_metadata->schema().has_id() && _metadata->schema().id() != TabletSchema::invalid_id()) {
+        return GlobalTabletSchemaMap::Instance()->emplace(_metadata->schema()).first;
+    }
+    return std::make_shared<const TabletSchema>(_metadata->schema());
 }
 
 int64_t VersionedTablet::id() const {

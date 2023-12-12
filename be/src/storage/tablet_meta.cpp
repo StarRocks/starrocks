@@ -76,12 +76,20 @@ TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
 }
 
-RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+const RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(
+        const std::vector<RowsetMetaSharedPtr>& rowsets) {
     return *std::max_element(
             rowsets.begin(), rowsets.end(), [](const RowsetMetaSharedPtr& a, const RowsetMetaSharedPtr& b) {
                 return !a->tablet_schema() || (b->tablet_schema() && a->tablet_schema()->schema_version() <
                                                                              b->tablet_schema()->schema_version());
             });
+}
+
+const RowsetMetaPB& TabletMeta::rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets) {
+    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetMetaPB& a, const RowsetMetaPB& b) {
+        return !a.has_tablet_schema() ||
+               (b.has_tablet_schema() && a.tablet_schema().schema_version() < b.tablet_schema().schema_version());
+    });
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,

@@ -140,6 +140,7 @@ message TxnLogPB {
         optional ReplicationTxnMetaPB txn_meta = 1;
         repeated OpWrite op_writes = 2;
         map<uint32, DelvecDataPB> delvecs = 3;
+        optional TabletSchemaPB schema = 4;
     }
 
     optional int64 tablet_id = 1;

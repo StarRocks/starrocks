@@ -82,7 +82,6 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
         }
     }
 
-    // TODO: Primary key
     std::vector<Version> missed_versions;
     tablet->calc_missed_versions(request.src_visible_version, &missed_versions);
     if (missed_versions.empty()) {
@@ -94,7 +93,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
         return Status::Corruption("No missing version");
     }
 
-    LOG(INFO) << "Remote snapshot tablet. "
+    LOG(INFO) << "Start make remote snapshot tablet. "
               << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
               << ", keys_type: " << KeysType_Name(tablet->keys_type()) << ", src_tablet_id: " << request.src_tablet_id
               << ", visible version: " << request.visible_version
@@ -102,15 +101,21 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
               << ", missed_versions=" << version_list_to_string(missed_versions);
 
     TBackend src_backend;
-    *incremental_snapshot = true;
-    status = make_remote_snapshot(request, &missed_versions, nullptr, &src_backend, src_snapshot_path);
-    if (!status.ok()) {
-        LOG(INFO) << "Fail to make incremental snapshot: " << status << ", txn_id: " << request.transaction_id
-                  << ", switch to fully snapshot. tablet_id: " << request.tablet_id
-                  << ", src_tablet_id: " << request.src_tablet_id << ", visible version: " << request.visible_version
-                  << ", snapshot version: " << request.src_visible_version;
+    if (request.visible_version <= 1) { // Make full snapshot
         *incremental_snapshot = false;
         status = make_remote_snapshot(request, nullptr, nullptr, &src_backend, src_snapshot_path);
+    } else { // Try to make incremental snapshot first, if failed, make full snapshot
+        *incremental_snapshot = true;
+        status = make_remote_snapshot(request, &missed_versions, nullptr, &src_backend, src_snapshot_path);
+        if (!status.ok()) {
+            LOG(INFO) << "Fail to make incremental snapshot: " << status << ", txn_id: " << request.transaction_id
+                      << ", switch to fully snapshot. tablet_id: " << request.tablet_id
+                      << ", src_tablet_id: " << request.src_tablet_id
+                      << ", visible version: " << request.visible_version
+                      << ", snapshot version: " << request.src_visible_version;
+            *incremental_snapshot = false;
+            status = make_remote_snapshot(request, nullptr, nullptr, &src_backend, src_snapshot_path);
+        }
     }
 
     if (!status.ok()) {
@@ -120,6 +125,11 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
                      << ", snapshot_version: " << request.src_visible_version;
         return status;
     }
+
+    LOG(INFO) << "Made snapshot from " << src_backend.host << ":" << src_backend.be_port << ":" << *src_snapshot_path
+              << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+              << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+              << ", snapshot_version: " << request.src_visible_version << ", is_incremental: " << *incremental_snapshot;
 
     txn_meta_pb.set_txn_id(request.transaction_id);
     txn_meta_pb.set_txn_state(ReplicationTxnStatePB::TXN_SNAPSHOTED);
@@ -330,6 +340,9 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(const std::strin
     tablet_meta_pb.set_partition_id(request.partition_id);
     tablet_meta_pb.set_tablet_id(request.tablet_id);
     tablet_meta_pb.set_schema_hash(request.schema_hash);
+    if (tablet_meta_pb.has_schema()) {
+        tablet_meta_pb.mutable_schema()->set_id(TabletSchema::invalid_id());
+    }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
         rowset_meta.set_partition_id(request.partition_id);
         rowset_meta.set_tablet_id(request.tablet_id);
@@ -364,6 +377,9 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
     tablet_meta_pb.set_partition_id(request.partition_id);
     tablet_meta_pb.set_tablet_id(request.tablet_id);
     tablet_meta_pb.set_schema_hash(request.schema_hash);
+    if (tablet_meta_pb.has_schema()) {
+        tablet_meta_pb.mutable_schema()->set_id(TabletSchema::invalid_id());
+    }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
         rowset_meta.set_partition_id(request.partition_id);
         rowset_meta.set_tablet_id(request.tablet_id);
@@ -566,7 +582,18 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << snapshot_dir << " to " << tablet_dir;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     Status status = tablet->updates()->load_snapshot(snapshot_meta);
-    if (!status.ok()) {
+    if (status.ok()) { // set tablet schema
+        if (!snapshot_meta.rowset_metas().empty() && snapshot_meta.rowset_metas().front().has_tablet_schema()) {
+            tablet->obtain_header_wrlock();
+            DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
+            tablet->set_tablet_schema_no_header_lock(TabletSchema::create(
+                    TabletMeta::rowset_meta_pb_with_max_rowset_version(snapshot_meta.rowset_metas()).tablet_schema()));
+        } else if (snapshot_meta.tablet_meta().has_schema()) {
+            tablet->obtain_header_wrlock();
+            DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
+            tablet->set_tablet_schema_no_header_lock(TabletSchema::create(snapshot_meta.tablet_meta().schema()));
+        }
+    } else {
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
@@ -612,6 +639,15 @@ Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const Tab
 
     // clone_data to tablet
     Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    if (st.ok()) { // set tablet schema
+        if (!rowsets_to_clone.empty() && rowsets_to_clone.front()->tablet_schema()) {
+            tablet->set_tablet_schema_no_header_lock(
+                    TabletMeta::rowset_meta_with_max_rowset_version(rowsets_to_clone)->tablet_schema());
+        } else if (cloned_tablet_meta.tablet_schema_ptr()) {
+            tablet->set_tablet_schema_no_header_lock(cloned_tablet_meta.tablet_schema_ptr());
+        }
+    }
+
     LOG(INFO) << "finish to publish incremental meta. [tablet=" << tablet->full_name() << ", status=" << st << "]";
     return st;
 }
@@ -685,6 +721,15 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
 
     // clone_data to tablet
     Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    if (st.ok()) { // set tablet schema
+        if (!rowsets_to_clone.empty() && rowsets_to_clone.front()->tablet_schema()) {
+            tablet->set_tablet_schema_no_header_lock(
+                    TabletMeta::rowset_meta_with_max_rowset_version(rowsets_to_clone)->tablet_schema());
+        } else if (cloned_tablet_meta->tablet_schema_ptr()) {
+            tablet->set_tablet_schema_no_header_lock(cloned_tablet_meta->tablet_schema_ptr());
+        }
+    }
+
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here

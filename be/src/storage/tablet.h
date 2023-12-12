@@ -306,6 +306,9 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
+    // Should obtain_header_wrlock outside
+    void set_tablet_schema_no_header_lock(const TabletSchemaCSPtr& tablet_schema);
+
     void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();

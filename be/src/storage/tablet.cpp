@@ -1722,6 +1722,22 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
+void Tablet::set_tablet_schema_no_header_lock(const TabletSchemaCSPtr& tablet_schema) {
+    std::lock_guard l1(_schema_lock);
+
+    if ((*tablet_schema) == (*_max_version_schema)) {
+        return;
+    }
+
+    if (tablet_schema->id() == TabletSchema::invalid_id()) {
+        _max_version_schema = tablet_schema;
+    } else {
+        _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+    }
+
+    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
+}
+
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);

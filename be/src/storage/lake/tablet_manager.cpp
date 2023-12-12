@@ -402,7 +402,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     // 1. direct lookup in cache, if there is schema info for the tablet
     auto cache_key = tablet_schema_cache_key(tablet_id);
     auto ptr = _metacache->lookup_tablet_schema(cache_key);
-    RETURN_IF(ptr != nullptr, ptr);
+    RETURN_IF(ptr != nullptr && ptr->id() != TabletSchema::invalid_id(), ptr);
 
     // Cache miss, load tablet metadata from remote storage use the hint version
 #ifdef USE_STAROS
@@ -452,7 +452,9 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
         }
     }
 
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema());
+    auto [schema, inserted] = metadata->schema().has_id() && metadata->schema().id() != TabletSchema::invalid_id()
+                                      ? GlobalTabletSchemaMap::Instance()->emplace(metadata->schema())
+                                      : std::make_pair(std::make_shared<const TabletSchema>(metadata->schema()), true);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", tablet_id));
     }
@@ -467,7 +469,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t t
     auto global_cache_key = global_schema_cache_key(index_id);
     auto schema = _metacache->lookup_tablet_schema(global_cache_key);
     TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
-    if (schema != nullptr) {
+    if (schema != nullptr && schema->id() != TabletSchema::invalid_id()) {
         return schema;
     }
     // else: Cache miss, read the schema file
@@ -507,7 +509,9 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
     RETURN_IF_ERROR(file.save(schema_pb));
 
     // Save the schema into the in-memory cache
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    auto [schema, inserted] = schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()
+                                      ? GlobalTabletSchemaMap::Instance()->emplace(schema_pb)
+                                      : std::make_pair(std::make_shared<const TabletSchema>(schema_pb), true);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError("failed to emplace the schema hash map");
     }
@@ -521,7 +525,9 @@ StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::s
     TabletSchemaPB schema_pb;
     ProtobufFile file(path);
     RETURN_IF_ERROR(file.load(&schema_pb));
-    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    auto [schema, inserted] = schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()
+                                      ? GlobalTabletSchemaMap::Instance()->emplace(schema_pb)
+                                      : std::make_pair(std::make_shared<const TabletSchema>(schema_pb), true);
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError("failed to emplace the schema hash map");
     }

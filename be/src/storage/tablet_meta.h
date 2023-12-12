@@ -99,7 +99,10 @@ public:
 
     static TabletMetaSharedPtr create();
 
-    static RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets);
+    static const RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(
+            const std::vector<RowsetMetaSharedPtr>& rowsets);
+
+    static const RowsetMetaPB& rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets);
 
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
@@ -161,6 +164,7 @@ public:
     void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
+    const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);

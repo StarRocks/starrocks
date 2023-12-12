@@ -213,6 +213,9 @@ private:
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
+            LOG(INFO) << "Apply pk incremental replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _base_version << ", new_version: " << _new_version
+                      << ", txn_id: " << txn_id;
         } else {
             auto old_next_rowset_id = _metadata->next_rowset_id();
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
@@ -236,6 +239,17 @@ private:
 
             _metadata->set_cumulative_point(0);
             old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+            _tablet.update_mgr()->unload_primary_index(_tablet.id());
+
+            LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _base_version << ", new_version: " << _new_version
+                      << ", txn_id: " << txn_id;
+        }
+
+        if (op_replication.has_schema()) {
+            _metadata->mutable_schema()->CopyFrom(op_replication.schema());
+            _metadata->mutable_schema()->set_id(TabletSchema::invalid_id());
         }
 
         return Status::OK();
@@ -414,6 +428,9 @@ private:
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write));
             }
+            LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
+                      << ", txn_id: " << op_replication.txn_meta().txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->clear_rowsets();
@@ -424,6 +441,15 @@ private:
 
             _metadata->set_cumulative_point(0);
             old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+            LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
+                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+        }
+
+        if (op_replication.has_schema() && TabletSchema(op_replication.schema()) != TabletSchema(_metadata->schema())) {
+            _metadata->mutable_schema()->CopyFrom(op_replication.schema());
+            _metadata->mutable_schema()->set_id(TabletSchema::invalid_id());
         }
 
         return Status::OK();
