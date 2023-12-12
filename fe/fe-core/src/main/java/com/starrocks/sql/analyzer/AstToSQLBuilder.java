@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -138,6 +139,16 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // set_var
+            if (MapUtils.isNotEmpty(selectList.getOptHints())) {
+                sqlBuilder.append("/*+SET_VAR(");
+                sqlBuilder.append(selectList.getOptHints().entrySet().stream()
+                        .map(entry -> String.format("%s=%s", entry.getKey(), entry.getValue()))
+                        .collect(Collectors.joining(",")));
+                sqlBuilder.append(")*/ ");
+            }
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
