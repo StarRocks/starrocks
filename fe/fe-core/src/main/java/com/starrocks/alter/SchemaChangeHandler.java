@@ -849,6 +849,15 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
 
+        // check if the new column already exist in base schema.
+        // do not support adding new column which already exist in base schema.
+        Optional<Column> foundColumn = olapTable.getBaseSchema().stream()
+                .filter(c -> c.getName().equalsIgnoreCase(newColName)).findFirst();
+        if (foundColumn.isPresent() && newColumn.equals(foundColumn.get())) {
+            throw new DdlException(
+                    "Can not add column which already exists in base table: " + newColName);
+        }
+
         // check if the new column already exist in physical column.
         // do not support adding new column which already exist in physical column.
         Optional<Column> foundPhysicalColumn = olapTable.getBaseSchema().stream()
@@ -857,15 +866,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(
                     "Can not add column which already exists in physical column: " + newColName
                             + ", you can remove " + foundPhysicalColumn.get() + " and try again.");
-        }
-
-        // check if the new column already exist in base schema.
-        // do not support adding new column which already exist in base schema.
-        Optional<Column> foundColumn = olapTable.getBaseSchema().stream()
-                .filter(c -> c.getName().equalsIgnoreCase(newColName)).findFirst();
-        if (foundColumn.isPresent() && newColumn.equals(foundColumn.get())) {
-            throw new DdlException(
-                    "Can not add column which already exists in base table: " + newColName);
         }
 
         /*
