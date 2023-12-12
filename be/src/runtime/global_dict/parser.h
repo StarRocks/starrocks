@@ -59,7 +59,7 @@ public:
 
     [[nodiscard]] Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
 
-    [[nodiscard]] Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
+    [[nodiscard]] Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
 
     [[nodiscard]] Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx,
                                          int32_t targetSlotId);
@@ -85,8 +85,7 @@ private:
     void _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                                            const std::vector<SlotId>& slot_ids);
+    [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
     [[nodiscard]] Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
                                            int32_t targetSlotId);
 

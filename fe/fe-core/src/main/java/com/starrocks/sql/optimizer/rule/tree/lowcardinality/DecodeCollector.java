@@ -465,7 +465,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // Check if an expression can be optimized using a dictionary
     // If the expression only contains a string column, the expression can be optimized using a dictionary
     private static class DictExpressionCollector extends ScalarOperatorVisitor<ScalarOperator, Void> {
+        // if expression contains constant-ref, return CONSTANTS, it's can be optmized with other dict-column
         private static final ScalarOperator CONSTANTS = ConstantOperator.TRUE;
+        // if expression contains multi columns, return VARIABLES, we should ignore the expression
         private static final ScalarOperator VARIABLES = ConstantOperator.FALSE;
 
         private final ColumnRefSet allDictColumnRefs;
@@ -548,6 +550,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+            // return actual dict-column
             if (allDictColumnRefs.contains(variable)) {
                 return variable;
             }

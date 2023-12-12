@@ -334,7 +334,7 @@ Status DictOptimizeParser::init_dict_exprs(const std::map<int, TExpr>& exprs) {
     return Status::OK();
 }
 
-Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs,
                                               const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
@@ -345,8 +345,8 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     return Status::OK();
 }
 
-Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    return _rewrite_expr_ctxs(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs) {
+    return _rewrite_expr_ctxs(pconjuncts_ctxs, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
 }
 
 void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
