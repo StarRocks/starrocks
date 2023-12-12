@@ -260,13 +260,13 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 >
 > 虽然仅修改分桶数量，没有修改分桶方式，但是您仍然需要在语句中说明分桶方式，例如示例中的 `HASH(user_id)`。
 
-- 修改所有分区的分桶数量为 10。
+- 将所有分区的分桶数量从原先的由 StarRocks 自动设置修改为 10。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10;
   ```
 
-- 修改指定分区的分桶数量为 15。
+- 将指定分区的分桶数量从原先的由 StarRocks 自动设置修改为 15。
 
   ```SQL
   ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRIBUTED BY HASH(user_id) BUCKETS 15;
@@ -282,13 +282,13 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 >
 > 同时修改分桶方式和分桶数量针对整个表的所有分区生效，不能仅仅针对某个分区生效。
 
-- 分桶方式从原先的 Hash 分桶修改为 Random 分桶，并且修改分桶数量为 10。
+- 分桶方式从原先的 Hash 分桶修改为 Random 分桶，并且分桶数量从原先的由 StarRocks 自动设置修改为 10。
 
    ```SQL
    ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
    ```
 
-- 修改 Hash 分桶的分桶键的同时，修改分桶数量为 10。
+- 将 Hash 分桶时所使用的分桶键从原先的 `event_time, event_type` 修改为 `user_id, event_time`，并且分桶数量从原先的由 StarRocks 自动设置修改为 10。
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
