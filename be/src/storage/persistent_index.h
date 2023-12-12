@@ -747,7 +747,7 @@ public:
         return res;
     }
 
-    Status reset(Tablet* tablet, EditVersion version);
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
 

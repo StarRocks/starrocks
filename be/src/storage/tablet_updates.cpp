@@ -1937,27 +1937,39 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
+
     Status st;
+    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
+    // avoid inconsistency between persistent index file and PersistentIndexMeta
+    bool enable_persistent_index = index.enable_persistent_index();
+    PersistentIndexMetaPB index_meta;
+    if (enable_persistent_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
+                                                  _debug_string(false, true));
+            failure_handler(msg);
+            return;
+        }
+    }
+
     bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
-        st = index.reset(&_tablet, version_info.version);
+        st = index.reset(&_tablet, version_info.version, &index_meta);
     } else {
         st = index.load(&_tablet);
     }
 
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
-    // avoid inconsistency between persistent index file and PersistentIndexMeta
-    bool enable_persistent_index = index.enable_persistent_index();
     // release or remove index entry when function end
     DeferOp index_defer([&]() {
+        index.reset_cancel_major_compaction();
         if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
             manager->index_cache().remove(index_entry);
         } else {
             manager->index_cache().release(index_entry);
         }
-        index.reset_cancel_major_compaction();
     });
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
@@ -2054,16 +2066,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     _compaction_state.reset();
     int64_t t_index_delvec = MonotonicMillis();
 
-    PersistentIndexMetaPB index_meta;
-    if (enable_persistent_index) {
-        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
-        if (!st.ok() && !st.is_not_found()) {
-            std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
-                                                  _debug_string(false, true));
-            failure_handler(msg);
-            return;
-        }
-    }
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg =

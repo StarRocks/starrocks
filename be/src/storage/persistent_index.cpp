@@ -3352,6 +3352,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
@@ -5024,7 +5025,7 @@ double PersistentIndex::get_write_amp_score() const {
     }
 }
 
-Status PersistentIndex::reset(Tablet* tablet, EditVersion version) {
+Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
     std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
@@ -5052,6 +5053,22 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version) {
     std::string file_path = get_l0_index_file_name(_path, version);
     RETURN_IF_ERROR(_l0->create_index_file(file_path));
     RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(0, 0, false));
+
+    index_meta->clear_l0_meta();
+    index_meta->clear_l1_version();
+    index_meta->clear_l2_versions();
+    index_meta->clear_l2_version_merged();
+    index_meta->set_key_size(_key_size);
+    index_meta->set_size(0);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_4);
+    version.to_pb(index_meta->mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
 
     return Status::OK();
 }

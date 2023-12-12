@@ -1415,7 +1415,7 @@ Status PrimaryIndex::major_compaction(Tablet* tablet) {
     }
 }
 
-Status PrimaryIndex::reset(Tablet* tablet, EditVersion version) {
+Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
@@ -1433,7 +1433,7 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version) {
             _persistent_index.reset();
         }
         _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
-        RETURN_IF_ERROR(_persistent_index->reset(tablet, version));
+        RETURN_IF_ERROR(_persistent_index->reset(tablet, version, index_meta));
     } else {
         if (_pkey_to_rssid_rowid != nullptr) {
             _pkey_to_rssid_rowid.reset();
