@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -196,6 +197,7 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -203,6 +205,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -743,18 +746,7 @@ public class StmtExecutor {
         if (parsedStmt == null) {
             return;
         }
-        Map<String, String> optHints = null;
-        if (parsedStmt instanceof QueryStatement &&
-                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
-        } else if (parsedStmt instanceof DmlStmt) {
-            DmlStmt dml = (DmlStmt) parsedStmt;
-            optHints = dml.getOptHints();
-        } else if (parsedStmt instanceof DdlStmt) {
-            DdlStmt ddl = (DdlStmt) parsedStmt;
-            optHints = ddl.getOptHints();
-        }
+        Map<String, String> optHints = visitVarHintFromStatement();
 
         if (MapUtils.isNotEmpty(optHints)) {
             SessionVariable sessionVariable = (SessionVariable) variables.clone();
@@ -764,6 +756,77 @@ public class StmtExecutor {
             }
             context.setSessionVariable(sessionVariable);
         }
+    }
+
+    /**
+     * Visit all SELECT query blocks
+     * <p>
+     * NOTE: for duplicated variable, it would use the first one
+     */
+    public static class VarHintVisitor extends AstTraverser<Void, Void> {
+
+        private final Map<String, String> hints = new HashMap<>();
+
+        public Map<String, String> getHints() {
+            return hints;
+        }
+
+        public static Map<String, String> extractAllHints(StatementBase stmt) {
+            VarHintVisitor visitor = new VarHintVisitor();
+            stmt.accept(visitor, null);
+            return visitor.getHints();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null && MapUtils.isNotEmpty(node.getSelectList().getOptHints())) {
+                node.getSelectList().getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitSelect(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                this.hints.putAll(node.getOptHints());
+            }
+            visit(node.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                this.hints.putAll(node.getOptHints());
+            }
+            visit(node.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                this.hints.putAll(node.getOptHints());
+            }
+            visit(node.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitDDLStatement(DdlStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                this.hints.putAll(node.getOptHints());
+            }
+            return null;
+        }
+    }
+
+    @Nullable
+    private Map<String, String> visitVarHintFromStatement() {
+        Map<String, String> optHints = null;
+        optHints = VarHintVisitor.extractAllHints(parsedStmt);
+        return optHints;
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
