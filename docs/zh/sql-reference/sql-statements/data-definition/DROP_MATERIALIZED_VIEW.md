@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 删除物化视图。
 
-此命令无法用于删除正在创建中的同步物化视图。如要删除创建中的同步物化视图，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除同步物化视图)。
+此命令无法用于删除正在创建中的同步物化视图。如要删除创建中的同步物化视图，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除正在创建的同步物化视图)。
 
 > **注意**
 >
@@ -63,7 +63,7 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 
 ```Plain
 MySQL > DROP MATERIALIZED VIEW k1_k2;
-ERROR 1064 (HY000): Materialized view k1_k2 is not find
+ERROR 1064 (HY000): Materialized view k1_k2 is not found
 ```
 
 - 当声明 `IF EXISTS` 参数时，删除一个不属于当前数据库的物化视图 `k1_k2` 不会报错。
