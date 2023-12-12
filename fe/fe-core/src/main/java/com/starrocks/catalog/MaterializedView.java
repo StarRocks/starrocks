@@ -1045,6 +1045,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(Joiner.on(", ").join(getCopiedBfColumns())).append("\"");
         }
 
+        // colocate_with
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
