@@ -14,7 +14,7 @@ Extracts characters staring from the specified position and returns a substring 
 VARCHAR substr(VARCHAR str, pos[, len])
 ```
 
-## Parameter values
+## Parameters
 
 - `str`: required, the string to extract characters. It must be a VARCHAR value.
 - `pos`: required, an integer that specifies the starting position. Note that the first character in a string is 1, not 0.
