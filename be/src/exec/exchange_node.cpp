@@ -87,7 +87,7 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
             config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
-    _stream_recvr->bind_profile(0, _runtime_profile.get());
+    _stream_recvr->bind_profile(0, _runtime_profile);
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
