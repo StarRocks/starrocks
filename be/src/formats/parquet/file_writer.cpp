@@ -237,6 +237,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
                                                       ::parquet::Type::DOUBLE, -1, file_column_id.field_id);
     }
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
