@@ -208,7 +208,8 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
-        if (state != nullptr && state->query_ctx()->is_query_expired()) {
+        if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+            // how many in-flight rpcs and what exchange receivers are.
             if (_total_in_flight_rpc > 0) {
                 std::stringstream ss;
                 auto remain_rpc_num = 0;
@@ -222,6 +223,7 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
                 LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id()) << " SinkBuffer remains "
                              << remain_rpc_num << " rpcs, dest are " << ss.str();
             }
+            // how many alive drivers left and what they are.
             if (_num_remaining_eos > 0) {
                 std::stringstream ss;
                 for (auto& remain_eos : _num_sinkers) {
@@ -232,7 +234,8 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
             }
         }
     }
-    if (state != nullptr && state->query_ctx()->is_query_expired()) {
+    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+        // check how many cancel operations are issued, and show the state of that time.
         LOG(INFO) << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",

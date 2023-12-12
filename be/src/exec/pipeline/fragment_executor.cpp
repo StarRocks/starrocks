@@ -681,11 +681,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
             COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
 
-            LOG(INFO) << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
-                      << " fragment_instance_id=" << print_id(request.fragment_instance_id())
-                      << " is_stream_pipeline=" << request.is_stream_pipeline()
-                      << " backend_num=" << request.backend_num()
-                      << " fragment plan=" << fragment_ctx->plan()->debug_string();
+            VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
+                       << " fragment_instance_id=" << print_id(request.fragment_instance_id())
+                       << " is_stream_pipeline=" << request.is_stream_pipeline()
+                       << " backend_num=" << request.backend_num()
+                       << " fragment plan=" << fragment_ctx->plan()->debug_string();
         } else {
             _fail_cleanup(prepare_success);
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
