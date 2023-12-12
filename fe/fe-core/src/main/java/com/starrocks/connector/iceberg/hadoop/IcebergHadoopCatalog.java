@@ -72,8 +72,8 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
         if (!copiedProperties.containsKey(WAREHOUSE_LOCATION)) {
-            throw new IllegalArgumentException("Iceberg hadoop catalog must set warehouse location (\"" +
-                    ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION + "\" = \"s3://path/to/warehouse\").");
+            throw new IllegalArgumentException(String.format("Iceberg hadoop catalog must set warehouse location (\"%s\" = \"s3://path/to/warehouse\").",
+                    ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION));
         }
 
         delegate = (HadoopCatalog) CatalogUtil.loadCatalog(HadoopCatalog.class.getName(), name, copiedProperties, conf);
