@@ -782,6 +782,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return physicalName != null ? physicalName : name;
     }
 
+    public String getDirectPhysicalName() {
+        return physicalName != null ? physicalName : "";
+    }
+
     public void renameColumn(String newName) {
         if (physicalName == null) {
             physicalName = name;
