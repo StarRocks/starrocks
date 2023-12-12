@@ -134,6 +134,16 @@ public class AstToSQLBuilder {
             return "";
         }
 
+        private void visitVarHint(StringBuilder sqlBuilder, Map<String, String> hints) {
+            if (MapUtils.isNotEmpty(hints)) {
+                sqlBuilder.append("/*+SET_VAR(");
+                sqlBuilder.append(hints.entrySet().stream()
+                        .map(entry -> String.format("%s=%s", entry.getKey(), entry.getValue()))
+                        .collect(Collectors.joining(",")));
+                sqlBuilder.append(")*/ ");
+            }
+        }
+
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
@@ -141,13 +151,7 @@ public class AstToSQLBuilder {
             sqlBuilder.append("SELECT ");
 
             // set_var
-            if (MapUtils.isNotEmpty(selectList.getOptHints())) {
-                sqlBuilder.append("/*+SET_VAR(");
-                sqlBuilder.append(selectList.getOptHints().entrySet().stream()
-                        .map(entry -> String.format("%s=%s", entry.getKey(), entry.getValue()))
-                        .collect(Collectors.joining(",")));
-                sqlBuilder.append(")*/ ");
-            }
+            visitVarHint(sqlBuilder, selectList.getOptHints());
 
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
@@ -374,6 +378,10 @@ public class AstToSQLBuilder {
         public String visitInsertStatement(InsertStmt insert, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("INSERT ");
+
+            // set_var
+            visitVarHint(sb, insert.getOptHints());
+
             if (insert.isOverwrite()) {
                 sb.append("OVERWRITE ");
             } else {
