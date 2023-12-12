@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.HashCachedCompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -97,18 +98,22 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                                                 ScalarOperatorRewriteContext context) {
         if (predicate.isNotBetween()) {
             ScalarOperator lower =
-                    new BinaryPredicateOperator(BinaryType.LT, predicate.getChild(0), predicate.getChild(1));
+                    new BinaryPredicateOperator(BinaryType.LT, predicate.getChild(0),
+                            predicate.getChild(1));
 
             ScalarOperator upper =
-                    new BinaryPredicateOperator(BinaryType.GT, predicate.getChild(0), predicate.getChild(2));
+                    new BinaryPredicateOperator(BinaryType.GT, predicate.getChild(0),
+                            predicate.getChild(2));
 
             return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper);
         } else {
             ScalarOperator lower =
-                    new BinaryPredicateOperator(BinaryType.GE, predicate.getChild(0), predicate.getChild(1));
+                    new BinaryPredicateOperator(BinaryType.GE, predicate.getChild(0),
+                            predicate.getChild(1));
 
             ScalarOperator upper =
-                    new BinaryPredicateOperator(BinaryType.LE, predicate.getChild(0), predicate.getChild(2));
+                    new BinaryPredicateOperator(BinaryType.LE, predicate.getChild(0),
+                            predicate.getChild(2));
 
             return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper);
         }
@@ -140,13 +145,14 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     @Nullable
     private ScalarOperator getOptimizedCompoundTree(CompoundPredicateOperator parent) {
+        // reset node first So we can apply NormalizePredicateRule to one tree many times
         parent.setCompoundTreeUniqueLeaves(Sets.newLinkedHashSet());
         parent.setCompoundTreeLeafNodeNumber(0);
         Set<ScalarOperator> compoundTreeUniqueLeaves = parent.getCompoundTreeUniqueLeaves();
 
         for (ScalarOperator child : parent.getChildren()) {
             if (child != null) {
-                // child is not leaf node in Compound tree whose root is 'parent'
+                // child is not leaf node in Compound tree
                 if ((parent.isAnd() && OperatorType.COMPOUND.equals(child.getOpType()) &&
                         ((CompoundPredicateOperator) child).isAnd()) ||
                         (parent.isOr() && OperatorType.COMPOUND.equals(child.getOpType()) &&
@@ -160,15 +166,18 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     compoundChild.setCompoundTreeUniqueLeaves(null);
                     compoundChild.setCompoundTreeLeafNodeNumber(0);
                 } else {
-                    // leaf node
-                    compoundTreeUniqueLeaves.add(child);
-                    parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
+                    // child is leaf node in compound tree
                     if (OperatorType.COMPOUND.equals(child.getOpType())) {
                         CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
+                        // we cache CompoundPredicate's hash value to eliminate duplicate calculations
+                        compoundTreeUniqueLeaves.add(new HashCachedCompoundPredicateOperator(compoundChild));
                         // clear child's set to save memory
                         compoundChild.setCompoundTreeUniqueLeaves(null);
                         compoundChild.setCompoundTreeLeafNodeNumber(0);
+                    } else {
+                        compoundTreeUniqueLeaves.add(child);
                     }
+                    parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
                 }
             }
         }
@@ -176,12 +185,18 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         // this tree can be optimized
         if (compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
             CompoundPredicateOperator newTree =
-                    (CompoundPredicateOperator) Utils.compoundOr(Lists.newArrayList(compoundTreeUniqueLeaves));
+                    (CompoundPredicateOperator) Utils.createCompound(parent.getCompoundType(),
+                            compoundTreeUniqueLeaves.stream().map(
+                                    node -> {
+                                        if (node instanceof HashCachedCompoundPredicateOperator) {
+                                            return ((HashCachedCompoundPredicateOperator) node).getOperator();
+                                        }
+                                        return node;
+                                    }).collect(Collectors.toCollection(Lists::newLinkedList)));
             newTree.setCompoundTreeLeafNodeNumber(compoundTreeUniqueLeaves.size());
             newTree.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
             return newTree;
         }
-
         // this tree can't be optimized
         return null;
     }
@@ -213,7 +228,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
                 .collect(Collectors.toList());
         if (constants.size() == 1) {
-            BinaryType op = isIn ? BinaryType.EQ : BinaryType.NE;
+            BinaryType op =
+                    isIn ? BinaryType.EQ : BinaryType.NE;
             result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
         } else if (!constants.isEmpty()) {
             constants.add(0, lhs);
@@ -258,7 +274,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                 throw new SemanticException("Invalid index for struct element: " + collectionElement);
             }
 
-            return SubfieldOperator.build(collectionElement.getChild(0), collectionElement.getChild(0).getType(),
+            return SubfieldOperator.build(collectionElement.getChild(0),
+                    collectionElement.getChild(0).getType(),
                     Lists.newArrayList(index));
         }
         return collectionElement;
@@ -271,14 +288,13 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         if (predicate.getChild(0).getType().isMapType()) {
-            Function fn = Expr.getBuiltinFunction(FunctionSet.MAP_SIZE, new Type[] {predicate.getChild(0).getType()},
-                    Function.CompareMode.IS_SUPERTYPE_OF);
+            Function fn = Expr.getBuiltinFunction(FunctionSet.MAP_SIZE,
+                    new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);
         } else if (predicate.getChild(0).getType().isArrayType()) {
-            Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.ARRAY_LENGTH, new Type[] {predicate.getChild(0).getType()},
-                            Function.CompareMode.IS_SUPERTYPE_OF);
+            Function fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_LENGTH,
+                    new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);
         }

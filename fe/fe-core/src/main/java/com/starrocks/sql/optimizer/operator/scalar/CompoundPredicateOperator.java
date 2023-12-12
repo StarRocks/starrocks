@@ -46,14 +46,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
     public CompoundPredicateOperator(CompoundType compoundType, ScalarOperator... arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
-        compoundTreeLeafNodeNumber = 0;
         Preconditions.checkState(arguments.length >= 1);
     }
 
     public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
-        compoundTreeLeafNodeNumber = 0;
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
     }
 
