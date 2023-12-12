@@ -390,18 +390,25 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
                                   std::vector<SlotDescriptor>* schema) {
     auto max_sample_file_count = scan_range.params.schema_sample_file_count;
 
-    if (max_sample_file_count >= scan_range.ranges.size()) {
-        max_sample_file_count = scan_range.ranges.size();
-    } else if (max_sample_file_count < 0) {
-        max_sample_file_count = scan_range.ranges.size();
-    } else if (max_sample_file_count == 0) {
-        max_sample_file_count = 1;
+    size_t step;
+    if (max_sample_file_count <= 0) {
+        // sample all files
+        step = 1;
+    } else if (max_sample_file_count == 1) {
+        // sample the first file.
+        step = scan_range.ranges.size();
+    } else if (max_sample_file_count == 2) {
+        // sample the first file and the last file.
+        step = scan_range.ranges.size() - 1;
+    } else {
+        step = scan_range.ranges.size() / max_sample_file_count;
     }
 
     size_t step = scan_range.ranges.size() / max_sample_file_count;
 
     std::vector<std::vector<SlotDescriptor>> schemas;
     // sample some files.
+    size_t sample_file_count = 0;
     for (size_t i = 0; i < scan_range.ranges.size(); i += step) {
         // sample range only contains 1 file.
         auto sample_range = scan_range;
@@ -435,6 +442,8 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
         RETURN_IF_ERROR_WITH_WARN(p_scanner->get_schema(&schema), "get schema failed: ");
 
         schemas.emplace_back(std::move(schema));
+
+        if (++sample_file_count > max_sample_file_count) break;
     }
 
     merge_schema(schemas, schema);
