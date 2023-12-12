@@ -109,12 +109,12 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
-        _write_varchar_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        _write_byte_array_column_chunk<TYPE_VARCHAR>(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
     case TYPE_BINARY:
     case TYPE_VARBINARY: {
-        _write_binary_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        _write_byte_array_column_chunk<TYPE_VARBINARY>(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
     case TYPE_ARRAY: {
@@ -298,40 +298,11 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
     });
 }
 
-void LevelBuilder::_write_binary_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                              const CallbackFunction& write_leaf_callback) {
-    const auto* data_col = down_cast<const RunTimeColumnType<TYPE_BINARY>*>(ColumnHelper::get_data_column(col.get()));
-    const auto* null_col = get_raw_null_column(col);
-    auto& vo = data_col->get_offset();
-    auto& vb = data_col->get_bytes();
-
-    // Use the rep_levels in the context from caller since node is primitive.
-    auto& rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
-    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
-
-    auto values = new ::parquet::ByteArray[col->size()];
-    DeferOp defer([&] { delete[] values; });
-
-    for (size_t i = 0; i < col->size(); i++) {
-        values[i].len = static_cast<uint32_t>(vo[i + 1] - vo[i]);
-        values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[i]);
-    }
-
-    write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx._num_levels,
-            .def_levels = def_levels ? def_levels->data() : nullptr,
-            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
-            .values = reinterpret_cast<uint8_t*>(values),
-            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
-    });
-}
-
-void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                               const CallbackFunction& write_leaf_callback) {
-    const auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(col.get()));
+template <LogicalType lt>
+void LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                  const CallbackFunction& write_leaf_callback) {
+    const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
     auto& vo = data_col->get_offset();
     auto& vb = data_col->get_bytes();
