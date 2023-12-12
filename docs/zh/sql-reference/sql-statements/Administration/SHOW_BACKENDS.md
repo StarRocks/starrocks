@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 该操作需要 SYSTEM 级 OPERATE 权限或 cluster_admin 角色。
+> 该操作需要 SYSTEM 级 OPERATE 权限或 `cluster_admin` 角色。
 
 ## 语法
 

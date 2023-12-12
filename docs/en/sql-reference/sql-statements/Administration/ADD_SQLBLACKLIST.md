@@ -16,10 +16,6 @@ This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the
 
 :::
 
-> **NOTE**
->
-> Only users with the ADMIN privilege can add SQL regular expressions to the SQL blacklist.
-
 ## Syntax
 
 ```SQL
