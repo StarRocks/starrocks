@@ -790,9 +790,7 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 node.getOptHints().forEach(hints::putIfAbsent);
             }
-            if (node.getQueryStatement() != null) {
-                visit(node.getQueryStatement(), context);
-            }
+            super.visitInsertStatement(node, context);
             return null;
         }
 
@@ -801,9 +799,7 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 node.getOptHints().forEach(hints::putIfAbsent);
             }
-            if (node.getQueryStatement() != null) {
-                visit(node.getQueryStatement(), context);
-            }
+            super.visitUpdateStatement(node, context);
             return null;
         }
 
@@ -812,9 +808,7 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 node.getOptHints().forEach(hints::putIfAbsent);
             }
-            if (node.getQueryStatement() != null) {
-                visit(node.getQueryStatement(), context);
-            }
+            super.visitDeleteStatement(node, context);
             return null;
         }
 
@@ -823,6 +817,7 @@ public class StmtExecutor {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
                 node.getOptHints().forEach(hints::putIfAbsent);
             }
+            super.visitDDLStatement(node, context);
             return null;
         }
     }
