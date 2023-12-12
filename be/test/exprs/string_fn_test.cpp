@@ -3546,4 +3546,6 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
     }
 }
 
+
+
 } // namespace starrocks

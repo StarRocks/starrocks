@@ -311,6 +311,7 @@ public:
     // regex method
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
@@ -343,6 +344,15 @@ public:
     DEFINE_VECTORIZED_FN(replace);
     static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_instr);
+    static Status instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status instr_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, from_value, to_value]
