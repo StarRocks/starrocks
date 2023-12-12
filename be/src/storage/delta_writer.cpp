@@ -481,7 +481,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
                             if (!st.ok()) {
                                 LOG(WARNING) << "Failed to submit sync tablet " << _tablet->tablet_id()
                                              << " segment err=" << st;
-                                replicate_token->set_status(st);
+                                replicate_token->cancel(st);
                             }
                         });
             }

@@ -277,9 +277,19 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
 
-    // Abort tablets which primary replica already failed
     if (response->status().status_code() != TStatusCode::OK) {
+        // Abort secondary replica tablets whose primary replica already failed
         _abort_replica_tablets(request, response->status().error_msgs()[0], node_id_to_abort_tablets);
+
+        // Cancel the failed primary tablets, and release the resource as soon as possible.
+        // Don't abort the tablets here because delta_writer->abort() may block the bthread
+        std::unordered_set<int64_t> failed_primary_tablets;
+        for (auto& [node_id, tablet_ids] : node_id_to_abort_tablets) {
+            for (auto tablet_id : tablet_ids) {
+                failed_primary_tablets.insert(tablet_id);
+            }
+        }
+        _cancel_primary_tablets(failed_primary_tablets, response->status().error_msgs()[0]);
     }
 
     // We need wait all secondary replica commit before we close the channel
@@ -462,6 +472,17 @@ void LocalTabletsChannel::_flush_stale_memtables() {
                   << " total_flush_writer: " << total_flush_writer << " total_active_writer: " << total_active_writer
                   << " total_writer: " << _delta_writers.size() << " job_mem_usage: " << _mem_tracker->consumption()
                   << " load_mem_usage: " << _mem_tracker->parent()->consumption();
+    }
+}
+
+void LocalTabletsChannel::_cancel_primary_tablets(const std::unordered_set<int64_t>& failed_primary_tablets,
+                                                  const std::string& cancel_reason) {
+    Status status = Status::Cancelled(cancel_reason);
+    for (auto tablet_id : failed_primary_tablets) {
+        auto it = _delta_writers.find(tablet_id);
+        DCHECK(it != _delta_writers.end());
+        auto& delta_writer = it->second;
+        delta_writer->cancel(status);
     }
 }
 

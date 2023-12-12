@@ -87,58 +87,56 @@ Status ReplicateChannel::_init() {
     return Status::OK();
 }
 
-Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
-
-    // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
-
-    // 2. send segment sync request
-    _send_request(segment, data, eos);
-
-    // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
-
-    VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
-            << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
-
-    return _st;
-}
-
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
-    RETURN_IF_ERROR(_st);
+    RETURN_IF_ERROR(status());
 
     VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
             << " eos " << eos << " to [" << _host << ":" << _port;
 
     // 1. init sync channel
-    _st = _init();
-    RETURN_IF_ERROR(_st);
+    Status status = _init();
 
     // 2. wait pre request's result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
+    if (status.ok()) {
+        status = _wait_response(replicate_tablet_infos, failed_tablet_infos);
+    }
 
     // 3. send segment sync request
-    _send_request(segment, data, eos);
+    if (status.ok()) {
+        status = _send_request(segment, data, eos);
+    }
 
     // 4. wait if eos=true
-    if (eos || _mem_tracker->limit_exceeded()) {
-        RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
+    if (status.ok() && (eos || _mem_tracker->limit_exceeded())) {
+        status = _wait_response(replicate_tablet_infos, failed_tablet_infos);
     }
 
     VLOG(1) << "Asynced tablet " << _opt->tablet_id << " segment id "
             << (segment == nullptr ? -1 : segment->segment_id()) << " eos " << eos << " to [" << _host << ":" << _port
             << "] res " << _closure->result.DebugString();
 
-    return _st;
+    if (!status.ok()) {
+        set_status(status);
+    }
+    return status;
 }
 
-void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
+Status ReplicateChannel::_start_new_rpc_call() {
+    // To ensure there is no new rpc call after cancel(), this need the protection
+    // of _status_lock, and do not create new rpc call id if _st is not ok.
+    std::lock_guard l(_status_lock);
+    if (!_st.ok()) {
+        return Status::InternalError("Failed to start new rpc call because channel status is " + _st.to_string());
+    }
+    _closure->reset();
+    return Status::OK();
+}
+
+Status ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
+    RETURN_IF_ERROR(_start_new_rpc_call());
+
     PTabletWriterAddSegmentRequest request;
     request.set_allocated_id(const_cast<starrocks::PUniqueId*>(&_opt->load_id));
     request.set_tablet_id(_opt->tablet_id);
@@ -147,7 +145,6 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_index_id(_opt->index_id);
 
     _closure->ref();
-    _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
     _closure->cntl.ignore_eovercrowded();
 
@@ -165,6 +162,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     if (segment != nullptr) {
         request.release_segment();
     }
+    return Status::OK();
 }
 
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
@@ -172,14 +170,14 @@ Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>
     if (_closure->join()) {
         _mem_tracker->release(_closure->request_size);
         if (_closure->cntl.Failed()) {
-            _st = Status::InternalError(_closure->cntl.ErrorText());
-            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
-            return _st;
+            Status status = Status::InternalError(_closure->cntl.ErrorText());
+            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << status;
+            return status;
         }
-        _st = _closure->result.status();
-        if (!_st.ok()) {
-            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
-            return _st;
+        Status status = _closure->result.status();
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << status;
+            return status;
         }
 
         for (size_t i = 0; i < _closure->result.tablet_vec_size(); ++i) {
@@ -196,13 +194,18 @@ Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>
     return Status::OK();
 }
 
-void ReplicateChannel::cancel() {
-    if (!_init().ok()) {
+void ReplicateChannel::cancel(const Status& status) {
+    std::lock_guard l(_status_lock);
+    if (!_st.ok()) {
         return;
     }
-
+    _st = status;
     // cancel rpc request, accelerate the release of related resources
-    // Cancel an already-cancelled call_id has no effect.
+    // Cancel an already-cancelled call_id has no effect. To ensure
+    // there is no new rpc call after this cancel, rpc cancel and
+    // _start_new_rpc_call() are both under the protection of _status_lock.
+    // _start_new_rpc_call() will not create new rpc call id if _st
+    // is not ok.
     _closure->cancel();
 }
 
@@ -234,6 +237,9 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
 
 void ReplicateToken::cancel(const Status& st) {
     set_status(st);
+    for (auto& channel : _replicate_channels) {
+        channel->cancel(Status::Cancelled("Replicate token is canceled"));
+    }
 }
 
 void ReplicateToken::shutdown() {
@@ -318,7 +324,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             st = channel->async_segment(segment.get(), data, eos, &_replicated_tablet_infos, &_failed_tablet_infos);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to sync segment " << channel->debug_string() << " err " << st;
-                channel->cancel();
+                channel->cancel(Status::Cancelled("Failed to sync segment because of failure, " + st.to_string()));
                 _failed_node_id.insert(channel->node_id());
             }
         }
@@ -328,7 +334,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                          << _failed_node_id.size() << " max_fail_num " << _max_fail_replica_num;
             for (auto& channel : _replicate_channels) {
                 if (_failed_node_id.count(channel->node_id()) == 0) {
-                    channel->cancel();
+                    channel->cancel(Status::Cancelled("Failed to sync segment because of reaching max_fail_num"));
                 }
             }
             return set_status(st);
