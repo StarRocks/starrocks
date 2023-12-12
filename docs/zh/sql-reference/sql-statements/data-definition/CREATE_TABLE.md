@@ -461,7 +461,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * 不支持主键模型表、更新模型表和聚合表。
   * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
   更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
 
@@ -487,7 +487,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * **建表时，必须指定分桶键**。
   * 作为分桶键的列，该列的值不支持更新。
   * 分桶键指定后不支持修改。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 ### **ORDER BY**
 

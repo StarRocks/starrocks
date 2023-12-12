@@ -4,6 +4,9 @@ displayed_sidebar: "English"
 
 # Data distribution
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 Configuring appropriate partitioning and bucketing at table creation can help to achieve even data distribution. Even data distribution means dividing the data into subsets according to certain rules and distributing them evenly across different nodes. It can also reduce the amount of data scanned and make full use of the cluster's parallel processing capability, thereby improving query performance.
 
 > **NOTE**
