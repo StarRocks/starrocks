@@ -80,7 +80,9 @@ public class KafkaProgress extends RoutineLoadProgress {
 
     public KafkaProgress(Map<Integer, Long> partitionOffsets) {
         super(LoadDataSourceType.KAFKA);
-        this.partitionIdToOffset = partitionOffsets;
+        if (partitionOffsets != null) {
+            this.partitionIdToOffset = partitionOffsets;
+        }
     }
 
     public Map<Integer, Long> getPartitionIdToOffset(List<Integer> partitionIds) {
