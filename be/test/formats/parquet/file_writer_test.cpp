@@ -629,12 +629,36 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(FileWriterTest, TestVarbinaryNotSupport) {
+TEST_F(FileWriterTest, TestWriteVarbinary) {
     auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
     std::vector<TypeDescriptor> type_descs{type_varbinary};
 
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = BinaryColumn::create();
+        data_column->append("hello");
+        data_column->append("world");
+        data_column->append("starrocks");
+        data_column->append("lakehouse");
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
     auto schema = _make_schema(type_descs);
-    ASSERT_TRUE(schema == nullptr);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestFieldIdWithStruct) {
