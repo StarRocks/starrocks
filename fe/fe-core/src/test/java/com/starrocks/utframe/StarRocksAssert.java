@@ -34,7 +34,6 @@
 
 package com.starrocks.utframe;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
