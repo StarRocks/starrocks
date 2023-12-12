@@ -1432,7 +1432,8 @@ public class GlobalStateMgr {
             autovacuumDaemon.start();
         }
 
-        if (Config.enable_safe_mode) {
+        // Current only support safe mode for shared-nothing cluster
+        if (Config.enable_safe_mode && RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
