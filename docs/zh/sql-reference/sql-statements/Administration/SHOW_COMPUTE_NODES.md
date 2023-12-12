@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 该语句用于查看集群内的 CN 节点。
 
+> **注意**
+>
+> 该操作需要 SYSTEM 级 OPERATE 权限或 `cluster_admin` 角色。
+
 ## 语法
 
 ```sql
