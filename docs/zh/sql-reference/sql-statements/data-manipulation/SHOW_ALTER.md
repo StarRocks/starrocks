@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-查询正在进行的 Alter table 操作的执行情况：
+查询正在进行的 Alter table 操作的执行情况，包括：
 
 - 修改列。
 - 优化表结构（自 3.2 版本起），包括修改分桶方式和分桶数量。

@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-取消指定 Alter table 操作，包括：
+取消正在进行的 ALTER TABLE 操作，包括：
 
 - 修改列。
 - 优化表结构（自 3.2 版本起），包括修改分桶方式和分桶数量。
@@ -15,8 +15,8 @@ displayed_sidebar: "Chinese"
 > **注意**
 >
 > - 该语句为同步操作。
-> - 只有拥有对应表 ALTER 权限的用户才可以执行该操作。
-> - 该语句仅支持取消使用 Alter table 命令执行的异步操作（如上），不支持取消使用 Alter table 命令执行同步操作，比如 rename。
+> - 只有拥有对应表 ALTER 权限的用户才可以执行语句。
+> - 该语句仅支持取消使用 ALTER TABLE 执行的异步操作（如上），不支持取消使用 ALTER TABLE 执行同步操作，比如 rename。
 
 ## 语法
 

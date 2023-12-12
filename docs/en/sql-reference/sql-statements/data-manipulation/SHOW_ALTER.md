@@ -6,21 +6,21 @@ displayed_sidebar: "English"
 
 ## Description
 
-Shows the execution of the following ongoing ALTER TABLE tasks:
+Shows the execution of the ongoing ALTER TABLE operations, including:
 
 - Modify columns.
-- Optimize table structure (from v3.2), including modifying bucketing method and the number of buckets.
-- Create and delete ROLLUP indexes.
+- Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.
+- Create and delete the rollup index.
 
 ## Syntax
 
-- Show the execution of tasks related to modifying columns or optimizing table structure.
+- Show the execution of operations of modifying columns or optimizing table schema.
 
     ```sql
     SHOW ALTER TABLE { COLUMN | OPTIMIZE } [FROM db_name] [WHERE TableName|CreateTime|FinishTime|State] [ORDER BY] [LIMIT]
     ```
 
-- Show the execution of tasks related to adding or deleting ROLLUP indexes.
+- Show the execution of operations of adding or deleting the rollup index.
 
     ```sql
     SHOW ALTER TABLE ROLLUP [FROM db_name]
@@ -30,15 +30,15 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
 
 - `{COLUMN ｜ OPTIMIZE | ROLLUP}`:
 
-  - If `COLUMN` is specified, this statement shows tasks for modifying columns.
-  - If `OPTIMIZE` is specified, this statement shows tasks for optimizing table structure.
-  - If `ROLLUP` is specified, this statement shows tasks for adding or deleting ROLLUP indexes.
+  - If `COLUMN` is specified, this statement shows operations of modifying columns.
+  - If `OPTIMIZE` is specified, this statement shows operations of optimizing table structure.
+  - If `ROLLUP` is specified, this statement shows operations of adding or deleting the rollup index.
 
 - `db_name`: optional. If `db_name` is not specified, the current database is used by default.
 
 ## Examples
 
-1. Show the execution of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in the current database.
+1. Show the execution of operations of modifying columns, optimizing table schema, and creating or deleting the rollup index in the current database.
 
     ```sql
     SHOW ALTER TABLE COLUMN;
@@ -46,7 +46,7 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
     SHOW ALTER TABLE ROLLUP;
     ```
 
-2. Show the execution of tasks related to modifying columns, optimizing table structure, and creating or deleting ROLLUP indexes in a specified database.
+2. Show the execution of operations related to modifying columns, optimizing table schema, and creating or deleting the rollup index in a specified database.
 
     ```sql
     SHOW ALTER TABLE COLUMN FROM example_db;
@@ -54,7 +54,7 @@ Shows the execution of the following ongoing ALTER TABLE tasks:
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ```
 
-3. Show the execution of the most recent task related to modifying columns or optimizing table structure in a specified table.
+3. Show the execution of the most recent operation of modifying columns or optimizing table schema in a specified table.
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
