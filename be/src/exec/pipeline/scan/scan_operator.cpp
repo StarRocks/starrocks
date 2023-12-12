@@ -193,7 +193,7 @@ void ScanOperator::_detach_chunk_sources() {
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
     // check when expired, are there running io tasks or submitted tasks
-    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+    if (UNLIKELY(state != nullptr && state->query_ctx() != nullptr && state->query_ctx()->is_query_expired() &&
                  (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
         LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
                      << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
