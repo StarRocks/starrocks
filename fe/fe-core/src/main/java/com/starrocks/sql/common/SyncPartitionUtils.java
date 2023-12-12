@@ -66,7 +66,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -825,10 +824,9 @@ public class SyncPartitionUtils {
     private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
             Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap) {
-        long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet()
-                .stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
+        long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet().size();
         long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
-                .stream().map(x -> x.size()).reduce(0, Integer::sum);
+                .stream().map(Set::size).reduce(0, Integer::sum);
         return refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize;
     }
 
@@ -971,9 +969,6 @@ public class SyncPartitionUtils {
             if (baseTableVersionMap != null) {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
-                        if (partitionName.equals(ICEBERG_ALL_PARTITION)) {
-                            return false;
-                        }
                         boolean isListPartition = mv.getPartitionInfo() instanceof ListPartitionInfo;
                         Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName), isListPartition, expr);

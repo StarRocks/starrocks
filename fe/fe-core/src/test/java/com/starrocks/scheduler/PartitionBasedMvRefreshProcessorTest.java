@@ -1719,7 +1719,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
@@ -1771,7 +1771,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable));
                 }
 
                 try {
@@ -1831,7 +1831,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String addPartitionSql =
@@ -1930,7 +1930,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p4";
