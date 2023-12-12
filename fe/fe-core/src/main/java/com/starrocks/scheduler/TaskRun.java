@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -68,8 +69,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ExecuteOption executeOption;
 
+    private final String uuid;
+
     TaskRun() {
         future = new CompletableFuture<>();
+        uuid = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -291,6 +295,9 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (status.getDefinition() == null) {
+            return false;
+        }
         TaskRun taskRun = (TaskRun) o;
         return status.getDefinition().equals(taskRun.getStatus().getDefinition());
     }
@@ -304,10 +311,11 @@ public class TaskRun implements Comparable<TaskRun> {
     public String toString() {
         return "TaskRun{" +
                 "taskId=" + taskId +
-                ", properties=" + properties +
-                ", task=" + task +
-                ", status=" + status +
                 ", type=" + type +
+                ", uuid=" + uuid +
+                ", task_state=" + status.getState() +
+                ", properties=" + properties +
+                ", extra_message =" + status.getExtraMessage() +
                 '}';
     }
 }
