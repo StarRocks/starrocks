@@ -115,6 +115,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
 
+<<<<<<< HEAD
         String deptsTable = "" +
                 "CREATE TABLE depts(    \n" +
                 "   deptno INT NOT NULL,\n" +
@@ -219,6 +220,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .withTable(nullableEmps)
                 .withTable(nullableDepts)
                 .withTable(empsTableWithoutConstraints);
+=======
+>>>>>>> a2a4c2e80c ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (#36711))
     }
 
     @AfterClass
