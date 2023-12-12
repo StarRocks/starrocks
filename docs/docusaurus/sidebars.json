@@ -285,9 +285,29 @@
       "label": "Integrations",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-        "integrations/authenticate_to_aws_resources",
-        "integrations/authenticate_to_azure_storage",
-        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "Data Warehouse",
+          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
+          "link": {"type": "doc", "id": "cover_pages/warehouse"},
+          "items": [
+             "data_source/catalog/hive_catalog",
+             "data_source/catalog/iceberg_catalog",
+             "data_source/catalog/hudi_catalog",
+             "data_source/catalog/deltalake_catalog"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Cloud Authentication",
+          "description": "Use AWS, Azure, or GCP authentication",
+          "link": {"type": "doc", "id": "cover_pages/csp_auth"},
+          "items": [
+            "integrations/authenticate_to_aws_resources",
+            "integrations/authenticate_to_azure_storage",
+            "integrations/authenticate_to_gcs"
+          ]
+        },
         {
           "type": "category",
           "label": "BI Tools",
@@ -313,7 +333,37 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-        "integrations/other_integrations/intro"
+        {
+          "type": "category",
+          "label": "Streaming Data",
+          "description": "Stream with Kafka, Flink, and StarRocks tools",
+          "link": {"type": "doc", "id": "integrations/streaming/streaming"},
+          "items": [
+            "loading/RoutineLoad",
+            "loading/automq-routine-load",
+            "integrations/streaming/flink",
+            "integrations/streaming/pipes"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Batch Loading Data",
+          "description": "Batch loading and data transformation",
+          "link": {"type": "doc", "id": "integrations/batch/batch"},
+          "items": [
+            "integrations/batch/spark",
+            {
+              "type": "link",
+              "label": "dbt",
+              "description": "Build data pipelines with dbt",
+              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector"
+            }
+          ]
+        },
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
+        }
       ]
     },
     {
