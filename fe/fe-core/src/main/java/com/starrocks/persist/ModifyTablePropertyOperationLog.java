@@ -69,7 +69,10 @@ public class ModifyTablePropertyOperationLog implements Writable {
         this.comment = comment;
     }
 
-
+    @Override
+    public String toString() {
+        return String.format("dbId = %s, tableId = %s, properties = %s", dbId, tableId, properties);
+    }
 
     public static ModifyTablePropertyOperationLog read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), ModifyTablePropertyOperationLog.class);
