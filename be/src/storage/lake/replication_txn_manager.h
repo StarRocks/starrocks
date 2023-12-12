@@ -16,7 +16,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
-#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
@@ -24,6 +24,8 @@
 #include "storage/rowset/rowset_meta.h"
 
 namespace starrocks::lake {
+
+class TabletManager;
 
 class ReplicationTxnManager {
 public:
@@ -43,11 +45,9 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    StatusOr<TxnLogPtr> replicate_remote_snapshot_for_none_primary(const TReplicateSnapshotRequest& request,
-                                                                   const TRemoteSnapshotInfo& src_snapshot_info);
-
-    StatusOr<TxnLogPtr> replicate_remote_snapshot_for_primary(const TReplicateSnapshotRequest& request,
-                                                              const TRemoteSnapshotInfo& src_snapshot_info);
+    StatusOr<TxnLogPtr> replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                                  const TRemoteSnapshotInfo& src_snapshot_info,
+                                                  const TabletMetadataPtr& tablet_metadata);
 
     Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
                                TxnLogPB::OpWrite* op_write,

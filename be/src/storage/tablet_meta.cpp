@@ -351,6 +351,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
+
+    if (_source_schema != nullptr) {
+        _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
+    }
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {

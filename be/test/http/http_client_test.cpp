@@ -138,9 +138,13 @@ TEST_F(HttpClientTest, download_to_memory) {
     auto st = client.init(hostname + "/simple_get");
     ASSERT_TRUE(st.ok());
     client.set_basic_auth("test1", "");
-    auto st_or = client.download();
-    ASSERT_TRUE(st_or.ok());
-    ASSERT_EQ("test1", st_or.value());
+    std::string value;
+    st = client.download([&](const void* data, size_t length) {
+        value.append((const char*)data, length);
+        return Status::OK();
+    });
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test1", value);
 }
 
 TEST_F(HttpClientTest, get_failed) {

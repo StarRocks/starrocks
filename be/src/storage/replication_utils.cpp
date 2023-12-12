@@ -94,17 +94,22 @@ static StatusOr<uint64_t> get_remote_file_size(const std::string& remote_file_ur
     return file_size;
 }
 
-static StatusOr<uint64_t> download_remote_file(const std::string& remote_file_url, const std::string& local_file_path,
-                                               uint64_t timeout_sec) {
-    uint64_t file_size = 0;
-    auto download_cb = [&remote_file_url, timeout_sec, &local_file_path, &file_size](HttpClient* client) {
+static Status download_remote_file(
+        const std::string& remote_file_url, uint64_t timeout_sec,
+        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>()>& converter_creator) {
+    auto download_cb = [&](HttpClient* client) {
+        ASSIGN_OR_RETURN(auto converter, converter_creator());
+        if (converter == nullptr) {
+            return Status::OK();
+        }
+
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        ASSIGN_OR_RETURN(file_size, client->download(local_file_path));
+        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); }));
+        RETURN_IF_ERROR(converter->close());
         return Status::OK();
     };
-    RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
-    return file_size;
+    return HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb);
 }
 #endif
 
@@ -194,15 +199,18 @@ Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t 
 Status ReplicationUtils::download_remote_snapshot(
         const std::string& host, int32_t http_port, const std::string& remote_token,
         const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
-        DataDir* data_dir, const std::string& local_path_prefix,
-        const std::function<std::string(const std::string&)>& name_converter) {
+        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name,
+                                                                           uint64_t file_size)>& file_converter,
+        DataDir* data_dir) {
 #ifdef BE_TEST
+    /*
     std::error_code error_code;
     std::filesystem::copy(strings::Substitute("$0/$1/$2/", remote_snapshot_path, remote_tablet_id, remote_schema_hash),
                           local_path_prefix, error_code);
     if (error_code) {
         return Status::InternalError(error_code.message());
     }
+    */
     return Status::OK();
 #else
 
@@ -230,7 +238,6 @@ Status ReplicationUtils::download_remote_snapshot(
 
     // Get copy from remote
     uint64_t total_file_size = 0;
-    uint64_t skipped_file_count = 0;
     MonotonicStopWatch watch;
     watch.start();
     for (int i = 0; i < file_name_list.size(); ++i) {
@@ -255,35 +262,18 @@ Status ReplicationUtils::download_remote_snapshot(
             estimate_timeout = config::download_low_speed_time;
         }
 
-        std::string local_file_name = name_converter ? name_converter(remote_file_name) : remote_file_name;
-        if (local_file_name.empty()) {
-            ++skipped_file_count;
-            LOG(INFO) << "Skipped download remote file: " << remote_file_url << ", file_size: " << file_size;
-            continue;
-        }
+        VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size << ", timeout: " << estimate_timeout;
 
-        std::string local_file_path = local_path_prefix + local_file_name;
-
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_file_path << ", bytes: " << file_size
-                << ", timeout: " << estimate_timeout;
-
-        ASSIGN_OR_RETURN(uint64_t local_file_size,
-                         download_remote_file(remote_file_url, local_file_path, estimate_timeout));
-        // Check file length
-        if (local_file_size != file_size) {
-            LOG(WARNING) << "Fail to download " << remote_file_url << ", file_size: " << local_file_size << "/"
-                         << file_size;
-            return Status::InternalError("mismatched file size");
-        }
-    } // Clone files from remote backend
+        RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout,
+                                             [&]() { return file_converter(remote_file_name, file_size); }));
+    } // Copy files from remote backend
 
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
     double copy_rate = 0.0;
     if (total_time_sec > 0) {
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
-    LOG(INFO) << "Copied tablet file count: " << (file_name_list.size() - skipped_file_count)
-              << ", skipped: " << skipped_file_count << ", total bytes: " << total_file_size
+    LOG(INFO) << "Copied tablet file count: " << file_name_list.size() << ", total bytes: " << total_file_size
               << ", cost: " << total_time_sec << " s, rate: " << copy_rate << " MB/s";
     return Status::OK();
 #endif
@@ -305,6 +295,7 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
             remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
 
     std::string file_content;
+    file_content.reserve(4 * 1024 * 1024);
     auto download_cb = [&remote_file_url, timeout_sec, &file_content](HttpClient* client) {
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
@@ -314,6 +305,32 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
     return file_content;
 #endif
+}
+
+void ReplicationUtils::calc_column_unique_id_map(const TabletSchemaPB& source_schema,
+                                                 const TabletSchemaPB& target_schema,
+                                                 std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+    for (const auto& source_column : source_schema.column()) {
+        for (const auto& target_column : target_schema.column()) {
+            if (source_column.name() == target_column.name()) {
+                column_unique_id_map->emplace(source_column.unique_id(), target_column.unique_id());
+                break;
+            }
+        }
+    }
+}
+
+void ReplicationUtils::calc_column_unique_id_map(const TabletSchema& source_schema,
+                                                 const TabletSchema& target_schema,
+                                                 std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+    for (const auto& source_column : source_schema.columns()) {
+        for (const auto& target_column : target_schema.columns()) {
+            if (source_column.name() == target_column.name()) {
+                column_unique_id_map->emplace(source_column.unique_id(), target_column.unique_id());
+                break;
+            }
+        }
+    }
 }
 
 } // namespace starrocks
