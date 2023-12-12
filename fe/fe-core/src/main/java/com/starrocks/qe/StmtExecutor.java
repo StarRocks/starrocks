@@ -788,7 +788,7 @@ public class StmtExecutor {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
-                this.hints.putAll(node.getOptHints());
+                node.getOptHints().forEach(hints::putIfAbsent);
             }
             if (node.getQueryStatement() != null) {
                 visit(node.getQueryStatement(), context);
@@ -799,7 +799,7 @@ public class StmtExecutor {
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
-                this.hints.putAll(node.getOptHints());
+                node.getOptHints().forEach(hints::putIfAbsent);
             }
             if (node.getQueryStatement() != null) {
                 visit(node.getQueryStatement(), context);
@@ -810,7 +810,7 @@ public class StmtExecutor {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
-                this.hints.putAll(node.getOptHints());
+                node.getOptHints().forEach(hints::putIfAbsent);
             }
             if (node.getQueryStatement() != null) {
                 visit(node.getQueryStatement(), context);
@@ -821,7 +821,7 @@ public class StmtExecutor {
         @Override
         public Void visitDDLStatement(DdlStmt node, Void context) {
             if (MapUtils.isNotEmpty(node.getOptHints())) {
-                this.hints.putAll(node.getOptHints());
+                node.getOptHints().forEach(hints::putIfAbsent);
             }
             return null;
         }
