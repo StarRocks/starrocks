@@ -50,7 +50,7 @@ public class HDFSBackendSelectorTest {
     private ConnectContext context;
     final int scanNodeId = 0;
     final int computeNodePort = 9030;
-    final String hostFormat = "Host%02d";
+    final String hostFormat = "192.168.1.%02d";
 
     private List<TScanRangeLocations> createScanRanges(long number, long size) {
         List<TScanRangeLocations> ans = new ArrayList<>();
@@ -128,7 +128,7 @@ public class HDFSBackendSelectorTest {
             }
         };
 
-        int scanRangeNumber = 100;
+        int scanRangeNumber = 10000;
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
@@ -144,7 +144,7 @@ public class HDFSBackendSelectorTest {
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
-        int variance = 5 * scanRangeSize;
+        double variance = 0.2 * avg;
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
         for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
