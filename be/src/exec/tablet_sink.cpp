@@ -766,6 +766,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 }
 
 bool OlapTableSink::is_close_done() {
+    if (_tablet_sink_sender == nullptr) {
+        return true;
+    }
     return _tablet_sink_sender->is_close_done();
 }
 
@@ -794,6 +797,9 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
     COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
 
+    if (_tablet_sink_sender == nullptr) {
+        return close_status;
+    }
     Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());

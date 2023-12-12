@@ -245,6 +245,8 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
 protected:
     friend class DataSink;
 

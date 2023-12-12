@@ -293,7 +293,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // when candidate num reach this value, the condidate with lowest score will be dropped.
 CONF_mInt64(max_compaction_candidate_num, "40960");
 
-CONF_mInt32(update_compaction_check_interval_seconds, "60");
+CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
@@ -1040,8 +1040,8 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
-// control the local persistent index in shared_data gc interval
-CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+// control the local persistent index in shared_data gc/evict interval
+CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
 // enable persistent index compression
@@ -1116,6 +1116,8 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
 
+CONF_mBool(enable_stream_load_verbose_log, "false");
+
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
@@ -1129,5 +1131,9 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
+
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 } // namespace starrocks::config

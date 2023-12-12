@@ -360,15 +360,17 @@ StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t
 
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
+    bool in_worker = true;
     if (g_worker != nullptr) {
         auto shard_info_or = g_worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
-            return false;
+            in_worker = false;
         }
     }
+    TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:1", &in_worker);
     // think the tablet is assigned to this worker by default,
     // for we may take action if tablet is not in the worker
-    return true;
+    return in_worker;
 }
 #endif // USE_STAROS
 
@@ -460,17 +462,16 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t t
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    tablet.set_version_hint(version);
-    ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(version));
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id, version));
+    auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<VerticalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<HorizontalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
     }
 }
 

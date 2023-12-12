@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# JSON_OBJECT
+# json_object
 
 ## 功能
 

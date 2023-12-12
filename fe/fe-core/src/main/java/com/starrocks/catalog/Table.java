@@ -119,9 +119,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         PAIMON,
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
-
         @SerializedName("ODPS")
-        ODPS;
+        ODPS,
+        @SerializedName("BLACKHOLE")
+        BLACKHOLE;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -293,12 +294,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -363,6 +368,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isTableFunctionTable() {
         return type == TableType.TABLE_FUNCTION;
+    }
+
+    public boolean isBlackHoleTable() {
+        return type == TableType.BLACKHOLE;
     }
 
     // for create table
@@ -593,6 +602,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "JDBC";
         } else if (this instanceof FileTable) {
             return "File";
+        } else if (this instanceof OdpsTable) {
+            return "Odps";
         } else {
             return null;
         }

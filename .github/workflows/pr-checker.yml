@@ -134,7 +134,9 @@ jobs:
           (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
           !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
           (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior'))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
@@ -193,7 +195,7 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: rebase
+          merge-method: squash
 
   changelist-check:
     runs-on: [self-hosted, normal]

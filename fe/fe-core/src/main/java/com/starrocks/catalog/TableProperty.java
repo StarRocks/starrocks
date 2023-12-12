@@ -43,6 +43,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -70,7 +71,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -126,7 +126,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
-    private int partitionRefreshNumber = INVALID;
+    private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -217,11 +217,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private PeriodDuration dataCachePartitionDuration;
 
     public TableProperty() {
-        this.properties = new LinkedHashMap<>();
+        this(Maps.newLinkedHashMap());
     }
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+        if (FeConstants.runningUnitTest) {
+            // FIXME: remove this later.
+            // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
+            // task run will only refresh 1 partition and will produce wrong result.
+            partitionRefreshNumber = INVALID;
+        }
     }
 
     public TableProperty copy() {
@@ -478,7 +484,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.isSharedDataMode() ? "default" : "local");
         return this;
     }
 

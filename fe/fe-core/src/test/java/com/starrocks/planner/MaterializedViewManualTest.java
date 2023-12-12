@@ -20,9 +20,14 @@ import org.junit.Test;
 public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
     }
 
     @Test

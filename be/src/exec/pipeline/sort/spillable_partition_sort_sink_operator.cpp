@@ -69,13 +69,16 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     // if has spill task. we should wait all spill task finished then to call finished
     // TODO: test cancel case
     auto io_executor = _chunks_sorter->spill_channel()->io_executor();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto chunk_sorter = _chunks_sorter.get();
+    _sort_context->ref();
+    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state, auto io_executor) {
         return _chunks_sorter->spiller()->set_flush_all_call_back(
-                [this]() {
+                [this, chunk_sorter]() {
                     // Current partition sort is ended, and
                     // the last call will drive LocalMergeSortSourceOperator to work.
-                    TRACE_SPILL_LOG << "finish partition rows:" << _chunks_sorter->get_output_rows();
-                    _sort_context->finish_partition(_chunks_sorter->get_output_rows());
+                    TRACE_SPILL_LOG << "finish partition rows:" << chunk_sorter->get_output_rows();
+                    _sort_context->finish_partition(chunk_sorter->get_output_rows());
+                    _sort_context->unref(runtime_state());
                     _is_finished = true;
                     return Status::OK();
                 },
