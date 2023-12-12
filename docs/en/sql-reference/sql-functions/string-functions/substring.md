@@ -18,7 +18,7 @@ If `len` is not specified, this function extracts characters from the position s
 VARCHAR substr(VARCHAR str, pos[, len])
 ```
 
-## Parameter values
+## Parameters
 
 - `str`: the string to extract characters, required. It must be a VARCHAR value.
 - `pos`: the start position, required. The first position in the string is 1.
