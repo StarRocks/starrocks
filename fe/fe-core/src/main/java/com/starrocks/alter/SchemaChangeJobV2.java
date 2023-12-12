@@ -235,6 +235,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
+    public void setWatershedTxnId(long txnId) {
+        this.watershedTxnId = txnId;
+    }
+
     /**
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method

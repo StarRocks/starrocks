@@ -2503,7 +2503,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;
         try {
-            locker.lockDatabase(db, LockType.WRITE);
+            db.writeLock();
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(), 
                                         info.getStartTime(), info.getAddColumnsName(), true);
         } catch (DdlException e) {
