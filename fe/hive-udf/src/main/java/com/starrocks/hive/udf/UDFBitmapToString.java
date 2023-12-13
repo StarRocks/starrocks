@@ -50,7 +50,7 @@ public class UDFBitmapToString extends GenericUDF {
             return null;
         }
 
-        byte[] bytes = this.inspector.getPrimitiveJavaObject(args[0].get());
+        byte[] bytes = PrimitiveObjectInspectorUtils.getBinary(args[0].get(), this.inspector).getBytes();
 
         try {
             BitmapValue bitmap = BitmapValue.bitmapFromBytes(bytes);
