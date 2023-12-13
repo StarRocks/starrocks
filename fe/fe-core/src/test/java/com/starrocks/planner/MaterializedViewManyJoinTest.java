@@ -35,8 +35,8 @@ import java.util.stream.Stream;
 public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
     @BeforeAll
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         starRocksAssert.withTable(
                 "CREATE TABLE tbl_0 (\n" +

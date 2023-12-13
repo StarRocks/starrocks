@@ -28,8 +28,8 @@ import org.junit.Test;
 public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         prepareDatas();
     }

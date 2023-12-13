@@ -107,7 +107,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.privilege.AccessDeniedException;
@@ -122,7 +121,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -183,7 +181,6 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
@@ -200,7 +197,6 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -226,8 +222,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -1851,74 +1845,16 @@ public class StmtExecutor {
             return;
         }
 
-        String label = DebugUtil.printId(context.getExecutionId());
-        if (stmt instanceof InsertStmt) {
-            String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
-        } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
-        } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
-        } else {
-            throw unsupportedException(
-                    "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
-        }
-
-        TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        long transactionId = -1;
+        long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
-        if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            TAuthenticateParams authenticateParams = new TAuthenticateParams();
-            authenticateParams.setUser(externalTable.getSourceTableUser());
-            authenticateParams.setPasswd(externalTable.getSourceTablePassword());
-            authenticateParams.setHost(context.getRemoteIP());
-            authenticateParams.setDb_name(externalTable.getSourceTableDbName());
-            authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
-            transactionId = transactionMgr.beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                    externalTable.getSourceTableHost(),
-                    externalTable.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                            FrontendOptions.getLocalHostAddress()),
-                    sourceType,
-                    context.getSessionVariable().getQueryTimeoutS(),
-                    authenticateParams);
-        } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable()) {
-            // schema table and iceberg and hive table does not need txn
-        } else {
-            long warehouseId = context.getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-            transactionId = transactionMgr.beginTransaction(
-                    database.getId(),
-                    Lists.newArrayList(targetTable.getId()),
-                    label,
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                            FrontendOptions.getLocalHostAddress()),
-                    sourceType,
-                    context.getSessionVariable().getQueryTimeoutS(),
-                    workerGroupId);
-
-            // The metadata may be changed between plan() and beginTransaction().
-            // When to beginTransaction(), the plan is not ready and the tablet is dropped by balance.
-            // So we need to get txn first, to make the dropping tablet procedure to wait.
-            // This is the re-plan of the insert to fix the issue
-
-            if (Config.replan_on_insert) {
-                execPlan = StatementPlanner.plan(stmt, context);
-            }
-
-            // add table indexes to transaction state
+        String label = DebugUtil.printId(context.getExecutionId());
+        if (targetTable instanceof OlapTable) {
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
-            if (targetTable instanceof OlapTable) {
-                txnState.addTableIndexes((OlapTable) targetTable);
-            }
+            label = txnState.getLabel();
         }
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {
@@ -1935,16 +1871,6 @@ public class StmtExecutor {
         boolean insertError = false;
         String trackingSql = "";
         try {
-            if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
-                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-                context.getSessionVariable().setPreferComputeNode(false);
-                context.getSessionVariable().setUseComputeNodes(0);
-                OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-                dataSink.init(context.getExecutionId(), transactionId, database.getId(),
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                dataSink.complete();
-            }
-
             coord = getCoordinatorFactory().createInsertScheduler(
                     context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
 
