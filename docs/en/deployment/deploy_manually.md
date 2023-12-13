@@ -58,7 +58,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/Configuration.md#fe-configuration-items).
+   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/FE_configuration.md#fe-configuration-items).
 
 3. Start the FE node.
 
@@ -134,7 +134,7 @@ The following procedures are performed on the BE instances.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/Configuration.md#be-configuration-items).
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md#be-configuration-items).
 
 3. Start the BE node.
 
@@ -193,7 +193,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/Configuration.md#be-configuration-items) because most of CN's parameters are inherited from BE.
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md#be-configuration-items) because most of CN's parameters are inherited from BE.
 
 2. Start the CN node.
 
