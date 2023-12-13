@@ -396,7 +396,7 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
     if (max_sample_file_count <= 0 || max_sample_file_count >= scan_range.ranges.size()) {
         // sample all files
         step = 1;
-    } else if (max_sample_file_count == 1 || scan_range.range.size() == 1) {
+    } else if (max_sample_file_count == 1 || scan_range.ranges.size() == 1) {
         step = scan_range.ranges.size();
     } else {
         step = static_cast<float>(scan_range.ranges.size() - 1) / (max_sample_file_count - 1);
