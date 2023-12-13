@@ -36,6 +36,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -984,6 +986,17 @@ public class QueryAnalyzer {
 
             if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+            }
+
+            List<String> partitionNames = tableRelation.getPartitionNames().getPartitionNames();
+            if (partitionNames != null) {
+                for (String partitionName : partitionNames) {
+                    Partition partition = table.getPartition(partitionName);
+                    if (partition == null) {
+                        throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
+                                table.getName());
+                    }
+                }
             }
 
             return table;
