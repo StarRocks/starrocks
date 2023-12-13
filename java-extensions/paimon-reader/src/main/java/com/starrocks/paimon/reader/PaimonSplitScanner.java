@@ -99,7 +99,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
-        RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+        RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
     }
 

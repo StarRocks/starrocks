@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/client_cache.h"
+#pragma once
 
-#include "gen_cpp/FrontendService.h"
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
-FrontendServiceClientCache g_frontend_service_client_cache;
+class SysFeLocks : public SchemaScanner {
+public:
+    SysFeLocks();
+    ~SysFeLocks() override;
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
+    Status _fill_chunk(ChunkPtr* chunk);
+
+    size_t _index = 0;
+    TFeLocksRes _result;
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
 
 } // namespace starrocks

@@ -2438,7 +2438,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::T10: {
             //  - / , . ; :	Punctuation characters are ignored
             auto ignored_char = *ptr;
-            _token_parsers.emplace_back([&, repeat_count, ignored_char]() {
+            _token_parsers.emplace_back([&, ignored_char]() {
                 if (*val != ignored_char) {
                     return false;
                 }
@@ -2452,7 +2452,7 @@ bool TeradataFormat::prepare(std::string_view format) {
             if (repeat_count != 2) {
                 return false;
             }
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2478,7 +2478,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 }
                 ++next_ch_ptr;
             }
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2540,7 +2540,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::M: {
             if (repeat_count == 2) {
                 // mm
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2558,7 +2558,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 ptr++;
 
                 // mi
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     ;
@@ -2579,7 +2579,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 return false;
             }
             // ss
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2594,7 +2594,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::Y: {
             // yy
             if (repeat_count == 2) {
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     ;
@@ -2608,7 +2608,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 });
             } else if (repeat_count == 4) {
                 // yyyy
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(4, val_end - val);
                     ;
