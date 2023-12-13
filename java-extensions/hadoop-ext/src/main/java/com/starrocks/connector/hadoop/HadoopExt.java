@@ -64,7 +64,7 @@ public class HadoopExt {
     }
 
     static <R, E extends Exception> R executeActionInDoAs(UserGroupInformation userGroupInformation,
-                                                                  GenericExceptionAction<R, E> action) throws E {
+                                                          GenericExceptionAction<R, E> action) throws E {
         return userGroupInformation.doAs((PrivilegedAction<ResultOrException<R, E>>) () -> {
             try {
                 return new ResultOrException<>(action.run(), null);
