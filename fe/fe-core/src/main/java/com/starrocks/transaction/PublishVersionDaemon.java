@@ -549,6 +549,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         continue;
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
+                        LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
+                                        "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);

@@ -683,7 +683,7 @@ public class TaskManager {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun, status.isMergeRedundant());
+                taskRunManager.arrangeTaskRun(taskRun);
                 break;
             // this will happen in build image
             case RUNNING:
