@@ -3502,7 +3502,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context
 }
 
 Status StringFunctions::regexp_instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    // Init RE2 options
+    // init RE2 options
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -3533,24 +3533,29 @@ Status StringFunctions::regexp_instr_prepare(FunctionContext* context, FunctionC
         return Status::InvalidArgument(error.str());
     }
 
-    LOG(ERROR) << "regexp_instr_prepare finish:";
-
     return Status::OK();
 }
 
-static ColumnPtr regexp_instr_const(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_instr_const(StringFunctionsState* state, const Columns& columns) {
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    re2::RE2* const_re = state->get_or_prepare_regex();
+    std::string pattern_str = state->pattern;
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
+        if (pattern_str.empty()) {
+            result.append(1);
+            continue;
+        }
+
         if (content_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
 
         auto row_value = content_viewer.value(row);
-        LOG(ERROR) << "1:row value = : " << row_value.get_data();
+        
         re2::StringPiece str_sp(row_value.get_data(), row_value.get_size());
         int max_matches = 1 + const_re->NumberOfCapturingGroups();
         std::vector<re2::StringPiece> matches(max_matches);
@@ -3563,11 +3568,8 @@ static ColumnPtr regexp_instr_const(re2::RE2* const_re, const Columns& columns) 
         const re2::StringPiece& match = matches[0];
         std::string row_str = row_value.get_data();
         std::string match_str = match.data();
-        LOG(ERROR) << "2:row value = : " << row_str;
-        LOG(ERROR) << "2:match value = : " << match_str;
 
         auto index = row_str.find(match_str);
-        LOG(ERROR) << "3:index value = : " << std::to_string(index);
         if (index == std::string::npos) {
             result.append_null();
             continue;
@@ -3587,7 +3589,12 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
     for (int row = 0; row < size; ++row) {
-        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+        if (ptn_viewer.is_null(row)) {
+            result.append(1);
+            continue;
+        } 
+        
+        if (content_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
@@ -3629,10 +3636,9 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
 StatusOr<ColumnPtr> StringFunctions::regexp_instr(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    LOG(ERROR) << "regexp_instr begin:, const pattern";
+    
     if (state->const_pattern) {
-        re2::RE2* const_re = state->get_or_prepare_regex();
-        return regexp_instr_const(const_re, columns);
+        return regexp_instr_const(state, columns);
     }
 
     re2::RE2::Options* options = state->options.get();

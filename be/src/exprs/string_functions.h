@@ -352,7 +352,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(regexp_instr);
     static Status instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    static Status instr_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, from_value, to_value]
