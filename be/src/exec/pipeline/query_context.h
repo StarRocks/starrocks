@@ -127,7 +127,6 @@ public:
         return _desc_tbl;
     }
 
-    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t option_query_mem_limit);
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate

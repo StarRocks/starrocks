@@ -98,16 +98,6 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
-int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t option_query_mem_limit) {
-    // no mem_limit
-    if (option_query_mem_limit <= 0) {
-        return -1;
-    }
-
-    // query's mem_limit never exceeds its parent's limit if it exists
-    return parent_mem_limit == -1 ? option_query_mem_limit : std::min(parent_mem_limit, option_query_mem_limit);
-}
-
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
                                     workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
