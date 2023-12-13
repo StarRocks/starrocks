@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -983,17 +984,20 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
 
-            if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
+            PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
+            if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
             }
 
-            List<String> partitionNames = tableRelation.getPartitionNames().getPartitionNames();
-            if (partitionNames != null) {
-                for (String partitionName : partitionNames) {
-                    Partition partition = table.getPartition(partitionName);
-                    if (partition == null) {
-                        throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                table.getName());
+            if (partitionNamesObject != null) {
+                List<String> partitionNames = partitionNamesObject.getPartitionNames();
+                if (partitionNames != null) {
+                    for (String partitionName : partitionNames) {
+                        Partition partition = table.getPartition(partitionName);
+                        if (partition == null) {
+                            throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
+                                    table.getName());
+                        }
                     }
                 }
             }
