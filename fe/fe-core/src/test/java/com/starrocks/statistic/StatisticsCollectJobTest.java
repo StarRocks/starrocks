@@ -39,6 +39,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -191,6 +192,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Before
     public void setUp() {
+        super.setUp();
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
@@ -740,7 +742,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         new MockUp<IcebergPartitionUtils>() {
             @Mock
-            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis) {
+            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis,
+                                                               Snapshot toSnapshot) {
                 return new HashSet<>();
             }
         };
@@ -769,7 +772,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         };
         new MockUp<IcebergPartitionUtils>() {
             @Mock
-            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis) {
+            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis,
+                                                        Snapshot toSnapshot) {
                 return Sets.newHashSet("date=2020-01-01", "date=2020-01-02", "date=2020-01-03");
             }
         };

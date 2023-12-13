@@ -919,14 +919,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        while count < check_count:
+        success_num = 0
+        while count < check_count and success_num < min_success_num:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -934,7 +935,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                break
+                success_num += 1
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
@@ -984,7 +985,7 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is found" % (mv_name))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
@@ -1373,3 +1374,13 @@ class StarrocksSQLApiLib(object):
             res_json = json.loads(res)
             tools.assert_dict_contains_subset({"status": "OK"}, res_json,
                                               f"failed to update be config [response={res}] [url={exec_url}]")
+
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))

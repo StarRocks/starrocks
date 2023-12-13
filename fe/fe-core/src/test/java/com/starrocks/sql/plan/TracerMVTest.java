@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.MaterializedViewTestBase;
 import org.junit.AfterClass;
@@ -24,10 +23,14 @@ import org.junit.Test;
 public class TracerMVTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        Config.default_replication_num = 1;
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("locations");
+        starRocksAssert.useTable("emps");
+
         String mv = "CREATE MATERIALIZED VIEW `test_distinct_mv1`\n" +
                 "DISTRIBUTED BY HASH(`deptno`, `locationid`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +

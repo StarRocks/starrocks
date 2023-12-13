@@ -22,6 +22,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -154,5 +155,26 @@ public class CatalogStmtTest {
         DDLStmtExecutor.execute(dropCatalogStmt_2, connectCtx);
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+    }
+
+    @Test
+    public void testToString() {
+        String sql = "CREATE EXTERNAL CATALOG " +
+                "`aauato_test_delta_lake_access_key_catalog` COMMENT 'auto test delta lake access key catalog!@#' " +
+                "PROPERTIES(\"type\" = \"deltalake\",\"aws.s3.region\" = \"us-west-2\"," +
+                "\"hive.metastore.type\" = \"glue\",\"aws.glue.region\" = \"us-west-2\"," +
+                "\"aws.glue.use_instance_profile\" = \"false\",\"aws.glue.access_key\" = \"some_key1\"," +
+                "\"aws.glue.secret_key\" = \"some_key2\",\"aws.s3.use_instance_profile\" = \"false\"" +
+                ",\"aws.s3.access_key\" = \"some_key3\",\"aws.s3.secret_key\" = \"some_key4\");\n";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateCatalogStmt
+                stmt = (CreateCatalogStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertEquals("CREATE EXTERNAL CATALOG 'aauato_test_delta_lake_access_key_catalog' " +
+                "COMMENT \"auto test delta lake access key catalog!@#\" PROPERTIES(\"aws.s3.access_key\"  =  \"***\", " +
+                "\"hive.metastore.type\"  =  \"glue\", \"aws.s3.secret_key\"  =  \"***\", " +
+                "\"aws.glue.secret_key\"  =  \"***\", \"aws.s3.region\"  =  \"us-west-2\", " +
+                "\"aws.glue.use_instance_profile\"  =  \"false\", \"aws.s3.use_instance_profile\"  =  \"false\", " +
+                "\"aws.glue.region\"  =  \"us-west-2\", \"type\"  =  \"deltalake\", " +
+                "\"aws.glue.access_key\"  =  \"***\")", AstToStringBuilder.toString(stmt));
     }
 }

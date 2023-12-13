@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -38,6 +39,7 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -95,6 +97,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -122,14 +125,19 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
 
-    // FileScanTaskSchema -> Pair<schemaId, specId>
+    // FileScanTaskSchema -> Pair<schema_string, partition_string>
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
+    private final ExecutorService jobPlanningExecutor;
+    private final ExecutorService refreshOtherFeExecutor;
 
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog) {
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
+        this.jobPlanningExecutor = jobPlanningExecutor;
+        this.refreshOtherFeExecutor = refreshOtherFeExecutor;
     }
 
     @Override
@@ -204,6 +212,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
+        asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
 
     @Override
@@ -235,7 +244,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        return icebergCatalog.listPartitionNames(dbName, tblName);
+        return icebergCatalog.listPartitionNames(dbName, tblName, jobPlanningExecutor);
     }
 
     @Override
@@ -372,6 +381,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.includeColumnStats();
         }
 
+        scan = scan.planWith(jobPlanningExecutor);
+
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
             scan = scan.filter(icebergPredicate);
         }
@@ -399,7 +410,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
-            FileScanTask scanTask = fileScanTaskIterator.next();
+            FileScanTask scanTask = fileScanTasks.next();
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
@@ -426,11 +437,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     statisticProvider.updateIcebergFileStats(
                             icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
                 }
-            } else {
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateCardinality")) {
-                    statisticProvider.updateIcebergCardinality(key, scanTask);
-                }
             }
+
             icebergScanTasks.add(icebergSplitScanTask);
 
             String filePath = icebergSplitScanTask.file().path().toString();
@@ -486,7 +494,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         if (!session.getSessionVariable().enableIcebergColumnStatistics()) {
-            return statisticProvider.getCardinalityStats(icebergTable, columns, predicate);
+            List<FileScanTask> icebergScanTasks = splitTasks.get(key);
+            if (icebergScanTasks == null) {
+                throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
+                        icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), predicate);
+            }
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.calculateCardinality" + key)) {
+                return statisticProvider.getCardinalityStats(columns, icebergScanTasks);
+            }
         } else {
             return statisticProvider.getTableStatistics(icebergTable, columns, session, predicate);
         }
@@ -536,7 +551,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getRemoteDbName();
             String tableName = icebergTable.getRemoteTableName();
-            icebergCatalog.refreshTable(dbName, tableName);
+            try {
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+            } catch (Exception e) {
+                LOG.error("Failed to refresh table {}.{}.{}. invalidate cache", catalogName, dbName, tableName, e);
+                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+            }
         }
     }
 
@@ -611,6 +631,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             batchWrite.commit();
             transaction.commitTransaction();
+            asyncRefreshOthersFeMetadataCache(dbName, tableName);
         } catch (Exception e) {
             List<String> toDeleteFiles = dataFiles.stream()
                     .map(TIcebergDataFile::getPath)
@@ -618,7 +639,23 @@ public class IcebergMetadata implements ConnectorMetadata {
             icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
+        } finally {
+            icebergCatalog.invalidateCacheWithoutTable(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
         }
+    }
+
+    private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {
+        refreshOtherFeExecutor.execute(() -> {
+            LOG.info("Start to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+            try {
+                GlobalStateMgr.getCurrentState().refreshOthersFeTable(
+                        new TableName(catalogName, dbName, tableName), new ArrayList<>(), false);
+            } catch (DdlException e) {
+                LOG.error("Failed to refresh others fe iceberg metadata cache {}.{}.{}", catalogName, dbName, tableName, e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+            LOG.info("Finish to refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+        });
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite) {

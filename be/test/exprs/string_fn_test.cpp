@@ -3756,6 +3756,20 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPattern) {
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         ASSERT_EQ(res[i], result->debug_item(i));
     }
+
+PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto str = BinaryColumn::create();
+    str->append("starrocks");
+    str->append("STARROCKS");
+    columns.push_back(str);
+
+    ASSERT_TRUE(StringFunctions::crc32(ctx.get(), columns).ok());
+    ColumnPtr result = StringFunctions::crc32(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+    ASSERT_EQ(static_cast<uint32_t>(2312449062), v->get_data()[0]);
+    ASSERT_EQ(static_cast<uint32_t>(3440849609), v->get_data()[1]);
 }
 
 } // namespace starrocks

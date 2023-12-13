@@ -54,6 +54,8 @@ public class MysqlSchemaResolverTest {
     PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
+    private MockResultSet dbResult;
+    private MockResultSet tableResult;
     private MockResultSet partitionsResult;
     private Map<JDBCTableName, Integer> tableIdCache;
 
@@ -84,6 +86,46 @@ public class MysqlSchemaResolverTest {
                 minTimes = 0;
             }
         };
+    }
+
+    @Test
+    public void testCheckPartitionWithoutPartitionsTable() {
+        try {
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCheckPartitionWithPartitionsTable() throws SQLException {
+        new Expectations() {
+            {
+                String catalogSchema = "information_schema";
+
+                dbResult = new MockResultSet("catalog");
+                dbResult.addColumn("TABLE_CAT", Arrays.asList(catalogSchema));
+
+                connection.getMetaData().getCatalogs();
+                result = dbResult;
+                minTimes = 0;
+
+                MockResultSet piResult = new MockResultSet("partitions");
+                piResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
+                connection.getMetaData().getTables(anyString, null, null, null);
+                result = piResult;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
+            Assert.assertTrue(schemaResolver.checkAndSetSupportPartitionInformation(connection));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
     }
 
     @Test

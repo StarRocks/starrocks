@@ -323,9 +323,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
-        if (errno == ENOENT) {
+        if (errno == ENOENT || s.find("404") != std::string::npos) {
             return Status::RemoteFileNotFound(s);
         }
+
         return Status::InternalError(s);
     }
 
@@ -504,7 +505,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.skip_read_rows += chunk_size_ori;
+            _app_stats.late_materialize_skip_rows += chunk_size_ori;
             continue;
         }
         {

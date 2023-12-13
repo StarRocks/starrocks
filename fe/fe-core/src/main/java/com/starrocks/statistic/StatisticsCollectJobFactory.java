@@ -184,6 +184,10 @@ public class StatisticsCollectJobFactory {
                                                                          StatsConstants.AnalyzeType analyzeType,
                                                                          StatsConstants.ScheduleType scheduleType,
                                                                          Map<String, String> properties) {
+        // refresh table to get latest table/partition info
+        GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(catalogName,
+                db.getFullName(), table, Lists.newArrayList(), true);
+
         if (columns == null || columns.isEmpty()) {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
@@ -300,7 +304,8 @@ public class StatisticsCollectJobFactory {
             IcebergTable icebergTable = (IcebergTable) table;
             if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
                 updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
-                                statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
+                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        icebergTable.getNativeTable().currentSnapshot()));
             }
         }
         LOG.info("create external full statistics job for table: {}, partitions: {}",

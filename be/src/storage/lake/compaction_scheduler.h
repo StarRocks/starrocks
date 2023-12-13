@@ -63,18 +63,30 @@ public:
         return !_status.ok();
     }
 
+    Status error() const {
+        std::lock_guard l(_mtx);
+        return _status;
+    }
+
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
+    bool timeout_exceeded() const { return butil::gettimeofday_ms() >= _timeout_deadline_ms; }
+
+    int64_t timeout_ms() const;
+
 private:
+    const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
+
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
     const lake::CompactRequest* _request;
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
+    int64_t _timeout_deadline_ms;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 

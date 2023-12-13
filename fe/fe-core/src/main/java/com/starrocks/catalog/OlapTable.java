@@ -309,7 +309,6 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -1476,6 +1475,10 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public boolean isTempPartition(long partitionId) {
+        return tempPartitions.getPartition(partitionId) != null;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TOlapTable tOlapTable = new TOlapTable(getName());
@@ -1656,6 +1659,13 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
+    // Whether it's a partitioned table partition by columns, range or list.
+    public boolean isPartitionedTable() {
+        return partitionInfo != null && partitionInfo.isPartitioned();
+    }
+
+    // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
+    // partitions.
     @Override
     public boolean isPartitioned() {
         int numSegs = 0;

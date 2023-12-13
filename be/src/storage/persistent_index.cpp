@@ -21,6 +21,7 @@
 #include "fs/fs.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -1903,6 +1904,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::unique_ptr<RandomAccessFile> l0_rfile;
         ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
         size_t snapshot_size = _index_file->size();
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add write stats manually
+        IOProfiler::add_write(snapshot_size);
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -1988,6 +1992,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
+        // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
+        // so add read stats manually
+        IOProfiler::add_read(snapshot_size);
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
@@ -3597,16 +3604,18 @@ class GetFromImmutableIndexTask : public Runnable {
 public:
     GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
                               std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
-                              PersistentIndex* index)
+                              PersistentIndex* index, IOStatEntry* io_stat_entry)
             : _num(num),
               _immu_index(immu_index),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
               _found_keys_info(found_keys_info),
-              _index(index) {}
+              _index(index),
+              _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+        auto scope = IOProfiler::scope(_io_stat_entry);
         WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                                            _found_keys_info),
                       "Failed to run GetFromImmutableIndexTask");
@@ -3620,6 +3629,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
+    IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3660,9 +3670,9 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
     for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
         ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
-        GetFromImmutableIndexTask task(n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                       &keys_info_by_key_size, &_found_keys_info[i], this);
-        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
+        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
+                n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()), &keys_info_by_key_size,
+                &_found_keys_info[i], this, IOProfiler::get_context()));
         auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
         if (!st.ok()) {
             error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
@@ -3969,8 +3979,8 @@ Status PersistentIndex::flush_advance() {
 }
 
 Status PersistentIndex::_flush_l0() {
-    // when l2 exist, must flush l0 with Delete Flag
-    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty());
+    // when l1 or l2 exist, must flush l0 with Delete Flag
+    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty());
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
@@ -4534,13 +4544,15 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // step 1.a
         // move tmp l1 to l1
         std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(new_l1_filename);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
         if (_l0->size() > 0) {
             // check if need to dump snapshot
             need_snapshot = true;
         }
         LOG(INFO) << "PersistentIndex minor compaction, link from tmp-l1: " << tmp_l1_filename
-                  << " to l1: " << new_l1_filename;
+                  << " to l1: " << new_l1_filename << " snapshot: " << need_snapshot;
     } else if (tmp_l1_cnt > 1) {
         // step 1.b
         auto writer = std::make_unique<ImmutableIndexWriter>();
@@ -4549,8 +4561,9 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // 1, remove delete key when l2 not exist
         // 2. skip merge l1, only merge tmp-l1 and l0
         RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 1 : 0, _l1_vec.size(), false));
+        // keep delete flag when l2 or older l1 exist
         RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
-                                                   _usage_and_size_by_key_length, !_l2_vec.empty()));
+                                                   _usage_and_size_by_key_length, !_l2_vec.empty() || _has_l1));
         RETURN_IF_ERROR(writer->finish());
         LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
                   << ", output: " << new_l1_filename;
@@ -4575,6 +4588,8 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         const std::string old_l1_file_path =
                 strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        // Make new file doesn't exist
+        (void)FileSystem::Default()->delete_file(l2_file_path);
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
         index_meta->add_l2_version_merged(false);

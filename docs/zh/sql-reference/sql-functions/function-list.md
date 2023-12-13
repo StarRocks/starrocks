@@ -152,10 +152,15 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [strleft](./string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](./string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](./string-functions/substring.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
+| [substring_index](./string-functions/substring_index.md) | 从给定字符串中截取第 `count` 个分隔符之前或之后的字符串。  |
+| [translate](./string-functions/translate.md) | 将给定字符串 `source` 中出现在 `from_string` 中的字符替换为对应位置的 `to_string` 中的字符。 |
 | [trim](./string-functions/trim.md) | 从字符串的左侧和右侧移除连续出现的空格或指定的字符。  |
 | [ucase](./string-functions/ucase.md) | 该函数与 upper 一致，将字符串转换为大写形式。  |
 | [unhex](./string-functions/unhex.md) | 将输入的字符串中的两个字符为一组转化为 16 进制的字符，然后拼接成字符串输出。  |
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
+| [url_decode](./string-functions/url_decode.md) | 将字符串从 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式转换回来。 |
+| [url_encode](./string-functions/url_encode.md)  | 将字符串根据 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式进行编码。  |
+| [url_extract_parameter](./string-functions/url_extract_parameter.md)   | 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。  |
 
 ## 聚合函数
 
@@ -446,6 +451,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [current_role](./utility-functions/current_role.md)| 获取当前用户激活的角色。  |
 |  [current_version](./utility-functions/current_version.md)| 获取当前 StarRocks 的版本 |
 | [database](./utility-functions/database.md)| 查询当前会话所在的数据库。 |
+| [get_query_profile](./utility-functions/get_query_profile.md)| 获取指定查询的 Profile。|
 |  [host_name](./utility-functions/host_name.md)| 获取计算所在节点的主机名。|
 |  [isnull](./utility-functions/isnull.md)| 判断输入值是否为 NULL。|
 | [is_role_in_session](./utility-functions/is_role_in_session.md) | 检查指定的角色（包括嵌套角色）在当前会话下是否已经激活。 |

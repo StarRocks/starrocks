@@ -216,13 +216,15 @@ int64_t DeltaWriterImpl::last_write_ts() const {
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
-        ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+        ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-            _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(tablet, _write_schema, _txn_id);
+            _tablet_writer =
+                    std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema, _txn_id);
         } else {
-            _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(tablet, _write_schema, _txn_id);
+            _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
+                                                                             _txn_id);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());

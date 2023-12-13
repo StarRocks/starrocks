@@ -68,6 +68,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -177,6 +178,8 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -504,10 +507,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                if (tableName.getCatalog() != null &&
-                                        !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(tableName.getCatalog())) {
-                                    continue;
-                                }
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
@@ -647,6 +646,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
         return SysObjectDependencies.listObjectDependencies(params);
+    }
+
+    @Override
+    public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
+        return SysFeLocks.listLocks(params, true);
     }
 
     // list MaterializedView table match pattern
@@ -1305,6 +1309,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
+        // check txn
+        long limit = Config.stream_load_max_txn_num_per_be;
+        if (limit >= 0) {
+            long txnNumBe = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
+            LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
+            if (txnNumBe >= limit) {
+                throw new UserException("streamload txn num per be exceeds limit, be: "
+                        + clientIp + ", txn_num: " + txnNumBe + ", limit: " + limit);
+            }
+        }
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
             throw new UserException("empty label in begin request");

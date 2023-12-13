@@ -17,6 +17,7 @@ package com.starrocks.hive.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
+import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -25,10 +26,15 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
 public class HiveColumnValue implements ColumnValue {
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final Object fieldData;
     private final ObjectInspector fieldInspector;
 
@@ -89,7 +95,17 @@ public class HiveColumnValue implements ColumnValue {
 
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
-        return inspectObject().toString();
+        // for rcfile with LazyBinaryColumnarSerDe, it will store timestamp type as UTC
+        // So we need adjust timestamp type's value according to current time zone
+        if (fieldData instanceof TimestampWritableV2) {
+            TimestampWritableV2 localTimestampWritable = (TimestampWritableV2) fieldData;
+            LocalDateTime localDateTime = LocalDateTime.ofInstant(
+                    Instant.ofEpochSecond(localTimestampWritable.getSeconds(), localTimestampWritable.getNanos()),
+                    ZoneId.systemDefault());
+            return localDateTime.format(DATETIME_FORMATTER);
+        } else {
+            return inspectObject().toString();
+        }
     }
 
     @Override

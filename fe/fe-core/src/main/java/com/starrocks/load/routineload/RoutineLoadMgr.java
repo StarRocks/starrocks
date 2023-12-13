@@ -46,6 +46,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -514,14 +516,9 @@ public class RoutineLoadMgr implements Writable {
     }
 
     public List<RoutineLoadJob> getRoutineLoadJobByState(Set<RoutineLoadJob.JobState> desiredStates) {
-        readLock();
-        try {
-            List<RoutineLoadJob> stateJobs = idToRoutineLoadJob.values().stream()
-                    .filter(entity -> desiredStates.contains(entity.getState())).collect(Collectors.toList());
-            return stateJobs;
-        } finally {
-            readUnlock();
-        }
+        return idToRoutineLoadJob.values().stream()
+                .filter(entity -> desiredStates.contains(entity.getState()))
+                .collect(Collectors.toList());
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
@@ -618,6 +615,23 @@ public class RoutineLoadMgr implements Writable {
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
                 .build());
+    }
+
+    public void setRoutineLoadJobOtherMsg(String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (!(txnCommitAttachment instanceof RLTaskTxnCommitAttachment)) {
+            return;
+        }
+        RLTaskTxnCommitAttachment rLTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) txnCommitAttachment;
+        long jobId = rLTaskTxnCommitAttachment.getJobId();
+        if (jobId == 0) {
+            return;
+        }
+        RoutineLoadJob routineLoadJob = getJob(jobId);
+        if (routineLoadJob != null && reason != null) {
+            String otherMsg = String.format("The %s task failed due to: %s",
+                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()), reason);
+            routineLoadJob.setOtherMsg(otherMsg);
+        }
     }
 
     /**
