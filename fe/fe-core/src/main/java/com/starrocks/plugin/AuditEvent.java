@@ -124,6 +124,9 @@ public class AuditEvent {
     @AuditField(value = "BigQueryLogScanRowsThreshold")
     public long bigQueryLogScanRowsThreshold = -1;
 
+    @AuditField(value = "IsForwardToLeader")
+    public boolean isForwardToLeader = false;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -275,6 +278,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
             auditEvent.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
+            return this;
+        }
+
+        public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
+            auditEvent.isForwardToLeader = isForwardToLeader;
             return this;
         }
 
