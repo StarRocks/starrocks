@@ -230,7 +230,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10");
         List<String> selectList = Lists.newArrayList(
                 "SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`",
-                "SELECT /*+SET_VAR(query_timeout=1)*/ `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`"
+                "SELECT /*+SET_VAR(query_timeout='1')*/ `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`"
         );
 
         // basic combinations
