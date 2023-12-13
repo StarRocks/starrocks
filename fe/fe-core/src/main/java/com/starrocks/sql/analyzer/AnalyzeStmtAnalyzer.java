@@ -62,6 +62,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+            StatsConstants.INIT_SAMPLE_STATS_JOB,
 
             //Deprecated , just not throw exception
             StatsConstants.PRO_SAMPLE_RATIO,

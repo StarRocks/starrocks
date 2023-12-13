@@ -15,6 +15,10 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.Maps;
+
+import java.util.Map;
+
 public class StatsConstants {
     public static final long DEFAULT_ALL_ID = -1;
 
@@ -53,6 +57,11 @@ public class StatsConstants {
     public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
     public static final String PROP_COLLECT_INTERVAL_SEC_KEY = "collect_interval_sec";
 
+    // use this to distinguish the initial sample collect job from sample job requested by client
+    public static final String INIT_SAMPLE_STATS_JOB = "init_stats_sample_job";
+
+    public static final String INIT_SAMPLE_STATS_PROPERTY = "('" + INIT_SAMPLE_STATS_JOB + "' = 'true')";
+
     public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
 
     public enum AnalyzeType {
@@ -72,5 +81,11 @@ public class StatsConstants {
         // only use for ScheduleType.ONCE
         FINISH,
         FAILED
+    }
+
+    public static Map<String, String> buildInitStatsProp() {
+        Map<String, String> map = Maps.newHashMap();
+        map.put(INIT_SAMPLE_STATS_JOB, "true");
+        return map;
     }
 }
