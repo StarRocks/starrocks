@@ -14,16 +14,16 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
-import java.util.ArrayList;
+import java.util.List;
 
-public class HashCachedCompoundPredicateOperator extends PredicateOperator {
-    public CompoundPredicateOperator operator;
+public class HashCachedScalarOperator extends ScalarOperator {
+    public ScalarOperator operator;
     private int hashValue = 0;
 
-    public HashCachedCompoundPredicateOperator(CompoundPredicateOperator operator) {
-        super(OperatorType.COMPOUND, new ArrayList<>());
+    public HashCachedScalarOperator(ScalarOperator operator) {
+        super(operator.getOpType(), operator.getType());
         this.operator = operator;
     }
 
@@ -35,7 +35,7 @@ public class HashCachedCompoundPredicateOperator extends PredicateOperator {
         this.hashValue = hashValue;
     }
 
-    public CompoundPredicateOperator getOperator() {
+    public ScalarOperator getOperator() {
         return operator;
     }
 
@@ -58,7 +58,41 @@ public class HashCachedCompoundPredicateOperator extends PredicateOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        HashCachedCompoundPredicateOperator that = (HashCachedCompoundPredicateOperator) o;
+        HashCachedScalarOperator that = (HashCachedScalarOperator) o;
         return this.getOperator() == that.getOperator();
+    }
+
+    @Override
+    public boolean isNullable() {
+        return false;
+    }
+
+    @Override
+    public List<ScalarOperator> getChildren() {
+        return null;
+    }
+
+    @Override
+    public ScalarOperator getChild(int index) {
+        return null;
+    }
+
+    @Override
+    public void setChild(int index, ScalarOperator child) {
+    }
+
+    @Override
+    public String toString() {
+        return null;
+    }
+
+    @Override
+    public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
+        return null;
+    }
+
+    @Override
+    public ColumnRefSet getUsedColumns() {
+        return null;
     }
 }

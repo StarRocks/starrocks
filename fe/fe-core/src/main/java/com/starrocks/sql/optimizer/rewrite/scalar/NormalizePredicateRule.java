@@ -32,7 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.HashCachedCompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.HashCachedScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -105,7 +105,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     new BinaryPredicateOperator(BinaryType.GT, predicate.getChild(0),
                             predicate.getChild(2));
 
-            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper);
+            return visitCompoundPredicate(
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper), context);
         } else {
             ScalarOperator lower =
                     new BinaryPredicateOperator(BinaryType.GE, predicate.getChild(0),
@@ -115,7 +116,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     new BinaryPredicateOperator(BinaryType.LE, predicate.getChild(0),
                             predicate.getChild(2));
 
-            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper);
+            return visitCompoundPredicate(
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper), context);
         }
     }
 
@@ -161,40 +163,42 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                     compoundTreeUniqueLeaves.addAll(compoundChild.getCompoundTreeUniqueLeaves());
                     parent.setCompoundTreeLeafNodeNumber(
                             compoundChild.getCompoundTreeLeafNodeNumber() + parent.getCompoundTreeLeafNodeNumber());
-
-                    // clear child's set to save memory
-                    compoundChild.setCompoundTreeUniqueLeaves(null);
-                    compoundChild.setCompoundTreeLeafNodeNumber(0);
                 } else {
                     // child is leaf node in compound tree
-                    if (OperatorType.COMPOUND.equals(child.getOpType())) {
-                        CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
-                        // we cache CompoundPredicate's hash value to eliminate duplicate calculations
-                        compoundTreeUniqueLeaves.add(new HashCachedCompoundPredicateOperator(compoundChild));
-                        // clear child's set to save memory
-                        compoundChild.setCompoundTreeUniqueLeaves(null);
-                        compoundChild.setCompoundTreeLeafNodeNumber(0);
-                    } else {
-                        compoundTreeUniqueLeaves.add(child);
-                    }
+                    // we cache CompoundPredicate's hash value to eliminate duplicate calculations
+                    compoundTreeUniqueLeaves.add(new HashCachedScalarOperator(child));
                     parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
+                }
+
+                // clear child's set to save memory
+                // but if node is root node in Compound Tree, there is nothing we can do to clear its set
+                if (OperatorType.COMPOUND.equals(child.getOpType())) {
+                    CompoundPredicateOperator compoundChild = (CompoundPredicateOperator) (child);
+                    compoundChild.setCompoundTreeUniqueLeaves(null);
+                    compoundChild.setCompoundTreeLeafNodeNumber(0);
                 }
             }
         }
 
         // this tree can be optimized
         if (compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
-            CompoundPredicateOperator newTree =
-                    (CompoundPredicateOperator) Utils.createCompound(parent.getCompoundType(),
-                            compoundTreeUniqueLeaves.stream().map(
-                                    node -> {
-                                        if (node instanceof HashCachedCompoundPredicateOperator) {
-                                            return ((HashCachedCompoundPredicateOperator) node).getOperator();
-                                        }
-                                        return node;
-                                    }).collect(Collectors.toCollection(Lists::newLinkedList)));
-            newTree.setCompoundTreeLeafNodeNumber(compoundTreeUniqueLeaves.size());
-            newTree.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
+            ScalarOperator newTree = Utils.createCompound(parent.getCompoundType(),
+                    compoundTreeUniqueLeaves.stream().map(
+                            node -> {
+                                // unpack HashCachedScalarOperator so other places will not perceive its existence
+                                if (node instanceof HashCachedScalarOperator) {
+                                    return ((HashCachedScalarOperator) node).getOperator();
+                                }
+                                return node;
+                            }).collect(Collectors.toCollection(Lists::newLinkedList)));
+
+            // newTree's root can be or not to be compoundOperator,like "true and true" can be optimized to true which is constant operator
+            if (OperatorType.COMPOUND.equals(newTree.getOpType())) {
+                CompoundPredicateOperator compoundNewTree = (CompoundPredicateOperator) newTree;
+                compoundNewTree.setCompoundTreeLeafNodeNumber(compoundTreeUniqueLeaves.size());
+                compoundNewTree.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
+            }
+
             return newTree;
         }
         // this tree can't be optimized

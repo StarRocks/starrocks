@@ -55,34 +55,6 @@ public class CompoundPredicateOperator extends PredicateOperator {
         Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
     }
 
-    public static ScalarOperator or(Collection<ScalarOperator> nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
-    }
-
-    public static ScalarOperator or(ScalarOperator... nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
-    }
-
-    public static ScalarOperator and(Collection<ScalarOperator> nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
-    }
-
-    public static ScalarOperator and(ScalarOperator... nodes) {
-        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
-    }
-
-    public static ScalarOperator not(ScalarOperator node) {
-        return new CompoundPredicateOperator(CompoundType.NOT, node);
-    }
-
-    public int getCompoundTreeLeafNodeNumber() {
-        return compoundTreeLeafNodeNumber;
-    }
-
-    public void setCompoundTreeLeafNodeNumber(int compoundTreeLeafNodeNumber) {
-        this.compoundTreeLeafNodeNumber = compoundTreeLeafNodeNumber;
-    }
-
     public CompoundType getCompoundType() {
         return type;
     }
@@ -95,9 +67,23 @@ public class CompoundPredicateOperator extends PredicateOperator {
         this.compoundTreeUniqueLeaves = compoundTreeUniqueLeaves;
     }
 
+    public int getCompoundTreeLeafNodeNumber() {
+        return compoundTreeLeafNodeNumber;
+    }
+
+    public void setCompoundTreeLeafNodeNumber(int compoundTreeLeafNodeNumber) {
+        this.compoundTreeLeafNodeNumber = compoundTreeLeafNodeNumber;
+    }
+
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitCompoundPredicate(this, context);
+    }
+
+    public enum CompoundType {
+        AND,
+        OR,
+        NOT
     }
 
     public boolean isAnd() {
@@ -176,9 +162,23 @@ public class CompoundPredicateOperator extends PredicateOperator {
         return Objects.hash(opType, type, h);
     }
 
-    public enum CompoundType {
-        AND,
-        OR,
-        NOT
+    public static ScalarOperator or(Collection<ScalarOperator> nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
+    }
+
+    public static ScalarOperator or(ScalarOperator... nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
+    }
+
+    public static ScalarOperator and(Collection<ScalarOperator> nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
+    }
+
+    public static ScalarOperator and(ScalarOperator... nodes) {
+        return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
+    }
+
+    public static ScalarOperator not(ScalarOperator node) {
+        return new CompoundPredicateOperator(CompoundType.NOT, node);
     }
 }
