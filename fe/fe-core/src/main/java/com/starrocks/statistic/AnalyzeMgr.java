@@ -733,6 +733,22 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (basicStatsMeta == null) {
+            // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
+            BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    StatsConstants.buildInitStatsProp(), loadedRows);
+            GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+        } else {
+            basicStatsMeta.increaseUpdateRows(loadedRows);
+        }
+    }
+
+>>>>>>> fba8a88eeb ([BugFix] distinguish the init sampling stats collect job (#36917))
     private static class SerializeData {
         @SerializedName("analyzeJobs")
         public List<NativeAnalyzeJob> jobs;
