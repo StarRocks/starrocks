@@ -4500,12 +4500,12 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
-    auto tablet_schema_ptr = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
-    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     if (_l0) {
@@ -4531,7 +4531,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     index_meta->clear_l2_version_merged();
     index_meta->set_key_size(_key_size);
     index_meta->set_size(0);
-    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_4);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
     version.to_pb(index_meta->mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
     l0_meta->clear_wals();

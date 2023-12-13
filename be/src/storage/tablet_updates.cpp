@@ -1611,7 +1611,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
                                                   _debug_string(false, true));
-            failure_handler(msg);
+            LOG(ERROR) << msg;
+            _set_error(msg);
             return;
         }
     }
@@ -1701,7 +1702,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 _compaction_state.reset();
                 std::string msg = strings::Substitute("_apply_compaction_commit error: index isnert failed: $0 $1",
                                                       st.to_string(), debug_string());
-                failure_handler(msg);
+                LOG(ERROR) << msg;
+                _set_error(msg);
                 return;
             }
         } else {
@@ -1711,7 +1713,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 _compaction_state.reset();
                 std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
                                                       st.to_string(), debug_string());
-                failure_handler(msg);
+                LOG(ERROR) << msg;
+                _set_error(msg);
                 return;
             }
         }
