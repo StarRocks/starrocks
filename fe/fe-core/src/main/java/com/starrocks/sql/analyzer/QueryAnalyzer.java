@@ -989,7 +989,7 @@ public class QueryAnalyzer {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
             }
 
-            if (partitionNamesObject != null) {
+            if (partitionNamesObject != null && table.isNativeTable()) {
                 List<String> partitionNames = partitionNamesObject.getPartitionNames();
                 if (partitionNames != null) {
                     boolean isTemp = partitionNamesObject.isTemp();
