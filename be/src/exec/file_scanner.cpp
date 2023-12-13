@@ -366,10 +366,11 @@ void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::ve
     std::vector<std::shared_ptr<SlotDescriptor>> merged_schema;
     std::map<std::string, size_t> merged_schema_index;
     for (const auto& schema : input) {
-        for(const auto &slot : schema) {
+        for (const auto& slot : schema) {
             auto itr = merged_schema_index.find(slot.col_name());
             if (itr == merged_schema_index.end()) {
-                merged_schema.emplace_back(std::make_shared<SlotDescriptor>(merged_schema.size(), slot.col_name(), slot.type()));
+                merged_schema.emplace_back(
+                        std::make_shared<SlotDescriptor>(merged_schema.size(), slot.col_name(), slot.type()));
                 merged_schema_index.insert({slot.col_name(), merged_schema.size() - 1});
             } else {
                 // treat conflicted types as varchar.
