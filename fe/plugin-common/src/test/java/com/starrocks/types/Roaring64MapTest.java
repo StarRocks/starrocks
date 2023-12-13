@@ -24,7 +24,7 @@ public class Roaring64MapTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         largeBitmap = new BitmapValue();
-        for (long i=0; i < 20; i++) {
+        for (long i = 0; i < 20; i++) {
             largeBitmap.add(i);
         }
     }
