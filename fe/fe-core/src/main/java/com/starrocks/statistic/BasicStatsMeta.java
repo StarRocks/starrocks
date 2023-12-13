@@ -137,7 +137,7 @@ public class BasicStatsMeta implements Writable {
             }
             LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
-            if (partition.hasData() && !isHappenAfterLoad(loadTime)) {
+            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
                 updatePartitionCount++;
             }
         }
@@ -175,7 +175,7 @@ public class BasicStatsMeta implements Writable {
         return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
     }
 
-    public boolean isHappenAfterLoad(LocalDateTime loadTime) {
+    public boolean isUpdatedAfterLoad(LocalDateTime loadTime) {
         if (isInitJobMeta()) {
             // We update the updateTime of a partition then we may do an init sample collect job, these auto init
             // sample may return a wrong healthy value which may block the auto full collect job.

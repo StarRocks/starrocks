@@ -110,7 +110,7 @@ Conditions that trigger automatic collection:
 
 - The collection time falls within the range of the configured collection period. (The default collection period is all day.)
 
-  *After the data of a table is changed, manually triggering a sampling collection task to this table will make condition one take effect and will not trigger automatic full collection for it in this round.*
+  *After the data of a table is changed, manually triggering a sampling collection task to this table will make the first condition branch take effect and will not trigger automatic full collection for it in this scheduling period.*
 
 Automatic full collection is enabled by default and run by the system using the default settings.
 

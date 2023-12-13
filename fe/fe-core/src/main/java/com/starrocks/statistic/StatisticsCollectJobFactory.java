@@ -346,7 +346,7 @@ public class StatisticsCollectJobFactory {
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {
-            if (basicStatsMeta.isHappenAfterLoad(tableUpdateTime)) {
+            if (basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
                 LOG.debug("statistics job doesn't work on non-update table: {}, " +
                                 "last update time: {}, last collect time: {}",
                         table.getName(), tableUpdateTime, basicStatsMeta.getUpdateTime());
@@ -356,7 +356,7 @@ public class StatisticsCollectJobFactory {
             long sumDataSize = 0;
             for (Partition partition : table.getPartitions()) {
                 LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                if (!basicStatsMeta.isHappenAfterLoad(partitionUpdateTime)) {
+                if (!basicStatsMeta.isUpdatedAfterLoad(partitionUpdateTime)) {
                     sumDataSize += partition.getDataSize();
                 }
             }
