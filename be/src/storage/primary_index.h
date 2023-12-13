@@ -123,6 +123,10 @@ public:
 
     size_t key_size() { return _key_size; }
 
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
