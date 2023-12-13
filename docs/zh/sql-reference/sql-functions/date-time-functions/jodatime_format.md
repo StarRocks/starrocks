@@ -1,31 +1,31 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # jodatime_format
 
-## Description
+## 功能
 
-Converts the specified date into a string in the specified Joda DateTimeFormat pattern format.
+将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。
 
-## Syntax
+## 语法
 
 ```Haskell
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 
-## Parameters
+## 参数说明
 
-- `date`: the date you want to convert. It must be a valid date or date expression.
-- `format`: the format of the date and time to be returned. For information about the available formats, see [Joda-Time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html).
+- `date`：待计算转换的日期，取值必须是合法的日期或日期表达式。
+- `format`：计算转换后生成的日期时间的返回格式。参见 [Joda-Time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html)。
 
-## Return value
+## 返回值说明
 
-Currently, the return value is a string that contains a maximum of 128 bytes in length. If the length of the string converted from the specified date exceeds 128 bytes, `NULL` is returned.
+当前支持返回值为长度不超过 128 字节的字符串。如果计算转换后生成的字符串长度超过 128 字节，则返回 `NULL`。
 
-## Examples
+## 示例
 
-Example 1: Convert the date `2020-06-25 15:58:51` into a string in `yyyy-MM-dd` format.
+示例一：将日期 `2020-06-25 15:58:51` 转换为 `yyyy-MM-dd` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd');
@@ -36,7 +36,7 @@ MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd');
 +------------------------------------------------------+
 ```
 
-Example 2: Convert the date `2020-06-25 15:58:51` into a string in `yyyy-MM-dd HH:mm:ss` format.
+示例二：将日期 `2020-06-25 15:58:51` 转换为 `yyyy-MM-dd HH:mm:ss` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd HH:mm:ss');
@@ -47,7 +47,7 @@ MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd HH:mm:ss');
 +---------------------------------------------------------------+
 ```
 
-Example 3: Convert the date `2020-06-25 15:58:51` into a string in `MM dd ee EE` format.
+示例三：将日期 `2020-06-25 15:58:51` 转换为 `MM dd ee EE` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2020-06-25 15:58:51', 'MM dd ee EE');
@@ -58,7 +58,7 @@ MySQL > select jodatime_format('2020-06-25 15:58:51', 'MM dd ee EE');
 +-------------------------------------------------------+
 ```
 
-Example 4: Convert the date `2020-06-25 15:58:51` into a string in `MMM dd ee EEE` format.
+示例四：将日期 `2020-06-25 15:58:51` 转换为 `MMM dd ee EEE` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMM dd ee EEE');
@@ -69,7 +69,7 @@ MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMM dd ee EEE');
 +---------------------------------------------------------+
 ```
 
-Example 5: Convert the date `2020-06-25 15:58:51` into a string in `MMMM dd ee EEEE` format.
+示例五：将日期 `2020-06-25 15:58:51` 转换为 `MMMM dd ee EEEE` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMMM dd ee EEEE');
@@ -80,7 +80,7 @@ MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMMM dd ee EEEE');
 +-----------------------------------------------------------+
 ```
 
-Example 6: Convert the date `2023-06-25 12:00:00` into a string in `KK:mm:ss a` format.
+示例六：将日期 `2023-06-25 12:00:00` 转换为 `KK:mm:ss a` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2023-06-25 12:00:00', 'KK:mm:ss a');
@@ -91,7 +91,7 @@ MySQL > select jodatime_format('2023-06-25 12:00:00', 'KK:mm:ss a');
 +------------------------------------------------------+
 ```
 
-Example 7: Convert the date `2023-06-25 12:00:00` into a string in `hh:mm:ss a` format.
+示例七：将日期 `2023-06-25 12:00:00` 转换为 `hh:mm:ss a` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2023-06-25 12:00:00', 'hh:mm:ss a');
@@ -102,7 +102,7 @@ MySQL > select jodatime_format('2023-06-25 12:00:00', 'hh:mm:ss a');
 +------------------------------------------------------+
 ```
 
-Example 8: Convert the date `2023-06-25 00:00:00` into a string in `yyyyMMdd ''starrocks''` format.
+示例八：将日期 `2023-06-25 00:00:00` 转换为 `yyyyMMdd ''starrocks''` 格式的字符串。
 
 ```SQL
 MySQL > select jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd ''starrocks''');
@@ -113,6 +113,6 @@ MySQL > select jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd ''starrocks''');
 +------------------------------------------------------------------+
 ```
 
-## Keywords
+## 关键字
 
 JODATIME_FORMAT, JODA, FORMAT
