@@ -641,6 +641,28 @@ public class AnalyzeMgr implements Writable {
             HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
             replayAddHistogramStatsMeta(histogramStatsMeta);
         }
+<<<<<<< HEAD
+=======
+
+        int externalBasicStatsMetaSize = reader.readInt();
+        for (int i = 0; i < externalBasicStatsMetaSize; ++i) {
+            ExternalBasicStatsMeta basicStatsMeta = reader.readJson(ExternalBasicStatsMeta.class);
+            replayAddExternalBasicStatsMeta(basicStatsMeta);
+        }
+    }
+
+    private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (basicStatsMeta == null) {
+            // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
+            BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    StatsConstants.buildInitStatsProp(), loadedRows);
+            GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+        } else {
+            basicStatsMeta.increaseUpdateRows(loadedRows);
+        }
+>>>>>>> fba8a88eeb ([BugFix] distinguish the init sampling stats collect job (#36917))
     }
 
     private static class SerializeData {

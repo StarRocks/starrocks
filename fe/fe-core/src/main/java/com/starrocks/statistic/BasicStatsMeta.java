@@ -23,6 +23,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.statistics.TableStatistic;
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> fba8a88eeb ([BugFix] distinguish the init sampling stats collect job (#36917))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -118,10 +123,17 @@ public class BasicStatsMeta implements Writable {
                 // skip init empty partition
                 continue;
             }
+<<<<<<< HEAD
 
             LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
             if (updateTime.isAfter(loadTimes)) {
                 continue;
+=======
+            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+
+            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
+                updatePartitionCount++;
+>>>>>>> fba8a88eeb ([BugFix] distinguish the init sampling stats collect job (#36917))
             }
 
             updatePartitionCount++;
@@ -157,5 +169,20 @@ public class BasicStatsMeta implements Writable {
 
     public void increaseUpdateRows(Long delta) {
         updateRows += delta;
+    }
+
+    public boolean isInitJobMeta() {
+        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
+    }
+
+    public boolean isUpdatedAfterLoad(LocalDateTime loadTime) {
+        if (isInitJobMeta()) {
+            // We update the updateTime of a partition then we may do an init sample collect job, these auto init
+            // sample may return a wrong healthy value which may block the auto full collect job.
+            // so we return false to regard it like a manual collect job before load.
+            return false;
+        } else {
+            return updateTime.isAfter(loadTime);
+        }
     }
 }
