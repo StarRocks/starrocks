@@ -3543,40 +3543,49 @@ static ColumnPtr regexp_instr_const(StringFunctionsState* state, const Columns& 
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(size);
-    for (int row = 0; row < size; ++row) {
-        if (pattern_str.empty()) {
+
+    if (pattern_str.empty()) {
+        // pattern("") can match every thing
+        for (int row = 0; row < size; ++row) {
             result.append(1);
-            continue;
         }
+    } else {
+        for (int row = 0; row < size; ++row) {
+            if (content_viewer.is_null(row)) {
+                result.append(0);
+                continue;
+            }
 
-        if (content_viewer.is_null(row)) {
-            result.append(0);
-            continue;
+            auto row_value = content_viewer.value(row);
+            auto row_size = row_value.get_size();
+            if (row_size > INT_MAX) {
+                // RE2::StringPiece(const char* offset, int len)
+                // max match index is: (INT_MAX - 1)
+                row_size = INT_MAX;
+            }
+            
+            re2::StringPiece str_sp(row_value.get_data(), row_size);
+            auto max_matches = 1 + const_re->NumberOfCapturingGroups();
+            std::vector<re2::StringPiece> matches(max_matches);
+            bool success = const_re->Match(str_sp, 0, row_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
+            if (!success) {
+                result.append(0);
+                continue;
+            }
+
+            const re2::StringPiece& match = matches[0];
+            std::string row_str = row_value.get_data();
+            std::string match_str = match.data();
+
+            auto index = row_str.find(match_str);
+            if (index == std::string::npos) {
+                result.append(0);
+                continue;
+            }
+
+            // Character indexes begin at 1 
+            result.append(++index);
         }
-
-        auto row_value = content_viewer.value(row);
-        
-        re2::StringPiece str_sp(row_value.get_data(), row_value.get_size());
-        int max_matches = 1 + const_re->NumberOfCapturingGroups();
-        std::vector<re2::StringPiece> matches(max_matches);
-        bool success = const_re->Match(str_sp, 0, row_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
-        if (!success) {
-            result.append(0);
-            continue;
-        }
-
-        const re2::StringPiece& match = matches[0];
-        std::string row_str = row_value.get_data();
-        std::string match_str = match.data();
-
-        auto index = row_str.find(match_str);
-        if (index == std::string::npos) {
-            result.append(0);
-            continue;
-        }
-
-        // Character indexes begin at 1 
-        result.append(++index);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -3607,9 +3616,16 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
             continue;
         }
 
-        int max_matches = 1 + local_re.NumberOfCapturingGroups();
+        auto max_matches = 1 + local_re.NumberOfCapturingGroups();
         auto row_value = content_viewer.value(row);
-        re2::StringPiece str_sp(row_value.get_data(), row_value.get_size());
+        auto row_size = row_value.get_size();
+        if (row_size > INT_MAX) {
+            // RE2::StringPiece(const char* offset, int len)
+            // max match index is: (INT_MAX - 1)
+            row_size = INT_MAX;
+        }
+
+        re2::StringPiece str_sp(row_value.get_data(), row_size);
         std::vector<re2::StringPiece> matches(max_matches);
         bool success = local_re.Match(str_sp, 0, row_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
         if (!success) {
@@ -3626,7 +3642,7 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
             continue;
         }
 
-        // Character indexes begin at 1 
+        // Character indexes begin at 1
         result.append(++index);
     }
 

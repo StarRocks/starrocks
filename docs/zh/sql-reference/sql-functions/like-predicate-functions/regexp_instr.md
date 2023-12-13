@@ -2,16 +2,16 @@
 displayed_sidebar: "Chinese"
 ---
 
-# regexp_extract
+# regexp_instr
 
 ## 功能
 
-对字符串 str 进行正则匹配，抽取符合 pattern 的第 1 个匹配部分的索引下标（从 1 开始），如果没有找到匹配项，则返回 0。
+对字符串 str 进行正则匹配，抽取符合 pattern 的第 1 个匹配部分的索引下标（从 1 开始），如果没有找到匹配项，则返回 0。如果str与pattern其中有一个为NULL，则函数返回NULL。
 
 ## 语法
 
 ```Haskell
-regexp_extract(str, pattern)
+regexp_instr(str, pattern)
 ```
 
 ## 参数说明
@@ -43,7 +43,7 @@ MySQL > SELECT regexp_instr('abCdE', '([[:lower:]]+)C([[:lower:]]+)');
 
 MySQL > SELECT regexp_instr('abCdE', 'ABC');
 +--------------------------------------------------------+
-| regexp_instr('abCdE', 'AbC');                          |
+| regexp_instr('abCdE', 'ABC');                          |
 +--------------------------------------------------------+
 | 0                                                      |
 +--------------------------------------------------------+

@@ -3546,7 +3546,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
     }
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrPattern) {
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConst) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
@@ -3558,7 +3558,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrPattern) {
     std::string strs[] = {"Alex test", "   Alexx test", "AAAAAlex test", "AAlex Alex", "adssdaAlexxx"};
     std::string res[] = {"1", "4", "5", "2", "7"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+    for (int i = 0; i < strs.sizes(); ++i) {
         str->append(strs[i]);
         pattern->append("Alex");
     }
@@ -3576,12 +3576,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrPattern) {
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
                     .ok());    
     
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+    for (int i = 0; i < strs.sizes(); ++i) {
         ASSERT_EQ(res[i], result->debug_item(i));
     }
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNullablePattern) {
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstUtf8) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
@@ -3590,48 +3590,54 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNullablePattern) {
     auto str = BinaryColumn::create();
     auto pattern = BinaryColumn::create();
 
-    std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "0"};
+    std::string strs[] = {"Alex &#x65B0;&#x624B;&#x6D4B;&#x8BD5;", "  &#x65B0;Alex&#x624B;  &#x6D4B;&#x8BD5;"};
+    std::string res[] = {"6", "3"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+    for (int i = 0; i < strs.sizes(); ++i) {
+        str->append(strs[i]);
+        pattern->append("&#x65B0");
+    }
+    columns.push_back(str);
+    columns.push_back(pattern);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());    
+    
+    for (int i = 0; i < strs.sizes(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstNullable) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+
+    std::string strs[] = {"NULL", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
+    std::string res[] = {"NULL", "2", "1", "1", "0", "1", "NULL"};
+
+    for (int i = 0; i < strs.sizes(); ++i) {
         str->append(strs[i]);
         pattern->append("([[:lower:]]+)C([[:lower:]]+)");
     }
-    columns.push_back(str);
-    columns.push_back(pattern);
-
-    context->set_constant_columns(columns);
-
-    ASSERT_TRUE(
-            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
-
-    auto result = StringFunctions::regexp_instr(context, columns).value();
-
-    ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                    .ok());
-
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        ASSERT_EQ(res[i], result->debug_item(i));
-    }
-}
-
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstNullPattern) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto context = ctx.get();
-
-    Columns columns;
-
-    auto str = BinaryColumn::create();
-    auto pattern = BinaryColumn::create();
-
-    std::string res[] = {"1", "1", "1", "1", "1"};
-
-    int length = 4;
-    for (int i = 0; i < length; ++i) {
-        str->append("test" + std::to_string(i));
-    }
-    str->append("")
+    // Pattern is empty
+    str->append("hitCdeciCsionCdlist");
+    pattern->append("");
+    // Pattern is null
+    str->append("hitCdeciCsionCdlist");
+    pattern->append("NULL");
 
     columns.push_back(str);
     columns.push_back(pattern);
@@ -3647,27 +3653,26 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstNullPattern) {
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
                     .ok());
 
-    for (int i = 0; i < length + 1; ++i) {
+    for (int i = 0; i < strs.sizes(); ++i) {
         ASSERT_EQ(res[i], result->debug_item(i));
     }
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstPattern) {
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPattern) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
     Columns columns;
 
     auto str = BinaryColumn::create();
-    auto pattern = ColumnHelper::create<TYPE_VARCHAR>("([[:lower:]]+)C([[:lower:]]+)", 5);
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("Alex", 5);
 
-    std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "0"};
+    std::string strs[] = {"Alex test", "   Alexx test", "AAAAAlex test", "AAlex Alex", "adssdaAlexxx"};
+    std::string res[] = {"1", "4", "5", "2", "7"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+    for (int i = 0; i < strs.sizes(); ++i) {
         str->append(strs[i]);
     }
-
     columns.push_back(str);
     columns.push_back(pattern);
 
@@ -3680,14 +3685,48 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstPattern) {
 
     ASSERT_TRUE(
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                    .ok());
-
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+                    .ok());    
+    
+    for (int i = 0; i < strs.sizes(); ++i) {
         ASSERT_EQ(res[i], result->debug_item(i));
     }
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstNullPattern) {
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPatternUtf8) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("&#x65B0", 2);
+
+    std::string strs[] = {"Alex &#x65B0;&#x624B;&#x6D4B;&#x8BD5;", "  &#x65B0;Alex&#x624B;  &#x6D4B;&#x8BD5;"};
+    std::string res[] = {"6", "3"};
+
+    for (int i = 0; i < strs.sizes(); ++i) {
+        str->append(strs[i]);
+    }
+    columns.push_back(str);
+    columns.push_back(pattern);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());    
+    
+    for (int i = 0; i < strs.sizes(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstNullable) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
@@ -3723,25 +3762,17 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstNullPattern) {
     }
 }
 
-PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPattern) {
+PARALLEL_TEST(VecStringFunctionsTest, regexpInstrAllConst) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
 
+    auto str = ColumnHelper::create_const_null_column(1);
+    auto pattern = ColumnHelper::create_const_null_column(1);
+    std::string res = "1";
+
     Columns columns;
-
-    auto str = BinaryColumn::create();
-    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("([[:lower:]]+)C([[:lower:]]+)", 5);
-
-    std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "0"};
-
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
-    }
-
-    columns.push_back(str);
-    columns.push_back(pattern);
-
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
@@ -3749,13 +3780,14 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPattern) {
 
     auto result = StringFunctions::regexp_instr(context, columns).value();
 
+    EXPECT_EQ(result->size(), 1);
+    EXPECT_TRUE(result->is_constant());
+    ASSERT_EQ(res, result->debug_item(i));
+
     ASSERT_TRUE(
             StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
                     .ok());
-
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        ASSERT_EQ(res[i], result->debug_item(i));
-    }
+}
 
 PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
