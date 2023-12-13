@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 description: Monitor with Datadog
+sidebar_label: Datadog
 ---
 
 # Integrate Datadog with StarRocks
