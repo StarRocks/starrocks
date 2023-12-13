@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 ## 前提条件
 
-您可以通过 [SHOW BROKER](../../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../administration/deploy_broker.md)完成 Broker 部署。
+您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../administration/deploy_broker.md)完成 Broker 部署。
 
 本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
@@ -86,13 +86,13 @@ WITH BROKER "mybroker"
 );
 ```
 
-有关 EXPORT 语句的详细语法和参数说明，请参见 [EXPORT](../../sql-reference/sql-statements/data-manipulation/EXPORT.md)。
+有关 EXPORT 语句的详细语法和参数说明，请参见 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md)。
 
 ### 获取导出作业的查询 ID
 
 提交导出作业后，可以通过 SELECT LAST_QUERY_ID() 语句获取导出作业的查询 ID。您可以通过查询到的 ID 查看或者取消导出作业。
 
-有关 SELECT LAST_QUERY_ID() 语句的详细语法和参数说明，请参见 [last_query_id](../../sql-reference/sql-functions/utility-functions/last_query_id.md)。
+有关 SELECT LAST_QUERY_ID() 语句的详细语法和参数说明，请参见 [last_query_id](../sql-reference/sql-functions/utility-functions/last_query_id.md)。
 
 ### 查看导出作业的状态
 
@@ -121,7 +121,7 @@ Timeout: 3600
 ErrorMsg: N/A
 ```
 
-有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](../../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
+有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
 
 ### 取消导出作业
 
@@ -135,7 +135,7 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 >
 > 上述示例中，`queryid` 为导出作业的 ID。
 
-有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../../sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT.md)。
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT.md)。
 
 ## 最佳实践
 
