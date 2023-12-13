@@ -104,9 +104,9 @@ public class UDAFBitmapAgg extends AbstractGenericUDAFResolver {
         @Override
         public void merge(AggregationBuffer aggregationBuffer, Object o) throws HiveException {
             BitmapAggBuffer buf = (BitmapAggBuffer) aggregationBuffer;
-            byte[] tmp_buf = this.mergeInspector.getPrimitiveJavaObject(o);
+            byte[] tmpBuf = this.mergeInspector.getPrimitiveJavaObject(o);
             try {
-                buf.bitmap.or(BitmapValue.bitmapFromBytes(tmp_buf));
+                buf.bitmap.or(BitmapValue.bitmapFromBytes(tmpBuf));
             } catch (IOException e) {
                 throw new HiveException(e);
             }

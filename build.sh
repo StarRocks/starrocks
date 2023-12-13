@@ -247,7 +247,7 @@ if [[ ${HELP} -eq 1 ]]; then
 fi
 
 if [ ${CLEAN} -eq 1 -a ${BUILD_BE} -eq 0 -a ${BUILD_FE} -eq 0 -a ${BUILD_SPARK_DPP} -eq 0 -a ${BUILD_HIVE_UDF} -eq 0 ]; then
-    echo "--clean can not be specified without --fe or --be or --spark-dpp"
+    echo "--clean can not be specified without --fe or --be or --spark-dpp or --hive-udf"
     exit 1
 fi
 
