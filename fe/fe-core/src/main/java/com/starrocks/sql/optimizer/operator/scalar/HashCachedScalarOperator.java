@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.List;
+import java.util.Objects;
 
 public class HashCachedScalarOperator extends ScalarOperator {
     public ScalarOperator operator;
@@ -59,7 +60,7 @@ public class HashCachedScalarOperator extends ScalarOperator {
             return false;
         }
         HashCachedScalarOperator that = (HashCachedScalarOperator) o;
-        return this.getOperator() == that.getOperator();
+        return Objects.equals(this.getOperator(), that.getOperator());
     }
 
     @Override
