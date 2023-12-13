@@ -395,14 +395,16 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
     if (max_sample_file_count <= 0 || max_sample_file_count >= scan_range.ranges.size()) {
         // sample all files
         step = 1;
+    } else if (max_sample_file_count == 1 || scan_range.range.size() == 1) {
+        step = scan_range.ranges.size();
     } else {
-        step = static_cast<float>(scan_range.ranges.size()) / (max_sample_file_count - 1);
+        step = static_cast<float>(scan_range.ranges.size() - 1) / (max_sample_file_count - 1);
     }
 
     std::vector<std::vector<SlotDescriptor>> schemas;
     // sample some files.
     size_t sample_file_count = 0;
-    for (size_t i = 0; i < scan_range.ranges.size(); i += step) {
+    for (size_t i = 0; i < scan_range.ranges.size(); i = std::round(i + step)) {
         // sample range only contains 1 file.
         auto sample_range = scan_range;
         sample_range.ranges = {sample_range.ranges[i]};
