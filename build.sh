@@ -397,7 +397,7 @@ cd ${STARROCKS_HOME}
 
 # Assesmble FE modules
 FE_MODULES=
-if [ ${BUILD_FE} -eq 1 ] ||  [ ${BUILD_SPARK_DPP} -eq 1 ] ||  [ ${BUILD_HIVE_UDF} -eq 1 ]; then
+if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         FE_MODULES="fe-common,spark-dpp"
     fi
