@@ -202,6 +202,7 @@ if [ $# == 1 ] ; then
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
+    BUILD_HIVE_UDF=1
     CLEAN=0
     RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
@@ -209,6 +210,7 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
+    BUILD_HIVE_UDF=1
     CLEAN=0
     RUN_UT=0
     PARALLEL=$2
@@ -216,6 +218,7 @@ else
     BUILD_BE=0
     BUILD_FE=0
     BUILD_SPARK_DPP=0
+    BUILD_HIVE_UDF=0
     CLEAN=0
     RUN_UT=0
     while true; do
