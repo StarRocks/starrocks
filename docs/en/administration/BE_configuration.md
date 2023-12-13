@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
-### View BE configuration items
+## View BE configuration items
 
 You can view the BE configuration items using the following command:
 
@@ -14,7 +14,7 @@ You can view the BE configuration items using the following command:
 curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ```
 
-### Configure BE dynamic parameters
+## Configure BE dynamic parameters
 
 You can configure a dynamic parameter of a BE node by using the `curl` command.
 
@@ -354,7 +354,7 @@ BE dynamic parameters are as follows.
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
 
-### Configure BE static parameters
+## Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
 
