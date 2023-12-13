@@ -3550,7 +3550,7 @@ static ColumnPtr regexp_instr_const(StringFunctionsState* state, const Columns& 
         }
 
         if (content_viewer.is_null(row)) {
-            result.append_null();
+            result.append(0);
             continue;
         }
 
@@ -3561,7 +3561,7 @@ static ColumnPtr regexp_instr_const(StringFunctionsState* state, const Columns& 
         std::vector<re2::StringPiece> matches(max_matches);
         bool success = const_re->Match(str_sp, 0, row_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
         if (!success) {
-            result.append_null();
+            result.append(0);
             continue;
         }
 
@@ -3571,7 +3571,7 @@ static ColumnPtr regexp_instr_const(StringFunctionsState* state, const Columns& 
 
         auto index = row_str.find(match_str);
         if (index == std::string::npos) {
-            result.append_null();
+            result.append(0);
             continue;
         }
 
@@ -3595,7 +3595,7 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
         } 
         
         if (content_viewer.is_null(row)) {
-            result.append_null();
+            result.append(0);
             continue;
         }
 
@@ -3603,7 +3603,7 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
         re2::RE2 local_re(ptn_value.to_string(), *options);
         if (!local_re.ok()) {
             context->set_error(strings::Substitute("Invalid regex expression: $0", ptn_value.to_string()).c_str());
-            result.append_null();
+            result.append(0);
             continue;
         }
 
@@ -3613,7 +3613,7 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
         std::vector<re2::StringPiece> matches(max_matches);
         bool success = local_re.Match(str_sp, 0, row_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
         if (!success) {
-            result.append_null();
+            result.append(0);
             continue;
         }
         
@@ -3622,7 +3622,7 @@ static ColumnPtr regexp_instr_general(FunctionContext* context, re2::RE2::Option
         std::string match_str = match.data();
         auto index = row_str.find(match_str);
         if (index == std::string::npos) {
-            result.append_null();
+            result.append(0);
             continue;
         }
 

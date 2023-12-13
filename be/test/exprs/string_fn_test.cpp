@@ -3591,7 +3591,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNullablePattern) {
     auto pattern = BinaryColumn::create();
 
     std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "NULL"};
+    std::string res[] = {"2", "2", "1", "1", "0"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);
@@ -3662,7 +3662,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrNonConstPattern) {
     auto pattern = ColumnHelper::create<TYPE_VARCHAR>("([[:lower:]]+)C([[:lower:]]+)", 5);
 
     std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "NULL"};
+    std::string res[] = {"2", "2", "1", "1", "0"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);
@@ -3733,7 +3733,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpInstrConstPattern) {
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("([[:lower:]]+)C([[:lower:]]+)", 5);
 
     std::string strs[] = {"AbCdE", "AbCdrrCryE", "hitCdeciCsionCdlist", "hitCdecCisiCondlCist", "12342356"};
-    std::string res[] = {"2", "2", "1", "1", "NULL"};
+    std::string res[] = {"2", "2", "1", "1", "0"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);
