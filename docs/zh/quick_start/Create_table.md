@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 创建表
 
 本文介绍如何在 StarRocks 中创建表以及进行相关操作。
@@ -35,7 +39,7 @@ MySQL [(none)]> SHOW DATABASES;
 
 > 说明：与 MySQL 的表结构类似，`information_schema` 包含当前 StarRocks 集群的元数据信息，但是部分统计信息还不完善。推荐您通过 `DESC table_name` 等命令来获取数据库元数据信息。
 
-## 创建表
+## 创建一张表
 
 在新建的数据库中创建表。
 
@@ -105,7 +109,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Using_bitmap.md) 等。
 
 > 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 
@@ -146,8 +150,6 @@ SHOW CREATE TABLE table_name;
 ```sql
 SHOW CREATE TABLE detailDemo;
 ```
-
-<br/>
 
 ## 修改表结构
 
@@ -240,9 +242,3 @@ GRANT ALL on example_db.* to test;
 ```bash
 mysql -h 127.0.0.1 -P9030 -utest -p123456
 ```
-
-<br/>
-
-## 下一步
-
-表创建成功后，您可以 [导入并查询数据](../quick_start/Import_and_query.md)。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data import and query
 
 ## Local File Import

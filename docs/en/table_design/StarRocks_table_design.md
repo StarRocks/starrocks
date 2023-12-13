@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Table Design
 
 ## Columnar Storage

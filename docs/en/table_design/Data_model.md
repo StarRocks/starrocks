@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data Models
 
 According to the mapping relationship between ingested data and actual stored data, StarRocks provides corresponding data models for different types of tables. Here we reference the concept of primary key (in the relational model), and use the value of the key column as the sort key. Compared with the traditional primary key,StarRocks’s sort key has these features:

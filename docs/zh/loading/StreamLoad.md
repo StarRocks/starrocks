@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Stream load
 
 StarRocks支持从本地直接导入数据，支持CSV文件格式。数据量在10GB以下。

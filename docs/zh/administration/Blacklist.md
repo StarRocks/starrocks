@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 黑名单管理
 
 StarRocks的客户可以维护一个SQL黑名单，在某些场景下禁止指定的一类SQL，避免这类SQL导致集群crash或者其他预期之外的行为。

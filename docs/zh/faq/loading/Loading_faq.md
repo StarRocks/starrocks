@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 导入通用FAQ
 
 ## 导入常见问题

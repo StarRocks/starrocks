@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Insert Into 导入
 
 Insert Into 语句的使用方式和 MySQL 等数据库中 Insert Into 语句的使用方式类似。

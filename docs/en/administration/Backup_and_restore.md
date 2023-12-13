@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Backup and Recovery
 
 StarRocks supports backing up the current data as a file to a remote storage system via the broker (the broker is an optional process in the StarRocks cluster, mainly used to support StarRocks to read and write files and directories on the remote storage, please refer to the [Broker Load documentation](../loading/BrokerLoad.md). The backup data can be restored from the remote storage system to any StarRocks cluster with the restore command. This feature supports periodic snapshot backup of data. It also allows migrating data between clusters.

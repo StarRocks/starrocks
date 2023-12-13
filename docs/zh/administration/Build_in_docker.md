@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # dev-env image 使用说明
 
 ## image 下载

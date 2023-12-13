@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Insert Into Loading
 
 The Insert Into statement is used similarly to the Insert Into statement in databases (e.g. MySQL).

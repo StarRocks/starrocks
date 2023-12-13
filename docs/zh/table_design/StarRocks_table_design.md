@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 理解StarRocks表设计
 
 ## 列式存储

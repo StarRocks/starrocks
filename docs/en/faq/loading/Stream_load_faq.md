@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Stream Load
 
 ## Does Stream Load identify the column name of the first row in a text file? Or can I specify the first row not to be read？
