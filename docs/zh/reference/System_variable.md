@@ -408,11 +408,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 
