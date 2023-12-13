@@ -39,6 +39,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "test_base_part");
         starRocksAssert.withTable(cluster, "table_with_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition");
+        starRocksAssert.withTable(cluster, "table_with_datetime_partition");
 
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
@@ -1141,8 +1142,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "  COUNT(`t1a`) AS `cnt` \n" +
                     "FROM `table_with_datetime_partition` \n" +
                     "GROUP BY DATE_TRUNC('DAY', `id_datetime`)");
-            createAndRefreshMv("test", "mv_on_view_1",
-                    "create materialized view mv_on_view_1" +
+            createAndRefreshMv("create materialized view mv_on_view_1" +
                             " partition by day_date" +
                             " distributed by hash(`day_date`)" +
                             " as" +
@@ -1166,8 +1166,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "  COUNT(`t1a`) AS `cnt` \n" +
                     "FROM `table_with_day_partition` \n" +
                     "GROUP BY DATE_TRUNC('DAY', `id_date`)");
-            createAndRefreshMv("test", "mv_on_view_1",
-                    "create materialized view mv_on_view_1" +
+            createAndRefreshMv("create materialized view mv_on_view_1" +
                             " partition by day_date" +
                             " distributed by hash(`day_date`)" +
                             " as" +
@@ -1190,8 +1189,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "  COUNT(`t1a`) AS `cnt` \n" +
                     "FROM `table_with_day_partition` \n" +
                     "GROUP BY DATE_TRUNC('MONTH', `id_date`)");
-            createAndRefreshMv("test", "mv_on_view_1",
-                    "create materialized view mv_on_view_1" +
+            createAndRefreshMv("create materialized view mv_on_view_1" +
                             " partition by day_month" +
                             " distributed by hash(`day_month`)" +
                             " as" +

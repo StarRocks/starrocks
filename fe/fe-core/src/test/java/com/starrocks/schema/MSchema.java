@@ -191,6 +191,27 @@ public class MSchema {
             "('varchar3', '1991-04-01', 3, 1, 1)," +
             "('varchar3', '1991-04-02', 4, 1, 1)");
 
+    public static final MTable TABLE_WITH_DATETIME_PARTITION = new MTable("table_with_datetime_partition", "t1a",
+            List.of(
+                    "  `t1a` varchar(20) NULL",
+                    "  `id_datetime` datetime NULL",
+                    "  `t1b` smallint(6) NULL",
+                    "  `t1c` int(11) NULL",
+                    "  `t1d` bigint(20) NULL"
+            ),
+            "id_datetime",
+            List.of(
+                    "PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31'))",
+                    "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01'))",
+                    "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02'))",
+                    "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03'))"
+            ),
+            "`t1a`,`id_datetime`"
+    ).withValues("('varchar1', '1991-03-30', 1, 1, 1)," +
+            "('varchar2', '1991-03-31', 2, 1, 1), " +
+            "('varchar3', '1991-04-01', 3, 1, 1)," +
+            "('varchar3', '1991-04-02', 4, 1, 1)");
+
     public static final MTable TEST_BASE_PART = new MTable("test_base_part", "c1",
             List.of(
                     "c1 int",
@@ -256,6 +277,7 @@ public class MSchema {
             T0,
             TABLE_WITH_PARTITION,
             TABLE_WITH_DAY_PARTITION,
+            TABLE_WITH_DATETIME_PARTITION,
             TEST_BASE_PART,
             T1,
             JSON_TBL
