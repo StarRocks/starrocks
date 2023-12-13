@@ -226,8 +226,8 @@ public class MetadataMgrTest {
                 result = new com.starrocks.catalog.Database();
                 minTimes = 0;
 
-                metadataMgr.listTableNames("iceberg_catalog", "iceberg_db");
-                result = Lists.newArrayList("iceberg_table");
+                metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = true;
                 minTimes = 0;
             }
         };
