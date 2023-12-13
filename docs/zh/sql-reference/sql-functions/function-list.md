@@ -32,22 +32,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-<<<<<<< HEAD
-|  [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
-|  [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
-|  [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
-|  [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
-|  [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
-|  [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
-|  [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
-|  [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
-|  [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
-|  [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
-|  [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
-|   [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
-|  [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
-|  [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
-=======
 | [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
 | [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
 | [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
@@ -63,7 +47,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
 | [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
 | [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
->>>>>>> 31ee9d798b ([Doc] Add 7 date functions to Branch 3.2 (backport #36130) (#36914))
 | [dayname](./date-time-functions/dayname.md)| 返回指定日期对应的星期名称。|
 | [dayofmonth](./date-time-functions/dayofmonth.md)| 返回日期中的天信息，返回值范围 1~31。  |
 | [dayofweek](./date-time-functions/dayofweek.md)| 返回指定日期的工作日索引值。  |
@@ -78,12 +61,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [hours_add](./date-time-functions/hours_add.md)| 给指定的日期时间增加指定的小时数。  |
 | [hours_diff](./date-time-functions/hours_diff.md)|  计算开始时间和结束时间相差多少个小时。 |
 | [hours_sub](./date-time-functions/hours_sub.md)| 从指定的日期时间中减少指定的小时数。  |
-<<<<<<< HEAD
-=======
 | [jodatime_format](./date-time-functions/jodatime_format.md)| 将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。  |
 | [last_day](./date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
 | [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
->>>>>>> 31ee9d798b ([Doc] Add 7 date functions to Branch 3.2 (backport #36130) (#36914))
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
@@ -103,7 +83,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [seconds_sub](./date-time-functions/seconds_sub.md)|  给指定的日期时间或日期减去指定的秒数。 |
 | [str2date](./date-time-functions/str2date.md)| 按照 format 指定的格式将 str 转换为 DATE 类型的值。  |
 | [str_to_date](./date-time-functions/str_to_date.md)| 按照 format 指定的格式将 str 转换为 DATETIME 类型的值。  |
-| [str_to_jodatime](./date-time-functions/str_to_jodatime.md)| 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式的 DATETIME 值。  |
 | [time_slice](./date-time-functions/time_slice.md)| 根据指定的时间粒度周期，将给定的时间转化为其所在的时间粒度周期的起始或结束时刻。  |
 | [time_to_sec](./date-time-functions/time_to_sec.md)| 将 time 时间值转换为秒数。  |
 | [timediff](./date-time-functions/timediff.md)| 返回两个 DATETIME 类型值之间的差值，返回 TIME 类型。  |
