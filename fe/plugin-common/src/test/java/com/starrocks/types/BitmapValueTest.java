@@ -18,6 +18,7 @@
 package com.starrocks.types;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -31,6 +32,39 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 
 public class BitmapValueTest {
+    static BitmapValue emptyBitmap;
+    static BitmapValue singleBitmap;
+    static BitmapValue largeBitmap;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        emptyBitmap = new BitmapValue();
+        singleBitmap = new BitmapValue();
+        singleBitmap.add(1);
+        largeBitmap = new BitmapValue();
+        for (long i = 0; i < 20; i++) {
+            largeBitmap.add(i);
+        }
+    }
+
+    private void check_bitmap(BitmapValue bitmap, long start, long end) {
+        Assert.assertEquals(bitmap.cardinality(), end - start);
+        for (long i = start; i < end; i++) {
+            Assert.assertTrue(bitmap.contains(i));
+        }
+    }
+
+    @Test
+    public void testBitmapToBytesAndBitmapFromBytes() throws IOException {
+        BitmapValue bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(emptyBitmap));
+        check_bitmap(bitmap, 0, 0);
+
+        bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(singleBitmap));
+        check_bitmap(bitmap, 1, 2);
+
+        bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(largeBitmap));
+        check_bitmap(bitmap, 0, 20);
+    }
 
     @Test
     public void testVarint64IntEncode() throws IOException {
@@ -47,16 +81,16 @@ public class BitmapValueTest {
     @Test
     public void testBitmapTypeTransfer() {
         BitmapValue bitmapValue = new BitmapValue();
-        Assert.assertTrue(bitmapValue.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue.getBitmapType());
 
         bitmapValue.add(1);
-        Assert.assertTrue(bitmapValue.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue.getBitmapType());
 
         bitmapValue.add(2);
-        Assert.assertTrue(bitmapValue.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue.getBitmapType());
 
         bitmapValue.clear();
-        Assert.assertTrue(bitmapValue.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue.getBitmapType());
     }
 
     @Test
@@ -98,8 +132,8 @@ public class BitmapValueTest {
         BitmapValue bitmapValue = new BitmapValue();
         bitmapValue.add(1);
         bitmapValue.add(1);
-        Assert.assertTrue(bitmapValue.getBitmapType() == BitmapValue.SINGLE_VALUE);
-        Assert.assertTrue(bitmapValue.cardinality() == 1);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue.getBitmapType());
+        assertEquals(1, bitmapValue.cardinality());
     }
 
     @Test
@@ -108,16 +142,16 @@ public class BitmapValueTest {
         BitmapValue bitmapValue1 = new BitmapValue();
         BitmapValue bitmapValue1_1 = new BitmapValue();
         bitmapValue1.and(bitmapValue1_1);
-        Assert.assertTrue(bitmapValue1.getBitmapType() == BitmapValue.EMPTY);
-        Assert.assertTrue(bitmapValue1.cardinality() == 0);
+        assertEquals(BitmapValue.EMPTY, bitmapValue1.getBitmapType());
+        assertEquals(0, bitmapValue1.cardinality());
 
         // empty and single value
         BitmapValue bitmapValue2 = new BitmapValue();
         BitmapValue bitmapValue2_1 = new BitmapValue();
         bitmapValue2_1.add(1);
         bitmapValue2.and(bitmapValue2_1);
-        Assert.assertTrue(bitmapValue2.getBitmapType() == BitmapValue.EMPTY);
-        Assert.assertTrue(bitmapValue2.cardinality() == 0);
+        assertEquals(BitmapValue.EMPTY, bitmapValue2.getBitmapType());
+        assertEquals(0, bitmapValue2.cardinality());
 
         // empty and bitmap
         BitmapValue bitmapValue3 = new BitmapValue();
@@ -125,16 +159,16 @@ public class BitmapValueTest {
         bitmapValue3_1.add(1);
         bitmapValue3_1.add(2);
         bitmapValue3.and(bitmapValue3_1);
-        Assert.assertTrue(bitmapValue2.getBitmapType() == BitmapValue.EMPTY);
-        Assert.assertTrue(bitmapValue3.cardinality() == 0);
+        assertEquals(BitmapValue.EMPTY, bitmapValue2.getBitmapType());
+        assertEquals(0, bitmapValue3.cardinality());
 
         // single value and empty
         BitmapValue bitmapValue4 = new BitmapValue();
         bitmapValue4.add(1);
         BitmapValue bitmapValue4_1 = new BitmapValue();
         bitmapValue4.and(bitmapValue4_1);
-        Assert.assertTrue(bitmapValue4.getBitmapType() == BitmapValue.EMPTY);
-        Assert.assertTrue(bitmapValue4.cardinality() == 0);
+        assertEquals(BitmapValue.EMPTY, bitmapValue4.getBitmapType());
+        assertEquals(0, bitmapValue4.cardinality());
 
         // single value and single value
         BitmapValue bitmapValue5 = new BitmapValue();
@@ -142,7 +176,7 @@ public class BitmapValueTest {
         BitmapValue bitmapValue5_1 = new BitmapValue();
         bitmapValue5_1.add(1);
         bitmapValue5.and(bitmapValue5_1);
-        Assert.assertTrue(bitmapValue5.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue5.getBitmapType());
         Assert.assertTrue(bitmapValue5.contains(1));
 
         bitmapValue5.clear();
@@ -150,7 +184,7 @@ public class BitmapValueTest {
         bitmapValue5.add(1);
         bitmapValue5_1.add(2);
         bitmapValue5.and(bitmapValue5_1);
-        Assert.assertTrue(bitmapValue5.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue5.getBitmapType());
 
         // single value and bitmap
         BitmapValue bitmapValue6 = new BitmapValue();
@@ -159,12 +193,12 @@ public class BitmapValueTest {
         bitmapValue6_1.add(1);
         bitmapValue6_1.add(2);
         bitmapValue6.and(bitmapValue6_1);
-        Assert.assertTrue(bitmapValue6.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue6.getBitmapType());
 
         bitmapValue6.clear();
         bitmapValue6.add(3);
         bitmapValue6.and(bitmapValue6_1);
-        Assert.assertTrue(bitmapValue6.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue6.getBitmapType());
 
         // bitmap and empty
         BitmapValue bitmapValue7 = new BitmapValue();
@@ -172,7 +206,7 @@ public class BitmapValueTest {
         bitmapValue7.add(2);
         BitmapValue bitmapValue7_1 = new BitmapValue();
         bitmapValue7.and(bitmapValue7_1);
-        Assert.assertTrue(bitmapValue7.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue7.getBitmapType());
 
         // bitmap and single value
         BitmapValue bitmapValue8 = new BitmapValue();
@@ -181,13 +215,13 @@ public class BitmapValueTest {
         BitmapValue bitmapValue8_1 = new BitmapValue();
         bitmapValue8_1.add(1);
         bitmapValue8.and(bitmapValue8_1);
-        Assert.assertTrue(bitmapValue8.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue8.getBitmapType());
 
         bitmapValue8.clear();
         bitmapValue8.add(2);
         bitmapValue8.add(3);
         bitmapValue8.and(bitmapValue8_1);
-        Assert.assertTrue(bitmapValue8.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue8.getBitmapType());
 
         // bitmap and bitmap
         BitmapValue bitmapValue9 = new BitmapValue();
@@ -197,21 +231,21 @@ public class BitmapValueTest {
         bitmapValue9_1.add(2);
         bitmapValue9_1.add(3);
         bitmapValue9.and(bitmapValue9_1);
-        Assert.assertTrue(bitmapValue9.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue9.getBitmapType());
 
         bitmapValue9.clear();
         bitmapValue9.add(4);
         bitmapValue9.add(5);
         bitmapValue9.and(bitmapValue9_1);
-        Assert.assertTrue(bitmapValue9.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue9.getBitmapType());
 
         bitmapValue9.clear();
         bitmapValue9.add(2);
         bitmapValue9.add(3);
         bitmapValue9.add(4);
         bitmapValue9.and(bitmapValue9_1);
-        Assert.assertTrue(bitmapValue9.getBitmapType() == BitmapValue.BITMAP_VALUE);
-        Assert.assertTrue(bitmapValue9.equals(bitmapValue9_1));
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue9.getBitmapType());
+        assertEquals(bitmapValue9, bitmapValue9_1);
 
     }
 
@@ -221,14 +255,14 @@ public class BitmapValueTest {
         BitmapValue bitmapValue1 = new BitmapValue();
         BitmapValue bitmapValue1_1 = new BitmapValue();
         bitmapValue1.or(bitmapValue1_1);
-        Assert.assertTrue(bitmapValue1.getBitmapType() == BitmapValue.EMPTY);
+        assertEquals(BitmapValue.EMPTY, bitmapValue1.getBitmapType());
 
         // empty or single value
         BitmapValue bitmapValue2 = new BitmapValue();
         BitmapValue bitmapValue2_1 = new BitmapValue();
         bitmapValue2_1.add(1);
         bitmapValue2.or(bitmapValue2_1);
-        Assert.assertTrue(bitmapValue2.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue2.getBitmapType());
 
         // empty or bitmap
         BitmapValue bitmapValue3 = new BitmapValue();
@@ -236,14 +270,14 @@ public class BitmapValueTest {
         bitmapValue3_1.add(1);
         bitmapValue3_1.add(2);
         bitmapValue3.or(bitmapValue3_1);
-        Assert.assertTrue(bitmapValue3.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue3.getBitmapType());
 
         // single or and empty
         BitmapValue bitmapValue4 = new BitmapValue();
         BitmapValue bitmapValue4_1 = new BitmapValue();
         bitmapValue4.add(1);
         bitmapValue4.or(bitmapValue4_1);
-        Assert.assertTrue(bitmapValue4.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue4.getBitmapType());
 
         // single or and single value
         BitmapValue bitmapValue5 = new BitmapValue();
@@ -251,12 +285,12 @@ public class BitmapValueTest {
         bitmapValue5.add(1);
         bitmapValue5_1.add(1);
         bitmapValue5.or(bitmapValue5_1);
-        Assert.assertTrue(bitmapValue5.getBitmapType() == BitmapValue.SINGLE_VALUE);
+        assertEquals(BitmapValue.SINGLE_VALUE, bitmapValue5.getBitmapType());
 
         bitmapValue5.clear();
         bitmapValue5.add(2);
         bitmapValue5.or(bitmapValue5_1);
-        Assert.assertTrue(bitmapValue5.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue5.getBitmapType());
 
         // single or and bitmap
         BitmapValue bitmapValue6 = new BitmapValue();
@@ -265,7 +299,7 @@ public class BitmapValueTest {
         bitmapValue6_1.add(1);
         bitmapValue6_1.add(2);
         bitmapValue6.or(bitmapValue6_1);
-        Assert.assertTrue(bitmapValue6.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue6.getBitmapType());
 
         // bitmap or empty
         BitmapValue bitmapValue7 = new BitmapValue();
@@ -273,7 +307,7 @@ public class BitmapValueTest {
         bitmapValue7.add(2);
         BitmapValue bitmapValue7_1 = new BitmapValue();
         bitmapValue7.or(bitmapValue7_1);
-        Assert.assertTrue(bitmapValue7.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue7.getBitmapType());
 
         // bitmap or single value
         BitmapValue bitmapValue8 = new BitmapValue();
@@ -282,7 +316,7 @@ public class BitmapValueTest {
         BitmapValue bitmapValue8_1 = new BitmapValue();
         bitmapValue8_1.add(1);
         bitmapValue8.or(bitmapValue8_1);
-        Assert.assertTrue(bitmapValue8.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue8.getBitmapType());
 
         // bitmap or bitmap
         BitmapValue bitmapValue9 = new BitmapValue();
@@ -290,7 +324,7 @@ public class BitmapValueTest {
         bitmapValue9.add(2);
         BitmapValue bitmapValue9_1 = new BitmapValue();
         bitmapValue9.or(bitmapValue9_1);
-        Assert.assertTrue(bitmapValue9.getBitmapType() == BitmapValue.BITMAP_VALUE);
+        assertEquals(BitmapValue.BITMAP_VALUE, bitmapValue9.getBitmapType());
     }
 
     @Test
@@ -306,7 +340,7 @@ public class BitmapValueTest {
         BitmapValue deserializeBitmapValue = new BitmapValue();
         deserializeBitmapValue.deserialize(emptyInputStream);
 
-        Assert.assertTrue(serializeBitmapValue.equals(deserializeBitmapValue));
+        assertEquals(serializeBitmapValue, deserializeBitmapValue);
 
         // single value
         BitmapValue serializeSingleValueBitmapValue = new BitmapValue();
@@ -323,7 +357,7 @@ public class BitmapValueTest {
                 new DataInputStream(new ByteArrayInputStream(singleValueOutputStream.toByteArray()));
         BitmapValue deserializeSingleValueBitmapValue = new BitmapValue();
         deserializeSingleValueBitmapValue.deserialize(singleValueInputStream);
-        Assert.assertTrue(serializeSingleValueBitmapValue.equals(deserializeSingleValueBitmapValue));
+        assertEquals(serializeSingleValueBitmapValue, deserializeSingleValueBitmapValue);
 
         // unsigned 64-bit
         serializeSingleValueBitmapValue = new BitmapValue();
@@ -338,7 +372,7 @@ public class BitmapValueTest {
         singleValueInputStream = new DataInputStream(new ByteArrayInputStream(singleValueOutputStream.toByteArray()));
         deserializeSingleValueBitmapValue = new BitmapValue();
         deserializeSingleValueBitmapValue.deserialize(singleValueInputStream);
-        Assert.assertTrue(serializeSingleValueBitmapValue.equals(deserializeSingleValueBitmapValue));
+        assertEquals(serializeSingleValueBitmapValue, deserializeSingleValueBitmapValue);
 
         // bitmap
         // case 1 : 32-bit bitmap
@@ -355,7 +389,7 @@ public class BitmapValueTest {
         BitmapValue deserializeBitmapBitmapValue = new BitmapValue();
         deserializeBitmapBitmapValue.deserialize(bitmapInputStream);
 
-        Assert.assertTrue(serializeBitmapBitmapValue.equals(deserializeBitmapBitmapValue));
+        assertEquals(serializeBitmapBitmapValue, deserializeBitmapBitmapValue);
 
         // bitmap
         // case 2 : 64-bit bitmap
@@ -372,7 +406,7 @@ public class BitmapValueTest {
         BitmapValue deserializeBitmapBitmapValue64 = new BitmapValue();
         deserializeBitmapBitmapValue64.deserialize(bitmapInputStream64);
 
-        Assert.assertTrue(serializeBitmapBitmapValue64.equals(deserializeBitmapBitmapValue64));
+        assertEquals(serializeBitmapBitmapValue64, deserializeBitmapBitmapValue64);
     }
 
     @Test
@@ -395,7 +429,7 @@ public class BitmapValueTest {
     public void testCardinality() {
         BitmapValue bitmapValue = new BitmapValue();
 
-        Assert.assertTrue(bitmapValue.cardinality() == 0);
+        assertEquals(0, bitmapValue.cardinality());
 
         bitmapValue.add(0);
         bitmapValue.add(0);
@@ -410,7 +444,7 @@ public class BitmapValueTest {
         bitmapValue.add(-Long.MAX_VALUE);
         bitmapValue.add(-Long.MAX_VALUE);
 
-        Assert.assertTrue(bitmapValue.cardinality() == 6);
+        assertEquals(6, bitmapValue.cardinality());
     }
 
     @Test
@@ -436,63 +470,61 @@ public class BitmapValueTest {
         // empty == empty
         BitmapValue emp1 = new BitmapValue();
         BitmapValue emp2 = new BitmapValue();
-        Assert.assertTrue(emp1.equals(emp2));
+        assertEquals(emp1, emp2);
         // empty == single value
         emp2.add(1);
-        Assert.assertFalse(emp1.equals(emp2));
+        Assert.assertNotEquals(emp1, emp2);
         // empty == bitmap
         emp2.add(2);
-        Assert.assertFalse(emp1.equals(emp2));
+        Assert.assertNotEquals(emp1, emp2);
 
         // single value = empty
         BitmapValue sgv = new BitmapValue();
         sgv.add(1);
         BitmapValue emp3 = new BitmapValue();
-        Assert.assertFalse(sgv.equals(emp3));
+        Assert.assertNotEquals(sgv, emp3);
         // single value = single value
         BitmapValue sgv1 = new BitmapValue();
         sgv1.add(1);
         BitmapValue sgv2 = new BitmapValue();
         sgv2.add(2);
-        Assert.assertTrue(sgv.equals(sgv1));
-        Assert.assertFalse(sgv.equals(sgv2));
+        assertEquals(sgv, sgv1);
+        Assert.assertNotEquals(sgv, sgv2);
         // single value = bitmap
         sgv2.add(3);
-        Assert.assertFalse(sgv.equals(sgv2));
+        Assert.assertNotEquals(sgv, sgv2);
 
         // bitmap == empty
         BitmapValue bitmapValue = new BitmapValue();
         bitmapValue.add(1);
         bitmapValue.add(2);
         BitmapValue emp4 = new BitmapValue();
-        Assert.assertFalse(bitmapValue.equals(emp4));
+        Assert.assertNotEquals(bitmapValue, emp4);
         // bitmap == singlevalue
         BitmapValue sgv3 = new BitmapValue();
         sgv3.add(1);
-        Assert.assertFalse(bitmapValue.equals(sgv3));
+        Assert.assertNotEquals(bitmapValue, sgv3);
         // bitmap == bitmap
         BitmapValue bitmapValue1 = new BitmapValue();
         bitmapValue1.add(1);
         BitmapValue bitmapValue2 = new BitmapValue();
         bitmapValue2.add(1);
         bitmapValue2.add(2);
-        Assert.assertTrue(bitmapValue.equals(bitmapValue2));
-        Assert.assertFalse(bitmapValue.equals(bitmapValue1));
+        assertEquals(bitmapValue, bitmapValue2);
+        Assert.assertNotEquals(bitmapValue, bitmapValue1);
     }
 
     @Test
     public void testToString() {
-        BitmapValue empty = new BitmapValue();
-        Assert.assertTrue(empty.toString().equals("{}"));
-
-        BitmapValue singleValue = new BitmapValue();
-        singleValue.add(1);
-        Assert.assertTrue(singleValue.toString().equals("{1}"));
-
-        BitmapValue bitmap = new BitmapValue();
-        bitmap.add(1);
-        bitmap.add(2);
-        Assert.assertTrue(bitmap.toString().equals("{1,2}"));
+        Assert.assertEquals(emptyBitmap.toString(), "{}");
+        Assert.assertEquals(singleBitmap.toString(), "{1}");
+        Assert.assertEquals(largeBitmap.toString(), "{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19}");
     }
 
+    @Test
+    public void testSerializeToString() {
+        Assert.assertEquals(emptyBitmap.serializeToString(), "");
+        Assert.assertEquals(singleBitmap.serializeToString(), "1");
+        Assert.assertEquals(largeBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19");
+    }
 }

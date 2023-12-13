@@ -20,8 +20,12 @@ package com.starrocks.types;
 import com.google.common.base.Objects;
 import org.roaringbitmap.Util;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -52,7 +56,7 @@ public class BitmapValue {
     private Roaring64Map bitmap;
 
     // for single value serialize and deserialize
-    private ByteBuffer buffer;
+    private final ByteBuffer buffer;
 
     public BitmapValue() {
         bitmapType = EMPTY;
@@ -60,6 +64,26 @@ public class BitmapValue {
         buffer = ByteBuffer.allocate(8);
         // be deserializes by little endian
         buffer.order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    public static byte[] bitmapToBytes(BitmapValue bitmap) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (DataOutputStream dos = new DataOutputStream(bos)) {
+            bitmap.serialize(dos);
+        } catch (IOException e) {
+            throw new IOException("Error serializing bitmap: ", e);
+        }
+        return bos.toByteArray();
+    }
+
+    public static BitmapValue bitmapFromBytes(byte[] bytes) throws IOException {
+        BitmapValue bitmap = new BitmapValue();
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
+            bitmap.deserialize(in);
+        } catch (IOException e) {
+            throw new IOException("Error deserializing bitmap: ", e);
+        }
+        return bitmap;
     }
 
     public void add(int value) {
@@ -291,6 +315,18 @@ public class BitmapValue {
                 break;
         }
         return toStringStr;
+    }
+
+    public String serializeToString() {
+        switch (bitmapType) {
+            case EMPTY:
+                break;
+            case SINGLE_VALUE:
+                return String.format("%s", singleValue);
+            case BITMAP_VALUE:
+                return this.bitmap.serializeToString();
+        }
+        return "";
     }
 
     public void clear() {
