@@ -613,7 +613,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
                                                Map<Column, Expr> columnExprMap,
-                                               ConnectContext connectContext) {
+                                               ConnectContext connectContext) throws SemanticException {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
 
@@ -624,7 +624,7 @@ public class MaterializedViewAnalyzer {
                         resolvePartitionExpr(partitionColumnExpr, connectContext, statement.getQueryStatement());
             } catch (Exception e) {
                 LOG.warn("resolve partition column failed", e);
-                throw new SemanticException("resolve partition column failed",
+                throw new SemanticException("Resolve partition column failed:" + e.getMessage(),
                         statement.getPartitionExpDesc().getPos());
             }
 
@@ -676,7 +676,11 @@ public class MaterializedViewAnalyzer {
         private Expr resolvePartitionExpr(Expr partitionColumnExpr,
                                           ConnectContext connectContext,
                                           QueryStatement queryStatement) {
-            Expr expr = AnalyzerUtils.resolveExpr(partitionColumnExpr, queryStatement);
+            Expr expr = SlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
+            if (expr == null) {
+                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                        partitionColumnExpr.toSql());
+            }
             SlotRef slot;
             if (expr instanceof SlotRef) {
                 slot = (SlotRef) expr;
@@ -714,11 +718,11 @@ public class MaterializedViewAnalyzer {
                         MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " is not support", functionCallExpr.getPos());
+                            functionName + " is not support: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
                 }
                 if (!checkPartitionFunction.check(functionCallExpr)) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " check failed", functionCallExpr.getPos());
+                            functionName + " check failed: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
                 }
             }
         }

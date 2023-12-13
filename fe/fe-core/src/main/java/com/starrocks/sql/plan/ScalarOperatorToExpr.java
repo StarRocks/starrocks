@@ -90,6 +90,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
@@ -136,8 +137,12 @@ public class ScalarOperatorToExpr {
          */
         private static void hackTypeNull(Expr expr) {
             // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
-            Type type = AnalyzerUtils.replaceNullType2Boolean(expr.getType());
-            expr.setType(type);
+            Type previousType = expr.getType();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(previousType);
+            // If actual type of expr is SlotRef, avoid change desc type if no hack happens.
+            if (!Objects.equals(previousType, type)) {
+                expr.setType(type);
+            }
         }
 
         @Override
@@ -156,9 +161,7 @@ public class ScalarOperatorToExpr {
                 return expr;
             }
 
-            if (expr.getType().isNull()) {
-                hackTypeNull(expr);
-            }
+            hackTypeNull(expr);
             return expr;
         }
 

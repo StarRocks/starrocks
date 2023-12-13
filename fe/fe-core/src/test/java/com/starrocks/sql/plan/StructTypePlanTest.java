@@ -193,7 +193,7 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "[], []");
+        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
     }
 
     @Test

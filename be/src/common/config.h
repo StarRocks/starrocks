@@ -305,12 +305,21 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 
-CONF_mInt32(update_compaction_check_interval_seconds, "60");
+// This config is to limit the max candidate of compaction queue to avoid
+// too many candidates lead to OOM or cpu overload.
+// when candidate num reach this value, the condidate with lowest score will be dropped.
+CONF_mInt64(max_compaction_candidate_num, "40960");
+
+CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
+// This config controls the io amp ratio of delvec files.
+CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
+// This config defines the maximum percentage of data allowed per compaction
+CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -732,6 +741,9 @@ CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
 CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
+CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
+CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
+CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -853,6 +865,11 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 // in passthrough style, the number of inflight RPCs of parallel deliveries are issued is not exceeds this limit.
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
+// if runtime filter size is larger than send_runtime_filter_via_http_rpc_min_size, be will transmit runtime filter via http protocol.
+// this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
+CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
+
+CONF_Int64(rpc_connect_timeout_ms, "30000");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
@@ -906,8 +923,12 @@ CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
+CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
+CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
+CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1014,6 +1035,8 @@ CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
 // control the local persistent index in shared_data gc interval
 CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+// enable persistent index compression
+CONF_mBool(enable_pindex_compression, "false");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -1039,7 +1062,11 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000");                                // 6s
+// only used for test. default: 128M
+CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
+// pipeline streaming aggregate chunk buffer size
+CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+CONF_mInt64(wait_apply_time, "6000"); // 6s
 
 // Max size of a binlog file. The default is 512MB.
 CONF_Int64(binlog_file_max_size, "536870912");
@@ -1073,6 +1100,8 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
+
+CONF_mBool(enable_stream_load_verbose_log, "false");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 

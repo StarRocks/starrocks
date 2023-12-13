@@ -147,6 +147,7 @@ Status HdfsScanner::_build_scanner_context() {
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
+    RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
@@ -158,7 +159,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else {
         LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
-    _app_stats.num_rows_read += (*chunk)->num_rows();
+    _app_stats.rows_read += (*chunk)->num_rows();
     return status;
 }
 
@@ -257,6 +258,22 @@ Status HdfsScanner::open_random_access_file() {
     return Status::OK();
 }
 
+void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
+    const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
+    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildFilterTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
+}
+
 int64_t HdfsScanner::estimated_mem_usage() const {
     if (_shared_buffered_input_stream == nullptr) {
         // don't read data in columnar format(such as CSV format), usually in a fixed size.
@@ -293,8 +310,9 @@ void HdfsScanner::update_counter() {
     update_hdfs_counter(profile);
 
     COUNTER_UPDATE(profile->reader_init_timer, _app_stats.reader_init_ns);
-    COUNTER_UPDATE(profile->rows_read_counter, _app_stats.raw_rows_read);
-    COUNTER_UPDATE(profile->rows_skip_counter, _app_stats.skip_read_rows);
+    COUNTER_UPDATE(profile->raw_rows_read_counter, _app_stats.raw_rows_read);
+    COUNTER_UPDATE(profile->rows_read_counter, _app_stats.rows_read);
+    COUNTER_UPDATE(profile->late_materialize_skip_rows_counter, _app_stats.late_materialize_skip_rows);
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);

@@ -56,6 +56,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -208,7 +209,10 @@ public class StarRocksAssert {
     // };
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getRoutineLoadMgr().createRoutineLoadJob(createRoutineLoadStmt);
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 100);
+        routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
         return this;
     }
 
@@ -241,6 +245,11 @@ public class StarRocksAssert {
 
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
@@ -449,6 +458,10 @@ public class StarRocksAssert {
         Analyzer.analyze(stmt, ctx);
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
         return showExecutor.execute().getResultRows();
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }
 
     public String executeShowResourceUsageSql(String sql) throws DdlException, AnalysisException {

@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -28,6 +29,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -511,5 +516,25 @@ public class IcebergMetadataTest extends TableTestBase {
                 "commit failed",
                 () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo)));
         Assert.assertFalse(fakeFile.exists());
+    }
+
+    @Test
+    public void testIcebergFilter() {
+        List<ScalarOperator> arguments = new ArrayList<>(2);
+        arguments.add(ConstantOperator.createVarchar("day"));
+        arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
+        ScalarOperator callOperator = new CallOperator("date_trunc", Type.DATE, arguments);
+
+        List<ScalarOperator> newArguments = new ArrayList<>(2);
+        newArguments.add(ConstantOperator.createVarchar("day"));
+        newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
+        ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
+
+        IcebergFilter filter = IcebergFilter.of("db", "table", 1L, callOperator);
+        IcebergFilter newFilter = IcebergFilter.of("db", "table", 1L, newCallOperator);
+        Assert.assertEquals(filter, newFilter);
+
+        Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
+        Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
     }
 }

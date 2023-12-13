@@ -128,6 +128,11 @@ public class MVRewriteValidator {
         List<MaterializedView> diffMVs = mvs.stream()
                 .filter(mv -> !beforeTableIds.contains(mv.getId()))
                 .collect(Collectors.toList());
+
+        if (taskContext.getOptimizerContext().getQueryTables() != null) {
+            taskContext.getOptimizerContext().getQueryTables().addAll(diffMVs);
+        }
+
         if (diffMVs.isEmpty()) {
             Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
             boolean hasRewriteSuccess = tracers.values().stream()

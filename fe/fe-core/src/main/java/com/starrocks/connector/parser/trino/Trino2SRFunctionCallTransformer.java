@@ -194,16 +194,17 @@ public class Trino2SRFunctionCallTransformer {
 
         // length -> char_length
         registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
+
+        // replace(string, search) -> replace(string, search, '')
+        registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                        new StringLiteral(""))));
     }
 
     private static void registerRegexpFunctionTransformer() {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 ImmutableList.of(Expr.class, Expr.class));
-
-        // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
-        registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
-                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
     }
 
     private static void registerJsonFunctionTransformer() {

@@ -486,11 +486,14 @@ fi
 echo "Finished patching $SASL_SOURCE"
 cd -
 
-# patch arrows to use our built jemalloc
+# patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
+        # use our built jemalloc
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
+        # fix exception handling
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
         touch $PATCHED_MARK
     fi
     cd -

@@ -25,7 +25,7 @@ Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     auto* factory = down_cast<ExchangeParallelMergeSourceOperatorFactory*>(_factory);
     _stream_recvr = factory->get_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics.get());
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _merger = factory->get_merge_path_merger(state);
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
     return Status::OK();

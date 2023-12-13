@@ -417,7 +417,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size() << "."
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size() << "."
                           << "Column delimiter: " << string_2_asc(_parse_options.column_delimiter) << ","
                           << "Row delimiter: " << string_2_asc(_parse_options.row_delimiter) << ".";
                 _report_error(record.to_string(), error_msg.str());
@@ -425,7 +425,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             if (_state->enable_log_rejected_record()) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size() << "."
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size() << "."
                           << "Column delimiter: " << string_2_asc(_parse_options.column_delimiter) << ","
                           << "Row delimiter: " << string_2_asc(_parse_options.row_delimiter) << ".";
                 _state->append_rejected_record_to_file(record.to_string(), error_msg.str(), _curr_reader->filename());

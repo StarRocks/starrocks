@@ -83,6 +83,7 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
@@ -184,6 +185,7 @@ public class HttpServer {
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
+        SyncCloudTableMetaAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
 

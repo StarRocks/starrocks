@@ -171,24 +171,15 @@ public class StatementPlanner {
         boolean isSchemaValid = true;
 
         // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
+        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        // TODO: double check relatedMvs for OlapTable
+        // only collect once to save the original olapTable info
+        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.currentTimeMillis();
-
-            Set<OlapTable> olapTables = Sets.newHashSet();
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-
-            try {
-                // Need lock to avoid olap table metas ConcurrentModificationException
-                lock(dbs);
-                AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
-
-                // Only need to re analyze and re transform when schema isn't valid
-                if (!isSchemaValid) {
-                    Analyzer.analyze(queryStmt, session);
-                }
-            } finally {
-                unLock(dbs);
+            if (!isSchemaValid) {
+                colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
@@ -200,6 +191,11 @@ public class StatementPlanner {
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
                 Optimizer optimizer = new Optimizer();
+                // FIXME: refactor this into Optimizer.optimize() method.
+                // set query tables into OptimizeContext so can be added for mv rewrite
+                if (Config.skip_whole_phase_lock_mv_limit >= 0) {
+                    optimizer.setQueryTables(olapTables);
+                }
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
@@ -236,8 +232,32 @@ public class StatementPlanner {
         return null;
     }
 
+    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+        Set<OlapTable> olapTables = Sets.newHashSet();
+        try {
+            // Need lock to avoid olap table metas ConcurrentModificationException
+            lock(dbs);
+            AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+            return olapTables;
+        } finally {
+            unLock(dbs);
+        }
+    }
+
+    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+        try {
+            lock(dbs);
+            Analyzer.analyze(queryStmt, session);
+            // only copy olap table
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
+            return queryStmt.getQueryRelation().getColumnOutputNames();
+        } finally {
+            unLock(dbs);
+        }
+    }
+
     // Lock all database before analyze
-    private static void lock(Map<String, Database> dbs) {
+    public static void lock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
@@ -249,7 +269,7 @@ public class StatementPlanner {
     }
 
     // unLock all database after analyze
-    private static void unLock(Map<String, Database> dbs) {
+    public static void unLock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }

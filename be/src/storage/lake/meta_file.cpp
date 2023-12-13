@@ -132,6 +132,36 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                            op_compaction.output_rowset().ShortDebugString());
 }
 
+Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels) {
+    std::map<uint32_t, RowsetMetadataPB*> segment_id_to_rowset;
+    for (int i = 0; i < _tablet_meta->rowsets_size(); i++) {
+        auto* mutable_rowset = _tablet_meta->mutable_rowsets(i);
+        for (int j = 0; j < mutable_rowset->segments_size(); j++) {
+            segment_id_to_rowset[mutable_rowset->id() + j] = mutable_rowset;
+        }
+    }
+    for (const auto& each : segment_id_to_add_dels) {
+        if (segment_id_to_rowset.count(each.first) == 0) {
+            // Maybe happen when primary index is in error state.
+            std::string err_msg =
+                    fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
+            LOG(ERROR) << err_msg;
+            if (!config::experimental_lake_ignore_pk_consistency_check) {
+                return Status::InternalError(err_msg);
+            }
+        } else {
+            const int64_t prev_num_dels = segment_id_to_rowset[each.first]->num_dels();
+            if (each.second > std::numeric_limits<int64_t>::max() - prev_num_dels) {
+                // Can't be possible
+                LOG(ERROR) << "Integer overflow detected";
+                return Status::InternalError("Integer overflow detected");
+            }
+            segment_id_to_rowset[each.first]->set_num_dels(prev_num_dels + each.second);
+        }
+    }
+    return Status::OK();
+}
+
 Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     if (!is_primary_key(_tablet_meta.get())) return Status::OK();
 

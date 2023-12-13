@@ -34,9 +34,9 @@ class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
-    // late materialization
-    int64_t skip_read_rows = 0;
-    int64_t num_rows_read = 0;
+    int64_t rows_read = 0;
+    int64_t late_materialize_skip_rows = 0;
+
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
@@ -60,8 +60,6 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
-    // iceberg pos-delete filter
-    int64_t build_iceberg_pos_filter_ns = 0;
 
     // page statistics
     bool has_page_statistics = false;
@@ -69,17 +67,21 @@ struct HdfsScanStats {
     int64_t page_skip = 0;
 
     // ORC only!
-    int64_t delete_build_ns = 0;
-    int64_t delete_file_per_scan = 0;
     std::vector<int64_t> stripe_sizes;
+
+    // Iceberg v2 only!
+    int64_t iceberg_delete_file_build_ns = 0;
+    int64_t iceberg_delete_files_per_scan = 0;
+    int64_t iceberg_delete_file_build_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
+    RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* rows_skip_counter = nullptr;
+    RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
@@ -281,7 +283,7 @@ public:
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
-    int64_t num_rows_read() const { return _app_stats.num_rows_read; }
+    int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
     int64_t estimated_mem_usage() const;
@@ -324,6 +326,8 @@ public:
 
 protected:
     Status open_random_access_file();
+
+    void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 
 private:
     bool _opened = false;

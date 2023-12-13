@@ -2041,6 +2041,11 @@ public class AggregateTest extends PlanTestBase {
                 "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
                 "  |  hasNullableGenerateChild: true");
 
+        sql = "select sum(cast(t1b as int) + cast('1.1' as int)) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[(cast([2: t1b, SMALLINT, true] as BIGINT) + cast(cast('1.1' as INT) as BIGINT)); " +
+                "args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]");
     }
 
     @Test
@@ -2197,6 +2202,17 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*), sum(2: t1b)\n" +
                 "  |  group by: 11: expr\n" +
                 "  |  having: dround(0.09733420538671422) IS NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule4() throws Exception {
+        String sql = "select v1, rand_col, v2, v3, count(1) from (select v1, UUID() v2," +
+                " case when v1 in (1, 6) then round(rand() * 100) else 1 end as rand_col," +
+                " v1 > v1 + 1 or v1 > rand() v3 from t0) a group by 1, 2, 3, 4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
     }
 
     @Test
@@ -2469,10 +2485,10 @@ public class AggregateTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 10001) from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 100001) from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the second parameter is 10000";
+            String expectedMessage = "The maximum number of the second parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
@@ -2487,10 +2503,10 @@ public class AggregateTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 100001) from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the third parameter is 10000";
+            String expectedMessage = "The maximum number of the third parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }

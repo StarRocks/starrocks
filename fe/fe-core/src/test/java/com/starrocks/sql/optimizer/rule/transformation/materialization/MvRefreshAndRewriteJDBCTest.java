@@ -39,7 +39,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
         mockedJDBCMetadata.initPartitions();
     }
-    
+
     @Test
     public void testStr2DateMVRefreshRewrite_InnerJoin_FullRefresh() throws Exception {
         String mvName = "test_mv1";

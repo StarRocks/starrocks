@@ -21,9 +21,18 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 
 public class PushDownAggregateRule implements TreeRewriteRule {
 
+    private final PushDownAggregateRewriter rewriter;
+
+    public PushDownAggregateRule(TaskContext taskContext) {
+        this.rewriter = new PushDownAggregateRewriter(taskContext);
+    }
+
+    public PushDownAggregateRewriter getRewriter() {
+        return rewriter;
+    }
+
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        PushDownAggregateRewriter rewriter = new PushDownAggregateRewriter(taskContext);
         return rewriter.rewrite(root);
     }
 }

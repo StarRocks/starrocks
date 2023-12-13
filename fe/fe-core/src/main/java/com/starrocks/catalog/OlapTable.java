@@ -301,11 +301,19 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
+        if (this.relatedMaterializedViews != null) {
+            olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        }
+        if (this.uniqueConstraints != null) {
+            olapTable.uniqueConstraints = Lists.newArrayList(this.uniqueConstraints);
+        }
+        if (this.foreignKeyConstraints != null) {
+            olapTable.foreignKeyConstraints = Lists.newArrayList(this.foreignKeyConstraints);
+        }
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
@@ -327,6 +335,11 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+
+        // Shallow copy shared data to check whether the copied table has changed or not.
+        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
+        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
     }
 
     public BinlogConfig getCurBinlogConfig() {

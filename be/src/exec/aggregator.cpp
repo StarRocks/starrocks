@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
@@ -32,6 +33,7 @@
 #include "runtime/descriptors.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -300,6 +302,10 @@ Status Aggregator::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(check_has_error());
 
+    _buffer_mem_manager = std::make_unique<pipeline::ChunkBufferMemoryManager>(
+            1, config::local_exchange_buffer_mem_limit_per_driver,
+            state->chunk_size() * config::streaming_agg_chunk_buffer_size);
+
     return Status::OK();
 }
 
@@ -481,8 +487,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 }
 
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
-                               pipeline::Operator* refill_op) {
-    RETURN_IF_ERROR(_reset_state(state));
+                               pipeline::Operator* refill_op, bool reset_sink_complete) {
+    RETURN_IF_ERROR(_reset_state(state, reset_sink_complete));
     // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
     // merge method of agg functions to process these chunks.
     begin_pending_reset_state();
@@ -496,10 +502,12 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-Status Aggregator::_reset_state(RuntimeState* state) {
+Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
-    _is_sink_complete = false;
+    if (reset_sink_complete) {
+        _is_sink_complete = false;
+    }
     _it_hash.reset();
     _num_rows_processed = 0;
 
@@ -614,20 +622,40 @@ bool Aggregator::is_chunk_buffer_empty() {
 }
 
 ChunkPtr Aggregator::poll_chunk_buffer() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    if (_buffer.empty()) {
-        return nullptr;
+    ChunkPtr chunk;
+    {
+        std::lock_guard<std::mutex> l(_buffer_mutex);
+        if (_buffer.empty()) {
+            return nullptr;
+        }
+        chunk = _buffer.front();
+        _buffer.pop();
     }
-    ChunkPtr chunk = _buffer.front();
-    _buffer.pop();
-    _buffer_size--;
+    size_t mem_usage = chunk->memory_usage();
+    size_t num_rows = chunk->num_rows();
+    _buffer_mem_manager->update_memory_usage(-mem_usage, -num_rows);
+
+    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, -mem_usage);
+    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, -1);
+
     return chunk;
 }
 
 void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(chunk);
-    _buffer_size++;
+    {
+        std::lock_guard<std::mutex> l(_buffer_mutex);
+        _buffer.push(chunk);
+    }
+
+    size_t mem_usage = chunk->memory_usage();
+    size_t num_rows = chunk->num_rows();
+    _buffer_mem_manager->update_memory_usage(mem_usage, num_rows);
+    COUNTER_ADD(_agg_stat->chunk_buffer_peak_memory, mem_usage);
+    COUNTER_ADD(_agg_stat->chunk_buffer_peak_size, 1);
+}
+
+bool Aggregator::is_chunk_buffer_full() {
+    return _buffer_mem_manager->is_full();
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,

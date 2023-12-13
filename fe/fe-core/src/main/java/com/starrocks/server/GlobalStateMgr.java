@@ -142,6 +142,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -473,6 +474,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
@@ -653,7 +655,7 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.starOSAgent = new StarOSAgent();
         }
 
@@ -732,6 +734,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
@@ -763,7 +766,7 @@ public class GlobalStateMgr {
         this.binlogManager = new BinlogManager();
         this.mvActiveChecker = new MVActiveChecker();
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
@@ -902,6 +905,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static StarMgrMetaSyncer getCurrentStarMgrMetaSyncer() {
+        return getCurrentState().getStarMgrMetaSyncer();
+    }
+
     public static WarehouseManager getCurrentWarehouseMgr() {
         return getCurrentState().getWarehouseMgr();
     }
@@ -959,6 +966,10 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public StarMgrMetaSyncer getStarMgrMetaSyncer() {
+        return starMgrMetaSyncer;
     }
 
     public CatalogMgr getCatalogMgr() {
@@ -1110,7 +1121,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
+        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1325,7 +1336,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1394,7 +1405,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1422,12 +1433,14 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
 
         slotManager.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -2291,6 +2304,7 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
+            boolean readSucc = false;
             try {
                 entity = cursor.next();
 
@@ -2298,6 +2312,8 @@ public class GlobalStateMgr {
                 if (entity == null) {
                     break;
                 }
+
+                readSucc = true;
 
                 // apply
                 EditLog.loadJournal(this, entity);
@@ -2307,7 +2323,9 @@ public class GlobalStateMgr {
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
-                    cursor.skipNext();
+                    if (!readSucc) {
+                        cursor.skipNext();
+                    }
                     continue;
                 }
                 // handled in outer loop

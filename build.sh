@@ -31,7 +31,7 @@
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
 ##############################################################
-
+startTime=$(date +%s)
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -318,15 +318,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       export STARLET_INSTALL_DIR
     fi
 
-    # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
-    # Once the starcache version is stable, we will turn on it by default.
     if [[ -z ${WITH_STARCACHE} ]]; then
-      WITH_STARCACHE=${USE_STAROS}
-    fi
-
-    if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
-        echo "Missing depdency libraries(starcache), you can download and extract it to thirdparty installed directory."
-        exit 1
+      WITH_STARCACHE=ON
     fi
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
@@ -437,6 +430,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -495,8 +489,11 @@ fi
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
 
+endTime=$(date +%s)
+totalTime=$((endTime - startTime))
+
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG}"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

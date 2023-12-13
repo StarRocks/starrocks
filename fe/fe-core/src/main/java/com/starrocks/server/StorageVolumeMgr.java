@@ -44,6 +44,8 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +54,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Pattern;
 
 public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable {
     private static final String ENABLED = "enabled";
@@ -61,6 +64,12 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public static final String LOCAL = "local";
 
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
+
+    private static final String S3 = "s3";
+
+    private static final String AZBLOB = "azblob";
+
+    private static final String HDFS = "hdfs";
 
     @SerializedName("defaultSVId")
     protected String defaultStorageVolumeId = "";
@@ -107,6 +116,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             validateParams(params);
+            validateLocations(svType, locations);
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
@@ -276,6 +286,33 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         for (String key : params.keySet()) {
             if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
+            }
+        }
+    }
+
+    private void validateLocations(String svType, List<String> locations) throws DdlException {
+        for (String location : locations) {
+            try {
+                URI uri = new URI(location);
+                String scheme = uri.getScheme().toLowerCase();
+                switch (svType.toLowerCase()) {
+                    case S3:
+                    case AZBLOB:
+                        if (!scheme.equalsIgnoreCase(svType)) {
+                            throw new DdlException("Invalid location " + location);
+                        }
+                        break;
+                    case HDFS:
+                        String pattern = "[a-z][a-z0-9]*";
+                        if (!Pattern.matches(pattern, scheme)) {
+                            throw new DdlException("Invalid location " + location);
+                        }
+                        break;
+                    default:
+                        throw new DdlException("Unknown storage volume type: " + svType);
+                }
+            } catch (URISyntaxException e) {
+                throw new DdlException(String.format("Invalid location %s, error: %s", location, e.getMessage()));
             }
         }
     }

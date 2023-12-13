@@ -462,7 +462,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.isSharedDataMode() ? "default" : "local");
         return this;
     }
 
@@ -754,7 +754,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        buildDynamicProperty();
+        try {
+            buildDynamicProperty();
+        } catch (Exception ex) {
+            LOG.warn("build dynamic property failed", ex);
+        }
         buildReplicationNum();
         buildInMemory();
         buildStorageVolume();

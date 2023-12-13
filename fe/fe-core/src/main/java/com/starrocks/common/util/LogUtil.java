@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
-
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
         boolean enableConnectionLog = false;
         if (Config.audit_log_modules != null) {
@@ -60,7 +59,7 @@ public class LogUtil {
         queryDetail.setRemoteIP(ctx.getRemoteIP());
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     public static List<String> getCurrentStackTraceToList() {

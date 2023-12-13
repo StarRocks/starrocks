@@ -163,4 +163,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("tbl_mock_023"));
     }
+
+    @Test
+    public void testMock_MV_CostBug() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_with_cost_bug1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        FeConstants.isReplayFromQueryDump = false;
+    }
 }

@@ -553,14 +553,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
 
-            // update colocation info and inactivate related mv
-            try {
-                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
-            } catch (DdlException e) {
-                // log an error if update colocation info failed, schema change already succeeded
-                LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
-            }
-
+            // inactivate related mv
             inactiveRelatedMv(modifiedColumns, table);
             table.onReload();
             this.jobState = JobState.FINISHED;
@@ -577,6 +570,23 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
             // TODO: what if unusedShards deletion is partially successful?
             StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
+        }
+
+        // since we use same shard group to do schema change, must clear old shard before
+        // updating colocation info. it's possible that after edit log above is written, fe crashes,
+        // and colocation info will not be updated , but it should be a rare case
+        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
+            LakeTable table = (db != null) ? db.getTable(tableId) : null;
+            if (table == null) {
+                LOG.info("database or table been dropped before updating colocation info, schema change job {}", jobId);
+            } else {
+                try {
+                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+                } catch (DdlException e) {
+                    // log an error if update colocation info failed, schema change already succeeded
+                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+                }
+            }
         }
 
         if (span != null) {

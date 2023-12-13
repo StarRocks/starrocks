@@ -37,6 +37,7 @@
 #include <iostream>
 #include <utility>
 
+#include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
@@ -47,6 +48,32 @@ namespace starrocks {
 DataStreamMgr::DataStreamMgr() {
     REGISTER_GAUGE_STARROCKS_METRIC(data_stream_receiver_count, [this]() { return _receiver_count.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); });
+}
+
+DataStreamMgr::~DataStreamMgr() {
+    std::vector<std::shared_ptr<DataStreamRecvr>> recvrs;
+    // ensure receivers are properly closed before the instances are released
+    for (int i = 0; i < BUCKET_NUM; ++i) {
+        recvrs.clear();
+        {
+            // fill recvrs under lock
+            std::lock_guard<Mutex> l(_lock[i]);
+            for (auto& iter : _receiver_map[i]) {
+                for (auto& sub_iter : *(iter.second)) {
+                    recvrs.push_back(sub_iter.second);
+                }
+            }
+        }
+        // close receivers under no lock, because the DataStreamRecvr will deregister itself
+        // from DataStreamMgr which will acquire lock again!
+        for (auto& recvr : recvrs) {
+            if (recvr) {
+                LOG(WARNING) << "Leaking DataStreamRecvr to be cleared! fragment_instance_id="
+                             << print_id(recvr->fragment_instance_id()) << ", node_id=" << recvr->dest_node_id();
+                recvr->close();
+            }
+        }
+    }
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {

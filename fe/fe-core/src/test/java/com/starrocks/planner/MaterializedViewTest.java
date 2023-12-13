@@ -14,10 +14,12 @@
 
 package com.starrocks.planner;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -26,6 +28,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Random;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
@@ -2705,6 +2708,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testCountWithRollup() {
+        String mv = "select user_id, count(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id, time;")
+                .notContain("coalesce");
+        testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id;")
+                .notContain("coalesce");
+        testRewriteOK(mv, "select count(tag_id) from user_tags;")
+                .contains("coalesce");
+    }
+
+    @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2946,6 +2960,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
+            this.setTracLogModule("MV");
             String mv = "SELECT count(lo_linenumber)\n" +
                     "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
                     "WHERE `c_name` != 'name'; ";
@@ -2956,8 +2971,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
             Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
             PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+            // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+            connectContext.getSessionVariable()
+                    .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
+            connectContext.getSessionVariable()
+                    .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
         }
     }
 
@@ -5130,5 +5150,96 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_CLICK_INFO");
         starRocksAssert.dropTable("IDX_CUST_COMMON_DIM");
         starRocksAssert.dropTable("D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3");
+    }
+
+    @Test
+    public void testForceRewriteWithRandomInput() {
+        String mv = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                "WHERE `c_name` != 'name'; ";
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        {
+            testRewriteFail(mv, query);
+        }
+
+        // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        {
+            this.setTracLogModule("MV");
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
+
+        {
+            Random rand = new Random();
+            for (int i = 0; i < 10; i++) {
+                long rowCount1 = rand.nextLong();
+                long rowCount2 = rand.nextLong();
+
+                PlanTestBase.setTableStatistics((OlapTable) table1, rowCount1);
+                PlanTestBase.setTableStatistics((OlapTable) table2, rowCount2);
+                MVRewriteChecker checker = testRewriteOK(mv, query);
+                checker.contains("UNION");
+            }
+        }
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+    }
+
+    private void createMaterializedViewWithInput(String mvName, long mvRowCount) throws Exception {
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " DISTRIBUTED BY HASH(c1) " +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT count(lo_linenumber) as c1\n" +
+                " FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                " WHERE `c_name` != 'name'; ", mvName);
+        starRocksAssert.withMaterializedView(mv);
+        Table mvTable = getTable(MATERIALIZED_DB_NAME, mvName);
+        PlanTestBase.setTableStatistics((OlapTable) mvTable, mvRowCount);
+    }
+
+    @Test
+    public void testForceRewriteForBestCost() throws Exception {
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+
+        // prepare mvs
+        List<String> mvNames = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            long rowCount = 1000 * (i + 1);
+            String mvName = String.format("test_mv_%s", i);
+            createMaterializedViewWithInput(mvName, rowCount);
+            mvNames.add(mvName);
+        }
+        MVRewriteChecker checker = sql(query);
+        checker.contains("UNION");
+        // must contain the lowest cost mv.
+        checker.contains("test_mv_0");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+        mvNames.stream().forEach(x -> {
+            try {
+                starRocksAssert.dropMaterializedView(x);
+            } catch (Exception e) {
+                // ignore
+            }
+        });
     }
 }

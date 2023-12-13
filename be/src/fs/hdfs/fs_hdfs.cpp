@@ -518,20 +518,11 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
         int32_t dir_size;
-        if (dir[dir.size() - 1] == '/') {
-            dir_size = dir.size();
+        std::string mName(fileinfo[i].mName);
+        std::size_t found = mName.rfind("/");
+        if (found == std::string::npos) {
+            dir_size = 0;
         } else {
-            dir_size = dir.size() + 1;
-        }
-
-        const std::string local_fs("file:/");
-        if (dir.compare(0, local_fs.length(), local_fs) == 0) {
-            std::string mName(fileinfo[i].mName);
-            std::size_t found = mName.rfind("/");
-            if (found == std::string::npos) {
-                return Status::InvalidArgument(fmt::format("parse path fail {}", dir));
-            }
-
             dir_size = found + 1;
         }
 

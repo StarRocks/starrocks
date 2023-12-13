@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "fs/fs_util.h"
+#include "gutil/strings/join.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -30,6 +31,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                                             int64_t commit_time) {
     if (txn_ids_size != 1) {
         return Status::NotSupported("does not support publish multiple txns yet");
+    }
+
+    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+    if (cached_new_metadata != nullptr) {
+        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                  << " base_version=" << base_version << " new_version=" << new_version
+                  << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_ids_size, ",");
+        return std::move(cached_new_metadata);
     }
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {

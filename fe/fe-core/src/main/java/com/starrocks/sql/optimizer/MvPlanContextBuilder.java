@@ -17,26 +17,14 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.RuleType;
 
 public class MvPlanContextBuilder {
     public MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        // optimize the sql by rule and disable rule based materialized view rewrite
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
-        // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
-        if (mv.getRefreshScheme().isSync()) {
-            optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
-        }
-        optimizerConfig.setMVRewritePlan(true);
         ConnectContext connectContext = new ConnectContext();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(
                 ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
-        return mvOptimizer.optimize(mv, connectContext, optimizerConfig);
+        return mvOptimizer.optimize(mv, connectContext);
     }
 }

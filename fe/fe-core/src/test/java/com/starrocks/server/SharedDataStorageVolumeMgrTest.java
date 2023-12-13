@@ -764,4 +764,27 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(1L));
         Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(2L));
     }
+
+    @Test
+    public void testCreateStorageVolumeWithInvalidParams() throws DdlException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = new ArrayList<>(Arrays.asList("{hdfs://abc}"));
+        Map<String, String> storageParams = new HashMap<>();
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), ""));
+
+        locations.clear();
+        locations.add("ablob://abc");
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "s3", locations, storageParams, Optional.empty(), ""));
+
+        locations.clear();
+        locations.add("s3://abc");
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "azblob", locations, storageParams, Optional.empty(), ""));
+
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svName, "abc", locations, storageParams, Optional.empty(), ""));
+    }
 }

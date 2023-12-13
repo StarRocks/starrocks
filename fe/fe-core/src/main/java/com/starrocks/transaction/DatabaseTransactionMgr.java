@@ -404,9 +404,6 @@ public class DatabaseTransactionMgr {
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
-        if (!tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
@@ -901,7 +898,7 @@ public class DatabaseTransactionMgr {
                                         && replica.getLastFailedVersion() < 0) {
                                     // if replica not commit yet, skip it. This may happen when it's just create by clone.
                                     if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
-                                            replica.getBackendId())) {
+                                            replica.getBackendId(), replica.getState())) {
                                         continue;
                                     }
                                     // this means the replica is a healthy replica,
@@ -1238,24 +1235,15 @@ public class DatabaseTransactionMgr {
         if (db == null) {
             return;
         }
-        List<TransactionStateListener> listeners = Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
-        db.readLock();
-        try {
-            for (Long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    TransactionStateListener listener = stateListenerFactory.create(this, table);
-                    if (listener != null) {
-                        listeners.add(listener);
-                    }
-                }
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
+                continue;
             }
-        } finally {
-            db.readUnlock();
-        }
-
-        for (TransactionStateListener listener : listeners) {
-            listener.postAbort(transactionState, failedTablets);
+            TransactionStateListener listener = stateListenerFactory.create(this, table);
+            if (listener != null) {
+                listener.postAbort(transactionState, failedTablets);
+            }
         }
     }
 

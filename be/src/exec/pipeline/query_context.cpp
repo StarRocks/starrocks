@@ -136,15 +136,24 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
         }
+
+        MemTracker* p = parent;
+        while (!p->has_limit()) {
+            p = p->parent();
+        }
+        _static_query_mem_limit = p->limit();
+        if (query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
     });
 }
 
-Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {
-        std::call_once(_init_query_once, [this, &st, wg]() {
+        std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
             this->init_query_begin_time();
-            auto maybe_token = wg->acquire_running_query_token();
+            auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
                 _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
@@ -348,7 +357,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     }
 }
 
-QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
+QueryContextPtr QueryContextManager::get(const TUniqueId& query_id, bool need_prepared) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -356,13 +365,24 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
     std::shared_lock<std::shared_mutex> read_lock(mutex);
     // lookup query context in context_map for the first chance
     auto it = context_map.find(query_id);
+    auto check_if_prepared = [need_prepared](auto it) -> QueryContextPtr {
+        if (need_prepared) {
+            if (it->second->is_prepared()) {
+                return it->second;
+            } else {
+                return nullptr;
+            }
+        } else {
+            return it->second;
+        }
+    };
     if (it != context_map.end()) {
-        return it->second;
+        return check_if_prepared(it);
     } else {
         // lookup query context in context_map for the second chance
         auto sc_it = sc_map.find(query_id);
         if (sc_it != sc_map.end()) {
-            return sc_it->second;
+            return check_if_prepared(sc_it);
         } else {
             return nullptr;
         }
@@ -488,7 +508,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
         TUniqueId id;
         id.__set_hi(p_query_id.hi());
         id.__set_lo(p_query_id.lo());
-        if (auto query_ctx = get(id); query_ctx != nullptr) {
+        if (auto query_ctx = get(id, true); query_ctx != nullptr) {
             int64_t cpu_cost = query_ctx->cpu_cost();
             int64_t scan_rows = query_ctx->cur_scan_rows_num();
             int64_t scan_bytes = query_ctx->get_scan_bytes();

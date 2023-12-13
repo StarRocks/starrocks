@@ -44,7 +44,7 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -82,7 +82,47 @@ jobs:
 
       - uses: articulate/actions-markdownlint@v1.1.0
         with:
-          config: "docs/.markdownlint.yaml"
+          config: "docs/.markdownlint.json"
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
+
+      - name: Docusaurus build
+        env:
+          DISABLE_VERSIONING: true
+        working-directory: ./docs/docusaurus
+        run: |
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          yarn install --frozen-lockfile
+          yarn build
+
+  behavior-unchange:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Set Body
+        run: |
+          body=$(gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body)
+          body=${body//"[x] Yes, this PR will result in a change in behavior."/"[ ] Yes, this PR will result in a change in behavior."}
+          body=${body//"[ ] No, this PR will not result in a change in behavior."/"[x] No, this PR will not result in a change in behavior."}
+          gh pr edit ${PR_NUMBER} -R ${REPO} -b "$body"

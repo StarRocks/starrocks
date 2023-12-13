@@ -186,6 +186,8 @@ public:
 
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
+    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
+
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>

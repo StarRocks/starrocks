@@ -31,6 +31,7 @@
 #include "common/statusor.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
+#include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -196,6 +197,11 @@ static const StreamingHtMinReductionEntry STREAMING_HT_MIN_REDUCTION[] = {
 static const int STREAMING_HT_MIN_REDUCTION_SIZE =
         sizeof(STREAMING_HT_MIN_REDUCTION) / sizeof(STREAMING_HT_MIN_REDUCTION[0]);
 
+struct LimitedMemAggState {
+    size_t limited_memory_size{};
+    bool has_limited(const Aggregator& aggregator) const;
+};
+
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 struct AggregatorParams {
@@ -241,7 +247,6 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
-    static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
 #else
@@ -280,9 +285,19 @@ public:
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
-    bool is_hash_set() { return _is_only_group_by_columns; }
+    bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+
+    const int64_t memory_usage() const {
+        if (is_hash_set()) {
+            return hash_set_memory_usage();
+        } else if (!_group_by_expr_ctxs.empty()) {
+            return hash_map_memory_usage();
+        } else {
+            return 0;
+        }
+    }
 
     TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
@@ -302,8 +317,8 @@ public:
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
-    size_t chunk_buffer_size() { return _buffer_size.load(std::memory_order_acquire); }
     void offer_chunk_to_buffer(const ChunkPtr& chunk);
+    bool is_chunk_buffer_full();
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                           int64_t ht_rows) const;
@@ -351,7 +366,9 @@ public:
     // to produce the final result that will be populated into the cache.
     // refill_chunk: partial-hit result of stale version.
     // refill_op: pre-cache agg operator, Aggregator's holder.
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op);
+    // reset_sink_complete: reset sink_complete state. sometimes if operator sink has complete we don't have to reset sink state
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op,
+                       bool reset_sink_complete = true);
 
     const AggregatorParamsPtr& params() const { return _params; }
 
@@ -372,6 +389,10 @@ public:
     bool is_spilled_eos() const {
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
+
+    void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
+
+    bool is_streaming_all_states() const { return _streaming_all_states; }
 
     HashTableKeyAllocator _state_allocator;
 
@@ -395,8 +416,8 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::atomic_int _buffer_size{};
     std::queue<ChunkPtr> _buffer;
+    std::unique_ptr<pipeline::ChunkBufferMemoryManager> _buffer_mem_manager;
     std::mutex _buffer_mutex;
 
     // Certain aggregates require a finalize step, which is the final step of the
@@ -406,6 +427,7 @@ protected:
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
     bool _is_ht_eos = false;
+    std::atomic_bool _streaming_all_states = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;
@@ -503,7 +525,7 @@ protected:
         return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
     }
 
-    Status _reset_state(RuntimeState* state);
+    Status _reset_state(RuntimeState* state, bool reset_sink_complete);
 
     // initial const columns for i'th FunctionContext.
     Status _evaluate_const_columns(int i);
@@ -581,6 +603,10 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
         }
         throw;
     }
+}
+
+inline bool LimitedMemAggState::has_limited(const Aggregator& aggregator) const {
+    return limited_memory_size > 0 && aggregator.memory_usage() >= limited_memory_size;
 }
 
 template <class T>

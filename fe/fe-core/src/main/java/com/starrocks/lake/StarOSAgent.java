@@ -96,8 +96,18 @@ public class StarOSAgent {
     }
 
     private void prepare() {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId.equals("")) {
+        if (!serviceId.isEmpty()) {
+            return;
+        }
+
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            if (!serviceId.isEmpty()) {
+                return;
+            }
+        }
+
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            if (serviceId.isEmpty()) {
                 getServiceId();
             }
         }
@@ -472,7 +482,7 @@ public class StarOSAgent {
         try {
             shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
         } catch (StarClientException e) {
-            throw new DdlException("Failed to list shards. error: " + e.getMessage());
+            throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
         }
         return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }

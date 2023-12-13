@@ -80,7 +80,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
-        assertPlanContains(sql, "array_filter([], array_map(<slot 2> -> TRUE, []))");
+        assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");
 
         sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
         assertPlanContains(sql, " array_filter([5,-6,NULL,7], array_map(<slot 2> -> <slot 2> > 0, [5,-6,NULL,7]))");
@@ -243,6 +243,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select length('aaa');";
         assertPlanContains(sql, "char_length('aaa')");
+
+        sql = "SELECT replace('hello-world', '-');";
+        assertPlanContains(sql, "replace('hello-world', '-', '')");
+
+        sql = "SELECT replace('hello-world', '-', '$');";
+        assertPlanContains(sql, "replace('hello-world', '-', '$')");
     }
 
     @Test
@@ -330,4 +336,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         System.out.println(getFragmentPlan(sql));
     }
 
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
 }

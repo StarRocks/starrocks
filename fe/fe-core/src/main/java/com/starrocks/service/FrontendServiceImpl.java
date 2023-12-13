@@ -34,7 +34,6 @@
 
 package com.starrocks.service;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -1187,7 +1186,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond * 1000, resp, false);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1924,7 +1923,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         } catch (UserException exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: none"));
+                                            + tablet.getId() + ", backends: none(cloud native table)"));
                             result.setStatus(errorStatus);
                             return result;
                         }
@@ -1939,8 +1938,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (bePathsMap.keySet().size() < quorum) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends())));
+                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
                             result.setStatus(errorStatus);
                             return result;
                         }

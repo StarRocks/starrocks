@@ -32,7 +32,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
@@ -417,11 +416,11 @@ public class ColumnFilterConverter {
         }
     }
 
-    public static LiteralExpr convertLiteral(Column partitionColumn, ConstantOperator operator) throws AnalysisException {
-        return convertLiteral(partitionColumn.getType(), operator);
+    public static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
+        return convertLiteral(operator.getType(), operator);
     }
 
-    public static LiteralExpr convertLiteral(Type partitionType, ConstantOperator operator) throws AnalysisException {
+    public static LiteralExpr convertLiteral(Type definedType, ConstantOperator operator) throws AnalysisException {
         Preconditions.checkArgument(!operator.getType().isInvalid());
 
         if (operator.isNull()) {
@@ -464,7 +463,7 @@ public class ColumnFilterConverter {
             case CHAR:
             case VARCHAR:
             case HLL:
-                boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionType, operator.getType());
+                boolean isConvertToDate = PartitionUtil.isConvertToDate(definedType, operator.getType());
                 literalExpr = new StringLiteral(operator.getVarchar());
                 if (isConvertToDate) {
                     literalExpr = PartitionUtil.convertToDateLiteral(literalExpr);
