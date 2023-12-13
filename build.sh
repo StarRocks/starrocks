@@ -108,6 +108,7 @@ if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
 
+USE_JEMALLOC=ON
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -204,6 +205,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
                     -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
@@ -218,6 +220,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}

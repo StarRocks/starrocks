@@ -552,6 +552,8 @@ build_arrow() {
     # JemallocAllocator use mallocx and rallocx to allocate new memory, but mallocx and rallocx are Non-standard APIs,
     # and can not be hooked in BE, the memory used by arrow can not be counted by BE,
     # so disable jemalloc here and use SystemAllocator.
+    #
+    # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
     ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
@@ -872,6 +874,21 @@ build_async_profiler() {
     cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
 }
 
+# jemalloc
+build_jemalloc() {
+    OLD_CFLAGS=$CFLAGS
+    check_if_source_exist $JEMALLOC_SOURCE
+
+    unset CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared
+    make -j$PARALLEL
+    make install
+    mv $TP_INSTALL_DIR/lib/libjemalloc.a $TP_INSTALL_DIR/lib/libjemalloc_for_starrocks.a
+    export CFLAGS=$OLD_CFLAGS
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -916,6 +933,7 @@ build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
 build_async_profiler
+build_jemalloc
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
