@@ -40,8 +40,13 @@ under the License.
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.4.2</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
+<<<<<<< HEAD
         <paimon.version>0.5.0-incubating</paimon.version>
         <staros.version>3.1.8</staros.version>
+=======
+        <paimon.version>0.6.0-incubating</paimon.version>
+        <staros.version>3.2-rc4</staros.version>
+>>>>>>> bb6946d18d ([Feature] Support native reader for paimon table (#36824))
         <python>python</python>
     </properties>
 
