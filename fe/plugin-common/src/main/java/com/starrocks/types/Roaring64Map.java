@@ -919,6 +919,24 @@ public class Roaring64Map {
     }
 
     /**
+     * Display Bitmap using comma separated strings.
+     *
+     * @return A string separated by ",".
+     */
+    public String serializeToString() {
+        final StringBuilder answer = new StringBuilder();
+        final LongIterator i = this.getLongIterator();
+        while (i.hasNext()) {
+            long nextValue = i.next();
+            if (answer.length() > 0) {
+                answer.append(",");
+            }
+            answer.append(signedLongs ? nextValue : toUnsignedString(nextValue));
+        }
+        return answer.toString();
+    }
+
+    /**
      * For better performance, consider the Use the {@link #forEach forEach} method.
      *
      * @return a custom iterator over set bits, the bits are traversed in ascending sorted order
