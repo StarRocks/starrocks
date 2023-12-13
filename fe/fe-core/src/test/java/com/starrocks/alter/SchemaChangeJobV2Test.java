@@ -333,8 +333,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assert.assertEquals(1, result.getJobId());
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
 
-        Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexMap"));
-        Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexTabletMap"));
+        Assert.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexMap"));
+        Assert.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexTabletMap"));
 
         Map<Long, SchemaVersionAndHash> map = Deencapsulation.getField(result, "indexSchemaVersionAndHashMap");
         Assert.assertEquals(10, map.get(1000L).schemaVersion);
