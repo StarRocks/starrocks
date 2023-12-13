@@ -204,6 +204,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Assertions.assertTrue(createTableStmt.get(0).contains(property), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(partitionBy), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(distribute), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(select), createTableStmt.get(0));
     }
 
     public static Stream<Arguments> genTestArguments() {
@@ -228,7 +229,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`)",
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10");
         List<String> selectList = Lists.newArrayList(
-                "select k1 as k3, k2 from tbl1"
+                "SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`",
+                "SELECT /*+SET_VAR(query_timeout='1')*/ `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`"
         );
 
         // basic combinations
