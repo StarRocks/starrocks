@@ -79,7 +79,7 @@ displayed_sidebar: "Chinese"
 - 优化主键模型表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
 - 主键模型表支持本地多块磁盘间数据均衡。
 - 分区中数据可以随着时间推移自动进行降冷操作（List 分区方式暂不支持）。相对原来的设置，更方便进行分区冷热管理。有关详细信息，请参见[设置数据的初始存储介质、自动降冷时间](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置数据的初始存储介质自动降冷时间和副本数)。
-- 主键模型表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](../administration/Configuration.md#enable_sync_publish)。
+- 主键模型表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](../administration/FE_configuration.md#enable_sync_publish)。
 
 #### 查询
 
