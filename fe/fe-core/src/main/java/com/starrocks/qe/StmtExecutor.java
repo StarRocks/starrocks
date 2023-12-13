@@ -90,6 +90,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -154,6 +155,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -578,6 +580,91 @@ public class StmtExecutor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
+        if (parsedStmt == null) {
+            return;
+        }
+        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
+
+        if (MapUtils.isNotEmpty(optHints)) {
+            SessionVariable sessionVariable = (SessionVariable) variables.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            context.setSessionVariable(sessionVariable);
+        }
+    }
+
+    /**
+     * Visit all SELECT query blocks
+     * <p>
+     * NOTE: for duplicated variable, it would use the first one
+     */
+    public static class VarHintVisitor extends AstTraverser<Void, Void> {
+
+        private final Map<String, String> hints = new HashMap<>();
+
+        public Map<String, String> getHints() {
+            return hints;
+        }
+
+        public static Map<String, String> extractAllHints(StatementBase stmt) {
+            VarHintVisitor visitor = new VarHintVisitor();
+            stmt.accept(visitor, null);
+            return visitor.getHints();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null && MapUtils.isNotEmpty(node.getSelectList().getOptHints())) {
+                node.getSelectList().getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitSelect(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitInsertStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitUpdateStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDeleteStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDDLStatement(DdlStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDDLStatement(node, context);
+            return null;
+        }
+    }
+
+>>>>>>> 06e77ee567 ([Enhancement] support set_var in multiple query blocks (#36871))
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
         CreateTableAsSelectStmt createTableAsSelectStmt = (CreateTableAsSelectStmt) parsedStmt;
 
