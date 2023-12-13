@@ -19,7 +19,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 ## 参数说明
 
-`bitmap`：支持的数据类型为 VARCHAR。导入外部 bitmap 数据时，可使用 Java 或者 C++ 接口先[创建 BitmapValue 对象](https://github.com/StarRocks/starrocks/blob/main/fe/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/BitmapValueTest.java)，然后添加元素、序列化、Base64 编码，将得到的 Base64 字符串作为该函数的入参。
+`bitmap`：支持的数据类型为 VARCHAR。导入外部 bitmap 数据时，可使用 Java 或者 C++ 接口先[创建 BitmapValue 对象](https://github.com/StarRocks/starrocks/blob/main/fe/plugin-common/src/test/java/com/starrocks/types/BitmapValueTest.java)，然后添加元素、序列化、Base64 编码，将得到的 Base64 字符串作为该函数的入参。
 
 ## 返回值说明
 
