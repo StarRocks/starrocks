@@ -123,6 +123,16 @@ public:
 
     size_t key_size() { return _key_size; }
 
+<<<<<<< HEAD
+=======
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+protected:
+    void _set_schema(const Schema& pk_schema);
+
+>>>>>>> 7852076c54 ([Enhancement] Skip read pindex when we pick all rowsets to do compaction for primary key table (#36819))
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
