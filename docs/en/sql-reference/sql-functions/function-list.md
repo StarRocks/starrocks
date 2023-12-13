@@ -217,7 +217,6 @@ You can find a function based on the following categories:
 - [seconds_sub](./date-time-functions/seconds_sub.md)
 - [str2date](./date-time-functions/str2date.md)
 - [str_to_date](./date-time-functions/str_to_date.md)
-- [str_to_jodatime](./date-time-functions/str_to_jodatime.md)
 - [time_slice](./date-time-functions/time_slice.md)
 - [time_to_sec](./date-time-functions/time_to_sec.md)
 - [timediff](./date-time-functions/timediff.md)
@@ -241,7 +240,6 @@ You can find a function based on the following categories:
 - [years_add](./date-time-functions/years_add.md)
 - [years_diff](./date-time-functions/years_diff.md)
 - [years_sub](./date-time-functions/years_sub.md)
->>>>>>> 31ee9d798b ([Doc] Add 7 date functions to Branch 3.2 (backport #36130) (#36914))
 
 ## Geographic functions
 
