@@ -31,6 +31,11 @@ public class SysDb extends Database {
         super.registerTableUnlocked(RoleEdges.create());
         super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
         super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
+<<<<<<< HEAD
+=======
+        super.registerTableUnlocked(SysObjectDependencies.create());
+        super.registerTableUnlocked(SysFeLocks.create());
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
     }
 
     @Override

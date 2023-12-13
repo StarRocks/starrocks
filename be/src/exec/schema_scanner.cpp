@@ -45,6 +45,12 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/schema_scanner/sys_object_dependencies.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
 
 namespace starrocks {
 

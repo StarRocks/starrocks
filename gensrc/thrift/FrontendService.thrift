@@ -1363,6 +1363,50 @@ struct TGetRoleEdgesResponse {
     1: optional list<TGetRoleEdgesItem> role_edges
 }
 
+<<<<<<< HEAD
+=======
+struct TObjectDependencyItem {
+    1: optional i64 object_id
+    2: optional string object_name
+    3: optional string database
+    4: optional string catalog
+    5: optional string object_type
+    
+    11: optional i64 ref_object_id
+    12: optional string ref_object_name
+    13: optional string ref_database
+    14: optional string ref_catalog
+    15: optional string ref_object_type
+}
+
+struct TObjectDependencyReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TObjectDependencyRes {
+    1: optional list<TObjectDependencyItem> items
+}
+
+struct TFeLocksItem {
+    1: optional string lock_type
+    2: optional string lock_object
+    3: optional string lock_mode
+    4: optional i64 lock_start_time
+    
+    11: optional string thread_info
+    12: optional bool granted
+    14: optional string waiter_list
+}
+
+struct TFeLocksReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeLocksRes {
+    1: optional list<TFeLocksItem> items
+}
+
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1471,6 +1515,9 @@ service FrontendService {
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
     
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+
+    // sys.fe_locks
+    TFeLocksRes listFeLocks(1: TFeLocksReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

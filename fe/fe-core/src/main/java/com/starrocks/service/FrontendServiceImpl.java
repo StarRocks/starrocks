@@ -63,6 +63,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.system.sys.SysFeLocks;
+import com.starrocks.catalog.system.sys.SysObjectDependencies;
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -154,6 +159,8 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -491,6 +498,104 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return listMaterializedViewStatus(limit, matcher, currentUser, params);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public TListPipesResult listPipes(TListPipesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        // TODO: check privilege
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        TListPipesResult result = new TListPipesResult();
+        for (Pipe pipe : pipes.values()) {
+            String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
+                    .map(Database::getOriginName)
+                    .orElse(null);
+
+            TListPipesInfo row = new TListPipesInfo();
+            row.setPipe_id(pipe.getPipeId().getId());
+            row.setPipe_name(pipe.getName());
+            row.setDatabase_name(databaseName);
+            row.setState(pipe.getState().toString());
+            row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+            row.setLast_error(pipe.getLastErrorInfo().toJson());
+            row.setCreated_time(pipe.getCreatedTime());
+
+            row.setLoad_status(pipe.getLoadStatus().toJson());
+            row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
+            row.setLoaded_rows(pipe.getLoadStatus().loadRows);
+            row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);
+
+            result.addToPipes(row);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TListPipeFilesResult listPipeFiles(TListPipeFilesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        LOG.info("listPipeFiles params={}", params);
+        // TODO: check privilege
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        TListPipeFilesResult result = new TListPipeFilesResult();
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        RepoAccessor repo = RepoAccessor.getInstance();
+        List<PipeFileRecord> files = repo.listAllFiles();
+        for (PipeFileRecord record : files) {
+            TListPipeFilesInfo file = new TListPipeFilesInfo();
+            Optional<Pipe> mayPipe = pm.mayGetPipe(record.pipeId);
+            if (!mayPipe.isPresent()) {
+                LOG.warn("Pipe not found with id {}", record.pipeId);
+            }
+
+            file.setPipe_id(record.pipeId);
+            file.setDatabase_name(
+                    mayPipe.flatMap(p ->
+                                    GlobalStateMgr.getCurrentState().mayGetDb(p.getDbAndName().first)
+                                            .map(Database::getOriginName))
+                            .orElse(""));
+            file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
+
+            file.setFile_name(record.fileName);
+            file.setFile_version(record.fileVersion);
+            file.setFile_rows(0L); // TODO(murphy)
+            file.setFile_size(record.fileSize);
+            file.setLast_modified(DateUtils.formatDateTimeUnix(record.lastModified));
+
+            file.setState(record.loadState.toString());
+            file.setStaged_time(DateUtils.formatDateTimeUnix(record.stagedTime));
+            file.setStart_load(DateUtils.formatDateTimeUnix(record.startLoadTime));
+            file.setFinish_load(DateUtils.formatDateTimeUnix(record.finishLoadTime));
+
+            file.setFirst_error_msg(record.getErrorMessage());
+            file.setError_count(record.getErrorCount());
+            file.setError_line(record.getErrorLine());
+
+            result.addToPipe_files(file);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
+        return SysObjectDependencies.listObjectDependencies(params);
+    }
+
+    @Override
+    public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
+        return SysFeLocks.listLocks(params, true);
+    }
+
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
                                                                          UserIdentity currentUser, TGetTablesParams params) {

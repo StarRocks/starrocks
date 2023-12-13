@@ -39,6 +39,17 @@ public:
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+<<<<<<< HEAD
+=======
+    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
+    static Status list_object_dependencies(const std::string& ip, int32_t port, const TObjectDependencyReq& req,
+                                           TObjectDependencyRes* res);
+    static Status list_fe_locks(const std::string& ip, int32_t port, const TFeLocksReq& req, TFeLocksRes* res);
+
+>>>>>>> a38f9b7be6 ([Feature] sys.fe_locks (#35080))
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
