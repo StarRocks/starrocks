@@ -275,20 +275,27 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
                 index_pb->set_index_type(IndexType::BITMAP);
                 const auto& mit = column_map.find(boost::to_lower_copy(index.columns[0]));
-                RETURN_IF(mit == column_map.end(), Status::Cancelled("index column (" + index.columns[0] +
-                                                                     ") can not be found in table columns"));
-                mit->second->set_has_bitmap_index(true);
+
+                // TODO: Fix abnormal scenes when index column can not be found
+                if (mit != column_map.end()) {
+                    mit->second->set_has_bitmap_index(true);
+                } else {
+                    LOG(WARNING) << "index column (" << index.columns[0] << ") can not be found in table columns";
+                }
             } else if (index.index_type == TIndexType::type::GIN) {
                 RETURN_IF(index.columns.size() != 1,
                           Status::Cancelled("GIN index " + index.index_name +
                                             " do not support to build with more than one column"));
                 index_pb->set_index_type(IndexType::GIN);
 
-                for (const auto& index_col_name : index.columns) {
-                    const auto& mit = column_map.find(index_col_name);
-                    RETURN_IF(mit == column_map.end(),
-                              Status::Cancelled("index " + index_col_name + " can not be found in table columns"));
-                    index_pb->add_col_unique_id(column_map.at(index_col_name)->unique_id());
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(index_col_name);
+
+                // TODO: Fix abnormal scenes when index column can not be found
+                if (mit != column_map.end()) {
+                    index_pb->add_col_unique_id(mit->second->unique_id());
+                } else {
+                    LOG(WARNING) << "index " << index_col_name << " can not be found in table columns";
                 }
 
                 std::map<std::string, std::map<std::string, std::string>> properties_map;
