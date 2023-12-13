@@ -32,19 +32,33 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
 
     private static final String SHOW_DATA_URI = "/show_data";
     private static final String SHOW_DATA_DB_NAME = "showdatadb";
-    private long expectedSize = 0;
+
+    private static final String SHOW_DATA_TABLE_NAME_SECOND = "ShowDataTable2";
+
+    private static final String SHOW_DATA_TABLE_NAME = "ShowDataTable";
+    private long expectedShowDataTableSize = 0;
 
     @Override
     public void doSetUp() {
         Database db = new Database(1000 + testDbId, SHOW_DATA_DB_NAME);
-        OlapTable table = newTable("ShowDataTable");
+        OlapTable table = newTable(SHOW_DATA_TABLE_NAME);
         db.registerTableUnlocked(table);
-        expectedSize = table.getDataSize();
+
+        OlapTable olapTable = newTable(SHOW_DATA_TABLE_NAME_SECOND);
+        db.registerTableUnlocked(olapTable);
+
+        expectedShowDataTableSize = olapTable.getDataSize();
+
+        Database db1 = new Database(1000 + testDbId, SHOW_DATA_DB_NAME + "!");
+
+        db1.registerTableUnlocked(olapTable);
+
 
         // inject our test db
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
+        fullNameToDb.put(SHOW_DATA_DB_NAME + "1", db1);
     }
 
     @Test
@@ -55,11 +69,61 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(BASE_URL + "/api" + SHOW_DATA_URI + "?db=" + SHOW_DATA_DB_NAME)
                 .build();
-        Response response = networkClient.newCall(request).execute();
-        assertTrue(response.isSuccessful());
-        Assert.assertNotNull(response.body());
-        String respStr = response.body().string();
-        Assert.assertNotNull(respStr);
-        Assert.assertEquals(String.valueOf(expectedSize), respStr);
+
+        try (Response response = networkClient.newCall(request).execute()) {
+            assertTrue(response.isSuccessful());
+            Assert.assertNotNull(response.body());
+            String respStr = response.body().string();
+            Assert.assertNotNull(respStr);
+            Assert.assertEquals(String.valueOf(expectedShowDataTableSize), respStr);
+        }
+    }
+
+    @Test
+    public void testShowDbAndTableSize() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api" + SHOW_DATA_URI + "?db=" + SHOW_DATA_DB_NAME + "&table=" + SHOW_DATA_TABLE_NAME_SECOND)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            assertTrue(response.isSuccessful());
+            Assert.assertNotNull(response.body());
+            String respStr = response.body().string();
+            Assert.assertNotNull(respStr);
+            Assert.assertEquals(String.valueOf(expectedShowDataTableSize), respStr);
+        }
+    }
+
+    @Test
+    public void testShowTableSize() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api" + SHOW_DATA_URI + "?table=" + SHOW_DATA_TABLE_NAME_SECOND)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            assertTrue(response.isSuccessful());
+            Assert.assertNotNull(response.body());
+            String respStr = response.body().string();
+            Assert.assertNotNull(respStr);
+            Assert.assertEquals(String.valueOf(expectedShowDataTableSize * 2), respStr);
+        }
+    }
+
+    @Test
+    public void testShowAllSize() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + "/api" + SHOW_DATA_URI + "?db=" + SHOW_DATA_DB_NAME)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            assertTrue(response.isSuccessful());
+            Assert.assertNotNull(response.body());
+            String respStr = response.body().string();
+            Assert.assertNotNull(respStr);
+            Assert.assertEquals(String.valueOf(expectedShowDataTableSize), respStr);
+        }
     }
 }
