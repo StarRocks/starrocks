@@ -22,6 +22,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
@@ -191,6 +192,17 @@ public class SetVar implements ParseNode {
 
         if (getVariable().equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(getResolvedExpression().getStringValue());
+        }
+
+        // follower_query_forward_mode
+        if (getVariable().equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
+            String queryFollowerForwardMode = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
+                throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
+                        "supported list is %s", queryFollowerForwardMode, supportedList));
+            }
         }
     }
 
