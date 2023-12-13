@@ -2,10 +2,10 @@
 
 #include "finish_task.h"
 
-#include "agent/client_cache.h"
 #include "agent/status.h"
 #include "agent/utils.h"
 #include "common/logging.h"
+#include "runtime/exec_env.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -20,7 +20,7 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
     int32_t sleep_seconds = 1;
     int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    MasterServerClient client(&g_frontend_service_client_cache);
+    MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
 
     while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
