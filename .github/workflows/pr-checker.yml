@@ -45,12 +45,35 @@ jobs:
   title-check:
     runs-on: ubuntu-latest
     needs: sync-checker
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
+
+      - name: update body
+        if: github.base_ref != 'main' && github.event.action == 'opened'
+        run: |
+          gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
+          ori_body=$(cat body.txt)
+          sed -i "s#\[ \] This is a backport pr#\[x\] This is a backport pr#g" body.txt
+          if [[ "${ori_body}" != $(cat body.txt) ]]; then
+            gh pr edit ${PR_NUMBER} -R ${REPO} -F body.txt
+          fi
+
+      - name: check backport pr's title
+        if: github.base_ref != 'main' && contains(toJson(github.event.pull_request.body), '[x] This is a backport pr')
+        run: |
+          PR_TITLE=$(echo "${{ github.event.pull_request.title }}")
+          if [[ ! $PR_TITLE =~ "\(backport #[0-9]+)$" ]]; then
+            echo "::error::Backport PR title is not valid. It should end with '(backport #[0-9]+)'"
+            exit 1
+          fi
 
   backport-check:
     needs: title-check
