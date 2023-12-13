@@ -413,7 +413,7 @@ public class OlapTable extends Table {
         this.maxColUniqueId = maxColUniqueId;
     }
 
-    public long incAndGetMaxIndexId() {
+    public synchronized long incAndGetMaxIndexId() {
         this.maxIndexId++;
         return this.maxIndexId;
     }
