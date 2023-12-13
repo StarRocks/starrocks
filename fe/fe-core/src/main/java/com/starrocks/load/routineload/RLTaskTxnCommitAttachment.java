@@ -62,7 +62,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private long taskExecutionTimeMs;
     @SerializedName("progress")
     private RoutineLoadProgress progress;
-    @SerializedName("timestampPorgress")
+    @SerializedName("timestampProgress")
     private RoutineLoadProgress timestampProgress;
     private String errorLogUrl;
     private long loadedBytes;
