@@ -42,6 +42,8 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private long receivedBytes;
     private long taskExecutionTimeMs;
     private RoutineLoadProgress progress;
+    @SerializedName("timestampProgress")
+    private RoutineLoadProgress timestampProgress;
     private String errorLogUrl;
 
     public RLTaskTxnCommitAttachment() {
@@ -60,10 +62,14 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
         switch (rlTaskTxnCommitAttachment.getLoadSourceType()) {
             case KAFKA:
-                this.progress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress());
+                this.progress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress()
+                        .getPartitionCmtOffset());
+                this.timestampProgress = new KafkaProgress(rlTaskTxnCommitAttachment.getKafkaRLTaskProgress().
+                        getPartitionCmtOffsetTimestamp());
                 break;
             case PULSAR:
                 this.progress = new PulsarProgress(rlTaskTxnCommitAttachment.getPulsarRLTaskProgress());
+                this.timestampProgress = new PulsarProgress();
                 break;
             default:
                 break;
@@ -108,6 +114,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public RoutineLoadProgress getProgress() {
         return progress;
+    }
+
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
     }
 
     public String getErrorLogUrl() {
