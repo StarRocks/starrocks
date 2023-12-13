@@ -383,11 +383,13 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
-                                                                               String sql,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig) {
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
+            MaterializedView mv,
+            String sql,
+            ColumnRefFactory columnRefFactory,
+            ConnectContext connectContext,
+            OptimizerConfig optimizerConfig,
+            boolean keepView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -402,7 +404,7 @@ public class MvUtils {
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, true);
+                new TransformerContext(columnRefFactory, connectContext, keepView);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(

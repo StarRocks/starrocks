@@ -662,8 +662,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         List<ColumnRefOperator> newOutputColumns = keepView ? Lists.newArrayList() : null;
-        LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
         if (keepView) {
+            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
             return new LogicalPlan(scanBuilder, newOutputColumns, null);
@@ -673,6 +673,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
             if (enableViewBasedMvRewrite) {
+                LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
@@ -715,7 +716,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Map<Expr, ColumnRefOperator> newExprMapping = Maps.newHashMap();
         // construct a mapping from output expr to output columns of view
         for (Map.Entry<Expr, ColumnRefOperator> entry : exprMapping.entrySet()) {
-            newExprMapping.put(entry.getKey(), projectionMap.get(entry.getValue()).cast());
+            if (projectionMap.containsKey(entry.getValue())) {
+                newExprMapping.put(entry.getKey(), projectionMap.get(entry.getValue()).cast());
+            } else {
+                newExprMapping.put(entry.getKey(), entry.getValue());
+            }
         }
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,

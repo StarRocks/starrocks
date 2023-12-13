@@ -193,8 +193,7 @@ public class MvRewritePreprocessor {
         for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
             OptExpression viewLogicalTree = viewPlanMap.get(viewScanOperator);
             // optimize logical tree of view and keep them in OptimizerContext,
-            // which will be used in union rewrite.
-            // use LogicalPlan here to get output columns in sequence
+            // which will be used in union rewrite or only some views are rewritten
             OptExpression optimizedViewPlan = optimizeViewPlan(
                     viewLogicalTree, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
             optimizedViewPlanMap.put(viewScanOperator, optimizedViewPlan);
@@ -302,25 +301,27 @@ public class MvRewritePreprocessor {
                 continue;
             }
 
-            MvPlanContext mvPlanContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+            List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
                     connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-            if (mvPlanContext == null) {
+            if (mvPlanContexts == null) {
                 logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
                         mv.getName());
                 continue;
             }
-            if (!mvPlanContext.isValidMvPlan()) {
-                if (mvPlanContext.getLogicalPlan() != null) {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                            mv.getName(), mvPlanContext.getLogicalPlan().debugString());
-                } else {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                            mv.getName());
+            for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                if (!mvPlanContext.isValidMvPlan()) {
+                    if (mvPlanContext.getLogicalPlan() != null) {
+                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
+                                mv.getName(), mvPlanContext.getLogicalPlan().debugString());
+                    } else {
+                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
+                                mv.getName());
+                    }
+                    continue;
                 }
-                continue;
-            }
 
-            filteredMVs.add(Pair.create(mv, mvPlanContext));
+                filteredMVs.add(Pair.create(mv, mvPlanContext));
+            }
         }
         if (filteredMVs.isEmpty()) {
             logMVPrepare(connectContext, "There are no valid related mvs for the query plan");
