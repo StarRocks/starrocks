@@ -21,12 +21,34 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+import junit.framework.Assert;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.apache.groovy.util.Maps;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 public class SetVarTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeAll() throws Exception {
+        PlanTestBase.beforeClass();
+    }
+
+    @AfterAll
+    public static void afterAll() throws Exception {
+        PlanTestBase.afterClass();
+    }
 
     @Test
     public void testInsertStmt() throws Exception {
@@ -77,11 +99,51 @@ public class SetVarTest extends PlanTestBase {
         {
             boolean enableAdaptiveSinkDop = variable.getEnableAdaptiveSinkDop();
             String sql = "LOAD /*+set_var(enable_adaptive_sink_dop=false)*/ "
-                          + "LABEL label0 (DATA INFILE('/path1/file') INTO TABLE tbl)";
+                    + "LABEL label0 (DATA INFILE('/path1/file') INTO TABLE tbl)";
             starRocksAssert.getCtx().executeSql(sql);
             Assert.assertEquals(enableAdaptiveSinkDop, variable.getEnableAdaptiveSinkDop());
         }
 
         starRocksAssert.dropTable("tbl");
+    }
+
+    @ParameterizedTest
+    @MethodSource("genArguments")
+    public void testMultiQueryBlocks(String query, Map<String, String> hints) throws Exception {
+        starRocksAssert.withTable("create table if not exists tbl (c1 int) properties('replication_num'='1')");
+
+        Assertions.assertEquals(hints, parseAndGetHints(query));
+    }
+
+    public static Stream<Arguments> genArguments() {
+        Map<String, String> hints2 = Maps.of("query_timeout", "1");
+        Map<String, String> hints3 = Maps.of("query_timeout", "10", "query_mem_limit", "1");
+
+        return Stream.of(
+                // multi-block select
+                Arguments.of("(select /*+set_var(query_timeout=1)*/avg(c1) from tbl) " +
+                        "union all (select /*+set_var(query_timeout=10)*/sum(c1) from tbl) ", hints2),
+                Arguments.of("(select /*+set_var(query_timeout=10)*/avg(c1) from tbl) " +
+                        "union all (select /*+set_var(query_mem_limit=1)*/sum(c1) from tbl) ", hints3),
+                Arguments.of("(select /*+set_var(query_timeout=10)*/ avg(c1) from tbl ) " +
+                        "union (" +
+                        "   select s1+1 from (" +
+                        "       select /*+set_var(query_mem_limit=1)*/ sum(c1) as s1 from tbl " +
+                        "   ) r1 " +
+                        ") ", hints3),
+                Arguments.of("insert /*+set_var(query_timeout=1) */ into tbl values(1) ", hints2),
+
+                // insert select
+                Arguments.of("insert into tbl select /*+set_var(query_timeout=1) */ * from tbl", hints2),
+                Arguments.of("insert /*+set_var(query_timeout=1)*/ into tbl " +
+                        "select /*+set_var(query_timeout=10) */ * from tbl", hints2),
+                Arguments.of("insert /*+set_var(query_timeout=10)*/ into tbl " +
+                        "select /*+set_var(query_mem_limit=1) */ * from tbl", hints3)
+        );
+    }
+
+    private static Map<String, String> parseAndGetHints(String sql) {
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        return StmtExecutor.VarHintVisitor.extractAllHints(stmts.get(0));
     }
 }
