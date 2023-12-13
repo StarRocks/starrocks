@@ -46,7 +46,15 @@ displayed_sidebar: "Chinese"
 
 本版本发布包含如下新增特性和问题修复。
 
+**新增特性**
 
+- 实现 [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction)中的新 Sink API，以支持[Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/issues/2600)。[#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
+- 支持 Flink 1.18。[#305](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/305)
+
+**问题修复**
+
+- 修复了误导性的线程名称和日志。[#290](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/290)
+- 修复了写入多个表时的错误配置。[#298](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/298)
 
 #### 1.2.8
 

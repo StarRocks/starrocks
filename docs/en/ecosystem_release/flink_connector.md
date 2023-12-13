@@ -46,7 +46,7 @@ This release includes some features and bug fixes.
 
 **Features**
 
-- Implement new sink api in [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction) to support [Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/issues/2600). [#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
+- Implement the new sink API introduced in [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction) to support [Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/issues/2600). [#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
 - Support Flink 1.18. [#305](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/305)
 
 **Bug Fixes**
