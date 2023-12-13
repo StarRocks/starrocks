@@ -52,8 +52,8 @@ public class UDFBitmapFromString extends GenericUDF {
 
         BitmapValue bitmap = new BitmapValue();
         try {
-            String[] str_array = str.split(",");
-            for (String s : str_array) {
+            String[] strArray = str.split(",");
+            for (String s : strArray) {
                 long v = Long.parseLong(s);
                 bitmap.add(v);
             }
