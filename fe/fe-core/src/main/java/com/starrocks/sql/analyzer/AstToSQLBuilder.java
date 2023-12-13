@@ -138,7 +138,7 @@ public class AstToSQLBuilder {
             if (MapUtils.isNotEmpty(hints)) {
                 sqlBuilder.append("/*+SET_VAR(");
                 sqlBuilder.append(hints.entrySet().stream()
-                        .map(entry -> String.format("%s=%s", entry.getKey(), entry.getValue()))
+                        .map(entry -> String.format("%s='%s'", entry.getKey(), entry.getValue()))
                         .collect(Collectors.joining(",")));
                 sqlBuilder.append(")*/ ");
             }
