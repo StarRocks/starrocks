@@ -165,16 +165,19 @@ public class ConnectProcessor {
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
 
+        boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
+                .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
         if (statistics != null) {
             ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
         }
 
         if (ctx.getState().isQuery()) {
@@ -331,7 +334,7 @@ public class ConnectProcessor {
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
                 if (i > 0) {
-                    ctx.resetRetureRows();
+                    ctx.resetReturnRows();
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);

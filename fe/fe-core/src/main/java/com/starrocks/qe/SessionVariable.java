@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -60,6 +61,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Optional;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -370,6 +372,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
+
+    // Flag to control whether to proxy follower's query statement to leader/follower.
+    public enum FollowerQueryForwardMode {
+        DEFAULT,    // proxy queries by the follower's replay progress (default)
+        FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
+        LEADER      // proxy queries to leader no matter the follower's replay progress
+    }
+    public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -1244,6 +1254,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getCboEqBaseType() {
         return cboEqBaseType;
+    }
+
+    @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
+    private String followerForwardMode = "";
+
+    public void setFollowerQueryForwardMode(String mode) {
+        this.followerForwardMode = mode;
+    }
+
+    public Optional<Boolean> isFollowerForwardToLeaderOpt() {
+        if (Strings.isNullOrEmpty(this.followerForwardMode) ||
+                followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
+            return Optional.empty();
+        }
+        return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
 
     public int getExprChildrenLimit() {
