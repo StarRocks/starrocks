@@ -154,6 +154,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -163,6 +164,7 @@ enum TSchemaTableType {
     SCH_PIPES,
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
+    SYS_FE_LOCKS,
 }
 
 enum THdfsCompression {
