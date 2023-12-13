@@ -19,7 +19,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 ## Parameters
 
-`bitmap`: The supported data type is VARCHAR. Before you load Bitmap data into StarRocks, you can use Java or C++ to [create a BitmapValue object](https://github.com/StarRocks/starrocks/blob/main/fe/spark-dpp/src/test/java/com/starrocks/load/loadv2/dpp/BitmapValueTest.java), add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
+`bitmap`: The supported data type is VARCHAR. Before you load Bitmap data into StarRocks, you can use Java or C++ to [create a BitmapValue object](https://github.com/StarRocks/starrocks/blob/main/fe/plugin-common/src/test/java/com/starrocks/types/BitmapValueTest.java), add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
 
 ## Return value
 
