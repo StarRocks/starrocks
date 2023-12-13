@@ -35,6 +35,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -103,6 +104,7 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.jupiter.params.provider.Arguments;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -503,6 +505,48 @@ public class StarRocksAssert {
 
     public QueryAssert query(String sql) {
         return new QueryAssert(ctx, sql);
+    }
+
+    /**
+     * Enumerate all test cases from combinations
+     */
+    public static class TestCaseEnumerator {
+
+        private List<List<Integer>> testCases;
+
+        public TestCaseEnumerator(List<Integer> space) {
+            this.testCases = Lists.newArrayList();
+            List<Integer> testCase = Lists.newArrayList();
+            search(space, testCase, 0);
+        }
+
+        private void search(List<Integer> space, List<Integer> testCase, int k) {
+            if (k >= space.size()) {
+                testCases.add(Lists.newArrayList(testCase));
+                return;
+            }
+
+            int n = space.get(k);
+            for (int i = 0; i < n; i++) {
+                testCase.add(i);
+                search(space, testCase, k + 1);
+                testCase.remove(testCase.size() - 1);
+            }
+        }
+
+        public Stream<List<Integer>> enumerate() {
+            return testCases.stream();
+        }
+
+        @SafeVarargs
+        public static <T> Arguments ofArguments(List<Integer> permutation, List<T>... args) {
+            Object[] objects = new Object[args.length];
+            for (int i = 0; i < args.length; i++) {
+                int index = permutation.get(i);
+                objects[i] = args[i].get(index);
+            }
+            return Arguments.of(objects);
+        }
     }
 
     public class QueryAssert {
