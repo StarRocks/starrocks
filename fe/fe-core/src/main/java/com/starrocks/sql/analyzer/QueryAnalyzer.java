@@ -992,11 +992,12 @@ public class QueryAnalyzer {
             if (partitionNamesObject != null) {
                 List<String> partitionNames = partitionNamesObject.getPartitionNames();
                 if (partitionNames != null) {
+                    boolean isTemp = partitionNamesObject.isTemp();
                     for (String partitionName : partitionNames) {
-                        Partition partition = table.getPartition(partitionName);
+                        Partition partition = table.getPartition(partitionName, isTemp);
                         if (partition == null) {
                             throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
-                                    table.getName());
+                                        table.getName());
                         }
                     }
                 }
