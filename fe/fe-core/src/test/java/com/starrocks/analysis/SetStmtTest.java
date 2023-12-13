@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
@@ -34,6 +35,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetVar;
 import mockit.Mocked;
+import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -145,4 +147,52 @@ public class SetStmtTest {
             Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFollowerQueryForwardMode() throws AnalysisException {
+        // normal
+        {
+            for (SessionVariable.FollowerQueryForwardMode mode :
+                    EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class)) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.FOLLOWER_QUERY_FORWARD_MODE,
+                            new StringLiteral(mode.toString()));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                } catch (Exception e) {
+                    Assert.fail();;
+                }
+            }
+
+        }
+
+        // empty
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.FOLLOWER_QUERY_FORWARD_MODE,
+                    new StringLiteral(""));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assert.fail();
+            } catch (Exception e) {
+                e.printStackTrace();
+                Assert.assertEquals("Unsupported follower query forward mode: , supported list " +
+                                "is DEFAULT,FOLLOWER,LEADER", e.getMessage());
+            }
+        }
+
+        // bad case
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.FOLLOWER_QUERY_FORWARD_MODE,
+                    new StringLiteral("bad_case"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assert.fail("should fail");
+            } catch (SemanticException e) {
+                Assert.assertEquals("Unsupported follower query forward mode: bad_case, supported list " +
+                        "is DEFAULT,FOLLOWER,LEADER", e.getMessage());;
+            }
+        }
+    }
+>>>>>>> 327a343c8b ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315) (#36414) (#36932))
 }

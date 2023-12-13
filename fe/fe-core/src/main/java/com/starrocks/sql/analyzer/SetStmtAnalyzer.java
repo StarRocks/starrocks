@@ -17,6 +17,15 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.system.HeartbeatFlags;
+import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> 327a343c8b ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315) (#36414) (#36932))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +76,87 @@ public class SetStmtAnalyzer {
                         var.setExpression(subquery);
                     }
                 }
+<<<<<<< HEAD
+=======
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
+            validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
+            String compressionName = resolvedExpression.getStringValue();
+            TCompressionType compressionType = CompressionUtils.getCompressTypeByName(compressionName);
+            if (compressionType == null) {
+                throw new SemanticException(String.format("Unsupported compression type: %s, supported list is %s",
+                        compressionName, StringUtils.join(CompressionUtils.getSupportedCompressionNames(), ",")));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal}", baseType));
+            }
+        }
+
+        // follower_query_forward_mode
+        if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
+            String queryFollowerForwardMode = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
+                throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
+                        "supported list is %s", queryFollowerForwardMode, supportedList));
+            }
+        }
+
+        var.setResolvedExpression(resolvedExpression);
+    }
+
+    private static void checkRangeLongVariable(LiteralExpr resolvedExpression, String field, Long min, Long max) {
+        String value = resolvedExpression.getStringValue();
+        try {
+            long num = Long.parseLong(value);
+            if (min != null && num < min) {
+                throw new SemanticException(String.format("%s must be equal or greater than %d.", field, min));
+            }
+            if (max != null && num > max) {
+                throw new SemanticException(String.format("%s must be equal or smaller than %d.", field, max));
+            }
+        } catch (NumberFormatException ex) {
+            throw new SemanticException(field + " is not a number");
+        }
+    }
+
+    private static void validateTabletInternalParallelModeValue(String val) {
+        try {
+            TTabletInternalParallelMode.valueOf(val.toUpperCase());
+        } catch (Exception ignored) {
+            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}.");
+        }
+    }
+
+    private static void analyzeUserVariable(UserVariable var) {
+        if (var.getVariable().length() > 64) {
+            throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
+        }
+
+        Expr expression = var.getUnevaluatedExpression();
+        if (expression instanceof NullLiteral) {
+            var.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+        } else {
+            Expr foldedExpression = Expr.analyzeAndCastFold(expression);
+            if (foldedExpression instanceof LiteralExpr) {
+                var.setEvaluatedExpression((LiteralExpr) foldedExpression);
+>>>>>>> 327a343c8b ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315) (#36414) (#36932))
             } else {
                 //TODO: Unify the analyze logic of other types of SetVar from the original definition
                 var.analyze();
