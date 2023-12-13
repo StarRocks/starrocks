@@ -1627,9 +1627,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
 
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release or remove index entry when function end
-    DeferOp index_defer([&]() {
-        index.reset_cancel_major_compaction();
-    });
+    DeferOp index_defer([&]() { index.reset_cancel_major_compaction(); });
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         _compaction_state.reset();
