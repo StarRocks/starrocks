@@ -67,7 +67,6 @@ private:
 
     // exec
     ExecNode* _source = nullptr;
-    TDescriptorTable* _t_desc_tbl;
     std::unique_ptr<DataSink> _sink;
     std::vector<std::unique_ptr<TFetchDataResult>> _results;
 };

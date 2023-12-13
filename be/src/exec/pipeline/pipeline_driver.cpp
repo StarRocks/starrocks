@@ -213,18 +213,6 @@ void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     }
 }
 
-static inline bool is_multilane(pipeline::OperatorPtr& op) {
-    if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
-        return true;
-    }
-    // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
-    // it shall populate cache on receiving EOS chunk of a tablet.
-    if (dynamic_cast<query_cache::CacheOperator*>(op.get()) != nullptr) {
-        return true;
-    }
-    return false;
-}
-
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
