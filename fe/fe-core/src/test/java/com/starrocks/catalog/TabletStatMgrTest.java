@@ -188,11 +188,11 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1000L;
             }
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return new ComputeNode();
             }
         };
@@ -300,11 +300,11 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1000L;
             }
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return new ComputeNode();
             }
         };
@@ -348,11 +348,11 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1000L;
             }
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return new ComputeNode();
             }
         };

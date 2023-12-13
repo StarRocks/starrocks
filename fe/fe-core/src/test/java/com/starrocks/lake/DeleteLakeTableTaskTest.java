@@ -50,7 +50,7 @@ public class DeleteLakeTableTaskTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return new ComputeNode();
             }
         };
@@ -136,7 +136,7 @@ public class DeleteLakeTableTaskTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return null;
             }
         };
@@ -215,7 +215,7 @@ public class DeleteLakeTableTaskTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return new ComputeNode();
             }
         };
