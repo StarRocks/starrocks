@@ -51,11 +51,14 @@ public:
         if (_run_or_released.load()) {
             return;
         }
-        Status status =
-                Status::Cancelled(fmt::format("Segment flush task does not run, and it may be cancelled,"
-                                              " txn_id: {}, tablet id: {}",
-                                              _request->txn_id(), _request->tablet_id()));
+        Status status = Status::Cancelled(
+                fmt::format("Segment flush task does not run, and it may be cancelled,"
+                            " txn_id: {}, tablet id: {}, flush token status: {}",
+                            _request->txn_id(), _request->tablet_id(), _flush_token->status().to_string()));
         _send_fail_response(status);
+        VLOG(1) << "Segment flush task is destructed with failure response"
+                << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
+                << ", flush token status: " << _flush_token->status();
     }
 
     // Run the task if release() is not called which will flush the segment, and respond the brpc
@@ -102,6 +105,9 @@ public:
     void release() {
         bool expect = false;
         _run_or_released.compare_exchange_strong(expect, true);
+        VLOG(1) << "Segment flush task is released"
+                << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
+                << ", flush token status: " << _flush_token->status();
     }
 
 private:
@@ -155,8 +161,9 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
                                  const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
                                  google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    Status st = status();
-    if (!st.ok()) {
+    Status token_st = status();
+    if (!token_st.ok()) {
+        Status st = Status::InternalError("Segment flush token is not ok. The status: " + token_st.to_string());
         st.to_protobuf(response->mutable_status());
         return st;
     }
@@ -181,8 +188,9 @@ void SegmentFlushToken::shutdown() {
     _flush_token->shutdown();
 }
 
-void SegmentFlushToken::wait() {
+Status SegmentFlushToken::wait() {
     _flush_token->wait();
+    return status();
 }
 
 Status SegmentFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {

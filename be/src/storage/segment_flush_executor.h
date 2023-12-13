@@ -63,7 +63,7 @@ public:
 
     void shutdown();
 
-    void wait();
+    Status wait();
 
 private:
     std::unique_ptr<ThreadPoolToken> _flush_token;

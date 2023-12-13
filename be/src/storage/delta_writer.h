@@ -119,6 +119,8 @@ public:
 
     const PUniqueId& load_id() const { return _opt.load_id; }
 
+    int64_t index_id() const { return _opt.index_id; }
+
     int64_t partition_id() const;
 
     int64_t node_id() const { return _opt.node_id; }

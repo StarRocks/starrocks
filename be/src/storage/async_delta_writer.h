@@ -103,6 +103,9 @@ public:
 
     int64_t write_buffer_size() const { return _writer->write_buffer_size(); }
 
+    // Just for testing
+    DeltaWriter* writer() { return _writer.get(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}
