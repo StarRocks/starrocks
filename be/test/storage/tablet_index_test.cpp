@@ -92,7 +92,7 @@ TEST(TabletIndexTest, test_init_from_pb) {
     index_pb.add_col_unique_id(1);
     index_pb.set_index_properties(json_properties);
     TabletIndex index;
-    index.init_from_pb(index_pb);
+    ASSERT_TRUE(index.init_from_pb(index_pb).ok());
 
     ASSERT_EQ(index.index_type(), GIN);
     ASSERT_EQ(index.index_id(), 0);
@@ -106,6 +106,17 @@ TEST(TabletIndexTest, test_init_from_pb) {
     ASSERT_TRUE(index.extra_properties().empty());
     ASSERT_TRUE(index.contains_column(1));
     ASSERT_FALSE(index.contains_column(0));
+
+    index_pb.set_index_properties("{{");
+    TabletIndex index2;
+    ASSERT_FALSE(index2.init_from_pb(index_pb).ok());
+
+    TabletIndexPB index_pb_out;
+    index.to_schema_pb(&index_pb_out);
+
+    ASSERT_EQ(index_pb_out.index_type(), GIN);
+    ASSERT_EQ(index_pb_out.index_id(), 0);
+    ASSERT_EQ(index_pb_out.index_name(), "test_index");
 }
 
 } // namespace starrocks
