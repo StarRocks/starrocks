@@ -236,6 +236,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        return icebergCatalog.tableExists(dbName, tblName);
+    }
+
+    @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 

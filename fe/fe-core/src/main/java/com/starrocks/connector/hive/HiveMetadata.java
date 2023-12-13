@@ -178,6 +178,11 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        return hmsOps.tableExists(dbName, tblName);
+    }
+
+    @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }

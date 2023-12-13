@@ -292,6 +292,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return get(tableCache, HiveTableName.of(dbName, tableName));
     }
 
+    public boolean tableExists(String dbName, String tableName) {
+        return metastore.tableExists(dbName, tableName);
+    }
+
     private Table loadTable(HiveTableName hiveTableName) {
         return metastore.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
     }
