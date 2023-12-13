@@ -235,9 +235,15 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private Exception exception;
         private String properties;
         private String traceLog;
+        private boolean isLogical;
 
         public MVRewriteChecker(String query) {
+            this(query, false);
+        }
+
+        public MVRewriteChecker(String query, boolean isLogical) {
             this.query = query;
+            this.isLogical = isLogical;
         }
 
         public MVRewriteChecker(String mv, String query) {
@@ -270,7 +276,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                if (isLogical) {
+                    this.rewritePlan = getLogicalPlan(query);
+                } else {
+                    this.rewritePlan = getFragmentPlan(query);
+                }
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
@@ -383,6 +393,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
     protected MVRewriteChecker sql(String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(query);
+        return fixture.rewrite();
+    }
+
+    protected MVRewriteChecker sql(String query, boolean isLogical) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query, isLogical);
         return fixture.rewrite();
     }
 
