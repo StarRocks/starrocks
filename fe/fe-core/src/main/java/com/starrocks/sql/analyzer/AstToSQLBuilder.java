@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -127,11 +128,25 @@ public class AstToSQLBuilder {
             return "";
         }
 
+        private void visitVarHint(StringBuilder sqlBuilder, Map<String, String> hints) {
+            if (MapUtils.isNotEmpty(hints)) {
+                sqlBuilder.append("/*+SET_VAR(");
+                sqlBuilder.append(hints.entrySet().stream()
+                        .map(entry -> String.format("%s='%s'", entry.getKey(), entry.getValue()))
+                        .collect(Collectors.joining(",")));
+                sqlBuilder.append(")*/ ");
+            }
+        }
+
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // set_var
+            visitVarHint(sqlBuilder, selectList.getOptHints());
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
@@ -333,5 +348,79 @@ public class AstToSQLBuilder {
                         expr.getColumnName(), expr.getColumnName());
             }
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public String visitInsertStatement(InsertStmt insert, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("INSERT ");
+
+            // set_var
+            visitVarHint(sb, insert.getOptHints());
+
+            if (insert.isOverwrite()) {
+                sb.append("OVERWRITE ");
+            } else {
+                sb.append("INTO ");
+            }
+
+            // target
+            sb.append(insert.getTableName().toSql()).append(" ");
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
+
+            // label
+            if (StringUtils.isNotEmpty(insert.getLabel())) {
+                sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
+            }
+
+            // target column
+            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
+            }
+
+            // source
+            if (insert.getQueryStatement() != null) {
+                sb.append(visit(insert.getQueryStatement()));
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitArrayExpr(ArrayExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append('[');
+            sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
+            sb.append(']');
+            return sb.toString();
+        }
+
+        @Override
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append("{");
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+>>>>>>> 06e77ee567 ([Enhancement] support set_var in multiple query blocks (#36871))
     }
 }

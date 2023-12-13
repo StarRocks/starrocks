@@ -407,6 +407,7 @@ public class ShowCreateMaterializedViewStmtTest {
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("deferred_mv4");
         List<String> createTableStmt = Lists.newArrayList();
+<<<<<<< HEAD
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
@@ -452,6 +453,57 @@ public class ShowCreateMaterializedViewStmtTest {
         String copySql = createTableStmt.get(0).replaceAll(mvName, mvName + "_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+=======
+        GlobalStateMgr.getDdlStmt(mv, createTableStmt, null, null, false, true);
+
+        Assertions.assertTrue(createTableStmt.get(0).contains(refreshClause), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(orderBy), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(property), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(partitionBy), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(distribute), createTableStmt.get(0));
+        Assertions.assertTrue(createTableStmt.get(0).contains(select), createTableStmt.get(0));
+    }
+
+    public static Stream<Arguments> genTestArguments() {
+        List<String> refreshArgumentsList = Lists.newArrayList(
+                "REFRESH MANUAL",
+                "REFRESH DEFERRED MANUAL",
+                "REFRESH ASYNC",
+                "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)",
+                "REFRESH ASYNC START(\"1998-01-01 00:00:00\") EVERY(INTERVAL 1 HOUR)"
+        );
+        List<String> orderByList = Lists.newArrayList("", "ORDER BY (k3)");
+        List<String> propertiesList = Lists.newArrayList(
+                "\"colocate_with\" = \"g1\"",
+                "\"replicated_storage\" = \"true\"",
+                "\"mv_rewrite_staleness_second\" = \"60\""
+        );
+        List<String> partitionList = Lists.newArrayList("",
+                "PARTITION BY (`k3`)",
+                "PARTITION BY (date_trunc('month', `k3`))");
+        List<String> distributeList = Lists.newArrayList(
+                "",
+                "DISTRIBUTED BY HASH(`k3`)",
+                "DISTRIBUTED BY HASH(`k3`) BUCKETS 10");
+        List<String> selectList = Lists.newArrayList(
+                "SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`",
+                "SELECT /*+SET_VAR(query_timeout='1')*/ `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`"
+        );
+
+        // basic combinations
+        StarRocksAssert.TestCaseEnumerator enumerator = new StarRocksAssert.TestCaseEnumerator(Lists.newArrayList(
+                refreshArgumentsList.size(),
+                orderByList.size(),
+                propertiesList.size(),
+                partitionList.size(),
+                distributeList.size(),
+                selectList.size()
+        ));
+        return enumerator.enumerate().map(permutation ->
+                StarRocksAssert.TestCaseEnumerator.ofArguments(permutation,
+                        refreshArgumentsList, orderByList, propertiesList,
+                        partitionList, distributeList, selectList));
+>>>>>>> 06e77ee567 ([Enhancement] support set_var in multiple query blocks (#36871))
     }
 
     @Test(expected = SemanticException.class)
