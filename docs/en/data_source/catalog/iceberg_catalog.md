@@ -19,10 +19,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 - Metastore like Hive metastore, AWS Glue, or Tabular
 
-  > **NOTE**
-  >
-  > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
-  > - If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
+:::note
+
+- If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+- If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
+
+:::
 
 ## Usage notes
 
@@ -71,9 +73,11 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
   - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
 
-> **NOTE**
->
-> If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+:::tip
+
+If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+
+:::
 
 ---
 
@@ -140,9 +144,11 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **NOTE**
->
-> Before querying Iceberg data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::note
+
+Before querying Iceberg data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+
+:::
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
@@ -521,7 +527,29 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
     "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
-    ```      
+    ```
+
+`StorageCredentialParams` for Google GCS:
+
+######  gcp.gcs.service_account_email          
+Default value:  ""                
+Example:  "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" 
+Description:  The email address in the JSON file generated at the creation of the service account. 
+
+######  gcp.gcs.service_account_private_key_id 
+Default value:  ""                
+Example:  "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   
+Description:  The private key ID in the JSON file generated at the creation of the service account. 
+
+######  gcp.gcs.service_account_private_key    
+Default value:  ""                
+Example:  "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+Description:  The private key in the JSON file generated at the creation of the service account. 
+
+###### gcp.gcs.impersonation_service_account
+Default value: ""  
+Example: "hello"  
+Description: The service account that you want to impersonate.
 
 </TabItem>
 
@@ -955,9 +983,11 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::tip
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::
 
 [Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create an Iceberg database in that catalog:
 
@@ -977,13 +1007,17 @@ The `prefix` varies based on the storage system you use:
 `Prefix` value:  `gs`                                                         
 
 ####  Azure Blob Storage                                         
-`Prefix` value:  <ul><li>If your storage account allows access over HTTP, the `prefix` is `wasb`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `wasbs`.</li></ul> 
+`Prefix` value:
+- If your storage account allows access over HTTP, the `prefix` is `wasb`.
+- If your storage account allows access over HTTPS, the `prefix` is `wasbs`.
 
 ####  Azure Data Lake Storage Gen1                               
 `Prefix` value:  `adl`                                                        
 
 ####  Azure Data Lake Storage Gen2                               
-`Prefix` value:  <ul><li>If your storage account allows access over HTTP, the`prefix` is `abfs`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `abfss`.</li></ul> 
+`Prefix` value:
+- If your storage account allows access over HTTP, the`prefix` is `abfs`.
+- If your storage account allows access over HTTPS, the `prefix` is `abfss`.
 
 ####  AWS S3 or other S3-compatible storage (for example, MinIO) 
 `Prefix` value:  `s3`                                                         
@@ -993,10 +1027,6 @@ The `prefix` varies based on the storage system you use:
 ### Drop an Iceberg database
 
 Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
-
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
@@ -1011,10 +1041,6 @@ DROP DATABASE <database_name>;
 ### Create an Iceberg table
 
 Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
-
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
 
@@ -1039,9 +1065,11 @@ The syntax of `column_definition` is as follows:
 col_name col_type [COMMENT 'comment']
 ```
 
-> **NOTICE**
->
-> All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+:::note
+
+All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
+
+:::
 
 ##### partition_desc
 
@@ -1053,9 +1081,11 @@ PARTITION BY (par_col1[, par_col2...])
 
 Currently StarRocks only supports [identity transforms](https://iceberg.apache.org/spec/#partitioning), which means that StarRocks creates a partition for each unique partition value.
 
-> **NOTICE**
->
-> Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
+:::note
+
+Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
+
+:::
 
 ##### PROPERTIES
 
@@ -1064,7 +1094,9 @@ You can specify the table attributes in the `"key" = "value"` format in `PROPERT
 The following table describes a few key properties.
 
 ######  location          
-Description:  The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> 
+Description:  The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
+- If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs.
+- If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.
 
 
 ######  file_format       
@@ -1114,10 +1146,6 @@ Description:  The compression algorithm used for the Iceberg table. The supporte
 
 Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-
 [Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
 
 #### Syntax
@@ -1133,32 +1161,34 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-> **NOTICE**
->
-> Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+:::note
+
+Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+
+:::
 
 #### Parameters
 
 #####  INTO        
-Description:  To append the data of the StarRocks table to the Iceberg table.                                       
+To append the data of the StarRocks table to the Iceberg table.                                       
 
 #####  OVERWRITE   
-Description:  To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       
+To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       
 
 #####  column_name 
-Description:  The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. 
+The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. 
 
 #####  expression  
-Description:  Expression that assigns values to the destination column.                                   
+Expression that assigns values to the destination column.                                   
 
 #####  DEFAULT     
-Description:  Assigns a default value to the destination column.                                         
+Assigns a default value to the destination column.                                         
 
 #####  query       
-Description:  Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. 
+Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. 
 
 #####  PARTITION   
-Description:  The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. 
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. 
 
 #### Examples
 
@@ -1215,10 +1245,6 @@ Description:  The partitions into which you want to load data. You must specify 
 ### Drop an Iceberg table
 
 Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
-
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
 
