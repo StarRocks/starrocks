@@ -38,6 +38,7 @@ import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.Vocabulary;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.misc.IntervalSet;
+import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -102,7 +103,12 @@ public class SqlParser {
         List<StarRocksParser.SingleStatementContext> singleStatementContexts =
                 parser.sqlStatements().singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
-            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+            // collect hint info
+            HintChannelListener listener = new HintChannelListener((CommonTokenStream) parser.getTokenStream());
+            ParseTreeWalker walker = new ParseTreeWalker();
+            walker.walk(listener, singleStatementContexts.get(idx));
+
+            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode(), listener.getContextWithHintMap());
             StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
             if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
                     && !(statement instanceof PrepareStmt)) {
