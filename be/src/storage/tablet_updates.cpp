@@ -1629,11 +1629,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // release or remove index entry when function end
     DeferOp index_defer([&]() {
         index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-            manager->index_cache().remove(index_entry);
-        } else {
-            manager->index_cache().release(index_entry);
-        }
     });
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
