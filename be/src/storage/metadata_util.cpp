@@ -307,7 +307,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
             } else {
                 std::string index_type;
                 EnumToString(TIndexType, index.index_type, index_type);
-                return Status::Cancelled("Not supported index type " + index_type);
+                return Status::Cancelled(strings::Substitute("Not supported index type $0", index_type));
             }
         }
     }

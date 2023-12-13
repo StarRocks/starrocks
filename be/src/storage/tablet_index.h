@@ -51,7 +51,10 @@ public:
     const IndexType index_type() const { return _index_type; }
     const std::vector<int32_t>& col_unique_ids() const { return _col_unique_ids; }
     const bool contains_column(int32_t column_uid) const {
-        return !_col_unique_ids.empty() && _col_unique_ids[0] == column_uid;
+        for (const int32_t& uid : _col_unique_ids) {
+            if (uid == column_uid) return true;
+        }
+        return false;
     }
 
     const std::map<std::string, std::string>& common_properties() const { return _common_properties; }
