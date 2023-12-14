@@ -796,7 +796,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         tbl.setState(OlapTableState.NORMAL);
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     /*

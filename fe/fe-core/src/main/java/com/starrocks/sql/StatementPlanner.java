@@ -177,7 +177,7 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.currentTimeMillis();
+            long planStartTime = System.nanoTime();
             if (!isSchemaValid) {
                 colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
@@ -207,13 +207,12 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.currentTimeMillis();
+                long buildFragmentStartTime = System.nanoTime();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t ->
-                        t.lastSchemaUpdateTime.get() > planStartTime);
+                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());

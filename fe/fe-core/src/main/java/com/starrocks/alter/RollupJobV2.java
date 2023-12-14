@@ -529,7 +529,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         tbl.rebuildFullSchema();
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     /**
