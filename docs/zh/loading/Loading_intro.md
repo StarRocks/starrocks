@@ -119,7 +119,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - 从 Hive 导入数据时，推荐创建 [Hive 外部表](../data_source/External_table.md#hive-外表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
 
-- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
 
 - 从 Oracle、PostgreSQL 等数据源导入数据时，推荐使用 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
 

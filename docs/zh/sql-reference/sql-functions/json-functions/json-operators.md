@@ -7,7 +7,7 @@ displayed_sidebar: "Chinese"
 StarRocks 支持使用 `<`，`<=`，`>`，`>=`，`=`，`!=` 运算符查询 JSON 数据，不支持使用 `IN` 运算符。
 
 > - 运算符两边必须均为 JSON 类型的数据。
-> - 如果运算符一边是 JSON 类型的数据，另一边不是，则运算时会通过隐式类型转换，将不是 JSON 类型的数据转换为 JSON 类型的数据。类型转换规则，请参见 [JSON 类型转换](./json-processing-functions/cast-from-or-to-json.md)。
+> - 如果运算符一边是 JSON 类型的数据，另一边不是，则运算时会通过隐式类型转换，将不是 JSON 类型的数据转换为 JSON 类型的数据。类型转换规则，请参见 [JSON 类型转换](./json-query-and-processing-functions/cast.md)。
 
 ## 运算规则
 
