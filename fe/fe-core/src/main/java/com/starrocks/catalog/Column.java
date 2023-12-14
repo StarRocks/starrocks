@@ -49,6 +49,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -84,7 +85,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     // physicalName is the column name used in the storage engine and will never change.
     // The name saved in the storage engine remains unchanged after the logical column name is changed.
-    // By default, this value is null, which expresses the same as name (logical name).
     // If the column name is changed, the value of name (logical name) will be updated to the new column name
     // and the value of physicalName will be set to the old column name.
     @SerializedName(value = "physicalName")
@@ -130,12 +130,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private Expr generatedColumnExpr;
 
     public Column() {
-        this.name = "";
-        this.type = Type.NULL;
-        this.isAggregationTypeImplicit = false;
-        this.isKey = false;
-        this.stats = new ColumnStats();
-        this.uniqueId = -1;
+        this("", Type.NULL);
     }
 
     public Column(String name, Type dataType) {
@@ -174,7 +169,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.name == null) {
             this.name = "";
         }
-
+        this.physicalName = generatePhysicalColumnName(this.name);
         this.type = type;
         if (this.type == null) {
             this.type = Type.NULL;
@@ -218,6 +213,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
+        this.physicalName = column.physicalName;
     }
 
     public ColumnDef toColumnDef() {
@@ -248,6 +244,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public void setName(String newName) {
         this.name = newName;
+        this.physicalName = generatePhysicalColumnName(newName);
     }
 
     public String getName() {
@@ -769,6 +766,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             generatedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
                     SqlModeHelper.MODE_DEFAULT);
         }
+        // Versions before 3.3.0 does not have physical column name
+        if (physicalName == null) {
+            physicalName = name;
+        }
     }
 
     @Override
@@ -779,17 +780,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public String getPhysicalName() {
-        return physicalName != null ? physicalName : name;
-    }
-
-    public String getDirectPhysicalName() {
-        return physicalName != null ? physicalName : "";
+        return physicalName;
     }
 
     public void renameColumn(String newName) {
-        if (physicalName == null) {
-            physicalName = name;
-        }
         this.name = newName;
     }
 
@@ -813,5 +807,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (bfColumns != null && bfColumns.contains(this.name)) {
             tColumn.setIs_bloom_filter_column(true);
         }
+    }
+
+    private static String generatePhysicalColumnName(String columnName) {
+        if (columnName == null || columnName.isEmpty()) {
+            return columnName;
+        }
+        return removeNamePrefix(columnName) + '@' + UUIDUtil.genUUID().toString();
     }
 }

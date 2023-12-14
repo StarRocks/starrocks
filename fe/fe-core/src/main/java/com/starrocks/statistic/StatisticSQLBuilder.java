@@ -18,6 +18,9 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -105,8 +108,21 @@ public class StatisticSQLBuilder {
         }
 
         if (!columnNames.isEmpty()) {
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Table table = database.getTable(tableId);
+            if (table == null) {
+                // Statistical information query is an unlocked operation,
+                // so it is possible for the table to be deleted while the code is running
+                return null;
+            }
+            List<String> physicalColumns = Lists.newArrayList();
+            for (String colName : columnNames) {
+                Column column = table.getColumn(colName);
+                Preconditions.checkState(column != null);
+                physicalColumns.add(column.getPhysicalName());
+            }
             predicateList.add("column_name in (" + Joiner.on(", ")
-                    .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
+                    .join(physicalColumns.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
         }
 
         context.put("predicate", Joiner.on(" and ").join(predicateList));
@@ -125,7 +141,7 @@ public class StatisticSQLBuilder {
             } else {
                 context.put("type", "string");
             }
-            context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getName() + "\"");
+            context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getPhysicalName() + "\"");
             querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
         }
 

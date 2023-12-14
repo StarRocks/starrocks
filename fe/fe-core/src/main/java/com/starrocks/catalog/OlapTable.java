@@ -667,7 +667,7 @@ public class OlapTable extends Table {
     public void renameColumnNamePrefix(long idxId) {
         List<Column> columns = indexIdToMeta.get(idxId).getSchema();
         for (Column column : columns) {
-            column.setName(Column.removeNamePrefix(column.getName()));
+            column.renameColumn(Column.removeNamePrefix(column.getName()));
         }
     }
 

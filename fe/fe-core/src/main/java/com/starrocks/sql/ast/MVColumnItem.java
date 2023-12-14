@@ -136,7 +136,6 @@ public class MVColumnItem {
         } else {
             result = new Column(baseColumn);
         }
-        result.setName(name);
         result.setIsKey(isKey);
         result.setAggregationType(aggregationType, isAggregationTypeImplicit);
         return result;
