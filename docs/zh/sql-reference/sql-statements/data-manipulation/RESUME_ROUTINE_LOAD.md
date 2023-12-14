@@ -18,7 +18,7 @@ RESUME ROUTINE LOAD FOR [db_name.]<job_name>
 
 | 参数名称 | 是否必填 | 说明                        |
 | -------- | -------- | --------------------------- |
-| db_name  |          | 导入的数据库名称。          |
+| db_name  |          | Routine Load 导入作业所属数据库名称。         |
 | job_name | ✅        | Routine Load 导入作业名称。 |
 
 ## 示例

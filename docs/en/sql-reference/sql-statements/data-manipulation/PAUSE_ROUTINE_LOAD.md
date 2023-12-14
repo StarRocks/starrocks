@@ -15,7 +15,7 @@ This statement pauses a Routine Load job but does not terminate this job. You ca
 ## Syntax
 
 ```SQL
-PAUSE ROUTINE LOAD FOR <db_name>.<job_name>;
+PAUSE ROUTINE LOAD FOR [db_name].<job_name>;
 ```
 
 ## Parameters

@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 导入作业停止且无法恢复。因此请谨慎执行该语句。
 
-如果仅仅需要暂停导入作业，则可以执行 PAUSE ROUTINE LOAD。
+如果仅仅需要暂停导入作业，则可以执行 [PAUSE ROUTINE LOAD](./PAUSE_ROUTINE_LOAD.md)。
 
 :::
 
@@ -26,7 +26,7 @@ STOP ROUTINE LOAD FOR [db_name.]<job_name>
 
 | 参数名称 | 是否必填 | 说明                        |
 | -------- | -------- | --------------------------- |
-| db_name  |          | 导入的数据库名称。          |
+| db_name  |          | Routine Load 导入作业所属数据库名称。         |
 | job_name | ✅        | Routine Load 导入作业名称。 |
 
 ## 示例
