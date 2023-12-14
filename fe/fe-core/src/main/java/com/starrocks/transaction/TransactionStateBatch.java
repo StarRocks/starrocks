@@ -41,6 +41,7 @@ public class TransactionStateBatch implements Writable {
 
     public TransactionStateBatch() {
     }
+
     public TransactionStateBatch(List<TransactionState> transactionStates) {
         this.transactionStates = transactionStates;
     }
@@ -82,7 +83,7 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
-    // all transctionState in TransactionStateBatch have the same dbId
+    // all transactionState in TransactionStateBatch have the same dbId
     public long getDbId() {
         if (transactionStates.size() != 0) {
             return transactionStates.get(0).getDbId();
@@ -94,9 +95,12 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
     }
 
+    // all transactionState in batch have the same table and return the tableId
     public long getTableId() {
-        if (transactionStates.size() != 0) {
-            return transactionStates.get(0).getTableIdList().get(0);
+        if (!transactionStates.isEmpty()) {
+            List<Long> tableIdList = transactionStates.get(0).getTableIdList();
+            assert tableIdList.size() == 1;
+            return tableIdList.get(0);
         }
         return -1;
     }
