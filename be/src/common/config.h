@@ -1130,7 +1130,7 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
-// simdjson_iterate_batch sets the maximum size of single json document. Default 100MB.
+// simdjson_iterate_batch sets the maximum size of single json document. Default 1GB.
 CONF_mInt64(simdjson_iterate_batch, "1073741824");
 
 } // namespace starrocks::config
