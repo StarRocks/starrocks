@@ -172,6 +172,9 @@ public:
 
     ~PulsarDataConsumer() override {
         VLOG(3) << "deconstruct pulsar client";
+        if (_p_reader.isConnected()) {
+            _p_reader.close();
+        }
         if (_p_client) {
             _p_client->close();
             delete _p_client;
@@ -179,18 +182,15 @@ public:
         }
     }
 
-    enum InitialPosition { LATEST, EARLIEST };
-
     Status init(StreamLoadContext* ctx) override;
-    Status assign_partition(const std::string& partition, StreamLoadContext* ctx, int64_t initial_position = -1);
+    Status assign_partition(const std::string& partition, StreamLoadContext* ctx,
+                            pulsar::MessageId begin_position=pulsar::MessageId::latest());
     // TODO(cmy): currently do not implement single consumer start method, using group_consume
     Status consume(StreamLoadContext* ctx) override { return Status::OK(); }
     Status cancel(StreamLoadContext* ctx) override;
     // reassign partition topics
     Status reset() override;
     bool match(StreamLoadContext* ctx) override;
-    // acknowledge pulsar message
-    Status acknowledge_cumulative(pulsar::MessageId& message_id);
 
     // start the consumer and put msgs to queue
     Status group_consume(TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms);
@@ -198,10 +198,8 @@ public:
     // get the partitions of the topic
     Status get_topic_partition(std::vector<std::string>* partitions);
 
-    // get backlog num of partition
-    Status get_partition_backlog(int64_t* backlog);
-
-    const std::string& get_partition();
+    // get last message id
+    Status get_partition_last_message_id(pulsar::MessageId& messageId);
 
 private:
     std::string _service_url;
@@ -210,8 +208,10 @@ private:
     std::unordered_map<std::string, std::string> _custom_properties;
 
     pulsar::Client* _p_client = nullptr;
-    pulsar::Consumer _p_consumer;
+    pulsar::Reader _p_reader;
     std::shared_ptr<PulsarConsumerPipe> _p_consumer_pipe;
+    bool _p_start_from_real_id;
+    pulsar::MessageId _p_start_message_id;
 };
 
 } // end namespace starrocks

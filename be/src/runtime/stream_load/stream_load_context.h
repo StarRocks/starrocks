@@ -104,8 +104,11 @@ public:
               subscription(t_info.subscription),
               partitions(t_info.partitions),
               properties(t_info.properties) {
-        if (t_info.__isset.initial_positions) {
-            initial_positions = t_info.initial_positions;
+        if (t_info.__isset.begin_positions) {
+            for (auto const& [key, val] : t_info.begin_positions) {
+                auto message_id = pulsar::MessageId(val.partition, val.ledgerId, val.entryId, val.batchIndex);
+                begin_positions.insert(std::pair<std::string, pulsar::MessageId>(key, message_id));
+            }
         }
     }
 
@@ -119,7 +122,7 @@ public:
     std::string topic;
     std::string subscription;
     std::vector<std::string> partitions;
-    std::map<std::string, int64_t> initial_positions;
+    std::map<std::string, pulsar::MessageId> begin_positions;
 
     // partition -> acknowledge offset, inclusive.
     std::map<std::string, pulsar::MessageId> ack_offset;

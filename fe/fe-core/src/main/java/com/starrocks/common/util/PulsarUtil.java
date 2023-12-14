@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableMap;
@@ -21,10 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
-import com.starrocks.proto.PPulsarBacklogBatchProxyRequest;
-import com.starrocks.proto.PPulsarBacklogProxyRequest;
-import com.starrocks.proto.PPulsarBacklogProxyResult;
 import com.starrocks.proto.PPulsarLoadInfo;
+import com.starrocks.proto.PPulsarMessageId;
+import com.starrocks.proto.PPulsarMessageIdBatchProxyRequest;
+import com.starrocks.proto.PPulsarMessageIdProxyRequest;
+import com.starrocks.proto.PPulsarMessageIdProxyResult;
 import com.starrocks.proto.PPulsarMetaProxyRequest;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
@@ -34,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPulsarMessageId;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -56,15 +57,10 @@ public class PulsarUtil {
         return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties);
     }
 
-    public static Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
-                                                    ImmutableMap<String, String> properties,
-                                                    List<String> partitions) throws UserException {
-        return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions);
-    }
-
-    public static List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
-            throws UserException {
-        return PROXY_API.getBatchBacklogNums(requests);
+    public static Map<String, TPulsarMessageId> getLatestMessageIds(String serviceUrl, String topic, String subscription,
+                                                                    ImmutableMap<String, String> properties,
+                                                                    List<String> partitions) throws UserException {
+        return PROXY_API.getMessageIds(serviceUrl, topic, subscription, properties, partitions);
     }
 
     public static PPulsarLoadInfo genPPulsarLoadInfo(String serviceUrl, String topic, String subscription,
@@ -99,40 +95,44 @@ public class PulsarUtil {
             return result.pulsarMetaResult.partitions;
         }
 
-        public Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
+        public Map<String, TPulsarMessageId> getMessageIds(String serviceUrl, String topic, String subscription,
                                                 ImmutableMap<String, String> properties, List<String> partitions)
                 throws UserException {
             // create request
-            PPulsarBacklogProxyRequest backlogRequest = new PPulsarBacklogProxyRequest();
-            backlogRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, properties);
-            backlogRequest.partitions = partitions;
+            PPulsarMessageIdProxyRequest messageIdRequest = new PPulsarMessageIdProxyRequest();
+            messageIdRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, properties);
+            messageIdRequest.partitions = partitions;
             PPulsarProxyRequest request = new PPulsarProxyRequest();
-            request.pulsarBacklogRequest = backlogRequest;
+            request.pulsarMessageIdRequest = messageIdRequest;
 
             // send request
             PPulsarProxyResult result = sendProxyRequest(request);
 
             // assembly result
-            Map<String, Long> partitionBacklogs = Maps.newHashMapWithExpectedSize(partitions.size());
-            List<Long> backlogs = result.pulsarBacklogResult.backlogNums;
-            for (int i = 0; i < result.pulsarBacklogResult.partitions.size(); i++) {
-                partitionBacklogs.put(result.pulsarBacklogResult.partitions.get(i), backlogs.get(i));
+            Map<String, TPulsarMessageId> partitionMessageIds = Maps.newHashMapWithExpectedSize(partitions.size());
+            List<PPulsarMessageId> messageIds = result.pulsarMessageIdResult.messageIds;
+            for (int i = 0; i < result.pulsarMessageIdResult.partitions.size(); i++) {
+                TPulsarMessageId pulsarMessageId = new TPulsarMessageId();
+                pulsarMessageId.batchIndex = messageIds.get(i).batchIndex;
+                pulsarMessageId.entryId = messageIds.get(i).entryId;
+                pulsarMessageId.ledgerId = messageIds.get(i).ledgerId;
+                pulsarMessageId.partition = messageIds.get(i).partition;
+                partitionMessageIds.put(result.pulsarMessageIdResult.partitions.get(i), pulsarMessageId);
             }
-            return partitionBacklogs;
+            return partitionMessageIds;
         }
 
-        public List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
+        public List<PPulsarMessageIdProxyResult> getBatchMessageIds(List<PPulsarMessageIdProxyRequest> requests)
                 throws UserException {
             // create request
             PPulsarProxyRequest pProxyRequest = new PPulsarProxyRequest();
-            PPulsarBacklogBatchProxyRequest pPulsarBacklogBatchProxyRequest = new PPulsarBacklogBatchProxyRequest();
-            pPulsarBacklogBatchProxyRequest.requests = requests;
-            pProxyRequest.pulsarBacklogBatchRequest = pPulsarBacklogBatchProxyRequest;
+            PPulsarMessageIdBatchProxyRequest pPulsarMessageIdBatchProxyRequest = new PPulsarMessageIdBatchProxyRequest();
+            pPulsarMessageIdBatchProxyRequest.requests = requests;
+            pProxyRequest.pulsarMessageIdBatchRequest = pPulsarMessageIdBatchProxyRequest;
 
             // send request
             PPulsarProxyResult result = sendProxyRequest(pProxyRequest);
-
-            return result.pulsarBacklogBatchResult.results;
+            return result.pulsarMessageIdBatchResult.results;
         }
 
         private PPulsarProxyResult sendProxyRequest(PPulsarProxyRequest request) throws UserException {
@@ -185,5 +185,46 @@ public class PulsarUtil {
             }
         }
     }
-}
 
+    public static boolean messageIdLt(TPulsarMessageId left, TPulsarMessageId right) {
+        if (left.ledgerId < right.ledgerId) {
+            return true;
+        } else if (left.ledgerId > right.ledgerId) {
+            return false;
+        }
+
+        if (left.entryId < right.entryId) {
+            return true;
+        } else if (left.entryId > right.entryId) {
+            return false;
+        }
+
+        if (left.batchIndex < right.batchIndex) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean messageIdEq(TPulsarMessageId left, TPulsarMessageId right) {
+        return left.ledgerId == right.ledgerId && left.entryId == right.entryId &&
+                left.batchIndex == right.batchIndex && left.partition == right.partition;
+    }
+    public static boolean messageIdGt(TPulsarMessageId left, TPulsarMessageId right) {
+        return !messageIdEq(left, right) && !messageIdLt(left, right);
+    }
+
+    public static boolean isMessageValid(TPulsarMessageId messageId) {
+        if (messageId.ledgerId == -1 && messageId.entryId == -1) {
+            return false;
+        }
+        return true;
+    }
+
+    public static String formatMessageId(TPulsarMessageId messageId) {
+        // MessageId format: ledgerId:entryID:partition-index:batch-index
+        return String.format("(%d,%d,%d,%d)",
+            messageId.getLedgerId(), messageId.getEntryId(),
+            messageId.getPartition(), messageId.getBatchIndex());
+    }
+}

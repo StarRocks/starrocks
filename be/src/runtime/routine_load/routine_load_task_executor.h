@@ -78,8 +78,8 @@ public:
 
     Status get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions);
 
-    Status get_pulsar_partition_backlog(const PPulsarBacklogProxyRequest& request, std::vector<int64_t>* backlog_num);
-
+    Status get_pulsar_partition_message_id(const PPulsarMessageIdProxyRequest& request,
+                                           std::vector<PPulsarMessageId>* message_ids);
 private:
     // execute the task
     void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);

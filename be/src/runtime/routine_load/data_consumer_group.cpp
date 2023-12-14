@@ -259,14 +259,9 @@ Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) 
     // assign partition to consumers
     int consumer_size = _consumers.size();
     for (int i = 0; i < consumer_size; ++i) {
-        auto iter = ctx->pulsar_info->initial_positions.find(ctx->pulsar_info->partitions[i]);
-        if (iter != ctx->pulsar_info->initial_positions.end()) {
-            RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
-                                    ->assign_partition(ctx->pulsar_info->partitions[i], ctx, iter->second));
-        } else {
-            RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
-                                    ->assign_partition(ctx->pulsar_info->partitions[i], ctx));
-        }
+        auto iter = ctx->pulsar_info->begin_positions.find(ctx->pulsar_info->partitions[i]);
+        RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
+                ->assign_partition(ctx->pulsar_info->partitions[i], ctx, iter->second));
     }
 
     return Status::OK();
@@ -381,7 +376,6 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 RETURN_IF_ERROR(pulsar_pipe->finish());
                 ctx->pulsar_info->ack_offset = std::move(ack_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
-                get_backlog_nums(ctx);
                 return Status::OK();
             }
         }
@@ -432,21 +426,6 @@ void PulsarDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>
                                              const ConsumeFinishCallback& cb) {
     Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->group_consume(queue, max_running_time_ms);
     cb(st);
-}
-
-void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
-    for (auto& consumer : _consumers) {
-        // get backlog num
-        int64_t backlog_num;
-        Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog_num);
-        if (!st.ok()) {
-            LOG(WARNING) << st.get_error_msg();
-        } else {
-            ctx->pulsar_info
-                    ->partition_backlog[std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition()] =
-                    backlog_num;
-        }
-    }
 }
 
 } // namespace starrocks
