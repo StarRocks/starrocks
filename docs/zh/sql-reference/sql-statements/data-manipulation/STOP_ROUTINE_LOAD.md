@@ -6,12 +6,33 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-停止 routine load 任务，停止了的导入任务会在间隔一段时间后自动删除。
+停止导入 Routine Load 作业。
+
+::: warning
+
+导入作业停止且无法恢复。因此请谨慎执行该语句。
+
+如果仅仅需要暂停导入作业，则可以执行 PAUSE ROUTINE LOAD。
+
+:::
+
+## 语法
+
+```SQL
+STOP ROUTINE LOAD FOR [db_name.]<job_name>
+```
+
+## 参数说明
+
+| 参数名称 | 是否必填 | 说明                        |
+| -------- | -------- | --------------------------- |
+| db_name  |          | 导入的数据库名称。          |
+| job_name | ✅        | Routine Load 导入作业名称。 |
 
 ## 示例
 
-1. 停止名称为 test1 的例行导入作业。
+停止 `example_db` 数据库中名称为 `example_tbl1_ordertest1` 的 Routine Load 导入作业。
 
-```sql
-STOP ROUTINE LOAD FOR test1;
+```SQL
+STOP ROUTINE LOAD FOR example_db.example_tbl1_ordertest1;
 ```
