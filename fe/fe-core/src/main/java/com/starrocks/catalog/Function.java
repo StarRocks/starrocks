@@ -52,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiFunction;
 
 import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
@@ -393,6 +394,29 @@ public class Function implements Writable {
         }
     }
 
+    private boolean compareNamedArguments(Function other, int start, BiFunction<Type, Type, Boolean> cmp) {
+        if (!this.hasNamedArg() || other.argNames.length != this.argNames.length ||
+                other.hasVarArgs || this.hasVarArgs) {
+            return false;
+        }
+        boolean[] mask = new boolean[other.argTypes.length];
+        for (int j = start; j < other.argTypes.length; ++j) {
+            boolean found = false;
+            for (int i = start; i < this.argTypes.length; ++i) {
+                if (!mask[i] && this.argNames[i].equals(other.argNames[j])) {
+                    if (cmp.apply(other.argTypes[j], argTypes[i])) {
+                        return false;
+                    }
+                    found = true;
+                    mask[i] = true;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
     /**
      * Returns true if 'this' is a supertype of 'other'. Each argument in other must
      * be implicitly castable to the matching argument in this.
@@ -415,27 +439,8 @@ public class Function implements Writable {
         }
 
         if (other.hasNamedArg()) {
-            if (!this.hasNamedArg() || other.argNames.length != this.argNames.length ||
-                    other.hasVarArgs || this.hasVarArgs) {
-                return false;
-            }
-            boolean[] mask = new boolean[other.argTypes.length];
-            for (int j = startArgIndex; j < other.argTypes.length; ++j) {
-                boolean found = false;
-                for (int i = startArgIndex; i < this.argTypes.length; ++i) {
-                    if (!mask[i] && this.argNames[i].equals(other.argNames[j])) {
-                        if (!other.argTypes[j].matchesType(this.argTypes[i]) &&
-                                !Type.isImplicitlyCastable(other.argTypes[j], this.argTypes[i], true)) {
-                            return false;
-                        }
-                        found = true;
-                        mask[i] = true;
-                    }
-                }
-                if (!found) {
-                    return false;
-                }
-            }
+            return compareNamedArguments(other, startArgIndex,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
         } else {
             for (int i = startArgIndex; i < this.argTypes.length; ++i) {
                 // Normally, if type A matches type B, then A and B must be implicitly castable,
@@ -474,27 +479,8 @@ public class Function implements Writable {
             return false;
         }
         if (other.hasNamedArg()) {
-            if (!this.hasNamedArg() || other.argNames.length != this.argNames.length ||
-                    other.hasVarArgs || this.hasVarArgs) {
-                return false;
-            }
-            boolean[] mask = new boolean[other.argTypes.length];
-            for (int j = 0; j < other.argTypes.length; ++j) {
-                boolean found = false;
-                for (int i = 0; i < this.argTypes.length; ++i) {
-                    if (!mask[i] && this.argNames[i].equals(other.argNames[j])) {
-                        if (!other.argTypes[j].matchesType(this.argTypes[i]) &&
-                                !Type.canCastTo(other.argTypes[j], argTypes[i])) {
-                            return false;
-                        }
-                        found = true;
-                        mask[i] = true;
-                    }
-                }
-                if (!found) {
-                    return false;
-                }
-            }
+            return compareNamedArguments(other, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
         } else {
             for (int i = 0; i < this.argTypes.length; ++i) {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
@@ -530,25 +516,8 @@ public class Function implements Writable {
             return false;
         }
         if (o.hasNamedArg()) {
-            if (!this.hasNamedArg() || o.argNames.length != this.argNames.length) {
-                return false;
-            }
-            boolean[] mask = new boolean[o.argTypes.length];
-            for (int j = 0; j < o.argTypes.length; ++j) {
-                boolean found = false;
-                for (int i = 0; i < this.argTypes.length; ++i) {
-                    if (!mask[i] && this.argNames[i].equals(o.argNames[j])) {
-                        if (!o.argTypes[j].matchesType(this.argTypes[i])) {
-                            return false;
-                        }
-                        found = true;
-                        mask[i] = true;
-                    }
-                }
-                if (!found) {
-                    return false;
-                }
-            }
+            return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m));
         } else {
             for (int i = 0; i < this.argTypes.length; ++i) {
                 if (!o.argTypes[i].matchesType(this.argTypes[i])) {
@@ -566,27 +535,8 @@ public class Function implements Writable {
         int minArgs = Math.min(o.argTypes.length, this.argTypes.length);
         // The first fully specified args must be identical.
         if (o.hasNamedArg()) {
-            if (!this.hasNamedArg() || o.argNames.length != this.argNames.length ||
-                    o.hasVarArgs || this.hasVarArgs) {
-                return false;
-            }
-            boolean[] mask = new boolean[o.argTypes.length];
-            for (int j = 0; j < o.argTypes.length; ++j) {
-                boolean found = false;
-                for (int i = 0; i < this.argTypes.length; ++i) {
-                    if (!mask[i] && this.argNames[i].equals(o.argNames[j])) {
-                        if (!o.argTypes[j].isNull() && !this.argTypes[i].isNull() &&
-                                !o.argTypes[j].matchesType(this.argTypes[i])) {
-                            return false;
-                        }
-                        found = true;
-                        mask[i] = true;
-                    }
-                }
-                if (!found) {
-                    return false;
-                }
-            }
+            return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.isNull() && !m.isNull() && !ot.matchesType(m));
         } else {
             for (int i = 0; i < minArgs; ++i) {
                 if (o.argTypes[i].isNull() || this.argTypes[i].isNull()) {
@@ -657,7 +607,6 @@ public class Function implements Writable {
                 return false;
             }
         }
-        return true;
     }
 
     public TFunction toThrift() {
