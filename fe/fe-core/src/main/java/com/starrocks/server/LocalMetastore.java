@@ -3512,13 +3512,16 @@ public class LocalMetastore implements ConnectorMetadata {
             // warehouse
             if (materializedView.isCloudNativeMaterializedView()) {
                 try {
+                    // use warehouse for current session（if u exec "set warehouse aaa" before you create mv1, then use aaa）
+                    long warehouseId = ConnectContext.get().getCurrentWarehouseId();
                     if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
                         String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
                         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
-                        materializedView.setWarehouseId(warehouse.getId());
-
-                        LOG.debug("set warehouse {} in materializedView", warehouseName);
+                        warehouseId = warehouse.getId();
                     }
+
+                    materializedView.setWarehouseId(warehouseId);
+                    LOG.debug("set warehouse {} in materializedView", warehouseId);
                 } catch (WarehouseUnavailableException e) {
                     throw new DdlException(e.getMessage());
                 }
