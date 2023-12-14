@@ -10,7 +10,7 @@ displayed_sidebar: "English"
 
 `DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
 
-onvert the unix timestamp to the corresponding time format. The format returned should be specified by string_format.
+Convert the unix timestamp to the corresponding time format. The format returned should be specified by string_format.
 
 The default format is yyyy-MM-dd HH:mm:ss. It also supports the formats in date_format.
 
