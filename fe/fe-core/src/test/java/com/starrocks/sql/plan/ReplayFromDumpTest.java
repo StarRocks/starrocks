@@ -492,7 +492,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  95:Project\n" +
                 "  |  output columns:\n" +
-                "  |  548 <-> 1\n" +
+                "  |  549 <-> 1\n" +
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
@@ -551,10 +551,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window"), null,
                         TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: gross, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [2: trans_date, DATE, false], [1: country, VARCHAR, true]\n" +
+                "  |  group by: [1: country, VARCHAR, true], [2: trans_date, DATE, false]\n" +
                 "  |  cardinality: 49070\n"));
     }
 
@@ -795,4 +795,24 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
                 "     table: lineorder_2, rollup: lineorder_2"));
     }
+
+    @Test
+    public void testPushDistinctAggDownWindow() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window2"),
+                        null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:ANALYTIC\n" +
+                "  |  functions: [, sum(5: sum), ]\n" +
+                "  |  partition by: 1: TIME\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 1> 1: TIME ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: NUM)\n" +
+                "  |  group by: 1: TIME"));
+    }
+
 }

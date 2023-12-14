@@ -305,8 +305,8 @@ public class PlanFragmentBuilder {
         if (!enableComputeNode(execPlan)
                 && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
-                && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1) {
+                && ((execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
+                .reduce(Integer::sum).orElse(2) <= 1) || execPlan.getPhysicalPlan().getShortCircuit())) {
             inputFragment.setOutputExprs(outputExprs);
             return;
         }
@@ -534,6 +534,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
+            inputFragment.setShortCircuit(optExpr.getShortCircuit());
             return inputFragment;
         }
 
@@ -825,7 +826,13 @@ public class PlanFragmentBuilder {
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             fragment.setQueryGlobalDicts(node.getGlobalDicts());
+            fragment.setShortCircuit(optExpr.getShortCircuit());
             context.getFragments().add(fragment);
+
+            // set row store literal
+            if (optExpr.getShortCircuit()) {
+                scanNode.computePointScanRangeLocations();
+            }
             return fragment;
         }
 
@@ -1176,8 +1183,6 @@ public class PlanFragmentBuilder {
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
-                // set slot for equality delete file
-                icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);

@@ -3,7 +3,7 @@ displayed_sidebar: "English"
 ---
 
 
-# STDDEV,STDDEV_POP,std
+# stddev,stddev_pop,std
 
 ## Description
 

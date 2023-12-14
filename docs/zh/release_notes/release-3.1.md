@@ -4,6 +4,65 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.5
+
+发布日期：2023 年 11 月 28 日
+
+### 新增特性
+
+- 存算分离模式下 CN 节点支持数据导出。[#34018](https://github.com/StarRocks/starrocks/pull/34018)
+
+### 功能优化
+
+- [`INFORMATION_SCHEMA.COLUMNS`](../reference/information_schema/columns.md) 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- 支持查询 [Hive](../data_source/catalog/hive_catalog.md) 中使用 LZO 算法压缩的 Parquet、ORC、和 CSV 格式的文件。[#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
+- 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- 当创建物化视图涉及的表、视图及视图内涉及的表、物化视图发生 Swap、Drop 或者 Schema Change 操作后，物化视图可以进行自动刷新。[#32829](https://github.com/StarRocks/starrocks/pull/32829)
+- 优化 Bitmap 相关的某些操作的性能，主要包括：
+  - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果提交的 Broker Load 作业包含过滤条件，在数据导入过程中，某些情况下会出现 BE Crash。[#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- SHOW GRANTS 时报 `unknown error`。[#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- 如果使用表达式作为自动分区列，导入数据时可能会报错 "Error: The row create partition failed since Runtime error: failed to analyse partition value"。[#33513](https://github.com/StarRocks/starrocks/pull/33513)
+- 查询时报错 "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction"。[#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- 存算一体模式下，单独查询 Iceberg 或者 Hive 外表容易出现 BE crash。[#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- 存算一体模式下，导入数据时同时自动创建多个分区，偶尔会出现数据写错分区的情况。[#34731](https://github.com/StarRocks/starrocks/pull/34731)
+- 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- 查询时报错 "Exception: java.lang.IllegalStateException: null"。[#33535](https://github.com/StarRocks/starrocks/pull/33535)
+- 执行 `show proc '/current_queries';` 时，如果某个查询刚开始执行， 可能会引起 BE Crash。[#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。[#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- 打开 `enable_load_profile` 后，Stream Load 会很容易失败。[#34544](https://github.com/StarRocks/starrocks/pull/34544)
+- 使用列模式进行主键模型表部分列更新后，会有 Tablet 出现副本之间数据不一致。[#34555](https://github.com/StarRocks/starrocks/pull/34555)
+- 使用 ALTER TABLE 增加 `partition_live_number` 属性没有生效。[#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- FE 启动失败，报错 "failed to load journal type 118"。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- 副本操作重放失败可能会引起 FE Crash。[#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
+### 兼容性变更
+
+#### 配置参数
+
+- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- FE 配置项 [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/BE_configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
+
+#### 系统变量
+
+- 新增会话变量 `cbo_decimal_cast_string_strict`，用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x 及之后版本的处理逻辑，执行严格转换（即，按 Scale 截断补 `0`）；当取值为 `false` 时，保留 v2.5.x 之前版本的处理逻辑（即，按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增会话变量 `cbo_eq_base_type`，用于指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增会话变量 `big_query_profile_second_threshold`，当会话变量 [`enable_profile`](../reference/System_variable.md#enable_profile) 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。[#33825](https://github.com/StarRocks/starrocks/pull/33825)
+
 ## 3.1.4
 
 发布日期：2023 年 11 月 2 日
@@ -52,10 +111,6 @@ displayed_sidebar: "Chinese"
 
 发布日期：2023 年 9 月 25 日
 
-### 行为变更
-
-- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 的分隔符必须使用 `SEPARATOR` 关键字声明。
-
 ### 新增特性
 
 - 存算分离下的主键模型支持基于本地磁盘上的持久化索引，使用方式与存算一体一致。
@@ -88,6 +143,11 @@ displayed_sidebar: "Chinese"
 - Tablet 元数据做 Checkpoint 与 Restore 操作并行时， 会导致某些副本丢失不可查。[#30603](https://github.com/StarRocks/starrocks/pull/30603)
 - 如果表字段为 `NOT NULL` 但没有设置默认值，使用 CloudCanal 导入时会报错“Unsupported dataFormat value is : \N”。[#30799](https://github.com/StarRocks/starrocks/pull/30799)
 
+### 行为变更
+
+- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 的分隔符必须使用 `SEPARATOR` 关键字声明。
+- 会话变量 [`group_concat_max_len`](../reference/System_variable.md#group_concat_max_len)（用于控制聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 可以返回的字符串最大长度）的默认值由原来的没有限制变更为默认 `1024`。
+
 ## 3.1.2
 
 发布日期：2023 年 8 月 25 日
@@ -115,7 +175,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- [存算分离架构](../deployment/deploy_shared_data.md)下，支持如下特性：
+- [存算分离架构](../deployment/shared_data/s3.md)下，支持如下特性：
   - 数据存储在 Azure Blob Storage 上。
   - List 分区。
 - 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
@@ -145,7 +205,7 @@ displayed_sidebar: "Chinese"
 - 新增支持主键模型（Primary Key）表，暂不支持持久化索引。
 - 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/expression_partitioning.md)，提高了分区创建的易用性和灵活性。
-- 支持[存储卷（Storage Volume）抽象](../deployment/deploy_shared_data.md#创建默认存储卷)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
+- 支持[存储卷（Storage Volume）抽象](../deployment/shared_data/s3.md)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
 
 #### 数据湖分析
 
@@ -278,7 +338,7 @@ displayed_sidebar: "Chinese"
 - FE 配置项 `quorom_publish_wait_time_ms` 更名为 `quorum_publish_wait_time_ms`，`async_load_task_pool_size` 更名为 `max_broker_load_job_concurrency`。
 - CN 配置项 `thrift_port` 更名为 `be_port`。
 - 废弃 BE 配置项 `routine_load_thread_pool_size`，单 BE 节点上 Routine Load 线程池大小完全由 FE 配置项 `max_routine_load_task_num_per_be` 控制。
-- 废弃 BE 配置项 `txn_commit_rpc_timeout_ms` 和系统变量 `tx_visible_wait_timeout`，通过 `time_out` 设置事务超时时间。
+- 废弃 BE 配置项 `txn_commit_rpc_timeout_ms` 和系统变量 `tx_visible_wait_timeout`。
 - 废弃 FE 配置项 `max_broker_concurrency`、`load_parallel_instance_num`。
 - 废弃 FE 配置项 `max_routine_load_job_num`，通过 `max_routine_load_task_num_per_be` 来动态判断每个 BE 节点上支持的 Routine Load 任务最大数，并且在任务失败时给出建议。
 - Routine Load 作业新增两个属性 `task_consume_second` 和 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。如果作业中没有设置这两个属性，则采用 FE 配置项 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 的配置。

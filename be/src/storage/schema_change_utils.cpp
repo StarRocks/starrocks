@@ -244,8 +244,14 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
         }
         if (_where_expr) {
             auto filter = _execute_where_expr(base_chunk);
+            // If no filtered rows are left, return directly
+            if (SIMD::count_nonzero(filter) == 0) {
+                base_chunk->set_num_rows(0);
+                return true;
+            }
             base_chunk->filter(filter);
         }
+        DCHECK(!base_chunk->is_empty());
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {

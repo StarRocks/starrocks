@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -409,14 +410,14 @@ public class Pipe implements GsonPostProcessable {
     }
 
     private void changeState(State state, boolean persist) {
-        try {
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        try (CloseableLock l = pm.writeLock()) {
             lock.writeLock().lock();
             if (this.state.equals(state)) {
                 return;
             }
             this.state = state;
             if (persist) {
-                PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
                 pm.updatePipe(this);
             }
         } catch (Throwable e) {
@@ -427,9 +428,9 @@ public class Pipe implements GsonPostProcessable {
     }
 
     private void persistPipe() {
-        try {
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        try (CloseableLock l = pm.writeLock()) {
             lock.writeLock().lock();
-            PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
             pm.updatePipe(this);
         } catch (Throwable e) {
             LOG.error("persist pipe {} state failed: {}", this, e.getMessage(), e);

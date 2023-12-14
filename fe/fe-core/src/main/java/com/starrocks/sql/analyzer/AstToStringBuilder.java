@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -1260,6 +1261,18 @@ public class AstToStringBuilder {
                         append(new PrintableMap<>(properties, "=", true, false))
                         .append(")");
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreateCatalogStatement(CreateCatalogStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL CATALOG '");
+            sb.append(stmt.getCatalogName()).append("' ");
+            if (stmt.getComment() != null) {
+                sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
+            }
+            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
             return sb.toString();
         }
     }

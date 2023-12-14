@@ -6,77 +6,106 @@ displayed_sidebar: "English"
 
 ## Description
 
-Converts a date into a string according to the format that is compatible with JodaTime’s DateTimeFormat pattern format. Currently it supports strings with a maximum of 128 bytes. If the length of the returned value exceeds 128, NULL is returned.
+Converts the specified date into a string in the specified Joda DateTimeFormat pattern format.
 
 ## Syntax
 
 ```Haskell
-VARCHAR JODATIME_FORMAT(DATETIME date, VARCHAR format)
+VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 
 ## Parameters
 
-- The `date` parameter must be a valid date or date expression.
+- `date`: the date you want to convert. It must be a valid date or date expression.
+- `format`: the format of the date and time to be returned. For information about the available formats, see [Joda-Time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html).
 
-- `format` specifies the output format of the date or time.
+## Return value
 
-The available formats could refer to [joda-time format](https://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html)
+Currently, the return value is a string that contains a maximum of 128 bytes in length. If the length of the string converted from the specified date exceeds 128 bytes, `NULL` is returned.
 
 ## Examples
 
-```Plain Text
-mysql> select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd');
+Example 1: Convert the date `2020-06-25 15:58:51` into a string in `yyyy-MM-dd` format.
+
+```SQL
+MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd');
 +------------------------------------------------------+
 | jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd') |
 +------------------------------------------------------+
 | 2020-06-25                                           |
 +------------------------------------------------------+
+```
 
-mysql> select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd HH:mm:ss');
+Example 2: Convert the date `2020-06-25 15:58:51` into a string in `yyyy-MM-dd HH:mm:ss` format.
+
+```SQL
+MySQL > select jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd HH:mm:ss');
 +---------------------------------------------------------------+
 | jodatime_format('2020-06-25 15:58:51', 'yyyy-MM-dd HH:mm:ss') |
 +---------------------------------------------------------------+
 | 2020-06-25 15:58:51                                           |
 +---------------------------------------------------------------+
+```
 
-mysql> select jodatime_format('2020-06-25 15:58:51', 'MM dd ee EE');
+Example 3: Convert the date `2020-06-25 15:58:51` into a string in `MM dd ee EE` format.
+
+```SQL
+MySQL > select jodatime_format('2020-06-25 15:58:51', 'MM dd ee EE');
 +-------------------------------------------------------+
 | jodatime_format('2020-06-25 15:58:51', 'MM dd ee EE') |
 +-------------------------------------------------------+
 | 06 25 04 Thu                                          |
 +-------------------------------------------------------+
-1 row in set (0.02 sec)
+```
 
-mysql> select jodatime_format('2020-06-25 15:58:51', 'MMM dd ee EEE');
+Example 4: Convert the date `2020-06-25 15:58:51` into a string in `MMM dd ee EEE` format.
+
+```SQL
+MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMM dd ee EEE');
 +---------------------------------------------------------+
 | jodatime_format('2020-06-25 15:58:51', 'MMM dd ee EEE') |
 +---------------------------------------------------------+
 | Jun 25 04 Thu                                           |
 +---------------------------------------------------------+
-1 row in set (0.01 sec)
+```
 
-mysql> select jodatime_format('2020-06-25 15:58:51', 'MMMM dd ee EEEE');
+Example 5: Convert the date `2020-06-25 15:58:51` into a string in `MMMM dd ee EEEE` format.
+
+```SQL
+MySQL > select jodatime_format('2020-06-25 15:58:51', 'MMMM dd ee EEEE');
 +-----------------------------------------------------------+
 | jodatime_format('2020-06-25 15:58:51', 'MMMM dd ee EEEE') |
 +-----------------------------------------------------------+
 | June 25 04 Thursday                                       |
 +-----------------------------------------------------------+
+```
 
-mysql> select jodatime_format('2023-06-25 12:00:00', 'KK:mm:ss a');
+Example 6: Convert the date `2023-06-25 12:00:00` into a string in `KK:mm:ss a` format.
+
+```SQL
+MySQL > select jodatime_format('2023-06-25 12:00:00', 'KK:mm:ss a');
 +------------------------------------------------------+
 | jodatime_format('2023-06-25 12:00:00', 'KK:mm:ss a') |
 +------------------------------------------------------+
 | 00:00:00 PM                                          |
 +------------------------------------------------------+
+```
 
-mysql> select jodatime_format('2023-06-25 12:00:00', 'hh:mm:ss a');
+Example 7: Convert the date `2023-06-25 12:00:00` into a string in `hh:mm:ss a` format.
+
+```SQL
+MySQL > select jodatime_format('2023-06-25 12:00:00', 'hh:mm:ss a');
 +------------------------------------------------------+
 | jodatime_format('2023-06-25 12:00:00', 'hh:mm:ss a') |
 +------------------------------------------------------+
 | 12:00:00 PM                                          |
 +------------------------------------------------------+
+```
 
-mysql> select jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd ''starrocks''');
+Example 8: Convert the date `2023-06-25 00:00:00` into a string in `yyyyMMdd ''starrocks''` format.
+
+```SQL
+MySQL > select jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd ''starrocks''');
 +------------------------------------------------------------------+
 | jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd \'starrocks\'') |
 +------------------------------------------------------------------+
@@ -84,6 +113,6 @@ mysql> select jodatime_format('2023-06-25 00:00:00', 'yyyyMMdd ''starrocks''');
 +------------------------------------------------------------------+
 ```
 
-## keyword
+## Keywords
 
-JODATIME_FORMAT,JODA,FORMAT
+JODATIME_FORMAT, JODA, FORMAT

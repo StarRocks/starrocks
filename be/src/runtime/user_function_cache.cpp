@@ -34,6 +34,7 @@
 
 #include "runtime/user_function_cache.h"
 
+#include <any>
 #include <atomic>
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <memory>
@@ -90,11 +91,7 @@ struct UserFunctionCacheEntry {
     // function type
     int function_type;
 
-    SpinLock map_lock;
-
-    // from symbol_name to function pointer
-    // used for native function
-    std::unordered_map<std::string, void*> fptr_map;
+    std::any cache_handle;
 };
 
 UserFunctionCacheEntry::~UserFunctionCacheEntry() {
@@ -135,9 +132,18 @@ Status UserFunctionCache::init(const std::string& lib_dir) {
 Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const std::string& checksum,
                                       std::string* libpath) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry));
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry,
+                                     [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }));
     *libpath = entry->lib_file;
     return Status::OK();
+}
+
+StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
+        int64_t fid, const std::string& url, const std::string& checksum,
+        const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
+    UserFunctionCacheEntryPtr entry;
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry, loader));
+    return entry->cache_handle;
 }
 
 // Now we only support JAVA_UDF
@@ -194,9 +200,9 @@ Status UserFunctionCache::_load_cached_lib() {
     }
     return Status::OK();
 }
-
+template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           UserFunctionCacheEntryPtr* output_entry) {
+                                           UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
     std::string shuffix = "tmp";
     int type = get_function_type(url);
     if (type == UDF_TYPE_JAVA) {
@@ -214,7 +220,7 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             _entry_map.emplace(fid, entry);
         }
     }
-    auto st = _load_cache_entry(url, entry);
+    auto st = _load_cache_entry(url, entry, loader);
     if (!st.ok()) {
         LOG(WARNING) << "fail to load cache entry, fid=" << fid;
         // if we load a cache entry failed, I think we should delete this entry cache
@@ -236,7 +242,8 @@ void UserFunctionCache::_destroy_cache_entry(UserFunctionCacheEntryPtr& entry) {
     entry->should_delete_library.store(true);
 }
 
-Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry) {
+template <class Loader>
+Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader) {
     if (entry->is_loaded.load()) {
         return Status::OK();
     }
@@ -246,7 +253,7 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
         RETURN_IF_ERROR(_download_lib(url, entry));
     }
 
-    RETURN_IF_ERROR(_load_cache_entry_internal(entry));
+    RETURN_IF_ERROR(_load_cache_entry_internal(entry, loader));
     return Status::OK();
 }
 
@@ -267,9 +274,11 @@ Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCach
 }
 
 // entry's lock must be held
-Status UserFunctionCache::_load_cache_entry_internal(UserFunctionCacheEntryPtr& entry) {
+template <class Loader>
+Status UserFunctionCache::_load_cache_entry_internal(UserFunctionCacheEntryPtr& entry, Loader&& loader) {
     if (entry->function_type == UDF_TYPE_JAVA) {
         // nothing to do
+        ASSIGN_OR_RETURN(entry->cache_handle, loader(entry->lib_file));
     } else {
         return Status::InternalError(fmt::format("unsupport udf type: {}", entry->function_type));
     }

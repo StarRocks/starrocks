@@ -46,6 +46,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -75,6 +76,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
@@ -114,7 +116,7 @@ public class OlapScanNode extends ScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
+    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     // The column names applied dict optimization
     // used for explain
@@ -166,6 +168,8 @@ public class OlapScanNode extends ScanNode {
     private Map<Long, List<Long>> partitionToScanTabletMap;
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
 
@@ -783,6 +787,10 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("MaterializedView: true\n");
         }
 
+        if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
+            output.append(prefix).append("Short Circuit Scan: true\n");
+        }
+
         return output.toString();
     }
 
@@ -1263,5 +1271,39 @@ public class OlapScanNode extends ScanNode {
     @Override
     protected boolean supportTopNRuntimeFilter() {
         return true;
+    }
+
+    public void computePointScanRangeLocations() {
+        List<String> keyColumns = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
+
+        if (points.isPresent()) {
+            rowStoreKeyLiterals = points.get();
+            return;
+        }
+    }
+
+    public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
+        return rowStoreKeyLiterals;
+    }
+
+    // clear scan node， reduce body size
+    public void clearScanNodeForThriftBuild() {
+        sortColumn = null;
+        this.selectedIndexId = -1;
+        selectedPartitionNames.clear();
+        selectedPartitionVersions.clear();
+        result.clear();
+        scanBackendIds.clear();
+        appliedDictStringColumns.clear();
+        unUsedOutputStringColumns.clear();
+        bucketSeq2locations.clear();
+        prunedPartitionPredicates.clear();
+        selectedPartitionIds.clear();
+        hintsReplicaIds.clear();
+        tabletId2BucketSeq.clear();
+        bucketExprs.clear();
+        bucketColumns.clear();
+        rowStoreKeyLiterals = Lists.newArrayList();
     }
 }

@@ -306,7 +306,6 @@ public class TableFunctionTable extends Table {
 
         PGetFileSchemaResult result;
         try {
-            // TODO(fw): more format support.
             PGetFileSchemaRequest request = getGetFileSchemaRequest(fileStatuses);
             Future<PGetFileSchemaResult> future = BackendServiceClient.getInstance().getFileSchema(address, request);
             result = future.get();
@@ -314,7 +313,7 @@ public class TableFunctionTable extends Table {
             Thread.currentThread().interrupt();
             throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
-            throw new DdlException("failed to get file schema", e);
+            throw new DdlException("failed to get file schema: " + e.getMessage());
         }
 
         if (TStatusCode.findByValue(result.status.statusCode) != TStatusCode.OK) {

@@ -249,6 +249,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/tablet_index_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
@@ -393,6 +394,7 @@ set(EXEC_FILES
         ./storage/compaction_parallelization_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

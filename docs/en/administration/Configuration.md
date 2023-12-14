@@ -120,6 +120,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
 
+##### enable_statistics_collect_profile
+
+- **Unit**: N/A
+- **Default**: false
+- **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -157,6 +163,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Default: TRUE
 - Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
+
+##### http_slow_request_threshold_ms
+
+- Unit: ms
+- Default: 5000
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: 2.5.15，3.1.5
 
 ##### max_partitions_in_one_batch
 
@@ -298,6 +311,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+
+##### statistic_auto_collect_small_table_rows
+
+- Unit: -
+- Default: 10000000
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
 
 ##### enable_local_replica_selection
 
@@ -668,6 +688,105 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: `15 * 60 * 100`
 - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
 
+#### Shared-data specific
+
+##### lake_compaction_score_selector_min_score
+
+- **Default**: 10.0
+- **Description**: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- **Introduced in**: v3.1.0
+
+The Compaction Score indicates whether a partition needs Compaction and is scored based on the number of files in the partition. Excessive number of files can impact query performance, so the system periodically performs Compaction to merge small files and reduce the file count. You can check the Compaction Score for a partition based on the `MaxCS` column in the result returned by running [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md).
+
+##### lake_compaction_max_tasks
+
+- **Default**: -1
+- **Description**: The maximum number of concurrent Compaction tasks allowed.
+- **Introduced in**: v3.1.0
+
+The system calculates the number of Compaction tasks based on the number of tablets in a partition. For example, if a partition has 10 tablets, performing one Compaction on that partition creates 10 Compaction tasks. If the number of concurrently executing Compaction tasks exceeds this threshold, the system will not create new Compaction tasks. Setting this item to `0` disables Compaction, and setting it to `-1` allows the system to automatically calculate this value based on an adaptive strategy.
+
+##### lake_compaction_history_size
+
+- **Default**: 12
+- **Description**: The number of recent successful Compaction task records to keep in the memory of the Leader FE node. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- **Default**: 12
+- **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_publish_version_max_threads
+
+- **Default**: 512
+- **Description**: The maximum number of threads for Version Publish tasks.
+- **Introduced in**: v3.2.0
+
+##### lake_autovacuum_parallel_partitions
+
+- **Default**: 8
+- **Description**: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVaccum is the Garbage Collection after Compactions.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- **Unit**: Seconds
+- **Default**: 180
+- **Description**: The minimum interval between AutoVacuum operations on the same partition.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- **Unit**: Minutes
+- **Default**: 5
+- **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- **Unit**: Hours
+- **Default**: 12
+- **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
+- **Introduced in**: v3.1.0
+
+##### lake_enable_ingest_slowdown
+
+- **Default**: false
+- **Description**: Whether to enable Data Ingestion Slowdown. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down.
+- **Introduced in**: v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- **Default**: 100
+- **Description**: The Compaction Score threshold that triggers Data Ingestion Slowdown. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- **Introduced in**: v3.2.0
+
+> **Note**
+>
+> When `lake_ingest_slowdown_threshold` is less than `lake_compaction_score_selector_min_score`, the effective threshold will be `lake_compaction_score_selector_min_score`.
+
+##### lake_ingest_slowdown_ratio
+
+- **Default**: 0.1
+- **Description**: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
+- **Introduced in**: v3.2.0
+
+Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
+
+> **Note**
+>
+> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
+> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
+> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
+
+##### lake_compaction_score_upper_bound
+
+- **Default**: 0
+- **Description**: The upper limit of the Compaction Score for a partition. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- **Introduced in**: v3.2.0
+
 #### Other FE dynamic parameters
 
 ##### plugin_enable
@@ -763,7 +882,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - **Default**: FALSE
-- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+- **Description**: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feaure, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+
+##### enable_backup_materialized_view
+
+- **Default**: TRUE
+- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+
+##### enable_colocate_mv_index
+
+- **Default**: TRUE
+- **Description**: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views. This item is supported from v3.2.0 onwards.
 
 ### Configure FE static parameters
 
@@ -1542,11 +1671,6 @@ BE dynamic parameters are as follows.
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
-#### txn_commit_rpc_timeout_ms
-
-- **Default:** 60,000 ms
-- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
-
 #### max_consumer_num_per_group
 
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
@@ -1652,6 +1776,11 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### update_compaction_ratio_threshold
+
+- **Default:** 0.5
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
 ### Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
@@ -1710,7 +1839,7 @@ BE static parameters are as follows.
 
 - **Default**: 9070
 - **Unit**: N/A
-- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+- **Description**: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
 
 #### heartbeat_service_thread_count
 
@@ -2049,35 +2178,35 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Number of threads that are used for flushing MemTable in each store.
 
-#### block_cache_enable
+#### datacache_enable
 
 - **Default**: false
 - **Unit**: N/A
 - **Description**: Whether to enable Data Cache. TRUE indicates Data Cache is enabled, and FALSE indicates Data Cache is disabled.
 
-#### block_cache_disk_path
+#### datacache_disk_path
 
 - **Default**: N/A
 - **Unit**: N/A
-- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named cachelib_data to cache blocks.
+- **Description**: The paths of disks. We recommend that the number of paths you configure for this parameter is the same as the number of disks on your BE machine. Multiple paths need to be separated with semicolons (;).
 
-#### block_cache_meta_path
+#### datacache_meta_path
 
 - **Default**: N/A
 - **Unit**: N/A
 - **Description**: The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the $STARROCKS_HOME path.
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- **Default**: 2147483648
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
+- **Default**: 10%
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached in memory. You can set it as a percentage (for example, `10%`) or a physical limit (for example, `10G`, `21474836480`). The default value is `10%`. We recommend that you set the value of this parameter to at least 10 GB.
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
 - **Default**: 0
-- **Unit**: Bytes
-- **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
+- **Unit**: N/A
+- **Description**: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you configure two disk paths for the `datacache_disk_path` parameter and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data. Unit: bytes.
 
 #### jdbc_connection_pool_size
 
@@ -2115,6 +2244,12 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
 
+#### lake_service_max_concurrency
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
 | be_service_threads | 64 | N/A | |
@@ -2122,11 +2257,11 @@ BE static parameters are as follows.
 | bitmap_max_filter_items | 30 | N/A | |
 | bitmap_max_filter_ratio | 1000 | N/A | |
 | bitmap_serialize_version | 1 | N/A | |
-| block_cache_block_size | 1048576 | N/A | |
-| block_cache_disk_path |  | N/A | |
-| block_cache_disk_size | 21474836480 | N/A | |
-| block_cache_enable | 0 | N/A | |
-| block_cache_mem_size | 2147483648 | N/A | |
+| datacache_block_size | 1048576 | N/A | |
+| datacache_disk_path |  | N/A | |
+| datacache_disk_size | 21474836480 | N/A | |
+| datacache_enable | 0 | N/A | |
+| datacache_mem_size | 2147483648 | N/A | |
 | broker_write_timeout_seconds | 30 | N/A | |
 | brpc_socket_max_unwritten_bytes | 1073741824 | N/A | |
 | cardinality_of_inject | 10 | N/A | |

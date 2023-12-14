@@ -1,0 +1,149 @@
+-- name: test_years_diff
+select years_diff('2020-01-01 00:00:00', '2019-01-01 00:00:00');
+-- result:
+1
+-- !result
+select years_diff('2020-01-01 00:00:00', '2019-01-01 00:00:00.000001');
+-- result:
+0
+-- !result
+select years_diff('2020-01-01 00:00:00.000001', '2019-01-01 00:00:00.000001');
+-- result:
+1
+-- !result
+select years_diff('2020-01-01 00:00:00.000001', '2019-01-01 00:00:00.00001');
+-- result:
+0
+-- !result
+select years_diff('2019-01-01 00:00:00', '2020-01-01 00:00:00');
+-- result:
+-1
+-- !result
+select years_diff('2019-01-01 00:00:00.000001', '2020-01-01 00:00:00');
+-- result:
+0
+-- !result
+select years_diff('2019-01-01 00:00:00.000001', '2020-01-01 00:00:00.000001');
+-- result:
+-1
+-- !result
+select years_diff('2019-01-01 00:00:00.00001', '2020-01-01 00:00:00.000001');
+-- result:
+0
+-- !result
+-- name: test_months_diff
+select months_diff('2020-01-01 00:00:00', '2019-01-01 00:00:00');
+-- result:
+12
+-- !result
+select months_diff('2020-01-01 00:00:00', '2019-01-01 00:00:00.000001');
+-- result:
+11
+-- !result
+select months_diff('2020-01-01 00:00:00.000001', '2019-01-01 00:00:00.000001');
+-- result:
+12
+-- !result
+select months_diff('2020-01-01 00:00:00.000001', '2019-01-01 00:00:00.00001');
+-- result:
+11
+-- !result
+select months_diff('2019-01-01 00:00:00', '2020-01-01 00:00:00');
+-- result:
+-12
+-- !result
+select months_diff('2019-01-01 00:00:00.000001', '2020-01-01 00:00:00');
+-- result:
+-11
+-- !result
+select months_diff('2019-01-01 00:00:00.000001', '2020-01-01 00:00:00.000001');
+-- result:
+-12
+-- !result
+select months_diff('2019-01-01 00:00:00.00001', '2020-01-01 00:00:00.000001');
+-- result:
+-11
+-- !result
+-- name: test_weeks_diff
+select weeks_diff('2020-01-08 00:00:00', '2020-01-01 00:00:00');
+-- result:
+1
+-- !result
+select weeks_diff('2020-01-08 00:00:00', '2020-01-01 00:00:00.000001');
+-- result:
+0
+-- !result
+select weeks_diff('2020-01-08 00:00:00.000001', '2020-01-01 00:00:00.000001');
+-- result:
+1
+-- !result
+select weeks_diff('2020-01-08 00:00:00.000001', '2020-01-01 00:00:00.000002');
+-- result:
+0
+-- !result
+select weeks_diff('2020-01-01 00:00:00', '2020-01-08 00:00:00');
+-- result:
+-1
+-- !result
+select weeks_diff('2020-01-01 00:00:00.000001', '2020-01-08 00:00:00');
+-- result:
+0
+-- !result
+select weeks_diff('2020-01-01 00:00:00.000001', '2020-01-08 00:00:00.000001');
+-- result:
+-1
+-- !result
+select weeks_diff('2020-01-01 00:00:00.000002', '2020-01-08 00:00:00.000001');
+-- result:
+0
+-- !result
+-- name: test_hours_diff
+select hours_diff('2020-01-01 01:00:00', '2020-01-01 00:00:00');
+-- result:
+1
+-- !result
+select hours_diff('2020-01-01 01:00:00', '2020-01-01 00:00:00.01');
+-- result:
+0
+-- !result
+select hours_diff('2020-01-01 01:00:00.01', '2020-01-01 00:00:00.01');
+-- result:
+1
+-- !result
+select hours_diff('2020-01-01 00:00:00', '2020-01-01 01:00:00');
+-- result:
+-1
+-- !result
+select hours_diff('2020-01-01 00:00:00.01', '2020-01-01 01:00:00');
+-- result:
+0
+-- !result
+select hours_diff('2020-01-01 00:00:00.01', '2020-01-01 01:00:00.01');
+-- result:
+-1
+-- !result
+-- name: test_seconds_diff
+select seconds_diff('2020-01-01 01:00:00', '2020-01-01 00:00:00');
+-- result:
+3600
+-- !result
+select seconds_diff('2020-01-01 01:00:00', '2020-01-01 00:00:00.01');
+-- result:
+3599
+-- !result
+select seconds_diff('2020-01-01 01:00:00.01', '2020-01-01 00:00:00.01');
+-- result:
+3600
+-- !result
+select seconds_diff('2020-01-01 00:00:00', '2020-01-01 01:00:00');
+-- result:
+-3600
+-- !result
+select seconds_diff('2020-01-01 00:00:00.01', '2020-01-01 01:00:00');
+-- result:
+-3599
+-- !result
+select seconds_diff('2020-01-01 00:00:00.01', '2020-01-01 01:00:00.01');
+-- result:
+-3600
+-- !result

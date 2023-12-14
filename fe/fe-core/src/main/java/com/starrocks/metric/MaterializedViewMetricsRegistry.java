@@ -21,8 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -71,40 +69,34 @@ public class MaterializedViewMetricsRegistry {
             if (null == db) {
                 continue;
             }
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                for (MaterializedView mv : db.getMaterializedViews()) {
-                    MaterializedViewMetricsEntity mvEntity =
-                            MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                MaterializedViewMetricsEntity mvEntity =
+                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
 
-                    for (Metric m : mvEntity.getMetrics()) {
-                        // minify metrics if needed
-                        if (minifyMetrics) {
-                            if (null == m.getValue()) {
-                                continue;
-                            }
-                            // GAUGE metrics is a bit heavy, skip it when in mini mode.
-                            if (Metric.MetricType.GAUGE == m.type) {
-                                continue;
-                            }
-                            if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
-                                continue;
-                            }
+                for (Metric m : mvEntity.getMetrics()) {
+                    // minify metrics if needed
+                    if (minifyMetrics) {
+                        if (null == m.getValue()) {
+                            continue;
                         }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("mv_name", mv.getName()))
-                                .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
-                        visitor.visit(m);
+                        // GAUGE metrics is a bit heavy, skip it when in mini mode.
+                        if (Metric.MetricType.GAUGE == m.type) {
+                            continue;
+                        }
+                        if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
+                            continue;
+                        }
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("mv_name", mv.getName()))
+                            .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
+                    visitor.visit(m);
                 }
+            }
 
-                for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                        .metricRegistry.getHistograms().entrySet()) {
-                    visitor.visitHistogram(e.getKey(), e.getValue());
-                }
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
+            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                    .metricRegistry.getHistograms().entrySet()) {
+                visitor.visitHistogram(e.getKey(), e.getValue());
             }
         }
     }

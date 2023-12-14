@@ -406,7 +406,7 @@ generatedColumnDesc
     ;
 
 indexDesc
-    : INDEX indexName=identifier identifierList indexType? comment?
+    : INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 engineDesc
@@ -492,7 +492,7 @@ alterTableStatement
 
 createIndexStatement
     : CREATE INDEX indexName=identifier
-        ON qualifiedName identifierList indexType?
+        ON qualifiedName identifierList (indexType propertyList?)?
         comment?
     ;
 
@@ -501,7 +501,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING BITMAP
+    : USING (BITMAP | GIN)
     ;
 
 showTableStatement
@@ -928,7 +928,7 @@ cleanTabletSchedQClause
 // ---------Alter table clause---------
 
 createIndexClause
-    : ADD INDEX indexName=identifier identifierList indexType? comment?
+    : ADD INDEX indexName=identifier identifierList (indexType propertyList?)? comment?
     ;
 
 dropIndexClause
@@ -1033,7 +1033,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
+    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -2056,6 +2056,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
+    | '[' identifier '|' primaryExpression literalExpressionList']'
     ;
 
 setVarHint
@@ -2410,6 +2411,10 @@ stringList
     : '(' string (',' string)* ')'
     ;
 
+literalExpressionList
+    : '(' literalExpression (',' literalExpression)* ')'
+    ;
+
 rangePartitionDesc
     : singleRangePartition
     | multiRangePartition
@@ -2530,7 +2535,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
 unitBoundary
@@ -2656,7 +2661,7 @@ number
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | ARRAY_AGG
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT

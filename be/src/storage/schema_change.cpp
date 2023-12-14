@@ -701,6 +701,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (const auto& column : request.columns) {
             base_tablet_schema->append_column(TabletColumn(column));
         }
+        base_tablet_schema->generate_sort_key_idxes();
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 

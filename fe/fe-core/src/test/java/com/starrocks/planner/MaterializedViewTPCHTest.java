@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -24,9 +25,9 @@ import org.junit.Test;
 
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
@@ -76,7 +77,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        runFileUnitTest("materialized-view/tpch/q7");
+        runFileUnitTestWithNormalizedResult("materialized-view/tpch/q7");
     }
 
     @Test

@@ -443,7 +443,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("Generated Column only support olap table");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
@@ -520,7 +520,8 @@ public class CreateTableAnalyzer {
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                        indexDef.getComment()));
+                        indexDef.getComment(), indexDef.getProperties()));
+
                 distinct.add(indexDef.getIndexName());
                 distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
             }

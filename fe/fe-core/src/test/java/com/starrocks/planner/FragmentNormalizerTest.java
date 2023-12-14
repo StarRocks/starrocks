@@ -17,21 +17,28 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
-
-import org.junit.Assert;
-import org.junit.Test;
 
 public class FragmentNormalizerTest {
 
@@ -122,5 +129,46 @@ public class FragmentNormalizerTest {
         LiteralExpr upperSucc =
                 new LargeIntLiteral(BigInteger.ONE.shiftLeft(127).subtract(BigInteger.valueOf(1)).toString());
         testHelper(partitionColumn, lower, lowerSucc, upper, upperSucc);
+    }
+
+    @Test
+    public void testNondetermisticTimeFunction() {
+        FragmentNormalizer fragmentNormalizer = new FragmentNormalizer(null, null);
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        for (String funcName : FunctionSet.nonDeterministicTimeFunctions) {
+            String sql = String.format("select %s()", funcName);
+            StatementBase statementBase;
+            try {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
+            Assert.assertTrue(expr instanceof FunctionCallExpr);
+            Assert.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+        }
+
+        for (String funcName : FunctionSet.nonDeterministicTimeFunctions) {
+            String sql = String.format("select %s('2022-12-01')", funcName);
+            StatementBase statementBase;
+            try {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            Expr expr = selectRelation.getSelectList().getItems().get(0).getExpr();
+            Assert.assertTrue(expr instanceof FunctionCallExpr);
+            if (funcName.equals(FunctionSet.NOW)) {
+                Assert.assertTrue(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+            } else {
+                Assert.assertFalse(fragmentNormalizer.hasNonDeterministicFunctions(expr));
+            }
+        }
     }
 }

@@ -92,6 +92,7 @@ public enum RuleType {
     TF_PRUNE_CTE_CONSUME_COLUMNS,
     TF_PRUNE_GROUP_BY_KEYS,
     TF_PRUNE_SUBFIELD,
+    TF_SUBFILED_NOCOPY,
 
     TF_SCALAR_OPERATORS_REUSE,
     TF_PRUNE_EMPTY_WINDOW,
@@ -170,6 +171,7 @@ public enum RuleType {
     TF_PRUNE_EMPTY_DIRECT,
 
     TF_DERIVE_RANGE_JOIN_PREDICATE,
+    TF_SKEW_JOIN_OPTIMIZE_RULE,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,

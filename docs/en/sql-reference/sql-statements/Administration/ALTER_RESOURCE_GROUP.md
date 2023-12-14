@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Alters the configuration of a resource group.
 
+:::tip
+
+This operation requires the ALTER privilege on the target resource group. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```SQL

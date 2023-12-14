@@ -6,7 +6,13 @@ displayed_sidebar: "English"
 
 ## Description
 
-Configures the properties of the specified database. (Administrator only)
+Configures the properties of the specified database.
+
+:::tip
+
+This operation requires the ALTER privilege on the target database. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
 
 1. Set database data quota in B/K/KB/M/MB/G/GB/T/TB/P/PB unit.
 

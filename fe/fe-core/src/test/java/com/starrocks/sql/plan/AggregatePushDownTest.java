@@ -77,10 +77,10 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [2: order_date, DATE, false], [1: region, VARCHAR, true]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +
@@ -169,5 +169,53 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testPruneColsAfterPushdownAgg_1() throws Exception {
+        String sql = "select L_PARTKEY from lineitem_partition where L_SHIPDATE >= '1992-01-01' and L_SHIPDATE < '1993-01-01'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/7");
+    }
+
+    @Test
+    public void testPruneColsAfterPushdownAgg_2() throws Exception {
+        String sql = "select max(L_ORDERKEY), sum(2), L_PARTKEY from lineitem_partition " +
+                "join t0 on L_PARTKEY = v1 " +
+                "where L_SHIPDATE >= '1992-01-01' and L_SHIPDATE < '1993-01-01' group by L_PARTKEY";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  <slot 26> : 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/7",
+                "7:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 23: cast = 18: v1\n" +
+                        "  |  \n" +
+                        "  |----6:EXCHANGE\n" +
+                        "  |    \n" +
+                        "  4:Project\n" +
+                        "  |  <slot 2> : 2: L_PARTKEY\n" +
+                        "  |  <slot 23> : CAST(2: L_PARTKEY AS BIGINT)\n" +
+                        "  |  <slot 24> : 24: max\n" +
+                        "  |  <slot 25> : 25: sum\n" +
+                        "  |  \n" +
+                        "  3:AGGREGATE (update finalize)\n" +
+                        "  |  output: sum(26: expr), max(1: L_ORDERKEY)\n" +
+                        "  |  group by: 2: L_PARTKEY\n" +
+                        "  |  \n" +
+                        "  2:EXCHANGE");
     }
 }

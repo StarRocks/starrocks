@@ -57,6 +57,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -412,7 +413,10 @@ public class UtFrameUtils {
 
     private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
                                    GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.setThreadLocalInfo();
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
@@ -451,6 +455,28 @@ public class UtFrameUtils {
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            try {
+                Tracers.register(connectContext);
+                Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                Tracers.close();
+            }
         }
     }
 

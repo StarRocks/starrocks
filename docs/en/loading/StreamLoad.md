@@ -11,8 +11,6 @@ StarRocks provides two methods of loading data from a local file system:
 - Synchronous loading using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 - Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 
-<InsertPrivNote />
-
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
@@ -25,9 +23,15 @@ For CSV data, take note of the following points:
 
 Stream Load and Broker Load both support data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
+## Before you begin
+
+### Check privileges
+
+<InsertPrivNote />
+
 ## Loading from a local file system via Stream Load
 
-Stream Load runs in synchronous loading mode based on HTTP PUT. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
+Stream Load is an HTTP PUT-based synchronous loading method. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
 > **NOTICE**
 >
@@ -109,7 +113,6 @@ Run the following command to load the data of `example1.csv` into `table1`:
 curl --location-trusted -u <username>:<password> -H "label:123" \
     -H "Expect:100-continue" \
     -H "column_separator:," \
-    -H "Expect:100-continue" \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
@@ -243,7 +246,7 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/Configuration.md#configure-be-dynamic-parameters).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/BE_configuration.md#configure-be-dynamic-parameters).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
@@ -259,7 +262,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::
 
-- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/Configuration.md#configure-fe-dynamic-parameters).
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/FE_configuration.md#configure-fe-dynamic-parameters).
   
   If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
 

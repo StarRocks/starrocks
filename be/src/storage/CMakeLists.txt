@@ -60,6 +60,7 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -207,4 +208,5 @@ add_library(Storage STATIC
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
     lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp)
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp)

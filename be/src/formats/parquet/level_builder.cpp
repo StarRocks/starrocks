@@ -109,7 +109,12 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
-        _write_varchar_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        _write_byte_array_column_chunk<TYPE_VARCHAR>(ctx, type_desc, node, col, write_leaf_callback);
+        break;
+    }
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
+        _write_byte_array_column_chunk<TYPE_VARBINARY>(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
     case TYPE_ARRAY: {
@@ -293,10 +298,11 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
     });
 }
 
-void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                               const CallbackFunction& write_leaf_callback) {
-    const auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(col.get()));
+template <LogicalType lt>
+void LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                  const CallbackFunction& write_leaf_callback) {
+    const auto* data_col = down_cast<const RunTimeColumnType<lt>*>(ColumnHelper::get_data_column(col.get()));
     const auto* null_col = get_raw_null_column(col);
     auto& vo = data_col->get_offset();
     auto& vb = data_col->get_bytes();
