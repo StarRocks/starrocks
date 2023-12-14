@@ -309,11 +309,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
+import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -321,6 +323,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -2202,6 +2205,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TCreatePartitionResult result;
         try {
+            if (partitionRequestNum.incrementAndGet() >= Config.thrift_server_max_worker_threads / 4) {
+                result = new TCreatePartitionResult();
+                TStatus errorStatus = new TStatus(SERVICE_UNAVAILABLE);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("Too many create partition requests, please try again later txn_id=%d",
+                        request.getTxn_id())));
+                result.setStatus(errorStatus);
+                return result;
+            }
+
             result = createPartitionProcess(request);
         } catch (Throwable t) {
             LOG.warn(t);
@@ -2210,6 +2223,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
                     request.getTxn_id(), t.getMessage())));
             result.setStatus(errorStatus);
+        } finally {
+            partitionRequestNum.decrementAndGet();
         }
 
         return result;
