@@ -37,7 +37,7 @@ E: (1064, "Getting syntax error at line 1, column 46. Detail message: Unexpected
 -- !result
 select * from TABLE(generate_series(start=>2, 5));
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: All arguments must be passed by name or all must be passed positionally.')
+E: (1064, "Getting syntax error at line 1, column 46. Detail message: Unexpected input '5', the most similar input is {a legal identifier}.")
 -- !result
 select * from TABLE(generate_series(start=>2, stop=>null));
 -- result:
@@ -49,7 +49,7 @@ E: (1064, 'table function not support null parameter')
 -- !result
 select * from TABLE(generate_series(start=>2, end=>4,step->3));
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: All arguments must be passed by name or all must be passed positionally.')
+E: (1064, "Getting syntax error at line 1, column 57. Detail message: Unexpected input '->', the most similar input is {'=>'}.")
 -- !result
 select * from TABLE(generate_series(start=>2, step=>2, end=>4,start=>3));
 -- result:
