@@ -375,7 +375,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "baseTableInfos")
     private List<BaseTableInfo> baseTableInfos;
 
-    private transient List<TableType> baseTableTypes = Lists.newArrayList();;
+    private transient List<TableType> baseTableTypes = Lists.newArrayList();
 
     @SerializedName(value = "active")
     private boolean active;
