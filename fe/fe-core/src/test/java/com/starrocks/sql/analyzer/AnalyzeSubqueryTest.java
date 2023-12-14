@@ -46,7 +46,7 @@ public class AnalyzeSubqueryTest {
         analyzeFail("select a.k1 from (select k1, k2 from (select v1 as k1, v2 as k2 from t0) a) b");
 
         analyzeSuccess("select * from (select count(v1) from t0) a");
-        analyzeFail("select * from (select count(v1) from t0)");
+        analyzeSuccess("select * from (select count(v1) from t0)");
 
         analyzeSuccess(
                 "select v1 from t0 where v2 in (select v4 from t1 where v3 = v5) or v2 = (select v4 from t1 where v3 = v5)");

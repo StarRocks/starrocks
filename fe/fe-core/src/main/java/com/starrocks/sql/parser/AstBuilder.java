@@ -4691,7 +4691,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier identifier = (Identifier) visit(context.alias);
             subqueryRelation.setAlias(new TableName(null, identifier.getValue()));
         } else {
-            subqueryRelation.setAlias(new TableName(null, null));
+            subqueryRelation.setAlias(null);
         }
 
         subqueryRelation.setColumnOutputNames(getColumnNames(context.columnAliases()));

@@ -197,7 +197,7 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 'a'");
 
         sql = "select * from (t0 a, (select * from t1))";
-        analyzeFail(sql, "Every derived table must have its own alias");
+        analyzeSuccess(sql);
 
         sql = "select * from t0, t0";
         analyzeFail(sql, "Not unique table/alias: 't0'");
