@@ -276,8 +276,8 @@ If you choose Blob Storage as storage for your Hive cluster, take one of the fol
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -285,8 +285,8 @@ If you choose Blob Storage as storage for your Hive cluster, take one of the fol
 
   | **Parameter**             | **Required** | **Description**                                              |
   | ------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
-  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
 
 ###### Azure Data Lake Storage Gen1
@@ -631,8 +631,8 @@ PROPERTIES
       "type" = "hive",
       "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
