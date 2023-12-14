@@ -395,6 +395,9 @@ public class Table extends MetaObject implements Writable {
     public Partition getPartition(String partitionName) {
         return null;
     }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
+        return null;
+    }
 
     public Partition getPartition(long partitionId) {
         return null;
