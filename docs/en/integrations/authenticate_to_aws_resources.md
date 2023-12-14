@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: AWS
 ---
 
 # Authenticate to AWS resources

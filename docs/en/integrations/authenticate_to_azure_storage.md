@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: Microsoft Azure Storage
 ---
 
 # Authenticate to Microsoft Azure Storage

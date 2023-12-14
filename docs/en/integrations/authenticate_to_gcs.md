@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: Google Cloud Storage (GCS)
 ---
 
 # Authenticate to Google Cloud Storage
