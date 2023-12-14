@@ -22,7 +22,7 @@ PAUSE ROUTINE LOAD FOR <db_name>.<job_name>;
 
 | Parameter | Required | Description                                                  |
 | --------- | -------- | ------------------------------------------------------------ |
-| db_name   |          | The name of the database for which you want to pause a Routine Load job. |
+| db_name   |          | The name of the database where the Routine Load job belongs. |
 | job_name  | ✅        | The name of the Routine Load job. A table may have multiple Routine Load jobs, it is recommended to set a meaningful Routine Load job name by using identifiable information, for example, Kafka topic name or time when you create the load job, to distinguish multiple routine load jobs.  The name of the Routine Load job must be unique within the same database |
 
 ## Examples
