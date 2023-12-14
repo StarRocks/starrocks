@@ -479,7 +479,16 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
-                        execPlan = StatementPlanner.plan(parsedStmt, context);
+                        try {
+                            execPlan = StatementPlanner.plan(parsedStmt, context);
+                        } catch (SemanticException e) {
+                            if (e.getMessage().contains("Unknown partition")) {
+                                throw new SemanticException(e.getMessage() +
+                                        " maybe table partition changed after prepared statement creation");
+                            } else {
+                                throw e;
+                            }
+                        }
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
