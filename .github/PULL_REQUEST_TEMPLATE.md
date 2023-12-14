@@ -26,14 +26,7 @@ Fixes #
 - [ ] This is a backport pr
 
 ## Bugfix cherry-pick branch check:
-<<<<<<< HEAD
 - [ ] I have checked the version labels which the pr will be auto backported to target branch
-=======
-- [ ] I have checked the version labels which the pr will be auto-backported to the target branch
-  - [ ] 3.2
-  - [ ] 3.1
-  - [ ] 3.0
->>>>>>> 7f4adaf4cb ([Tool] Add backport checklist in pr template (#37017))
   - [ ] 2.5
   - [ ] 2.4
   - [ ] 2.3
