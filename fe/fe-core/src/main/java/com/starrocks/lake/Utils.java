@@ -38,6 +38,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -54,7 +55,10 @@ public class Utils {
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
             try {
-                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                // randomly choose one node from this workerGroup
+                List<Long> nodeIds = GlobalStateMgr.getCurrentStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
+                int randomIndex = new Random().nextInt(nodeIds.size());
+                return nodeIds.get(randomIndex);
             } catch (UserException e) {
                 return null;
             }

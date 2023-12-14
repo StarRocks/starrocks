@@ -16,13 +16,15 @@
 package com.starrocks.lake;
 
 import com.starrocks.common.UserException;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class UtilsTest {
 
@@ -30,15 +32,15 @@ public class UtilsTest {
     GlobalStateMgr globalStateMgr;
 
     @Mocked
-    SystemInfoService systemInfoService;
+    StarOSAgentEpack starOSAgentEpack;
 
     @Test
     public void testChooseBackend() {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgentEpack;
             }
         };
 
@@ -49,9 +51,9 @@ public class UtilsTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<StarOSAgentEpack>() {
             @Mock
-            public Long seqChooseBackendOrComputeId() throws UserException {
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
                 throw new UserException("No backend or compute node alive.");
             }
         };
