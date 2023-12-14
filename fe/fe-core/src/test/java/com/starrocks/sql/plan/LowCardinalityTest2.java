@@ -441,7 +441,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
             sql = "select max(S_ADDRESS), count(distinct S_ADDRESS) from supplier group by S_ADDRESS;";
             plan = getFragmentPlan(sql);
             Assert.assertTrue(plan, plan.contains("  4:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(11: S_ADDRESS), max(12: max)"));
+                    "  |  output: max(12: max), count(11: S_ADDRESS)"));
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(0);
         }
@@ -2026,5 +2026,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "  1:SORT\n" +
                 "  |  order by: <slot 10> 10: S_ADDRESS ASC, <slot 11> 11: S_COMMENT ASC\n" +
                 "  |  offset: 0");
+    }
+
+    @Test
+    public void testCountDistinctPos() throws Exception {
+        try {
+            connectContext.getSessionVariable().setNewPlanerAggStage(3);
+            String sql = "select count(distinct S_COMMENT), MAX(S_ADDRESS), MIN(S_NAME) from supplier";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "count(13: S_COMMENT), max(14: max), min(11: min)");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
     }
 }
