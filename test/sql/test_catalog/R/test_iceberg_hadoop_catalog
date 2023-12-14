@@ -32,6 +32,14 @@ select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
 -- result:
 1	A
 -- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+[]
+-- !result
+drop database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+[]
+-- !result
 drop catalog ice_hadoop${uuid0};
 -- result:
 []
