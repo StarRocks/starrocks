@@ -36,7 +36,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ## Prerequisites
 
-- Apache Ranger 2.0.0 or later has been installed. For the instructions on how to install Apache Ranger, see [Ranger quick start](https://ranger.apache.org/quick_start_guide.html).
+- Apache Ranger 2.1.0 or later has been installed. For the instructions on how to install Apache Ranger, see [Ranger quick start](https://ranger.apache.org/quick_start_guide.html).
 - All StarRocks FE machines have access to Apache Ranger. You can check this by running the following command on each FE machine:
 
    ```SQL
@@ -47,7 +47,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ## Integration procedure
 
-### Installation ranger-starrocks-plugin
+### Install ranger-starrocks-plugin
 
 Currently, StarRocks supports:
 
@@ -60,7 +60,7 @@ Currently, StarRocks supports:
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. Download [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) and [`mysql-connector-j`](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
+2. Download [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) and [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/), and place them in the `starrocks` folder.
 
 3. Restart Ranger Admin.
 
@@ -70,7 +70,7 @@ Currently, StarRocks supports:
 
 ### Configure StarRocks Service on Ranger Admin
 
-1. Copy [`ranger-servicedef-starrocks.json`](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
+1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
 
    ```SQL
    wget https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
@@ -108,7 +108,7 @@ Currently, StarRocks supports:
    ![added service](../assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
-6. On each FE machine of the StarRocks cluster, create [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
+6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
@@ -169,7 +169,7 @@ For External Catalog, you can reuse external services (such as Hive Service) for
       ```SQL
         CREATE EXTERNAL CATALOG hive_catalog_1
         PROPERTIES (
-            "hive.metastore.uris" = "thrift://172.26.195.10:9083",
+            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
             "ranger.plugin.hive.service.name" = "hive_catalog_1"
         )
       ```
