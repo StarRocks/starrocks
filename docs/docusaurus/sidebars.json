@@ -333,7 +333,7 @@
           "type": "category",
           "label": "Batch Loading Data",
           "description": "Batch loading and data transformation",
-          "link": {"type": "doc", "id": "integrations/batch/apache_spark"},
+          "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
           "items": ["loading/Spark-connector-starrocks", "loading/SparkLoad"]
         },
         {
