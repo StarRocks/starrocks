@@ -33,7 +33,7 @@ public class ShowRoutineLoadStmtTest {
         Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
-        Assert.assertEquals(18, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals(19, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
     }
 
