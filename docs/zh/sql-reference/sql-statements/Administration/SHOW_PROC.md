@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 查看当前集群中的特定指标。
 
+> **注意**
+>
+> 该操作需要 SYSTEM 级 OPERATE 权限。
+
 ## 语法
 
 ```SQL

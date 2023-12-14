@@ -92,7 +92,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name` 和 `azure.blob.sas_token`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container` 和 `azure.blob.sas_token`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -100,15 +100,15 @@ PROPERTIES
 (
     "type" = "hive", 
     "hive.metastore.uris" = "thrift://10.1.0.18:9083",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name`、`azure.blob.sas_token` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -121,15 +121,15 @@ PROPERTIES
 (
     "path" = "wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### Broker load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -140,8 +140,8 @@ LOAD LABEL test_db.label000
 )
 WITH BROKER
 (
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```

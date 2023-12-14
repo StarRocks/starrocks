@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 该语句用于对一组 tablet 执行指定的检查操作。
 
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```sql

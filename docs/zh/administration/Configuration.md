@@ -620,6 +620,105 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 默认值：15 \* 60 \* 100
 
+#### 存算分离相关动态参数
+
+##### lake_compaction_score_selector_min_score
+
+- 含义：触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
+- 默认值： 10.0
+- 引入版本：v3.1.0
+
+Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
+
+##### lake_compaction_max_tasks
+
+- 含义：允许同时执行的 Compaction 任务数。
+- 默认值：-1
+- 引入版本：v3.1.0
+
+系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaciton 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
+
+##### lake_compaction_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_publish_version_max_threads
+
+- 含义：发送生效版本（Publish Version）任务的最大线程数。
+- 默认值：512
+- 引入版本：v3.2.0
+
+##### lake_autovacuum_parallel_partitions
+
+- 含义：最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
+- 默认值：8
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- 含义：对同一个表分区进行垃圾数据清理的最小间隔时间。
+- 单位：秒
+- 默认值：180
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- 含义：保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 单位：分钟
+- 默认值：5
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- 含义：如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
+- 单位：小时
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_enable_ingest_slowdown
+
+- 含义：是否开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。
+- 默认值：false
+- 引入版本：v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- 含义：触发导入限速的 Compaction Score 阈值。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。
+- 默认值：100
+- 引入版本：v3.2.0
+
+> **说明**
+>
+> 当 `lake_ingest_slowdown_threshold` 比配置项 `lake_compaction_score_selector_min_score` 小时，实际生效的阈值会是 `lake_compaction_score_selector_min_score`。
+
+##### lake_ingest_slowdown_ratio
+
+- 含义：导入限速比例。
+- 默认值：0.1
+- 引入版本：v3.2.0
+
+数据导入任务可以分为数据写入和数据提交（COMMIT）两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，延迟比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。例如，数据写入阶段耗时为 5 分钟，`lake_ingest_slowdown_ratio` 为 0.1，Compaction Score 比 `lake_ingest_slowdown_threshold` 多 10，那么延迟提交的时间为 `5 * 10 * 0.1 = 5` 分钟，相当于写入阶段的耗时由 5 分钟增加到了 10 分钟，平均导入速度下降了一倍。
+
+> **说明**
+>
+> - 如果一个导入任务同时向多个分区写入，那么会取所有分区的 Compaction Score 的最大值来计算延迟提交时间。
+> - 延迟提交的时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要 Compaction Score 不超过 `lake_compaction_score_upper_bound`，系统都会执行数据提交（COMMIT）操作。
+> - 如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
+
+##### lake_compaction_score_upper_bound
+
+- 含义：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
+- 默认值：0
+- 引入版本：v3.2.0
+
 #### 其他动态参数
 
 ##### plugin_enable

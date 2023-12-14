@@ -688,6 +688,105 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: `15 * 60 * 100`
 - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
 
+#### Shared-data specific
+
+##### lake_compaction_score_selector_min_score
+
+- **Default**: 10.0
+- **Description**: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- **Introduced in**: v3.1.0
+
+The Compaction Score indicates whether a partition needs Compaction and is scored based on the number of files in the partition. Excessive number of files can impact query performance, so the system periodically performs Compaction to merge small files and reduce the file count. You can check the Compaction Score for a partition based on the `MaxCS` column in the result returned by running [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md).
+
+##### lake_compaction_max_tasks
+
+- **Default**: -1
+- **Description**: The maximum number of concurrent Compaction tasks allowed.
+- **Introduced in**: v3.1.0
+
+The system calculates the number of Compaction tasks based on the number of tablets in a partition. For example, if a partition has 10 tablets, performing one Compaction on that partition creates 10 Compaction tasks. If the number of concurrently executing Compaction tasks exceeds this threshold, the system will not create new Compaction tasks. Setting this item to `0` disables Compaction, and setting it to `-1` allows the system to automatically calculate this value based on an adaptive strategy.
+
+##### lake_compaction_history_size
+
+- **Default**: 12
+- **Description**: The number of recent successful Compaction task records to keep in the memory of the Leader FE node. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- **Default**: 12
+- **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_publish_version_max_threads
+
+- **Default**: 512
+- **Description**: The maximum number of threads for Version Publish tasks.
+- **Introduced in**: v3.2.0
+
+##### lake_autovacuum_parallel_partitions
+
+- **Default**: 8
+- **Description**: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVaccum is the Garbage Collection after Compactions.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- **Unit**: Seconds
+- **Default**: 180
+- **Description**: The minimum interval between AutoVacuum operations on the same partition.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- **Unit**: Minutes
+- **Default**: 5
+- **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- **Unit**: Hours
+- **Default**: 12
+- **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
+- **Introduced in**: v3.1.0
+
+##### lake_enable_ingest_slowdown
+
+- **Default**: false
+- **Description**: Whether to enable Data Ingestion Slowdown. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down.
+- **Introduced in**: v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- **Default**: 100
+- **Description**: The Compaction Score threshold that triggers Data Ingestion Slowdown. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- **Introduced in**: v3.2.0
+
+> **Note**
+>
+> When `lake_ingest_slowdown_threshold` is less than `lake_compaction_score_selector_min_score`, the effective threshold will be `lake_compaction_score_selector_min_score`.
+
+##### lake_ingest_slowdown_ratio
+
+- **Default**: 0.1
+- **Description**: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
+- **Introduced in**: v3.2.0
+
+Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
+
+> **Note**
+>
+> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
+> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
+> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
+
+##### lake_compaction_score_upper_bound
+
+- **Default**: 0
+- **Description**: The upper limit of the Compaction Score for a partition. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- **Introduced in**: v3.2.0
+
 #### Other FE dynamic parameters
 
 ##### plugin_enable

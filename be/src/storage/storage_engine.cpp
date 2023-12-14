@@ -58,6 +58,7 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/rowset/rowset_meta.h"
@@ -114,7 +115,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
-          _publish_version_manager(new PublishVersionManager()) {
+          _publish_version_manager(new PublishVersionManager()),
+          _dictionary_cache_manager(new DictionaryCacheManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -207,7 +209,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
-                            .set_min_threads(config::number_tablet_writer_threads / 2)
+                            .set_min_threads(1)
                             .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
@@ -533,9 +535,8 @@ DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     auto stores = get_stores<false>();
     if (stores.empty()) {
         return nullptr;
-    } else {
-        return stores[tablet_id % stores.size()];
     }
+    return stores[tablet_id % stores.size()];
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
@@ -619,7 +620,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_pk_index_major_compaction_thread)
 
 #ifdef USE_STAROS
-    JOIN_THREAD(_local_pk_index_shard_data_gc_thread)
+    JOIN_THREAD(_local_pk_index_shared_data_gc_evict_thread)
 #endif
 
     JOIN_THREAD(_fd_cache_clean_thread)
@@ -1514,28 +1515,6 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         }
     }
     return Status::OK();
-}
-
-Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
-    // remove meta in RocksDB
-    WriteBatch wb;
-    auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
-    if (status.ok()) {
-        status = data_dir->get_meta()->write_batch(&wb);
-        if (!status.ok()) {
-            LOG(WARNING) << "fail to remove persistent index meta, tablet_id=[" + std::to_string(tablet_id)
-                         << "] error[" << status.to_string() << "]";
-        } else {
-            // remove tablet persistent_index dir
-            status = fs::remove_all(dir);
-            if (!status.ok()) {
-                LOG(WARNING) << "fail to remove local persistent index dir=[" + dir << "] error[" << status.to_string()
-                             << "]";
-            }
-        }
-    }
-
-    return status;
 }
 
 void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {

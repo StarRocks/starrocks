@@ -19,10 +19,15 @@ import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PClearDictionaryCacheRequest;
+import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetDictionaryStatisticRequest;
+import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
@@ -30,6 +35,10 @@ import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
+import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
+import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
+import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
+import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
@@ -85,5 +94,21 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PInternalService", methodName = "list_fail_point",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_short_circuit",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "refresh_dictionary_cache_begin", onceTalkTimeout = 600000)
+    Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(PRefreshDictionaryCacheBeginRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "refresh_dictionary_cache_commit", onceTalkTimeout = 600000)
+    Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(PRefreshDictionaryCacheCommitRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "clear_dictionary_cache", onceTalkTimeout = 600000)
+    Future<PClearDictionaryCacheResult> clearDictionaryCache(PClearDictionaryCacheRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_dictionary_statistic", onceTalkTimeout = 600000)
+    Future<PGetDictionaryStatisticResult> getDictionaryStatistic(PGetDictionaryStatisticRequest request);
 }
 

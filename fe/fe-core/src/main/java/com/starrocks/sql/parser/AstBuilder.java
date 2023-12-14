@@ -155,6 +155,7 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
+import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
@@ -168,6 +169,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateImageClause;
@@ -194,6 +196,7 @@ import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DictionaryExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -202,6 +205,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -282,6 +286,7 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -334,6 +339,7 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowEventsStmt;
@@ -749,7 +755,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (FunctionSet.SUBSTR.equals(functionName) || FunctionSet.SUBSTRING.equals(functionName)) {
+            if (FunctionSet.SUBSTR.equals(functionName)
+                    || FunctionSet.SUBSTRING.equals(functionName)
+                    || FunctionSet.FROM_UNIXTIME.equals(functionName)) {
                 List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
@@ -3401,6 +3409,69 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             backendList = Lists.newArrayList(tmp.split(","));
         }
         return new ShowFailPointStatement(pattern, backendList, createPos(ctx));
+    }
+
+    // ----------------------------------------------- Dictionary Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreateDictionaryStatement(StarRocksParser.CreateDictionaryStatementContext context) {
+        String dictionaryName = getQualifiedName(context.dictionaryName().qualifiedName()).toString();
+        String queryableObject = getQualifiedName(context.qualifiedName()).toString();
+
+        List<StarRocksParser.DictionaryColumnDescContext> dictionaryColumnDescs = context.dictionaryColumnDesc();
+        List<String> dictionaryKeys = new ArrayList<>();
+        List<String> dictionaryValues = new ArrayList<>();
+        for (StarRocksParser.DictionaryColumnDescContext desc : dictionaryColumnDescs) {
+            String columnName = getQualifiedName(desc.qualifiedName()).toString();
+            if (desc.KEY() != null) {
+                dictionaryKeys.add(columnName);
+            }
+            if (desc.VALUE() != null) {
+                dictionaryValues.add(columnName);
+            }
+        }
+
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        return new CreateDictionaryStmt(dictionaryName, queryableObject, dictionaryKeys, dictionaryValues,
+                                        properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropDictionaryStatement(StarRocksParser.DropDictionaryStatementContext context) {
+        String dictionaryName = getQualifiedName(context.qualifiedName()).toString();
+        boolean cacheOnly = false;
+        if (context.CACHE() != null) {
+            cacheOnly = true;
+        }
+        return new DropDictionaryStmt(dictionaryName, cacheOnly, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRefreshDictionaryStatement(StarRocksParser.RefreshDictionaryStatementContext context) {
+        String dictionaryName = getQualifiedName(context.qualifiedName()).toString();
+        return new RefreshDictionaryStmt(dictionaryName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowDictionaryStatement(StarRocksParser.ShowDictionaryStatementContext context) {
+        String dictionaryName = null;
+        if (context.qualifiedName() != null) {
+            dictionaryName = getQualifiedName(context.qualifiedName()).toString();
+        }
+        return new ShowDictionaryStmt(dictionaryName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCancelRefreshDictionaryStatement(StarRocksParser.CancelRefreshDictionaryStatementContext context) {
+        String dictionaryName = getQualifiedName(context.qualifiedName()).toString();
+        return new CancelRefreshDictionaryStmt(dictionaryName, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
@@ -6307,6 +6378,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText(), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDictionaryGetExpr(StarRocksParser.DictionaryGetExprContext context) {
+        List<Expr> params = visit(context.expressionList().expression(), Expr.class);
+        return new DictionaryExpr(params);
     }
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------

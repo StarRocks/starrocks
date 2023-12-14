@@ -419,8 +419,8 @@ Description:  The shared key of your Blob Storage account.
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -428,7 +428,7 @@ Description:  The shared key of your Blob Storage account.
 Required:  Yes          
 Description:  The username of your Blob Storage account.                   
 
-######  azure.blob.container_name 
+######  azure.blob.container 
 Required:  Yes          
 Description:  The name of the blob container that stores your data.        
 
@@ -739,8 +739,8 @@ PROPERTIES
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
