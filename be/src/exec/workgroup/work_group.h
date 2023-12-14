@@ -258,6 +258,7 @@ private:
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
     void add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock);
     void update_metrics_unlocked();
+    WorkGroupPtr get_default_workgroup_unlocked();
 
 private:
     std::shared_mutex _mutex;
