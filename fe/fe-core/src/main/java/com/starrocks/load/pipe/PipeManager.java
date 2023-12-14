@@ -211,8 +211,12 @@ public class PipeManager {
         return repo;
     }
 
-    protected CloseableLock writeLock() {
+    protected CloseableLock takeWriteLock() {
         return CloseableLock.lock(this.lock.writeLock());
+    }
+
+    protected CloseableLock takeReadLock() {
+        return CloseableLock.lock(this.lock.readLock());
     }
 
     //============================== RAW CRUD ===========================================
