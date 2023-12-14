@@ -67,7 +67,7 @@ Status DictionaryCacheWriter::append_chunk(ChunkPtr chunk, std::atomic_bool* ter
             _buffer_chunk = chunk->clone_empty_with_slot();
         }
         DCHECK(_buffer_chunk != nullptr);
-        _buffer_chunk->append(*chunk.get());
+        _buffer_chunk->append(*chunk);
     }
 
     if (_buffer_chunk != nullptr &&

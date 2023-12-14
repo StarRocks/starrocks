@@ -108,15 +108,6 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
 }
 
 template <typename T>
-void BackendInternalServiceImpl<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
-                                                             const PRefreshDictionaryCacheRequest* request,
-                                                             PRefreshDictionaryCacheResult* response,
-                                                             google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
-}
-
-template <typename T>
 void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                          const PTabletWriterCancelRequest* request,
                                                          PTabletWriterCancelResult* response,

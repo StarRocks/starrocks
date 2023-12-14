@@ -95,20 +95,20 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_short_circuit",
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_short_circuit",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "refresh_dictionary_cache_begin", onceTalkTimeout = 600000)
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "refresh_dictionary_cache_begin", onceTalkTimeout = 600000)
     Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(PRefreshDictionaryCacheBeginRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "refresh_dictionary_cache_commit", onceTalkTimeout = 600000)
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "refresh_dictionary_cache_commit", onceTalkTimeout = 600000)
     Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(PRefreshDictionaryCacheCommitRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "clear_dictionary_cache", onceTalkTimeout = 600000)
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "clear_dictionary_cache", onceTalkTimeout = 600000)
     Future<PClearDictionaryCacheResult> clearDictionaryCache(PClearDictionaryCacheRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_dictionary_statistic", onceTalkTimeout = 600000)
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_dictionary_statistic", onceTalkTimeout = 600000)
     Future<PGetDictionaryStatisticResult> getDictionaryStatistic(PGetDictionaryStatisticRequest request);
 }
 

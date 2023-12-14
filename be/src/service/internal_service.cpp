@@ -391,15 +391,6 @@ void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::Rp
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
-                                                           const PRefreshDictionaryCacheRequest* request,
-                                                           PRefreshDictionaryCacheResult* response,
-                                                           google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
-}
-
-template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,
@@ -783,6 +774,15 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("too busy to get file schema").to_protobuf(response->mutable_status());
     }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PRefreshDictionaryCacheRequest* request,
+                                                           PRefreshDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
 }
 
 template <typename T>
