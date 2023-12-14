@@ -29,10 +29,8 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
@@ -152,7 +150,6 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
-        return Instant.ofEpochMilli(((Timestamp) fieldData)
-                .getMillisecond()).atZone(ZoneOffset.ofHours(0)).toLocalDateTime();
+        return ((Timestamp) fieldData).toLocalDateTime();
     }
 }

@@ -444,25 +444,15 @@ public class OffHeapColumnVector {
 
     public int appendDate(LocalDate v) {
         reserve(elementsAppended + 1);
-        putDate(elementsAppended, v);
-        return elementsAppended++;
-    }
-
-    private void putDate(int rowId, LocalDate v) {
         int date = convertToDate(v.getYear(), v.getMonthValue(), v.getDayOfMonth());
-        Platform.putInt(null, data + rowId * 4L, date);
+        return appendInt(date);
     }
 
     public int appendDateTime(LocalDateTime v) {
         reserve(elementsAppended + 1);
-        putDateTime(elementsAppended, v);
-        return elementsAppended++;
-    }
-
-    private void putDateTime(int rowId, LocalDateTime v) {
-        long time = convertToDateTime(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), v.getHour(),
+        long datetime = convertToDateTime(v.getYear(), v.getMonthValue(), v.getDayOfMonth(), v.getHour(),
                 v.getMinute(), v.getSecond(), v.getNano() / 1000);
-        Platform.putLong(null, data + rowId * 8L, time);
+        return appendLong(datetime);
     }
 
     public void updateMeta(OffHeapColumnVector meta) {
@@ -724,6 +714,9 @@ public class OffHeapColumnVector {
         return bytes;
     }
 
+    /**
+     * logical components in be: time_types.cpp, date::from_date
+     */
     public static int convertToDate(int year, int month, int day) {
         int century;
         int julianDate;
@@ -743,6 +736,9 @@ public class OffHeapColumnVector {
         return julianDate;
     }
 
+    /**
+     * logical components in be: time_types.h, timestamp::from_datetime
+     */
     public static long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
         int secsPerMinute = 60;
         int minsPerHour = 60;

@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 import java.math.BigDecimal;
@@ -32,8 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.starrocks.hudi.reader.HudiScannerUtils.DATETIME_FORMATTER;
-import static com.starrocks.hudi.reader.HudiScannerUtils.DATE_FORMATTER;
 import static com.starrocks.hudi.reader.HudiScannerUtils.TIMESTAMP_UNIT_MAPPING;
 
 public class HudiColumnValue implements ColumnValue {
@@ -152,19 +151,15 @@ public class HudiColumnValue implements ColumnValue {
 
     @Override
     public LocalDate getDate() {
-        return LocalDate.parse(inspectObject().toString(), DATE_FORMATTER);
+        return LocalDate.ofEpochDay((((DateObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData))
+                .toEpochDay());
     }
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
-        // INT64 timestamp type
-        if (HudiScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
-            long datetime = ((LongWritable) fieldData).get();
-            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
-            LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(datetime, timeUnit, true);
-            return localDateTime;
-        } else {
-            return LocalDateTime.parse(inspectObject().toString(), DATETIME_FORMATTER);
-        }
+        Long dateTime = ((LongWritable) fieldData).get();
+        TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+        LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(dateTime, timeUnit, true);
+        return localDateTime;
     }
 }

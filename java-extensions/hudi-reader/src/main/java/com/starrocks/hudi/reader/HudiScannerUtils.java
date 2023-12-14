@@ -20,15 +20,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class HudiScannerUtils {
-    public static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     public static final Map<String, String> HIVE_TYPE_MAPPING = new HashMap<>();
     public static Map<ColumnType.TypeValue, TimeUnit> TIMESTAMP_UNIT_MAPPING = new HashMap<>();
 
@@ -79,10 +76,6 @@ public class HudiScannerUtils {
                 break;
         }
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds, nanoseconds), zone);
-    }
-
-    public static String formatDateTime(LocalDateTime dateTime) {
-        return dateTime.format(DATETIME_FORMATTER);
     }
 
     public static boolean isMaybeInt64Timestamp(ColumnType.TypeValue type) {
