@@ -29,7 +29,7 @@ E: (1064, "Getting analyzing error. Detail message: Unknown table function 'gene
 -- !result
 select * from TABLE(generate_series(end=>5,start=>2, step = 2));
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: All arguments must be passed by name or all must be passed positionally.')
+E: (1064, 'Getting syntax error at line 1, column 58. Detail message: Unexpected input '=', the most similar input is {'=>'}.')
 -- !result
 select * from TABLE(generate_series(start=>2, =>5));
 -- result:
