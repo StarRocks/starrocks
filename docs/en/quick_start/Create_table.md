@@ -64,11 +64,11 @@ PROPERTIES(
 
 > **NOTE**
 >
-> - To create a table in StarRocks, you MUST specify a bucket key in the `DISTRIBUTED BY HASH` clause to strategize the data distribution plan of the table. By default, the data is distributed to 10 tablets. See [Data Distribution](../table_design/Data_model.md#starrocks-data-distribution) for more information.
+> - To create a table in StarRocks, you MUST specify a bucket key in the `DISTRIBUTED BY HASH` clause to strategize the data distribution plan of the table. By default, the data is distributed to 10 tablets. See [Data Distribution](../table_design/Data_model.md) for more information.
 > - You need to specify the table property `replication_num`, which represents the number of data replicas, as `1` because the StarRocks instance you deployed has only one BE node.
 > - If no [data model](../table_design/Data_model.md) is specified, a Duplicate Key model is created by default. See [Duplicate Key model](../table_design/Data_model.md#duplicate-key-model)
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
-> - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_model.md#design-partitioning-and-bucketing-rules) for more instructions.
+> - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_model.md) for more instructions.
 
 After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW_TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) for more information.
 
@@ -80,5 +80,5 @@ In addition to the features this tutorial has demonstrated, StarRocks also suppo
 
 - A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
 - Multiple [data models](../table_design/Data_model.md)
-- Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
+- Flexible [partitioning strategies](../table_design/Data_distribution.md)
 - [Materialized view](../using_starrocks/Materialized_view.md)
