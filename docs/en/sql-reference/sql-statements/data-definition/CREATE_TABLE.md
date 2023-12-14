@@ -246,7 +246,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax: 
+Syntax:
 
 ```SQL
 key_type(k1[,k2 ...])
@@ -329,7 +329,7 @@ You can specify the value for `START` and `END` and the expression in `EVERY` to
 - If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
 - If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
 ### distribution_desc
 
