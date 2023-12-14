@@ -2659,4 +2659,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
 }
