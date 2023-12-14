@@ -69,7 +69,7 @@ public class AnalyzeSingleTest {
         analyzeFail("select error from t0");
         analyzeFail("select v1 from t_error");
 
-        analyzeSuccess("select v1 from t0 temporary partition(t1,t2)");
+        analyzeFail("select v1 from t0 temporary partition(t1,t2)");
         analyzeFail("SELECT v1,v2,v3 FROM t0 INTO OUTFILE \"hdfs://path/to/result_\""
                 + "FORMAT AS PARQUET PROPERTIES" +
                 "(\"broker.name\" = \"my_broker\"," +
