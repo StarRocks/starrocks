@@ -48,6 +48,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    public static final String IS_TEST = "__IS_TEST__";
 
     private long taskId;
 
