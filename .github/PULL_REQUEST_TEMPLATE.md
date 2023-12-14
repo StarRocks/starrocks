@@ -32,9 +32,9 @@ If yes, please specify the type of change:
 - [ ] I have added test cases for my bug fix or my new feature
 - [ ] This pr needs user documentation (for new or modified features or behaviors)
   - [ ] I have added documentation for my new feature or new function
+- [ ] This is a backport pr
 
 ## Bugfix cherry-pick branch check:
-
 - [ ] I have checked the version labels which the pr will be auto-backported to the target branch
   - [ ] 3.2
   - [ ] 3.1
