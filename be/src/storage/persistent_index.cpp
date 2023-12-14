@@ -689,8 +689,15 @@ public:
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
-                std::string msg = strings::Substitute("FixedMutableIndex<$0> insert found duplicate key $1", KeySize,
-                                                      hexdump((const char*)key.data, KeySize));
+                auto old = reinterpret_cast<uint64_t*>(&(it->second));
+                auto old_rssid = (uint32_t)((*old) >> 32);
+                auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
+                auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                std::string msg = strings::Substitute(
+                        "FixedMutableIndex<$0> insert found duplicate key $1, new(rssid=$2 rowid=$3), old(rssid=$4 "
+                        "rowid=$5)",
+                        KeySize, hexdump((const char*)key.data, KeySize), (uint32_t)((*new_value) >> 32),
+                        (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             }
