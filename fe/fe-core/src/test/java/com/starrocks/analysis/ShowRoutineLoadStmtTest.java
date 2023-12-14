@@ -46,7 +46,11 @@ public class ShowRoutineLoadStmtTest {
         Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
+<<<<<<< HEAD
         Assert.assertEquals(19, stmt.getMetaData().getColumnCount());
+=======
+        Assert.assertEquals(21, stmt.getMetaData().getColumnCount());
+>>>>>>> 4c9756fdc6 ([Feature] Adds routine_load_unstable_threshold_second (#36222))
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
     }
 
