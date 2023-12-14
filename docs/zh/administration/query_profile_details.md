@@ -181,10 +181,10 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 | PushdownPredicates |  |  | 下推的谓词数量。 |
 | Predicates |  |  | 谓词表达式。 |
 | BytesRead |  |  | 读取数据的大小。 |
-| CompressedBytesRead |  |  | 读取压缩数据的大小。 |
-| UncompressedBytesRead |  |  | 读取未压缩数据的大小。 |
-| RowsRead |  |  | 读取的行数。 |
-| RawRowsRead |  |  | 读取的原始行数。 |
+| CompressedBytesRead |  |  | 从磁盘上读取的压缩数据的大小。 |
+| UncompressedBytesRead |  |  | 从磁盘上读取的未压缩数据的大小。 |
+| RowsRead |  |  | 读取的行数（谓词过滤后的行数）。 |
+| RawRowsRead |  |  | 读取的原始行数（谓词过滤前的行数）。 |
 | ReadPagesNum |  |  | 读取 Page 的数量。 |
 | CachedPagesNum |  |  | 缓存的 Page 数量。 |
 | ChunkBufferCapacity |  |  | Chunk Buffer 的容量。 |
@@ -195,10 +195,10 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 | ScanTime |  |  | Scan 累计时间。Scan 操作在异步 I/O 线程池中完成。 |
 | IOTaskExecTime |  |  | IO 任务的执行时间。 |
 |  | CreateSegmentIter |  | 创建 Segment 迭代器的时间。 |
-|  | GetDelVec |  |  |
-|  | GetDeltaColumnGroup |  |  |
-|  | GetRowsets |  |  |
-|  | IOTime |  |  |
+|  | GetDelVec |  | 加载 DelVec（删除向量）的时间。 |
+|  | GetDeltaColumnGroup |  | 加载 DelVecColumnGroup 的时间。 |
+|  | GetRowsets |  | 加载 RowSet 的时间。 |
+|  | IOTime |  | 文件 IO 的时间。 |
 |  | LateMaterialize |  | 延迟物化的时间。 |
 |  | ReadPKIndex |  | 读取 PK 索引的时间。 |
 |  | SegmentInit |  | Segment 初始化的时间。 |
