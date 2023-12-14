@@ -2665,4 +2665,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean use_lock_manager = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
 }

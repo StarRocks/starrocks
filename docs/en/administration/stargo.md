@@ -58,7 +58,7 @@ The following example builds mutual authentication between central control node 
 
 ### Create configuration file
 
-Create the StarRocks deployment topology file based on the following YAML template. See [Configuration](../administration/Configuration.md) for detailed information.
+Create the StarRocks deployment topology file based on the following YAML template. See [Configuration](../administration/FE_configuration.md) for detailed information.
 
 ```yaml
 global:
@@ -490,7 +490,7 @@ You can scale a cluster out via StarGo.
 
 ### Create configuration file
 
-Create the scale-out task topology file based on the following template. You can specify the file to add FE and/or BE nodes based on your demand. See [Configuration](../administration/Configuration.md) for detailed information.
+Create the scale-out task topology file based on the following template. You can specify the file to add FE and/or BE nodes based on your demand. See [Configuration](../administration/FE_configuration.md) for detailed information.
 
 ```yaml
 # Add an FE node.
