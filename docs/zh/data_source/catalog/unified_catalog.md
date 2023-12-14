@@ -2,56 +2,50 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Iceberg catalog
+# Unified catalog
 
-Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
+Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 等多个数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-- 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
+- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
-为保证正常访问 Iceberg 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问融合数据源内的数据，StarRocks 集群必须集成以下两个关键组件：
 
-- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、华为云 OBS、腾讯云 COS、火山引擎 TOS、金山云 KS3、MinIO、Ceph S3 等）。
+- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
-- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue、Tabular。
+- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue。
 
   > **说明**
   >
-  > - 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
-  > - 如果您使用 Tabular 作为元数据服务，则您需要使用 Iceberg 的 REST Catalog。
+  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+
+## 使用限制
+
+一个 Unified Catalog 当前只支持对接一个存储系统和一个元数据服务。因此，您需要确保您通过 Unified Catalog 访问的所有数据源使用同一个存储系统和同一个元数据服务。
 
 ## 使用说明
 
-- StarRocks 查询 Iceberg 数据时，支持 Parquet 和 ORC 文件格式，其中：
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md) 和 [Delta Lake catalog](../catalog/deltalake_catalog.md) 文档中“使用说明”部分。
 
-  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-  - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
+- 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
 
-- Iceberg Catalog 支持查询 v1 表数据。自 3.0 版本起支持查询 ORC 格式的 v2 表数据，自 3.1 版本起支持查询 Parquet 格式的 v2 表数据。
+  当您通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 在 Unified Catalog 中创建表时，必须通过 `ENGINE` 参数来指定表格式（Hive 或 Iceberg）。
 
 ## 准备工作
 
-在创建 Iceberg Catalog 之前，请确保 StarRocks 集群能够正常访问 Iceberg 的文件存储及元数据服务。
+在创建 Unified Catalog 之前，请确保 StarRocks 集群能够正常访问您所使用的文件存储及元数据服务。
 
 ### AWS IAM
 
-如果 Iceberg 使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
-
-您可以选择如下认证鉴权方案：
-
-- Instance Profile（推荐）
-- Assumed Role
-- IAM User
-
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+如果您使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
 如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
 
 - （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE 使配置生效。如果不设置该用户名，则默认使用 FE 和 BE 进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Iceberg 数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
+- 查询数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
   - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
   - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
 
@@ -64,9 +58,9 @@ Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支�
 如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
 
 - 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 krb5.conf 文件的路径，可以根据文件的实际路径进行修改。
 
-## 创建 Iceberg Catalog
+## 创建 Unified Catalog
 
 ### 语法
 
@@ -75,9 +69,10 @@ CREATE EXTERNAL CATALOG <catalog_name>
 [COMMENT <comment>]
 PROPERTIES
 (
-    "type" = "iceberg",
+    "type" = "unified",
     MetastoreParams,
-    StorageCredentialParams
+    StorageCredentialParams,
+    MetadataUpdateParams
 )
 ```
 
@@ -85,7 +80,7 @@ PROPERTIES
 
 #### catalog_name
 
-Iceberg Catalog 的名称。命名要求如下：
+Unified Catalog 的名称。命名要求如下：
 
 - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
 - 总长度不能超过 1023 个字符。
@@ -93,44 +88,44 @@ Iceberg Catalog 的名称。命名要求如下：
 
 #### comment
 
-Iceberg Catalog 的描述。此参数为可选。
+Unified  Catalog 的描述。此参数为可选。
 
 #### type
 
-数据源的类型。设置为 `iceberg`。
+数据源的类型。设置为 `unified` 。
 
 #### MetastoreParams
 
-StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
+StarRocks 访问元数据服务的相关参数配置。
 
-##### HMS
+##### Hive metastore
 
-如果选择 HMS 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
+如果选择 HMS 作为元数据服务，请按如下配置 `MetastoreParams`：
 
 ```SQL
-"iceberg.catalog.type" = "hive",
+"unified.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
 > **说明**
 >
-> 在查询 Iceberg 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+> 在查询数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
 
 `MetastoreParams` 包含如下参数。
 
-| 参数                                 | 是否必须 | 说明                                                         |
-| ----------------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.type                | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `hive`。           |
-| hive.metastore.uris                 | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| 参数                   | 是否必须 | 说明                                                         |
+| ---------------------- | -------- | ------------------------------------------------------------ |
+| unified.metastore.type | 是       | 元数据服务的类型。设置为 `hive`。                            |
+| hive.metastore.uris    | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。 如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号 (`,`) 分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
 
-如果选择 AWS Glue 作为 Iceberg 集群的元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
+如果选择 AWS Glue 作为元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
 
 - 基于 Instance Profile 进行认证和鉴权
 
   ```SQL
-  "iceberg.catalog.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.region" = "<aws_glue_region>"
   ```
@@ -138,7 +133,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 Assumed Role 进行认证和鉴权
 
   ```SQL
-  "iceberg.catalog.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.iam_role_arn" = "<iam_role_arn>",
   "aws.glue.region" = "<aws_glue_region>"
@@ -147,7 +142,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
-  "iceberg.catalog.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -158,7 +153,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 | 参数                          | 是否必须 | 说明                                                         |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.type          | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `glue`。           |
+| unified.metastore.type        | 是       | 元数据服务的类型。设置为 `glue`。                            |
 | aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
@@ -167,53 +162,17 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-##### Tabular
-
-如果您使用 Tabular 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
-
-```SQL
-"iceberg.catalog.type" = "rest",
-"iceberg.catalog.uri" = "<rest_server_api_endpoint>",
-"iceberg.catalog.credential" = "<credential>",
-"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
-```
-
-`MetastoreParams` 包含如下参数。
-
-| 参数                       | 是否必须 | 说明                                                         |
-| -------------------------- | ------ | ------------------------------------------------------------ |
-| iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
-| iceberg.catalog.uri        | 是      | Tabular 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
-| iceberg.catalog.credential | 是      | Tabular 服务的认证信息。                                        |
-| iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
-
-例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
-
-```SQL
-CREATE EXTERNAL CATALOG tabular
-PROPERTIES
-(
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "rest",
-    "iceberg.catalog.uri" = "https://api.tabular.io/ws",
-    "iceberg.catalog.credential" = "t-5Ii8e3FIbT9m0:aaaa-3bbbbbbbbbbbbbbbbbbb",
-    "iceberg.catalog.warehouse" = "sandbox"
-);
-```
-
 #### StorageCredentialParams
 
-StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
+StarRocks 访问文件存储的相关参数配置。
 
-注意：
+如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
 
-- 如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
-
-- 如果您使用 Tabular 作为元数据服务，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 HMS 或 AWS Glue 作为元数据服务，则必须配置 `StorageCredentialParams`。
+如果您使用 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
-如果选择 AWS S3 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 AWS S3 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Instance Profile 进行认证和鉴权
 
@@ -241,7 +200,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
 `StorageCredentialParams` 包含如下参数。
 
-| 参数                        | 是否必须 | 说明                                                         |
+| 参数                        | 是否必须   | 说明                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
@@ -253,7 +212,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
 ##### 阿里云 OSS
 
-如果选择阿里云 OSS 作为 Iceberg 集群的文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
+如果选择阿里云 OSS 作为文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
 
 ```SQL
 "aliyun.oss.access_key" = "<user_access_key>",
@@ -265,13 +224,11 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 | ------------------------------- | -------- | ------------------------------------------------------------ |
 | aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
 | aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
 
 ##### 兼容 S3 协议的对象存储
 
-Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
-
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择兼容 S3 协议的对象存储（如 MinIO）作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
 "aws.s3.enable_ssl" = "false",
@@ -293,11 +250,9 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 
 ##### Microsoft Azure Storage
 
-Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
-
 ###### Azure Blob Storage
 
-如果选择 Blob Storage 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Blob Storage 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Shared Key 进行认证和鉴权
 
@@ -331,7 +286,7 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ###### Azure Data Lake Storage Gen1
 
-如果选择 Data Lake Storage Gen1 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen1 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Managed Service Identity 进行认证和鉴权
 
@@ -363,7 +318,7 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ###### Azure Data Lake Storage Gen2
 
-如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen2 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Managed Identity 进行认证和鉴权
 
@@ -413,9 +368,7 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ##### Google GCS
 
-Iceberg Catalog 从 3.0 版本起支持 Google GCS。
-
-如果选择 Google GCS 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Google GCS 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 VM 进行认证和鉴权
 
@@ -479,20 +432,37 @@ Iceberg Catalog 从 3.0 版本起支持 Google GCS。
     | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
     | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
 
+#### MetadataUpdateParams
+
+指定缓存元数据更新策略的一组参数。此组参数为可选。StarRocks 根据该策略更新缓存的 Hive、Hudi 和 Delta Lake 元数据。有关 Hive、Hudi、和 Delta Lake 元数据缓存更新的详细介绍，参见 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md) 和 [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)。
+
+StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+
+如果 Hive、Hudi、或 Delta Lake 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
+
+| 参数                                   | 是否必须 | 说明                                                         |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | 否       | 指定 StarRocks 是否缓存 Hive、Hudi、或 Delta Lake 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
+| remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
+| metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
+| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+
 ### 示例
 
-以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
+以下示例创建了一个名为 `unified_catalog_hms` 或 `unified_catalog_glue` 的 Unified Catalog，用于查询融合数据源里的数据。
 
 #### HDFS
 
-使用 HDFS 作为存储时，可以按如下创建 Iceberg Catalog：
+使用 HDFS 作为存储时，可以按如下创建 Unified Catalog：
 
 ```SQL
-CREATE EXTERNAL CATALOG iceberg_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
 );
 ```
@@ -501,29 +471,28 @@ PROPERTIES
 
 ##### 如果基于 Instance Profile 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
-
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.region" = "us-west-2",
       "aws.s3.use_instance_profile" = "true",
@@ -533,14 +502,14 @@ PROPERTIES
 
 ##### 如果基于 Assumed Role 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
@@ -548,14 +517,14 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2",
@@ -567,14 +536,14 @@ PROPERTIES
 
 ##### 如果基于 IAM User 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
@@ -583,14 +552,14 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -604,14 +573,14 @@ PROPERTIES
 
 #### 兼容 S3 协议的对象存储
 
-以 MinIO 为例，可以按如下创建 Iceberg Catalog：
+以 MinIO 为例，可以按如下创建 Unified Catalog：
 
 ```SQL
-CREATE EXTERNAL CATALOG iceberg_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -625,28 +594,31 @@ PROPERTIES
 
 ##### Azure Blob Storage
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.storage_account" = "<blob_storage_account_name>",
-      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+      "aws.s3.enable_ssl" = "true",
+      "aws.s3.enable_path_style_access" = "true",
+      "aws.s3.endpoint" = "<s3_endpoint>",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>"
   );
   ```
 
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
@@ -656,27 +628,27 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen1
 
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -686,14 +658,14 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -701,58 +673,58 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
   );
   ```
 
 #### Google GCS
 
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 VM 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
 
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -762,28 +734,28 @@ PROPERTIES
 
 - 如果基于 Impersonation 进行认证和鉴权
 
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Iceberg Catalog：
+  - 使用 VM 实例模拟 Service Account，可以按如下创建 Unified Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG iceberg_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg",
-        "iceberg.catalog.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
-        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
     ```
 
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Iceberg Catalog：
+  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Unified Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG iceberg_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg",
-        "iceberg.catalog.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
@@ -792,7 +764,7 @@ PROPERTIES
     );
     ```
 
-## 查看 Iceberg Catalog
+## 查看 Unified Catalog
 
 您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
@@ -800,17 +772,17 @@ PROPERTIES
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Unified Catalog `unified_catalog_glue` 的创建语句：
 
 ```SQL
-SHOW CREATE CATALOG iceberg_catalog_glue;
+SHOW CREATE CATALOG unified_catalog_glue;
 ```
 
-## 切换 Iceberg Catalog 和数据库
+## 切换 Unified Catalog 和数据库
 
-您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
+您可以通过如下方法切换至目标 Unified Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Unified Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -819,25 +791,25 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
+- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Unified Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
-## 删除 Iceberg Catalog
+## 删除 Unified Catalog
 
 您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
-例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
+例如，通过如下命令删除 Unified Catalog `unified_catalog_glue`：
 
 ```SQL
-DROP Catalog iceberg_catalog_glue;
+DROP CATALOG unified_catalog_glue;
 ```
 
-## 查看 Iceberg 表结构
+## 查看 Unified Catalog 内的表结构
 
-您可以通过如下方法查看 Iceberg 表的表结构：
+您可以通过如下方法查看 Hive 表的表结构：
 
 - 查看表结构
 
@@ -851,15 +823,17 @@ DROP Catalog iceberg_catalog_glue;
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
-## 查询 Iceberg 表数据
+## 查询 Unified Catalog 内的表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+ 您可以通过如下操作查询 Unified Catalog 内的数据：
+
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Unified Catalog 所属的数据源中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
+2. [切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)。
 
 3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
@@ -867,26 +841,41 @@ DROP Catalog iceberg_catalog_glue;
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 创建 Iceberg 数据库
+## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Iceberg Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Iceberg Catalog 内创建数据库。本功能自 3.1 版本起开始支持。
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
+
+例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
+
+```SQL
+INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
+```
+
+## 在 Unified Catalog 内创建数据库
+
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句创建 Iceberg 数据库：
+注意当前仅支持创建 Hive 数据库和 Iceberg 数据库。
+
+[切换至目标 Unified Catalog](#切换-unified-catalog-和数据库)，然后通过如下语句创建数据库：
 
 ```SQL
 CREATE DATABASE <database_name>
-[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
-您可以通过 `location` 参数来为该数据库设置具体的文件路径，支持 HDFS 和对象存储。如果您不指定 `location` 参数，则 StarRocks 会在当前 Iceberg Catalog 的默认路径下创建该数据库。
+`location` 参数用于指定数据库所在的文件路径，支持 HDFS 和对象存储：
+
+- 选择 HMS 作为元数据服务时，如果您在创建数据库时不指定 `location`，那么系统会使用 HMS 默认的 `<warehouse_location>/<database_name.db>` 作为文件路径。
+- 选择 AWS Glue 作为元数据服务时，`location` 参数没有默认值，因此您在创建数据库时必须指定该参数。
 
 `prefix` 根据存储系统的不同而不同：
 
-| **存储系统**                           | **`Prefix` 取值**                                        |
+| **存储系统**                           | **`Prefix`** **取值**                                        |
 | -------------------------------------- | ------------------------------------------------------------ |
 | HDFS                                   | `hdfs`                                                       |
 | Google GCS                             | `gs`                                                         |
@@ -898,133 +887,69 @@ CREATE DATABASE <database_name>
 | 华为云 OBS                             | `obs`                                                        |
 | AWS S3 及其他兼容 S3 的存储（如 MinIO)   | `s3`                                                         |
 
-## 删除 Iceberg 数据库
+## 从 Unified Catalog 内删除数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Iceberg 数据库。本功能自 3.1 版本起开始支持。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+注意当前仅支持删除 Hive 数据库和 Iceberg 数据库。
 
 删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
 
-[切换至目标 Iceberg Catalog](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 数据库：
+[切换至目标 Unified Catalog](#切换-unified-catalog-和数据库)，然后通过如下语句删除数据库：
 
 ```SQL
-DROP DATABASE <database_name>;
+DROP DATABASE <database_name>
 ```
 
-## 创建 Iceberg 表
+## 在 Unified Catalog 内创建表
 
-同 StarRocks 内部数据库一致，如果您拥有 Iceberg 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Iceberg 数据库下创建表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。然后通过如下语法创建 Iceberg 表：
+注意当前仅支持创建 Hive 表和 Iceberg 表。
 
-### 语法
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 创建 Hive 表或 Iceberg 表：
 
 ```SQL
-CREATE TABLE [IF NOT EXISTS] [database.]table_name
-(column_definition1[, column_definition2, ...
-partition_column_definition1,partition_column_definition2...])
+CREATE TABLE <table_name>
+(column_definition1[, column_definition2, ...]
+ENGINE = {|hive|iceberg}
 [partition_desc]
-[PROPERTIES ("key" = "value", ...)]
-[AS SELECT query]
 ```
 
-### 参数说明
+有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](../catalog/iceberg_catalog.md#创建-iceberg-表)。
 
-#### column_definition
-
-`column_definition` 语法定义如下:
+例如，通过如下语句，创建一张 Hive 表 `hive_table`：
 
 ```SQL
-col_name col_type [COMMENT 'comment']
+CREATE TABLE hive_table
+(
+    action varchar(65533),
+    id int,
+    dt date
+)
+ENGINE = hive
+PARTITION BY (id,dt);
 ```
 
-参数说明：
+## 向 Unified Catalog 内的表中插入数据
 
-| **参数**           | **说明**                                              |
-| ----------------- |------------------------------------------------------ |
-| col_name          | 列名称。                                                |
-| col_type          | 列数据类型。当前支持如下数据类型：TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DECIMAL、DATE、DATETIME、CHAR、VARCHAR[(length)]、ARRAY、MAP、STRUCT。不支持 LARGEINT、HLL、BITMAP 类型。 |
-
-> **注意**
->
-> 所有非分区列均以 `NULL` 为默认值（即，在建表语句中指定 `DEFAULT "NULL"`）。分区列必须在最后声明，且不能为 `NULL`。
-
-#### partition_desc
-
-`partition_desc` 语法定义如下:
-
-```SQL
-PARTITION BY (par_col1[, par_col2...])
-```
-
-目前 StarRocks 仅支持 [Identity Transforms](https://iceberg.apache.org/spec/#partitioning)。 即，会为每个唯一的分区值创建一个分区。
-
-> **注意**
->
-> 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。
-
-#### PROPERTIES
-
-可以在 `PROPERTIES` 中通过 `"key" = "value"` 的形式声明 Iceberg 表的属性。具体请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
-
-以下为常见的几个 Iceberg 表属性：
-
-| **属性**          | **描述**                                                     |
-| ----------------- | ------------------------------------------------------------ |
-| location          | Iceberg 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
-| file_format       | Iceberg 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Iceberg 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
-
-### 示例
-
-1. 创建非分区表 `unpartition_tbl`，包含 `id` 和 `score` 两列，如下所示：
-
-   ```SQL
-   CREATE TABLE unpartition_tbl
-   (
-       id int,
-       score double
-   );
-   ```
-
-2. 创建分区表 `partition_tbl_1`，包含 `action`、`id`、`dt` 三列，并定义 `id` 和 `dt` 为分区列，如下所示：
-
-   ```SQL
-   CREATE TABLE partition_tbl_1
-   (
-       action varchar(20),
-       id int,
-       dt date
-   )
-   PARTITION BY (id,dt);
-   ```
-
-3. 查询原表 `partition_tbl_1` 的数据，并根据查询结果创建分区表 `partition_tbl_2`，定义 `id` 和 `dt` 为 `partition_tbl_2` 的分区列：
-
-   ```SQL
-   CREATE TABLE partition_tbl_2
-   PARTITION BY (id, dt)
-   AS SELECT * from partition_tbl_1;
-   ```
-
-## 向 Iceberg 表中插入数据
-
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中：
+注意当前仅支持向 Hive 表和 Iceberg 表中插入数据。
 
-### 语法
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 向 Hive 表或 Iceberg 表中插入数据：
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
@@ -1037,107 +962,38 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-> **注意**
->
-> 分区列不允许为 `NULL`，因此导入时需要保证分区列有值。
+有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](../catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
 
-### 参数说明
+例如，通过如下语句，向 Hive 表 `hive_table` 中写入如下数据：
 
-| 参数         | 说明                                                         |
-| ----------- | ------------------------------------------------------------ |
-| INTO        | 将数据追加写入目标表。                                       |
-| OVERWRITE   | 将数据覆盖写入目标表。                                       |
-| column_name | 导入的目标列。可以指定一个或多个列。指定多个列时，必须用逗号 (`,`) 分隔。指定的列必须是目标表中存在的列，并且必须包含分区列。该参数可以与源表中的列名称不同，但顺序需一一对应。如果不指定该参数，则默认导入数据到目标表中的所有列。如果源表中的某个非分区列在目标列不存在，则写入默认值 `NULL`。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
-| expression  | 表达式，用以为对应列赋值。                                   |
-| DEFAULT     | 为对应列赋予默认值。                                         |
-| query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
-| PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
+```SQL
+INSERT INTO hive_table
+VALUES
+    ("buy", 1, "2023-09-01"),
+    ("sell", 2, "2023-09-02"),
+    ("buy", 3, "2023-09-03");
+```
 
-### 示例
+## 从 Unified Catalog 内删除表
 
-1. 向表 `partition_tbl_1` 中插入如下三行数据：
-
-   ```SQL
-   INSERT INTO partition_tbl_1
-   VALUES
-       ("buy", 1, "2023-09-01"),
-       ("sell", 2, "2023-09-02"),
-       ("buy", 3, "2023-09-03");
-   ```
-
-2. 向表 `partition_tbl_1` 按指定列顺序插入一个包含简单计算的 SELECT 查询的结果数据：
-
-   ```SQL
-   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
-   ```
-
-3. 向表 `partition_tbl_1` 中插入一个从其自身读取数据的 SELECT 查询的结果数据：
-
-   ```SQL
-   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
-   FROM partition_tbl_1
-   WHERE id=1;
-   ```
-
-4. 向表 `partition_tbl_2` 中 `dt='2023-09-01'`、`id=1` 的分区插入一个 SELECT 查询的结果数据：
-
-   ```SQL
-   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
-   ```
-
-   Or
-
-   ```SQL
-   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
-   ```
-
-5. 将表 `partition_tbl_1` 中 `dt='2023-09-01'`、`id=1` 的分区下所有 `action` 列值全部覆盖为 `close`：
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
-   ```
-
-   Or
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
-   ```
-
-## 删除 Iceberg 表
-
-同 StarRocks 内表一致，在拥有 Iceberg 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限的情况下，您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Iceberg 表。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该表。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-删除表操作并不会将 HDFS 或对象存储上的对应文件路径和数据删除。
+注意当前仅支持删除 Hive 表和 Iceberg 表。
 
-强制删除表（增加 `FORCE` 关键字）会将 HDFS 或对象存储上的数据删除，但不会删除对应文件路径。
-
-[切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)，然后通过如下语句删除 Iceberg 表：
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 删除 Hive 表或 Iceberg 表。
 
 ```SQL
-DROP TABLE <table_name> [FORCE];
+DROP TABLE <table_name>
 ```
 
-## 配置元数据缓存方式
+有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](../catalog/iceberg_catalog.md#删除-iceberg-表)。
 
-Iceberg 的元数据文件可能存储在 AWS S3 或 HDFS 上。StarRocks 默认在内存中缓存 Iceberg 元数据。为了加速查询，StarRocks 提供了基于内存和磁盘的元数据两级缓存机制，在初次查询时触发缓存，在后续查询中会优先使用缓存。如果缓存中无对应元数据，则会直接访问远端存储。
+例如，通过如下语句，删除 Hive 表 `hive_table`：
 
-StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基本原则如下：
-
-- 优先从内存读取元数据。如果在内存中没有找到，才会从磁盘上读取。从磁盘上读取的元数据，会被加载到内存中。如果没有命中磁盘上的缓存，则会从远端存储拉取元数据，并在内存中缓存。
-- 从内存中淘汰的元数据，会写入磁盘；从磁盘上淘汰的元数据，会被废弃。
-
-您可以通过以下 FE 配置项来设置 Iceberg 元数据缓存方式：
-
-| **配置项**                                       | **单位** | **默认值**                                           | **含义**                                                     |
-| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
-| enable_iceberg_metadata_disk_cache               | 无       | `false`                                              | 是否开启磁盘缓存。                                           |
-| iceberg_metadata_cache_disk_path                 | 无       | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | 磁盘缓存的元数据文件位置。                                   |
-| iceberg_metadata_disk_cache_capacity             | 字节     | `2147483648`，即 2 GB                                | 磁盘中缓存的元数据最大空间。                                 |
-| iceberg_metadata_memory_cache_capacity           | 字节     | `536870912`，即 512 MB                               | 内存中缓存的元数据最大空间。                                 |
-| iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
-| iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
-| iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+```SQL
+DROP TABLE hive_table FORCE
+```
