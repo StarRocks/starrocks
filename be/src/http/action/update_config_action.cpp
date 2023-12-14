@@ -64,6 +64,7 @@
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
+#include "common/gflags_utils.h"
 #include "service/staros_worker.h"
 #endif // USE_STAROS
 
