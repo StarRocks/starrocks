@@ -28,10 +28,6 @@ permissions:
   statuses: write
 
 jobs:
-<<<<<<< HEAD
-  title-check:
-    runs-on: ubuntu-latest
-=======
 
   sync-checker:
     runs-on: ubuntu-latest
@@ -63,7 +59,6 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
->>>>>>> 7f4adaf4cb ([Tool] Add backport checklist in pr template (#37017))
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
@@ -71,9 +66,6 @@ jobs:
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
 
-<<<<<<< HEAD
-  branch-info-check:
-=======
       - name: update body
         if: always() && github.base_ref != 'main' && github.event.action == 'opened'
         env:
@@ -97,7 +89,6 @@ jobs:
           fi
 
   backport-check:
->>>>>>> 7f4adaf4cb ([Tool] Add backport checklist in pr template (#37017))
     needs: title-check
     runs-on: ubuntu-latest
     if: >
@@ -168,13 +159,18 @@ jobs:
 
   automerge-check:
     runs-on: ubuntu-latest
-    needs: branch-info-check
-    if: ${{ !failure() && (contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport')) }}
+    needs: backport-check
+    if: >
+      !failure() &&
+      github.base_ref != 'main' &&
+      startsWith(github.head_ref, 'mergify/') &&
+      (contains(github.event.pull_request.title, 'cherry-pick') || 
+      contains(github.event.pull_request.title, 'backport'))
     steps:
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: automerge
 
       - name: automerge
