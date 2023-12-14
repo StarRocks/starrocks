@@ -84,7 +84,7 @@ CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
 CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
-CONF_Int32(create_tablet_worker_count, "3");
+CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
 CONF_mInt32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
@@ -295,7 +295,7 @@ CONF_mInt64(max_compaction_candidate_num, "40960");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
-CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
@@ -362,7 +362,7 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
-CONF_Int32(number_tablet_writer_threads, "16");
+CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
 CONF_mInt64(stale_memtable_flush_time_sec, "30");
@@ -688,7 +688,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-CONF_Double(pipeline_connector_scan_thread_num_per_cpu, "8");
+CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -869,22 +869,22 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
-CONF_Int32(starlet_cache_thread_num, "64");
+CONF_mInt32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
 CONF_Int32(starlet_cache_check_interval, "900");
 // Cache backend cache evictor interval (in seconds)
-CONF_Int32(starlet_cache_evict_interval, "60");
+CONF_mInt32(starlet_cache_evict_interval, "60");
 // Cache will start evict cache files if free space belows this value(percentage)
-CONF_Double(starlet_cache_evict_low_water, "0.1");
+CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Cache will stop evict cache files if free space is above this value(percentage)
-CONF_Double(starlet_cache_evict_high_water, "0.2");
+CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
-CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_mBool(starlet_use_star_cache, "false");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
@@ -898,9 +898,9 @@ CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
 // number of instances per cache item
 CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 // whether turn on read prefetch feature
-CONF_Bool(starlet_fs_read_prefetch_enable, "false");
+CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
-CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
+CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1052,6 +1052,9 @@ CONF_mBool(enable_pindex_compression, "true");
 // So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
 // filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
 CONF_mInt32(max_bf_read_bytes_percent, "10");
+
+// If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
+CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

@@ -243,6 +243,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             this.conf = new Configuration(conf);
         }
 
+        HadoopExt.getInstance().rewriteConfiguration(this.conf);
+
         version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
 
         uriResolverHook = loadUriResolverHook();

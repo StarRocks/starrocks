@@ -51,7 +51,7 @@ public class InvertedIndexParams {
 
     public enum CommonIndexParamKey implements ParamsKey {
         /**
-         *  index implement lib, default is clucene
+         * index implement lib, default is clucene
          */
         IMP_LIB {
             @Override

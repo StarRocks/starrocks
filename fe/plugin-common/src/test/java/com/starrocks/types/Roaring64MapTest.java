@@ -12,12 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/client_cache.h"
+package com.starrocks.types;
 
-#include "gen_cpp/FrontendService.h"
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
-namespace starrocks {
+public class Roaring64MapTest {
+    static BitmapValue largeBitmap;
 
-FrontendServiceClientCache g_frontend_service_client_cache;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        largeBitmap = new BitmapValue();
+        for (long i = 0; i < 20; i++) {
+            largeBitmap.add(i);
+        }
+    }
 
-} // namespace starrocks
+    @Test
+    public void testSerializeToString() {
+        Assert.assertEquals("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19", largeBitmap.serializeToString());
+    }
+}
