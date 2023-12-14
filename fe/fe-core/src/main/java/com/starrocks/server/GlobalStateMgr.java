@@ -64,6 +64,7 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
@@ -95,6 +96,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
@@ -560,6 +562,9 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
 
+    private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
+    private RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -650,6 +655,10 @@ public class GlobalStateMgr {
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
         return configRefreshDaemon;
+    }
+
+    public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
+        return refreshDictionaryCacheTaskDaemon;
     }
 
     private static class SingletonHolder {
@@ -773,6 +782,7 @@ public class GlobalStateMgr {
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
+        this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -1456,6 +1466,8 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        refreshDictionaryCacheTaskDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1554,6 +1566,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                        .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1972,6 +1985,7 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
+                    dictionaryMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -4214,5 +4228,9 @@ public class GlobalStateMgr {
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
+    }
+
+    public DictionaryMgr getDictionaryMgr() {
+        return dictionaryMgr;
     }
 }
