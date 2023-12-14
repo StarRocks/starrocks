@@ -395,7 +395,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：60
 
 #### routine_load_unstable_threshold_second
-- 含义：Routine Load 导入作业的任一导入任务延迟（正在消费的消息时间戳与当前时间的差值）超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
 - 单位：秒
 - 默认值：3600
 
