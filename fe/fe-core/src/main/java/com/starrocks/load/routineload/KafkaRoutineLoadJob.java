@@ -97,6 +97,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
+        this.progress = new KafkaProgress();
+        this.timestampProgress = new KafkaProgress();
     }
 
     public KafkaRoutineLoadJob(Long id, String name,
@@ -105,6 +107,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.brokerList = brokerList;
         this.topic = topic;
         this.progress = new KafkaProgress();
+        this.timestampProgress = new KafkaProgress();
     }
 
     public String getTopic() {
@@ -254,13 +257,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
+        this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
     }
 
     @Override
@@ -584,5 +588,26 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
+    }
+
+    // update substate according to the lag.
+    @Override
+    public void updateSubstate() throws UserException {
+        KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+        Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
+        long now = System.currentTimeMillis();
+
+        for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+            int partition = entry.getKey();
+            long lag = (now - entry.getValue().longValue()) / 1000;
+            if (lag > Config.routine_load_unstable_threshold_second) {
+                updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
+                        String.format("The lag [%d] of partition [%d] exceeds " +
+                                        "Config.routine_load_unstable_threshold_second [%d]",
+                                lag,  partition, Config.routine_load_unstable_threshold_second)));
+                return;
+            }
+        }
+        updateSubstate(JobSubstate.STABLE, null);
     }
 }
