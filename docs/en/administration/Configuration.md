@@ -444,7 +444,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### routine_load_unstable_threshold_second
 - **Unit**: s
 - **Default**: 3600
-- **Description**: Routine Load job is set in the UNSTABLE state if any task lag of the job (the difference between the timestamp of the message being consumed and the current time) exceeds this threshold and there are unconsumed messages in the data source.
+- **Description**: Routine Load job is set in the UNSTABLE state if any task lag within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed and the current time  exceeds this threshold andunconsumed messages exist in the data source.
 
 ##### max_tolerable_backend_down_num
 
