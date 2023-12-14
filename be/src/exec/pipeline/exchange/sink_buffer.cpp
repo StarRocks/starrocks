@@ -30,7 +30,9 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
-          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
+          _sent_audit_stats_frequency(std::max(_sent_audit_stats_frequency,
+                                               BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4) - 1)) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -229,29 +231,6 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
-    if (!request.params->has_query_statistics()) {
-        return;
-    }
-    auto& query_statistics = request.params->query_statistics();
-    bool need_merge = false;
-    if (query_statistics.scan_rows() > 0 || query_statistics.scan_bytes() > 0 || query_statistics.cpu_cost_ns() > 0) {
-        need_merge = true;
-    }
-    if (!need_merge && query_statistics.stats_items_size() > 0) {
-        for (int i = 0; i < query_statistics.stats_items_size(); i++) {
-            const auto& stats_item = query_statistics.stats_items(i);
-            if (stats_item.scan_rows() > 0 || stats_item.scan_bytes()) {
-                need_merge = true;
-                break;
-            }
-        }
-    }
-    if (need_merge) {
-        _eos_query_stats->merge_pb(query_statistics);
-        request.params->clear_query_statistics();
-    }
-}
 
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
@@ -317,8 +296,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
-                // to reduce uncessary rpc requests, we merge all query statistics in eos requests into one and send it through the last eos request
-                _try_to_merge_query_statistics(request);
                 if (request.params->chunks_size() == 0) {
                     continue;
                 } else {
@@ -333,9 +310,15 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                _eos_query_stats->merge_pb(request.params->query_statistics());
-                request.params->clear_query_statistics();
-                _eos_query_stats->to_pb(request.params->mutable_query_statistics());
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                    final_stats->to_pb(request.params->mutable_query_statistics());
+                }
+            }
+        } else {
+            if ((_request_sent & _sent_audit_stats_frequency) == _sent_audit_stats_frequency) {
+                if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                    part_stats->to_pb(request.params->mutable_query_statistics());
+                }
             }
         }
 
