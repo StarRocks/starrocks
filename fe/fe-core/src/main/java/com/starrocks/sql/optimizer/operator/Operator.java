@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.BitSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -53,6 +54,14 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
+    // Like LogicalJoinOperator#transformMask, add a mask to avoid one operator's dead-loop in one transform rule.
+    // eg: MV's UNION-ALL RULE:
+    //                 UNION                         UNION
+    //               /        \                    /       \
+    //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
+    //                                       /      \
+    //                                  EXTRA-OP    MV-SCAN
+    protected BitSet opBitSet = new BitSet();
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -133,6 +142,15 @@ public abstract class Operator {
         return salt;
     }
 
+
+    public boolean isOpBitApplied(int b) {
+        return opBitSet.get(b);
+    }
+
+    public void setOpBit(int b) {
+        this.opBitSet.set(b);
+    }
+
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
         if (rowOutputInfo == null) {
             rowOutputInfo = deriveRowOutputInfo(inputs);
@@ -201,6 +219,7 @@ public abstract class Operator {
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
             builder.salt = operator.salt;
+            builder.opBitSet = operator.opBitSet;
             return (B) this;
         }
 
@@ -243,6 +262,11 @@ public abstract class Operator {
 
         public B addSalt() {
             builder.salt = ++saltGenerator;
+            return (B) this;
+        }
+
+        public B setOpBitSet(BitSet bitSet) {
+            builder.opBitSet = bitSet;
             return (B) this;
         }
     }

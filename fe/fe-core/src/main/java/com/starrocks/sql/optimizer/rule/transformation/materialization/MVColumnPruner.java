@@ -43,8 +43,17 @@ public class MVColumnPruner {
 
     public OptExpression pruneColumns(OptExpression queryExpression) {
         if (queryExpression.getOp() instanceof LogicalFilterOperator) {
-            queryExpression = queryExpression.inputAt(0);
+            OptExpression projectExpression = queryExpression.inputAt(0);
+            OptExpression prunedExpression = pruneProjectExpression(projectExpression);
+            // For pull-up union all rewrite, ensure add the filter operator after column prune,
+            // otherwise maybe cause a wrong result.
+            return OptExpression.create(queryExpression.getOp(), prunedExpression);
+        } else {
+            return pruneProjectExpression(queryExpression);
         }
+    }
+
+    private OptExpression pruneProjectExpression(OptExpression queryExpression) {
         Projection projection = queryExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
         Preconditions.checkState(projection != null);

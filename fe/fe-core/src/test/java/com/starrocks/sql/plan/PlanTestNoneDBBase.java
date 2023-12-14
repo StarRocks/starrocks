@@ -135,6 +135,12 @@ public class PlanTestNoneDBBase {
         Assert.assertFalse(text, text.contains(pattern));
     }
 
+    public static void assertNotContains(String text, String... pattern) {
+        for (String s : pattern) {
+            Assert.assertFalse(text, text.contains(s));
+        }
+    }
+
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(rowCount);
