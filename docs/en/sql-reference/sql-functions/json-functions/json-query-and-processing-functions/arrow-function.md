@@ -6,11 +6,11 @@ displayed_sidebar: "English"
 
 ## Description
 
-Queries an element that can be located by the `json_path` expression in a JSON object and returns a JSON value. The arrow function `->` is more compact and easier to use than the JSON_QUERY function.
+Queries an element that can be located by the `json_path` expression in a JSON object and returns a JSON value. The arrow function `->` is more compact and easier to use than the [json_query](json_query.md) function.
 
 ## Syntax
 
-```Plain_Text
+```Haskell
 json_object_expr -> json_path
 ```
 
@@ -18,7 +18,7 @@ json_object_expr -> json_path
 
 - `json_object_expr`: the expression that represents the JSON object. The object can be a JSON column, or a JSON object that is produced by a JSON constructor function such as PARSE_JSON.
 
-- `json_path`: the expression that represents the path to an element in the JSON object. The value of this parameter is a string. For more information about the JSON path syntax that is supported by StarRocks, see [Overview of JSON functions and operators](../overview-of-json-functions-and-operators.md).
+- `json_path`: the expression that represents the path to an element in the JSON object. The value of this parameter is a string. For information about the JSON path syntax that is supported by StarRocks, see [Overview of JSON functions and operators](../overview-of-json-functions-and-operators.md).
 
 ## Return value
 

@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 系统架构图
 
-<img width="750px" height="550px" src="../assets/2.1-1.png"/>
+![architecture](../assets/2.1-1.png)
 
 ## 组件介绍
 
