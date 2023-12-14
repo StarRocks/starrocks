@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.HashCachedScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -165,7 +166,7 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                 } else {
                     // child is leaf node in compound tree
                     // we cache CompoundPredicate's hash value to eliminate duplicate calculations
-                    compoundTreeUniqueLeaves.add(child);
+                    compoundTreeUniqueLeaves.add(new HashCachedScalarOperator(child));
                     parent.setCompoundTreeLeafNodeNumber(1 + parent.getCompoundTreeLeafNodeNumber());
                 }
 
@@ -181,8 +182,15 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         // this tree can be optimized
         if (compoundTreeUniqueLeaves.size() != parent.getCompoundTreeLeafNodeNumber()) {
-            ScalarOperator newTree =
-                    Utils.createCompound(parent.getCompoundType(), Lists.newArrayList(compoundTreeUniqueLeaves));
+            ScalarOperator newTree = Utils.createCompound(parent.getCompoundType(),
+                    compoundTreeUniqueLeaves.stream().map(
+                            node -> {
+                                // unpack HashCachedScalarOperator so other places will not perceive its existence
+                                if (node instanceof HashCachedScalarOperator) {
+                                    return ((HashCachedScalarOperator) node).getOperator();
+                                }
+                                return node;
+                            }).collect(Collectors.toCollection(Lists::newLinkedList)));
 
             // newTree's root can be or not to be compoundOperator,like "true and true" can be optimized to true which is constant operator
             if (OperatorType.COMPOUND.equals(newTree.getOpType())) {
