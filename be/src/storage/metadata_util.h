@@ -26,6 +26,11 @@
 
 namespace starrocks {
 
+#define COMMON_PROPERTIES "common_properties"
+#define INDEX_PROPERTIES "index_properties"
+#define SEARCH_PROPERTIES "search_properties"
+#define EXTRA_PROPERTIES "extra_properties"
+
 class TTabletSchema;
 class TabletSchemaPB;
 enum RowsetTypePB : int;

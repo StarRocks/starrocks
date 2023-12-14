@@ -91,6 +91,7 @@ message TabletSchemaPB {
 enum IndexType {
     BITMAP = 0;
     GIN = 1;
+    INDEX_UNKNOWN = 2;
 }
 
 message TabletIndexPB {
