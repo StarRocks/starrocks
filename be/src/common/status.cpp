@@ -222,10 +222,6 @@ std::string Status::code_as_string() const {
         return "Resource temporarily unavailable";
     case TStatusCode::REMOTE_FILE_NOT_FOUND:
         return "Remote file not found";
-    case TStatusCode::DUPLICATE_PRIMARY_KEY:
-        return "Duplicate primary key";
-    case TStatusCode::INVALID_PRIMARY_INDEX:
-        return "Invalid primary index";
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));

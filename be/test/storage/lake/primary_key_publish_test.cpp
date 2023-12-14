@@ -600,17 +600,12 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        std::string sync_point;
-        if (i == 0) {
-            sync_point = "lake_index_load.1";
-        } else {
-            sync_point = "publish_primary_key_tablet.1";
-        }
+        std::string sync_point = "lake_index_load.1";
         // Publish version
         int retry_time = 0;
         SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
             if (retry_time < 1) {
-                *(Status*)arg = Status::DuplicatePrimaryKey("ut_test");
+                *(Status*)arg = Status::AlreadyExist("ut_test");
                 retry_time++;
             }
         });

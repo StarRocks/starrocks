@@ -73,10 +73,13 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
     Status st = index.lake_load(tablet, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
+        if (st.is_already_exist()) {
+            builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+        }
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
-        return st;
+        return Status::InternalError(msg);
     }
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
@@ -84,7 +87,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
         std::string msg =
                 strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
-        return st;
+        return Status::InternalError(msg);
     }
     builder->set_has_update_index();
     return index_entry;
@@ -197,11 +200,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             size_t cur_new = new_del_vecs[idx].second->cardinality();
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
+                std::string error_msg = strings::Substitute(
+                        "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
+                        "v:$6",
+                        tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
+                LOG(ERROR) << error_msg;
                 if (!config::experimental_lake_ignore_pk_consistency_check) {
-                    LOG(FATAL) << strings::Substitute(
-                            "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
-                            "v:$6",
-                            tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
+                    builder->set_recover_flag(RecoverFlag::RECOVER_WITH_PUBLISH);
+                    return Status::InternalError(error_msg);
                 }
             }
             new_del += cur_add;
@@ -212,7 +218,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         idx++;
     }
     new_deletes.clear();
-    TEST_ERROR_POINT("publish_primary_key_tablet.1");
 
     // 5. update TabletMeta and write to meta file
     for (auto&& each : new_del_vecs) {

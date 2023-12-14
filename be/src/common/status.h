@@ -198,10 +198,6 @@ public:
 
     static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
-    static Status DuplicatePrimaryKey(const Slice& msg) { return Status(TStatusCode::DUPLICATE_PRIMARY_KEY, msg); }
-
-    static Status InvalidPrimaryIndex(const Slice& msg) { return Status(TStatusCode::INVALID_PRIMARY_INDEX, msg); }
-
     bool ok() const {
         mark_checked();
         return _state == nullptr;
@@ -309,16 +305,6 @@ public:
     bool is_eagain() const {
         mark_checked();
         return code() == TStatusCode::SR_EAGAIN;
-    }
-
-    bool is_duplicate_primary_key() const {
-        mark_checked();
-        return code() == TStatusCode::DUPLICATE_PRIMARY_KEY;
-    }
-
-    bool is_invalid_primary_index() const {
-        mark_checked();
-        return code() == TStatusCode::INVALID_PRIMARY_INDEX;
     }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional

@@ -102,8 +102,8 @@ public:
     std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
 
 private:
-    bool need_recover(const Status& st) { return st.is_duplicate_primary_key() || st.is_invalid_primary_index(); }
-    bool need_re_publish(const Status& st) { return st.is_duplicate_primary_key(); }
+    bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
+    bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
 
     Status check_and_recover(const std::function<Status()>& publish_func) {
         auto ret = publish_func();
@@ -122,9 +122,11 @@ private:
                           << " base_ver: " << _base_version;
             }
             if (need_re_publish(ret)) {
+                _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
                 return publish_func();
             } else {
+                _builder.set_recover_flag(RecoverFlag::OK);
                 // No need to re-publish, make sure txn log already apply
                 return Status::OK();
             }
