@@ -110,6 +110,16 @@ public class Tracers {
         }
     }
 
+    public static boolean isSetTraceMode(Mode e) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return (tracers.modeMask & 1 << e.ordinal()) != 0;
+    }
+
+    public static boolean isSetTraceModule(Module m) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return (tracers.moduleMask & 1 << m.ordinal()) != 0;
+    }
+
     public static void close() {
         THREAD_LOCAL.remove();
     }

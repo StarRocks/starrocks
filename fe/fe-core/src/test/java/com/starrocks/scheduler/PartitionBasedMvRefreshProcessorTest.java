@@ -39,12 +39,14 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -3159,6 +3161,14 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals("{tbl15=[p20220202, p20220201], tbl16=[p20220202, p20220201]}",
                 processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
         starRocksAssert.useDatabase("test").dropMaterializedView("mv_union_filter");
+    }
+
+    @Test
+    public void testQueryDebugOptions() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        QueryDebugOptions debugOptions = sessionVariable.getQueryDebugOptions();
+        Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
+        Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
 }
 
