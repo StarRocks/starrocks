@@ -2011,6 +2011,8 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "select a, b, d, cnt " +
                 "from iceberg_table_view";
         starRocksAssert.withMaterializedView(mv);
+        starRocksAssert.getCtx().executeSql("refresh materialized view iceberg_mv_1" +
+                " partition start('2023-08-01') end('2023-08-02') with sync mode");
 
         {
             String query = "select a, b, d, cnt from iceberg_table_view";
@@ -2018,7 +2020,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "iceberg_mv_1", "UNION");
         }
         {
-            String query = "select a, b, d, cnt from iceberg_table_view where d >= '2023-08-01' and d < '2023-08-02'";
+            String query = "select a, b, d, cnt from iceberg_table_view where d = '2023-08-01'";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "iceberg_mv_1");
         }

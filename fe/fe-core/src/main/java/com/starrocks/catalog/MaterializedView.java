@@ -375,7 +375,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "baseTableInfos")
     private List<BaseTableInfo> baseTableInfos;
 
-    private transient List<TableType> baseTableTypes;
+    private transient List<TableType> baseTableTypes = Lists.newArrayList();;
 
     @SerializedName(value = "active")
     private boolean active;
@@ -457,6 +457,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.baseTableInfos = Lists.newArrayList();
         this.baseTableInfos.add(
                 new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getName(), baseTable.getId()));
+        baseTableTypes = Lists.newArrayList();
         baseTableTypes.add(baseTable.getType());
 
         Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
