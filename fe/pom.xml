@@ -33,6 +33,7 @@ under the License.
         <module>fe-common</module>
         <module>spark-dpp</module>
         <module>fe-core</module>
+        <module>hive-udf</module>
     </modules>
 
     <name>starrocks-fe</name>
@@ -154,6 +155,12 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>plugin-common</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>hive-udf</artifactId>
                 <version>1.0.0</version>
             </dependency>
 
