@@ -13,7 +13,7 @@ CREATE TABLE AS SELECT (CTAS) is used to create a new table based on the query r
 ~~~SQL
 CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
-[(column_name [, column_name2, ...]]
+[column_name [, column_name2, ...]]
 
 [COMMENT "table comment"]
 
