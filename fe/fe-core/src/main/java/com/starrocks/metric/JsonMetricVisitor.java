@@ -89,15 +89,15 @@ public class JsonMetricVisitor extends MetricVisitor {
         for (JvmStats.MemoryPool memPool : jvmStats.getMem()) {
             if (memPool.getName().equalsIgnoreCase(GcNames.PERM)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
                 buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
                         Collections.singletonList(new MetricLabel("type", GcNames.PERM)));
             } else if (memPool.getName().equalsIgnoreCase(GcNames.OLD)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
                 // **NOTICE**: We shouldn't use 'jvm_size_percent' as a metric name, it should be a type,
                 // but for compatibility reason, we won't remove it.
