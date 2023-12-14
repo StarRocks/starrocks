@@ -161,6 +161,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    public enum JobSubstate {
+        STABLE,
+        UNSTABLE
+    }
+
     @SerializedName("i")
     protected long id;
     @SerializedName("n")
@@ -181,6 +186,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected int desireTaskConcurrentNum; // optional
     @SerializedName("s")
     protected JobState state = JobState.NEED_SCHEDULE;
+    protected JobSubstate substate = JobSubstate.STABLE;
     @SerializedName("da")
     protected LoadDataSourceType dataSourceType;
     protected double maxFilterRatio = 1;
@@ -235,6 +241,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("p")
     protected RoutineLoadProgress progress;
 
+    @SerializedName("tp")
+    protected RoutineLoadProgress timestampProgress;
+
     protected long firstResumeTimestamp; // the first resume time
     protected long autoResumeCount;
     protected boolean autoResumeLock = false; //it can't auto resume iff true
@@ -242,6 +251,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected String otherMsg = "";
     protected ErrorReason pauseReason;
     protected ErrorReason cancelReason;
+
+    protected ErrorReason stateChangedReason;
 
     @SerializedName("c")
     protected long createTimestamp = System.currentTimeMillis();
@@ -571,6 +582,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return progress;
     }
 
+<<<<<<< HEAD
+=======
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
+    }
+
+    protected abstract String getSourceProgressString();
+
+>>>>>>> 4c9756fdc6 ([Feature] Adds routine_load_unstable_threshold_second (#36222))
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }
@@ -1365,7 +1385,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(TimeUtils.longToTimeString(endTimestamp));
             row.add(db == null ? String.valueOf(dbId) : db.getFullName());
             row.add(tbl == null ? String.valueOf(tableId) : tbl.getName());
-            row.add(getState().name());
+            if (state == JobState.RUNNING) {
+                row.add(substate == JobSubstate.STABLE ? state.name() : substate.name());
+            } else {
+                row.add(state.name());
+            }
             row.add(dataSourceType.name());
             row.add(String.valueOf(getSizeOfRoutineLoadTaskInfoList()));
             row.add(jobPropertiesToJsonString());
@@ -1373,12 +1397,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
             row.add(getProgress().toJsonString());
+            row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     row.add(pauseReason == null ? "" : pauseReason.toString());
                     break;
                 case CANCELLED:
                     row.add(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                case RUNNING:
+                    if (substate == JobSubstate.UNSTABLE) {
+                        row.add(stateChangedReason == null ? "" : stateChangedReason.toString());
+                    } else {
+                        row.add("");
+                    }
                     break;
                 default:
                     row.add("");
@@ -1560,6 +1592,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                timestampProgress = new KafkaProgress();
                 progress.readFields(in);
                 break;
             }
@@ -1723,4 +1756,82 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public void gsonPostProcess() throws IOException {
         setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
     }
+<<<<<<< HEAD
+=======
+
+    public TRoutineLoadJobInfo toThrift() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Table tbl = null;
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                tbl = db.getTable(tableId);
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+        }
+        readLock();
+        try {
+            TRoutineLoadJobInfo info = new TRoutineLoadJobInfo();
+            info.setId(id);
+            info.setName(name);
+            info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+            info.setPause_time(TimeUtils.longToTimeString(pauseTimestamp));
+            info.setEnd_time(TimeUtils.longToTimeString(endTimestamp));
+            info.setDb_name(db == null ? String.valueOf(dbId) : db.getFullName());
+            info.setTable_name(tbl == null ? String.valueOf(tableId) : tbl.getName());
+            info.setState(getState().name());
+            info.setCurrent_task_num(getSizeOfRoutineLoadTaskInfoList());
+            info.setJob_properties(jobPropertiesToJsonString());
+            info.setData_source_properties(dataSourcePropertiesJsonToString());
+            info.setCustom_properties(customPropertiesJsonToString());
+            info.setData_source_type(dataSourceType.name());
+            info.setStatistic(getStatistic());
+            info.setProgress(getProgress().toJsonString());
+            switch (state) {
+                case PAUSED:
+                    info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
+                    break;
+                case CANCELLED:
+                    info.setReasons_of_state_changed(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                default:
+                    info.setReasons_of_state_changed("");
+            }
+
+            // tracking url
+            if (!errorLogUrls.isEmpty()) {
+                info.setError_log_urls(Joiner.on(",").join(errorLogUrls));
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setOther_msg(otherMsg);
+            return info;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+        writeLock();
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_substate", this.substate)
+                .add("desire_job_substate", substate)
+                .add("msg", reason)
+                .build());
+        try {
+            this.substate = substate;
+            this.stateChangedReason = reason;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void updateSubstateStable() throws UserException {
+        updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    public void updateSubstate() throws UserException {
+    }
+>>>>>>> 4c9756fdc6 ([Feature] Adds routine_load_unstable_threshold_second (#36222))
 }
