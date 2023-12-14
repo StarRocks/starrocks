@@ -350,7 +350,7 @@ mvn package
 mvn deploy 
 ```
 
-您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
+您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。
 
 > 说明
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。
