@@ -406,7 +406,15 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
   "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   ```
 
- `StorageCredentialParams` for Microsoft Azure:
+- To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+`StorageCredentialParams` for Microsoft Azure:
 
 ######  azure.blob.storage_account 
 Required:  Yes          
@@ -415,14 +423,6 @@ Description:  The username of your Blob Storage account.
 ######  azure.blob.shared_key      
 Required:  Yes          
 Description:  The shared key of your Blob Storage account. 
-
-- To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
-  ```
 
 ######  azure.blob.account_name   
 Required:  Yes          
