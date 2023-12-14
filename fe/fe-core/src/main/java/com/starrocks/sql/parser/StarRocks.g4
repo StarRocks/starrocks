@@ -313,6 +313,13 @@ statement
     | executeStatement
     | deallocateStatement
 
+    // Dictionary Statement
+    | createDictionaryStatement
+    | dropDictionaryStatement
+    | refreshDictionaryStatement
+    | showDictionaryStatement
+    | cancelRefreshDictionaryStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -818,6 +825,38 @@ updateFailPointStatusStatement
 
 showFailPointStatement
     : SHOW FAILPOINTS ((LIKE pattern=string))? (ON BACKEND string)?
+    ;
+
+// ------------------------------------------- Dictionary Statement -----------------------------------------------------
+
+createDictionaryStatement
+    : CREATE DICTIONARY dictionaryName USING qualifiedName
+        '(' dictionaryColumnDesc (',' dictionaryColumnDesc)* ')'
+        properties?
+    ;
+
+dropDictionaryStatement
+    : DROP DICTIONARY qualifiedName CACHE?
+    ;
+
+refreshDictionaryStatement
+    : REFRESH DICTIONARY qualifiedName
+    ;
+
+showDictionaryStatement
+    : SHOW DICTIONARY qualifiedName?
+    ;
+
+cancelRefreshDictionaryStatement
+    : CANCEL REFRESH DICTIONARY qualifiedName;
+
+dictionaryColumnDesc
+    : qualifiedName KEY
+    | qualifiedName VALUE
+    ;
+
+dictionaryName
+    : qualifiedName
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -2209,6 +2248,7 @@ valueExpression
 primaryExpression
     : userVariable                                                                        #userVariableExpression
     | systemVariable                                                                      #systemVariableExpression
+    | DICTIONARY_GET '(' expressionList ')'                                               #dictionaryGetExpr
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
@@ -2663,10 +2703,10 @@ nonReserved
     | ARRAY_AGG
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
-    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

@@ -71,6 +71,10 @@ public:
                                    const PTabletWriterAddSegmentRequest* request,
                                    PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
 
+    void refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PRefreshDictionaryCacheRequest* request,
+                                  PRefreshDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 

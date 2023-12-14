@@ -1384,3 +1384,20 @@ class StarrocksSQLApiLib(object):
         match = re.search(expect, str(res["result"]))
         print(expect)
         tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
+
+    def wait_refresh_dictionary_finish(self, name, check_status):
+        """
+        wait dictionary refresh job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW DICTIONARY %s" % name,
+                True,
+            )
+
+            status = res["result"][0][6]
+            if status != ("REFRESHING") and status != ("COMMITTING"):
+                break
+            time.sleep(0.5)
+        tools.assert_equal(check_status, status, "wait refresh dictionary finish error")

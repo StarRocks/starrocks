@@ -208,4 +208,5 @@ add_library(Storage STATIC
     persistent_index_compaction_manager.cpp
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
-    lake/local_pk_index_manager.cpp)
+    lake/local_pk_index_manager.cpp
+    dictionary_cache_manager.cpp)

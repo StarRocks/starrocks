@@ -216,6 +216,16 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         @Override
+        public DefaultCoordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                                        DescriptorTable descTable, List<PlanFragment> fragments,
+                                                                        List<ScanNode> scanNodes) {
+
+            JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(context, queryId, descTable, fragments,
+                                                                             scanNodes);
+            return new DefaultCoordinator(context, jobSpec);
+        }
+
+        @Override
         public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
                                                                        DescriptorTable descTable,
                                                                        List<PlanFragment> fragments,

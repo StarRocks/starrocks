@@ -32,7 +32,9 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
+#include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/hive_table_sink_operator.h"
@@ -50,6 +52,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/dictionary_cache_sink.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
@@ -566,7 +569,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
             tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK || tsink.type == TDataSinkType::ICEBERG_TABLE_SINK ||
             tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK ||
-            tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK) {
+            tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK || tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK) {
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
@@ -1066,6 +1069,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
                     sink_dop);
         }
+    } else if (typeid(*datasink) == typeid(starrocks::DictionaryCacheSink)) {
+        OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 
     return Status::OK();

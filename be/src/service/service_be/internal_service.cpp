@@ -47,7 +47,9 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/local_tablet_reader.h"
+#include "storage/storage_engine.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -103,6 +105,15 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
              << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                                             const PRefreshDictionaryCacheRequest* request,
+                                                             PRefreshDictionaryCacheResult* response,
+                                                             google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
 }
 
 template <typename T>
