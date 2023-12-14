@@ -95,13 +95,13 @@ private:
             return true;
         }
 
-        bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
+        bool try_mem_consume_with_limited_tracker(int64_t size) {
             MemTracker* cur_tracker = _loader();
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size, tracker, limit);
+                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
                 if (LIKELY(limit_tracker == nullptr)) {
                     _cache_size = 0;
                     return true;
@@ -116,10 +116,10 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
+        bool try_mem_reserve(int64_t reserve_bytes) {
             DCHECK(_reserved_bytes == 0);
             DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
+            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
                 _reserved_bytes = reserve_bytes;
                 return true;
             }
@@ -270,8 +270,8 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
-        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
+    bool try_mem_reserve(int64_t size) {
+        if (_mem_cache_manager.try_mem_reserve(size)) {
             return true;
         }
         return false;
