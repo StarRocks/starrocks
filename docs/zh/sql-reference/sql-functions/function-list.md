@@ -306,8 +306,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_min](./bitmap-functions/bitmap_min.md)| 获取 Bitmap 中的最小值。|
 |  [bitmap_or](./bitmap-functions/bitmap_or.md)| 计算两个 bitmap 的并集，返回新的 bitmap。|
 |  [bitmap_remove](./bitmap-functions/bitmap_remove.md)| 从 Bitmap 中删除指定的数值。 |
-| [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
-| [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
+|  [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
+|  [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
 |  [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)| 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。|
 |  [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)| 将 bitmap 转换为 Base64 字符串。|
 |  [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)| 将 bitmap 转换为特定格式的 binary 字符串。|
@@ -318,6 +318,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)| 计算 TINYINT，SMALLINT 和 INT 类型的列中不重复值的个数。|
 |  [bitmap_xor](./bitmap-functions/bitmap_xor.md)| 计算两个 Bitmap 中不重复元素所构成的集合。|
 |  [intersect_count](./bitmap-functions/intersect_count.md)| 求 bitmap 交集大小。|
+|  [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 |  [sub_bitmap](./bitmap-functions/sub_bitmap.md)| 计算两个 bitmap 之间相同元素的个数。|
 |  [to_bitmap](./bitmap-functions/to_bitmap.md)| 将输入值转换为 bitmap。 |
 
@@ -372,6 +373,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [files](./table-functions/files.md) | 从云存储或 HDFS 读取数据文件。|
 | [generate_series](./table-functions/generate_series.md) | 生成一系列从 start 到 end 的数值，步长为 step。 |
 | [json_each](./json-functions/json-query-and-processing-functions/json_each.md) | 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。 |
+| [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 | [unnest](./array-functions/unnest.md) | 用于将一个数组展开成多行。|
 
 ## Bit 函数
