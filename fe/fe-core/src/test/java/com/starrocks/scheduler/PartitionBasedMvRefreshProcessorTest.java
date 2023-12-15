@@ -920,7 +920,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7", "partitions=3/3");
+        assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
     }
 
     @Test
