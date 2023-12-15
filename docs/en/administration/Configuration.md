@@ -105,7 +105,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Loading and unloading
 
-<<<<<<< HEAD
 | Parameter                               | Unit | Default                                         | Description                                                  |
 | --------------------------------------- | ---- | ----------------------------------------------- | ------------------------------------------------------------ |
 | max_broker_load_job_concurrency         | -    | 5                                               | The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.|
