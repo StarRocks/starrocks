@@ -47,6 +47,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
@@ -1948,6 +1949,11 @@ public class ExpressionAnalyzer {
             }
             StructType returnType = new StructType(structFields);
             node.setType(returnType);
+            return null;
+        }
+
+        @Override
+        public Void visitNamedArgument(NamedArgument node, Scope context) {
             return null;
         }
     }
