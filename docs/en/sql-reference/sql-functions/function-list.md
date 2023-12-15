@@ -143,6 +143,7 @@ You can find a function based on the following categories:
 - [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)
 - [bitmap_xor](./bitmap-functions/bitmap_xor.md)
 - [intersect_count](./bitmap-functions/intersect_count.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [sub_bitmap](./bitmap-functions/sub_bitmap.md)
 - [to_bitmap](./bitmap-functions/to_bitmap.md)
 
@@ -417,10 +418,11 @@ You can find a function based on the following categories:
 
 ## Table functions
 
-- [files](../sql-functions/table-functions/files.md)
-- [generate_series](../sql-functions/table-functions/generate_series.md)
-- [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-- [unnest](../sql-functions/array-functions/unnest.md)
+- [files](./table-functions/files.md)
+- [generate_series](./table-functions/generate_series.md)
+- [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [unnest](./array-functions/unnest.md)
 
 ## Utility functions
 
