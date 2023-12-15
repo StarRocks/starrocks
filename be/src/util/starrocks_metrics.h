@@ -80,6 +80,13 @@ public:
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(query_scan_rows, MetricUnit::ROWS);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_read_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_write_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_skip_read_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_skip_read_count, MetricUnit::BLOCKS);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_hit_count, MetricUnit::BLOCKS);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(data_cache_miss_count, MetricUnit::BLOCKS);
+    METRIC_DEFINE_DOUBLE_GAUGE(data_cache_hit_ratio, MetricUnit::PERCENT);
 
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);

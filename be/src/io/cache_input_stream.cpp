@@ -138,6 +138,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
     // read remote
+    _stats.read_cache_miss_count += 1;
     char* src = nullptr;
     if (sb) {
         // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.

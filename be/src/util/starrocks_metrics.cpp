@@ -53,6 +53,13 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(http_request_send_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
+    REGISTER_STARROCKS_METRIC(data_cache_read_bytes);
+    REGISTER_STARROCKS_METRIC(data_cache_write_bytes);
+    REGISTER_STARROCKS_METRIC(data_cache_skip_read_bytes);
+    REGISTER_STARROCKS_METRIC(data_cache_skip_read_count);
+    REGISTER_STARROCKS_METRIC(data_cache_hit_count);
+    REGISTER_STARROCKS_METRIC(data_cache_miss_count);
+    REGISTER_STARROCKS_METRIC(data_cache_hit_ratio);
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);

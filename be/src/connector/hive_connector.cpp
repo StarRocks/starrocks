@@ -400,6 +400,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_miss_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadMissCounter", TUnit::UNIT, prefix);
     }
 
     {

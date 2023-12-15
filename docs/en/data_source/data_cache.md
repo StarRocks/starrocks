@@ -162,3 +162,23 @@ Table: lineitem
  - __MAX_OF_BytesRead: 194.99 MB
  - __MIN_OF_BytesRead: 81.25 MB
 ```
+
+You can also use RESTful API operation to query the metrics related to the data cache.
+
+```shell
+curl -s  http://<be_host>:<be_http_port>/metrics |grep data_cache
+
+# TYPE starrocks_be_data_cache_hit_count counter
+starrocks_be_data_cache_hit_count 3
+# TYPE starrocks_be_data_cache_miss_count counter
+starrocks_be_data_cache_miss_count 15
+# TYPE starrocks_be_data_cache_read_bytes counter
+starrocks_be_data_cache_read_bytes 786432
+# TYPE starrocks_be_data_cache_skip_read_bytes counter
+starrocks_be_data_cache_skip_read_bytes 0
+# TYPE starrocks_be_data_cache_skip_read_count counter
+starrocks_be_data_cache_skip_read_count 0
+# TYPE starrocks_be_data_cache_write_bytes counter
+starrocks_be_data_cache_write_bytes 54783366
+```
+  

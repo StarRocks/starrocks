@@ -19,6 +19,7 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
+#include "util/starrocks_metrics.h"
 
 static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
 namespace starrocks {
@@ -333,6 +334,24 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_counter, stats.read_block_buffer_count);
         COUNTER_UPDATE(profile->datacache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
+        COUNTER_UPDATE(profile->datacache_read_miss_counter, stats.read_cache_miss_count);
+
+        StarRocksMetrics::instance()->data_cache_write_bytes.increment(stats.write_cache_bytes);
+        StarRocksMetrics::instance()->data_cache_skip_read_bytes.increment(stats.skip_read_cache_bytes);
+        StarRocksMetrics::instance()->data_cache_skip_read_count.increment(stats.skip_read_cache_count);
+        int64_t data_cache_read_bytes = stats.read_cache_bytes + stats.read_block_buffer_bytes;
+        if (data_cache_read_bytes > 0) {
+            StarRocksMetrics::instance()->data_cache_read_bytes.increment(data_cache_read_bytes);
+        }
+        int64_t data_cache_hit_count = stats.read_cache_count + stats.read_block_buffer_count;
+        if (data_cache_hit_count > 0) {
+            StarRocksMetrics::instance()->data_cache_hit_count.increment(data_cache_hit_count);
+        }
+        StarRocksMetrics::instance()->data_cache_miss_count.increment(stats.read_cache_miss_count);
+        int64_t total_hit_count = StarRocksMetrics::instance()->data_cache_hit_count.value();
+        int64_t total_lookup_count = StarRocksMetrics::instance()->data_cache_miss_count.value() + total_hit_count;
+        StarRocksMetrics::instance()->data_cache_hit_ratio.set_value(
+                (total_lookup_count == 0L) ? 0.0 : double(total_hit_count) / double(total_lookup_count));
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

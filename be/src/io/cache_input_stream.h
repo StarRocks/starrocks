@@ -44,6 +44,7 @@ public:
         int64_t write_cache_fail_bytes = 0;
         int64_t read_block_buffer_bytes = 0;
         int64_t read_block_buffer_count = 0;
+        int64_t read_cache_miss_count = 0;
     };
 
     explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
