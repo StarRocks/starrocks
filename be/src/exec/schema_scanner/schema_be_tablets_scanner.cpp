@@ -89,12 +89,12 @@ static const char* keys_type_to_string(KeysType type) {
 
 static const char* medium_type_to_string(TStorageMedium::type type) {
     switch (type) {
-        case TStorageMedium::SSD:
-            return "SSD";
-        case TStorageMedium::HDD:
-            return "HDD";
-        default:
-            return "UNKNOWN";
+    case TStorageMedium::SSD:
+        return "SSD";
+    case TStorageMedium::HDD:
+        return "HDD";
+    default:
+        return "UNKNOWN";
     }
 }
 
