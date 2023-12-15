@@ -101,8 +101,7 @@ public class MTable {
     }
 
     public MTable withProperties(String value) {
-        String[] arr = value.split(",");
-        return withProperties(List.of(arr));
+        return withProperties(List.of(value));
     }
 
     public MTable withProperties(List<String> values) {
