@@ -395,7 +395,6 @@ set(EXEC_FILES
         ./storage/compaction_parallelization_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
-        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
@@ -405,6 +404,7 @@ endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
 if (USE_AVX2)
