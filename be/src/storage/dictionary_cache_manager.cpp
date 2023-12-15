@@ -34,8 +34,8 @@ Status DictionaryCacheManager::begin(DictionaryId dict_id, DictionaryCacheTxnId 
     return Status::OK();
 }
 
-Status DictionaryCacheManager::refresh(const PRefreshDictionaryCacheRequest* request) {
-    const auto& dictionary_id = request->dictionary_id();
+Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* request) {
+    const auto& dict_id = request->dict_id();
     const auto& txn_id = request->txn_id();
     const auto& pchunk = request->chunk();
     const auto& pschema = request->schema();
@@ -116,14 +116,14 @@ Status DictionaryCacheManager::refresh(const PRefreshDictionaryCacheRequest* req
     if (encoded_key_column == nullptr) {
         return Status::InternalError(
                 fmt::format("encode key chunk failed when refreshing dictionary cache, dictionary id: {}, txn id: {}",
-                            dictionary_id, txn_id));
+                            dict_id, txn_id));
     }
 
     auto encoded_value_column = DictionaryCacheUtil::encode_columns(*value_schema.get(), value_chunk.get());
     if (encoded_value_column == nullptr) {
         return Status::InternalError(
                 fmt::format("encode value chunk failed when refreshing dictionary cache, dictionary id: {}, txn id: {}",
-                            dictionary_id, txn_id));
+                            dict_id, txn_id));
     }
 
     // release memory after get the encoded column
@@ -132,7 +132,7 @@ Status DictionaryCacheManager::refresh(const PRefreshDictionaryCacheRequest* req
     chunk.reset();
 
     // 4. refresh
-    return _refresh_encoded_chunk(dictionary_id, txn_id, encoded_key_column.get(), encoded_value_column.get(),
+    return _refresh_encoded_chunk(dict_id, txn_id, encoded_key_column.get(), encoded_value_column.get(),
                                   dictionary_schema, DictionaryCacheUtil::get_encoded_type(*key_schema.get()),
                                   DictionaryCacheUtil::get_encoded_type(*value_schema.get()), memory_limit);
 }
@@ -260,7 +260,7 @@ void DictionaryCacheManager::clear(DictionaryId dict_id, bool is_cancel) {
     }
 }
 
-void DictionaryCacheManager::get_info(DictionaryId dict_id, PGetDictionaryStatisticResult& response) {
+void DictionaryCacheManager::get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response) {
     std::shared_lock wlock1(_lock);
 
     long dictionary_memory_usage = 0;

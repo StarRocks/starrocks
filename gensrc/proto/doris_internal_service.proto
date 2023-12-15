@@ -70,8 +70,6 @@ service PBackendService {
     // NOTE(murphy) check if it's really necessary
     rpc submit_mv_maintenance_task(starrocks.PMVMaintenanceTaskRequest) returns (starrocks.PMVMaintenanceTaskResult);
 
-    rpc refresh_dictionary_cache(starrocks.PRefreshDictionaryCacheRequest) returns (starrocks.PRefreshDictionaryCacheResult);
-
     // local tablet reader
     rpc local_tablet_reader_open(starrocks.PTabletReaderOpenRequest) returns (starrocks.PTabletReaderOpenResult);
     rpc local_tablet_reader_close(starrocks.PTabletReaderCloseRequest) returns (starrocks.PTabletReaderCloseResult);
@@ -83,9 +81,5 @@ service PBackendService {
     rpc update_fail_point_status(starrocks.PUpdateFailPointStatusRequest) returns (starrocks.PUpdateFailPointStatusResponse);
     rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
 
-    rpc refresh_dictionary_cache_begin(starrocks.PRefreshDictionaryCacheBeginRequest) returns (starrocks.PRefreshDictionaryCacheBeginResult);
-    rpc refresh_dictionary_cache_commit(starrocks.PRefreshDictionaryCacheCommitRequest) returns (starrocks.PRefreshDictionaryCacheCommitResult);
-
-    rpc clear_dictionary_cache(starrocks.PClearDictionaryCacheRequest) returns (starrocks.PClearDictionaryCacheResult);
-    rpc get_dictionary_statistic(starrocks.PGetDictionaryStatisticRequest) returns (starrocks.PGetDictionaryStatisticResult);
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

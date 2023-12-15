@@ -129,13 +129,14 @@ public:
         OlapTableSchemaParam olap_schema;
         olap_schema.init(tschema);
 
-        PRefreshDictionaryCacheRequest request;
+        PProcessDictionaryCacheRequest request;
         request.set_allocated_chunk(pchunk.get());
         request.set_dictionary_id(dict);
         request.set_txn_id(txn_id);
         request.set_allocated_schema(olap_schema.to_protobuf());
         request.set_memory_limit(1024 * 1024);
         request.set_key_size(1);
+        request.set_type(PProcessDictionaryCacheRequestType::REFRESH);
 
         dictionary_cache_manager->begin(dict, txn_id);
         dictionary_cache_manager->refresh(&request);

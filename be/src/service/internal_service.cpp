@@ -777,83 +777,76 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
-                                                           const PRefreshDictionaryCacheRequest* request,
-                                                           PRefreshDictionaryCacheResult* response,
+void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PProcessDictionaryCacheRequest* request,
+                                                           PProcessDictionaryCacheResult* response,
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
-}
+    PProcessDictionaryCacheRequestType request_type = request->type();
+    switch (request_type) {
+    case PProcessDictionaryCacheRequestType::BEGIN: {
+        if (!request->has_txn_id() || !request->has_dict_id()) {
+            std::stringstream ss;
+            ss << "Incomplete request information for refresh dictionary cache begin";
+            LOG(WARNING) << ss.str();
+            Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+            break;
+        }
 
-template <typename T>
-void PInternalServiceImplBase<T>::refresh_dictionary_cache_begin(google::protobuf::RpcController* controller,
-                                                                 const PRefreshDictionaryCacheBeginRequest* request,
-                                                                 PRefreshDictionaryCacheBeginResult* response,
-                                                                 google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    if (!request->has_txn_id() || !request->has_dict_id()) {
+        int64_t dict_id = request->dict_id();
+        int64_t txn_id = request->txn_id();
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::REFRESH: {
+        StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::COMMIT: {
+        if (!request->has_txn_id() || !request->has_dict_id()) {
+            std::stringstream ss;
+            ss << "Incomplete request information for refresh dictionary cache commit";
+            LOG(WARNING) << ss.str();
+            Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+            break;
+        }
+
+        int64_t dict_id = request->dict_id();
+        int64_t txn_id = request->txn_id();
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::CLEAR: {
+        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::STATISTIC: {
+        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    default: {
         std::stringstream ss;
-        ss << "Incomplete request information for refresh dictionary cache begin";
+        ss << "invalid request type for process_dictionary_cache";
         LOG(WARNING) << ss.str();
-        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
-        return;
+        Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
+        break;
     }
-
-    int64_t dict_id = request->dict_id();
-    int64_t txn_id = request->txn_id();
-    auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
-    if (!st.ok()) {
-        LOG(WARNING) << st.message();
-        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
-        return;
-    }
-
-    Status::OK().to_protobuf(response->mutable_status());
-}
-
-template <typename T>
-void PInternalServiceImplBase<T>::refresh_dictionary_cache_commit(google::protobuf::RpcController* controller,
-                                                                  const PRefreshDictionaryCacheCommitRequest* request,
-                                                                  PRefreshDictionaryCacheCommitResult* response,
-                                                                  google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    if (!request->has_txn_id() || !request->has_dict_id()) {
-        std::stringstream ss;
-        ss << "Incomplete request information for refresh dictionary cache commit";
-        LOG(WARNING) << ss.str();
-        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
-        return;
-    }
-
-    int64_t dict_id = request->dict_id();
-    int64_t txn_id = request->txn_id();
-    auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
-    if (!st.ok()) {
-        LOG(WARNING) << st.message();
-        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
-        return;
-    }
-    Status::OK().to_protobuf(response->mutable_status());
-}
-
-template <typename T>
-void PInternalServiceImplBase<T>::clear_dictionary_cache(google::protobuf::RpcController* controller,
-                                                         const PClearDictionaryCacheRequest* request,
-                                                         PClearDictionaryCacheResult* response,
-                                                         google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
-    Status::OK().to_protobuf(response->mutable_status());
-}
-
-template <typename T>
-void PInternalServiceImplBase<T>::get_dictionary_statistic(google::protobuf::RpcController* controller,
-                                                           const PGetDictionaryStatisticRequest* request,
-                                                           PGetDictionaryStatisticResult* response,
-                                                           google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
-    Status::OK().to_protobuf(response->mutable_status());
+    return;
 }
 
 template <typename T>

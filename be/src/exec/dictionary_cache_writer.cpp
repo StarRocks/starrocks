@@ -104,10 +104,10 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
     Status st = Status::OK();
 
     // construct closures
-    std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*> closures;
+    std::vector<RefCountClosure<PProcessDictionaryCacheResult>*> closures;
     closures.resize(_t_dictionary_cache_sink.nodes.size());
     for (auto& closure : closures) {
-        closure = new RefCountClosure<PRefreshDictionaryCacheResult>();
+        closure = new RefCountClosure<PProcessDictionaryCacheResult>();
         closure->ref();
     }
 
@@ -154,18 +154,19 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
 }
 
 Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,
-                                            std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures) {
+                                            std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
     const auto& nodes = _t_dictionary_cache_sink.nodes;
     DCHECK(closures.size() == nodes.size());
 
     for (size_t i = 0; i < nodes.size(); ++i) {
-        PRefreshDictionaryCacheRequest request;
+        PProcessDictionaryCacheRequest request;
         request.set_allocated_chunk(pchunk);
-        request.set_dictionary_id(_t_dictionary_cache_sink.dictionary_id);
+        request.set_dict_id(_t_dictionary_cache_sink.dictionary_id);
         request.set_txn_id(_t_dictionary_cache_sink.txn_id);
         request.set_allocated_schema(pschema);
         request.set_memory_limit(_t_dictionary_cache_sink.memory_limit);
         request.set_key_size(_t_dictionary_cache_sink.key_size);
+        request.set_type(PProcessDictionaryCacheRequestType::REFRESH);
 
         auto& closure = closures[i];
         closure->ref();
@@ -179,7 +180,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
             LOG(WARNING) << "create brpc stub failed, " << res.status().message();
             return res.status();
         }
-        res.value()->refresh_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
+        res.value()->process_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
 
         request.release_chunk();
         request.release_schema();
@@ -187,7 +188,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
     return Status::OK();
 }
 
-Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures) {
+Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
     Status st = Status::OK();
     for (size_t i = 0; i < closures.size(); ++i) {
         auto& closure = closures[i];
