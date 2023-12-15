@@ -61,6 +61,8 @@ public class MVRefreshTestBase {
     protected static long startSuiteTime = 0;
     protected long startCaseTime = 0;
 
+    protected static final String TEST_DB_NAME = "test";
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;

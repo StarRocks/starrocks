@@ -279,7 +279,7 @@ public class MvRewriteTestBase {
         return toRefreshPartitions;
     }
 
-    public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         new StmtExecutor(connectContext, sql).execute();
     }
