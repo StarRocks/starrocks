@@ -6,9 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Split a large bitmap into multiple sub-bitmaps.
+Splits a large bitmap into multiple sub-bitmaps.
 
-This function is mainly used to export bitmap. When the bitmap is too large, it will exceed the upper limit of the packet size of the Mysql protocol.
+This function is mainly used to export bitmaps. Bitmaps that are too large will exceed the maximum packet size allowed in the Mysql protocol.
 
 This function is supported from v2.5.
 
@@ -21,13 +21,17 @@ BITMAP subdivide_bitmap(bitmap, length)
 ## Parameters
 
 `bitmap`: The bitmap that needs to be split, required.
-`length`: The size of the split. Bitmaps larger than this value will be split into multiple small bitmaps. The size of each bitmap is smaller than this value, required.
+`length`: The maximum length of each sub-bitmap, required. Bitmaps larger than this value will be split into multiple small bitmaps.
 
 ## Return value
 
-Split into multiple sub-bitmaps not larger than length.
+Returns multiple sub-bitmaps not larger than `length`.
 
 ## Examples
+
+Suppose there is a table `t1`, in which the `c2` column is a BITMAP column.
+
+Use bitmap_to_string() to convert values in `c2` into a string.
 
 ```Plain
 mysql> select c1, bitmap_to_string(c2) from t1;
@@ -36,6 +40,8 @@ mysql> select c1, bitmap_to_string(c2) from t1;
 +------+----------------------+
 |    1 | 1,2,3,4,5,6,7,8,9,10 |
 +------+----------------------+
+
+Split `c2` into small bitmaps whose maximum length is 3.
 
 mysql> select c1, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(c2, 3);
 +------+------------------------------------+
