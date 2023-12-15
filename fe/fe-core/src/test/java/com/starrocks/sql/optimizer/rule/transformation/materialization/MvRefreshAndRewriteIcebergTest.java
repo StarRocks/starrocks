@@ -21,15 +21,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.runners.MethodSorters;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@TestMethodOrder(MethodOrderer.MethodName.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {

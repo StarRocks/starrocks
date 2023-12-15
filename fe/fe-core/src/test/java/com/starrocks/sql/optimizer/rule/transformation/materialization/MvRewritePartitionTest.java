@@ -18,8 +18,11 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @BeforeClass

@@ -2242,7 +2242,11 @@ public class SchemaChangeHandler extends AlterHandler {
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
-            if (existedIdx.getIndexId() >= newIndex.getIndexId()) {
+            // check the index id only if the index is CompatibleIndex(GIN)
+            // Bitmap index's id is always be -1
+            if (IndexDef.IndexType.isCompatibleIndex(existedIdx.getIndexType()) &&
+                    IndexDef.IndexType.isCompatibleIndex(newIndex.getIndexType()) &&
+                        existedIdx.getIndexId() >= newIndex.getIndexId()) {
                 throw new IllegalStateException(
                         String.format("New index id %s should be lg than existed idx %s in OlapTable",
                                 newIndex.getIndexId(), existedIdx.getIndexId()));
