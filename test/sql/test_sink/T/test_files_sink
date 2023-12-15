@@ -1,0 +1,24 @@
+-- name: testFilesSink
+
+insert into files ( 
+	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+	"format"="parquet", 
+	"compression" = "uncompressed"
+) 
+select 1 as k1, "A" as k2;
+
+set pipeline_sink_dop = 1;
+
+insert into files ( 
+	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+	"format"="parquet", 
+	"compression" = "uncompressed"
+) 
+select 2 as k1, "B" as k2;
+
+select * from files (
+	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+	"format" = "parquet"
+);
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
