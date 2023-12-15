@@ -80,7 +80,6 @@ private:
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
     OlapScanConjunctsManager _conjuncts_manager;
-    DictOptimizeParser _dict_optimize_parser;
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -223,8 +222,6 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // eval const conjuncts
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
-
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
@@ -271,7 +268,6 @@ void LakeDataSource::close(RuntimeState* state) {
         _reader.reset();
     }
     _predicate_free_pool.clear();
-    _dict_optimize_parser.close(state);
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -495,7 +491,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();

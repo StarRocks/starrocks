@@ -76,6 +76,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         UtFrameUtils.createMinStarRocksCluster();
 
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);

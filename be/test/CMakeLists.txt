@@ -39,7 +39,6 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
-        ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -396,7 +395,6 @@ set(EXEC_FILES
         ./storage/compaction_parallelization_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
-        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
@@ -406,6 +404,7 @@ endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
 if (USE_AVX2)
