@@ -31,8 +31,8 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
-          _sent_audit_stats_frequency(std::max(_sent_audit_stats_frequency,
-                                               BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4) - 1)) {
+          _sent_audit_stats_frequency_upper_limit(
+                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4))) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -313,12 +313,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     final_stats->to_pb(request.params->mutable_query_statistics());
                 }
             }
-        } else {
-            if ((_request_sent & _sent_audit_stats_frequency) == _sent_audit_stats_frequency) {
-                if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
-                    part_stats->to_pb(request.params->mutable_query_statistics());
-                }
-            }
         }
 
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
@@ -327,6 +321,20 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         if (!request.attachment.empty()) {
             _bytes_sent += request.attachment.size();
             _request_sent++;
+        }
+        // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
+        // _sent_audit_stats_frequency grows exponentially to reduce the costs of collecting stats but
+        // let the first limited chunks' stats approach truth。
+        auto request_sent_num = _request_sent.load();
+        if (!request.params->eos()) {
+            if ((request_sent_num & (_sent_audit_stats_frequency - 1)) == 0) {
+                if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
+                    _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
+                }
+                if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                    part_stats->to_pb(request.params->mutable_query_statistics());
+                }
+            }
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
