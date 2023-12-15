@@ -477,18 +477,18 @@ public class StarRocksAssert {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
             mvName = createMaterializedViewStatement.getTableName().getTbl();
+            System.out.println(sql);
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         } finally {
-            if (!Strings.isNullOrEmpty(mvName)) {
-                try {
-                    dropMaterializedView(mvName);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+            Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
+            try {
+                dropMaterializedView(mvName);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
         return this;
