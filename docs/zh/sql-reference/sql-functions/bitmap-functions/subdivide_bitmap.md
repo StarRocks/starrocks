@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 将大 bitmap 拆成多个子 bitmap。
 
-该函数主要用于将 bitmap 导出，bitmap 太大时，会超出 Mysql 协议的包大小上限。
+该函数主要用于将 bitmap 导出，bitmap 太大时，会超出 MySQL 协议的包大小上限。
 
 该函数从 2.5 版本开始支持。
 
