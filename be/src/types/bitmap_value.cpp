@@ -38,6 +38,7 @@
 #include "types/bitmap_value_detail.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -862,7 +863,7 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        (*array).resize(_bitmap->cardinality());
+        raw::make_room(array, _bitmap->cardinality());
         _bitmap->toUint64Array((uint64_t*)(*array).data());
         break;
     }
