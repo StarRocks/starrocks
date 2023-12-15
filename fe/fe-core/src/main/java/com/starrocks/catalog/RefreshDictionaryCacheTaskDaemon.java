@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
 public class RefreshDictionaryCacheTaskDaemon extends FrontendDaemon {
@@ -28,6 +27,5 @@ public class RefreshDictionaryCacheTaskDaemon extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         GlobalStateMgr.getCurrentState().getDictionaryMgr().scheduleTasks();
-        ConnectContext.remove();
     }
 }
