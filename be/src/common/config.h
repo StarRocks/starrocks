@@ -379,6 +379,12 @@ CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 // set to 1 means always use dictionary encoding
 CONF_Double(dictionary_encoding_ratio, "0.7");
 
+// Some data types use dictionary encoding, and this configuration is used to control 
+// the size of dictionary pages. If you want a higher compression ratio, please increase 
+// this configuration item, but be aware that excessively large values may lead to 
+// performance degradation.
+CONF_Int32(dictionary_page_size, "1048576");
+
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
