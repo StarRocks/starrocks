@@ -577,18 +577,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // partitionId -> transactionState
         Map<Long, List<TransactionState>> partitionStates = new HashMap<>();
 
-<<<<<<< HEAD
-            for (TransactionState state : states) {
-                Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
-                        .getIdToPartitionCommitInfo();
-                for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
-=======
 
         for (TransactionState state : states) {
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
                     .getIdToPartitionCommitInfo();
             for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
->>>>>>> 07e1a8462d ([BugFix]Fix NPE when enable batch publish (#36338))
 
                 if (!dirtyPartitons.containsKey(item.getKey())) {
                     dirtyPartitons.put(item.getKey(), new ArrayList<>());
