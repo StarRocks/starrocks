@@ -395,7 +395,12 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
+<<<<<<< HEAD
         ./storage/lake/local_pk_index_manager_test.cpp
+=======
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
+>>>>>>> 45fad8048b ([BugFix] Only compile local pk index manager test with staros (#36954))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
@@ -405,6 +410,7 @@ endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
 if (USE_AVX2)
