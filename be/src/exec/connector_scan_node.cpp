@@ -219,6 +219,7 @@ Status ConnectorScanNode::prepare(RuntimeState* state) {
 
 Status ConnectorScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
+    DictOptimizeParser::disable_open_rewrite(&_conjunct_ctxs);
     RETURN_IF_ERROR(ScanNode::open(state));
     RETURN_IF_ERROR(_data_source_provider->open(state));
 

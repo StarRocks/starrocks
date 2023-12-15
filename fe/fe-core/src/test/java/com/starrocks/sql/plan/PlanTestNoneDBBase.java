@@ -90,6 +90,7 @@ public class PlanTestNoneDBBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
     }

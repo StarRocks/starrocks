@@ -14,18 +14,36 @@
 
 #include "exprs/dictmapping_expr.h"
 
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "runtime/runtime_state.h"
+
 namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
 
+Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    RETURN_IF_ERROR(Expr::open(state, context, scope));
+    if (scope != FunctionContext::FunctionStateScope::FRAGMENT_LOCAL || !_open_rewrite) {
+        return Status::OK();
+    }
+
+    return state->mutable_dict_optimize_parser()->rewrite_expr(context, this, _output_id);
+}
+
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
-    // TODO: record rewrite info in ExprContext
-    // If dict_func_expr is nullptr, then it means that this DictExpr has not been rewritten.
-    // But in some cases we need to evaluate the original expression directly
-    // (usually column_expr_predicate).
-    if (dict_func_expr == nullptr) {
+    if (ptr == nullptr || ptr->is_empty()) {
         return get_child(1)->evaluate_checked(context, ptr);
-    } else {
+    }
+    auto target_column = ptr->get_column_by_slot_id(slot_id());
+    auto data_column = ColumnHelper::get_data_column(target_column.get());
+
+    if (data_column->is_binary()) {
+        DCHECK(dict_func_expr == nullptr);
+        return get_child(1)->evaluate_checked(context, ptr);
+    } else if (dict_func_expr != nullptr) {
         return dict_func_expr->evaluate_checked(context, ptr);
+    } else {
+        return Status::InternalError("unreachable path, dict_func_expr shouldn't be nullptr");
     }
 }
 

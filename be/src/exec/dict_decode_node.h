@@ -60,7 +60,6 @@ private:
 
     std::vector<ExprContext*> _expr_ctxs;
     std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
-    DictOptimizeParser _dict_optimize_parser;
 
     // profile
     RuntimeProfile::Counter* _decode_timer = nullptr;
