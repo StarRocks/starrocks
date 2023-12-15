@@ -245,6 +245,7 @@ struct TQueryOptions {
   111: optional bool enable_file_metacache;
 
   112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
 }
 
 
