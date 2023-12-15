@@ -96,7 +96,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -684,10 +683,6 @@ public class AlterJobMgr {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
             } else if (alterClause instanceof CompactionClause) {
-                // not support in Shared_data mode
-                if (RunMode.isSharedDataMode()) {
-                    throw new DdlException("not supported command in SHARED_DATA runMode");
-                }
                 String s = (((CompactionClause) alterClause).isBaseCompaction() ? "base" : "cumulative")
                         + " compact " + tableName + " partitions: " + ((CompactionClause) alterClause).getPartitionNames();
                 compactionHandler.process(alterClauses, db, olapTable);
