@@ -40,7 +40,7 @@ mysql> select c1, bitmap_to_string(c2) from t1;
 |    1 | 1,2,3,4,5,6,7,8,9,10 |
 +------+----------------------+
 
--- 使用 subdivide_bitmap() 函数将该 Bitmap 拆分成长度不大于 3 的小 Bitmap。然后使用 bitmap_to_string() 将拆分后的 Bitmap 显示到客户端。
+-- 使用 subdivide_bitmap() 函数将该 Bitmap 拆分成长度不大于 3 的多个 Bitmap。然后使用 bitmap_to_string() 将拆分后的多行 Bitmap 显示到客户端。
 mysql> select c1, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(c2, 3);
 +------+------------------------------------+
 | c1   | bitmap_to_string(subdivide_bitmap) |
