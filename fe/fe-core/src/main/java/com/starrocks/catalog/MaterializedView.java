@@ -542,6 +542,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public List<TableType> getBaseTableTypes() {
         if (baseTableTypes == null) {
             baseTableTypes = Lists.newArrayList();
+        }
+        if (baseTableTypes.isEmpty()) {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = baseTableInfo.getTable();
                 baseTableTypes.add(table.getType());
