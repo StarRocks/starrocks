@@ -8,13 +8,13 @@ import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.
 
 ## Description
 
-Stop a Routine Load job.
+Stops a Routine Load job.
 
 <RoutinelLoadPrivNote />
 
 ::: warning
 
-- A stopped Routine Load job can not be resumed.
+- A stopped Routine Load job cannot be resumed. Therefore, please proceed with caution when executing this statement.
 - If you only need to pause the Routine Load job, you can execute [PAUSE ROUTINE LOAD](./PAUSE _ROUTINE_LOAD.md).
 
 :::
@@ -29,7 +29,7 @@ STOP ROUTINE LOAD FOR [db_name.]<job_name>
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| db_name       |              | The name of the database where the Routine Load job belongs. |
+| db_name       |              | The name of the database to which the Routine Load job belongs. |
 | job_name      | ✅            | The name of the Routine Load job.                            |
 
 ## Examples

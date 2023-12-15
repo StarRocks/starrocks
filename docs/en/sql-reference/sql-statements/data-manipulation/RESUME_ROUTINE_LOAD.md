@@ -8,7 +8,7 @@ import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.
 
 ## Description
 
-Resume a Routine load job. The job will temporarily enter **NEED_SCHEDULE** state because the job is being re-scheduled. And after some time, the job will be resumed to **RUNNING** state, continuing consuming messages from the data source and loading data. You can check the job's information with the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement.
+Resumes a Routine load job. The job will temporarily enter **NEED_SCHEDULE** state because the job is being re-scheduled. And after some time, the job will be resumed to **RUNNING** state, continuing consuming messages from the data source and loading data. You can check the job's information with the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement.
 
 <RoutinelLoadPrivNote />
 
@@ -22,7 +22,7 @@ RESUME ROUTINE LOAD FOR [db_name.]<job_name>
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| db_name       |              | The name of the database where the Routine Load job belongs. |
+| db_name       |              | The name of the database to which the Routine Load job belongs. |
 | job_name      | ✅            | The name of the Routine Load job.                            |
 
 ## Examples

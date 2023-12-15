@@ -8,7 +8,7 @@ import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.
 
 ## 功能
 
-停止导入 Routine Load 作业。
+停止 Routine Load 导入作业。
 
 <RoutinelLoadPrivNote />
 

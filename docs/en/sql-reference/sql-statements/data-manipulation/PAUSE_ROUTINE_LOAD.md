@@ -8,7 +8,7 @@ import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.
 
 ## Description
 
-This statement pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) to view and modify information about the paused load job.
+Pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) to view and modify information about the paused load job.
 
 <RoutinelLoadPrivNote />
 
@@ -22,7 +22,7 @@ PAUSE ROUTINE LOAD FOR [db_name.]<job_name>;
 
 | Parameter | Required | Description                                                  |
 | --------- | -------- | ------------------------------------------------------------ |
-| db_name   |          | The name of the database where the Routine Load job belongs. |
+| db_name   |          | The name of the database to which the Routine Load job belongs. |
 | job_name  | ✅        | The name of the Routine Load job. A table may have multiple Routine Load jobs, it is recommended to set a meaningful Routine Load job name by using identifiable information, for example, Kafka topic name or time when you create the load job, to distinguish multiple routine load jobs.  The name of the Routine Load job must be unique within the same database |
 
 ## Examples
