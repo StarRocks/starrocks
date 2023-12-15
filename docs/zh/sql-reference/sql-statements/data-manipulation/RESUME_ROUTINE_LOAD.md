@@ -4,9 +4,13 @@ displayed_sidebar: "Chinese"
 
 # RESUME ROUTINE LOAD
 
+import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.md'
+
 ## 功能
 
 恢复 Routine Load 导入作业。导入作业会先短暂地进入 **NEED_SCHEDULE** 状态，表示正在重新调度导入作业，一段时间后会恢复至 **RUNNING** 状态，继续消费数据源的消息并且导入数据。您可以执行 [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) 语句查看已恢复的导入作业。
+
+<RoutinelLoadPrivNote />
 
 ## 语法
 

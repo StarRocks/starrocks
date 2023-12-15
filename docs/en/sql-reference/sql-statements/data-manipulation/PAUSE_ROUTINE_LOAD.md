@@ -4,13 +4,13 @@ displayed_sidebar: "English"
 
 # PAUSE ROUTINE LOAD
 
+import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.md'
+
 ## Description
 
 This statement pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) to view and modify information about the paused load job.
 
-> **Note**
->
-> Only users with the LOAD_PRIV privilege on the table to which data is loaded have permissions to pause Routine Load jobs on this table.
+<RoutinelLoadPrivNote />
 
 ## Syntax
 
