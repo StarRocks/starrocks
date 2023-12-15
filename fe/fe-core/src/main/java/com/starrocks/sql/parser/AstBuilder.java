@@ -5329,6 +5329,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
+<<<<<<< HEAD
+=======
+        NodePosition pos = createPos(context);
+        MaterializedView.RefreshMoment refreshMoment =
+                Config.default_mv_refresh_immediate ?
+                        MaterializedView.RefreshMoment.IMMEDIATE : MaterializedView.RefreshMoment.DEFERRED;
+        if (context.DEFERRED() != null) {
+            refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+        } else if (context.IMMEDIATE() != null) {
+            refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+        }
+>>>>>>> 2bd50b99c1 ([Enhancement] add a switch to control default refresh immediate (#37093))
         if (context.ASYNC() != null) {
             if (context.START() != null && context.interval() == null) {
                 throw new SemanticException("Please input interval clause");
