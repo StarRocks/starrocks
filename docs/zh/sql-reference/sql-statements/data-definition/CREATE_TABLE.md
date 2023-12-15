@@ -461,7 +461,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * 不支持主键模型表、更新模型表和聚合表。
   * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
   更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
 
@@ -487,7 +487,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * **建表时，必须指定分桶键**。
   * 作为分桶键的列，该列的值不支持更新。
   * 分桶键指定后不支持修改。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 ### **ORDER BY**
 
@@ -618,13 +618,13 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
-#### 设置随机分桶的表中分桶大小
+#### 设置随机分桶表中分桶大小
 
-自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小。默认为 `1024 * 1024 * 1024 B`（1 GB），最大支持为 4 GB。通常情况下建议保留默认值。
+自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
 
 ``` sql
 PROPERTIES (
-    "bucket_size" = "3221225472"
+    "bucket_size" = "1073741824"
 )
 ```
 
@@ -773,10 +773,6 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
-
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### 创建表并设置存储介质和数据自动降冷时间
 

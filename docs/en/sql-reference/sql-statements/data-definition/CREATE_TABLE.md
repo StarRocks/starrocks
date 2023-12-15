@@ -345,7 +345,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - You can only use random bucketing to create Duplicate Key tables.
   - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
   - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
   For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
@@ -374,7 +374,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -515,11 +515,11 @@ PROPERTIES (
 
 #### Specify the bucket size for tables configured with random bucketing
 
-Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
 
 ```sql
 PROPERTIES (
-    "bucket_size" = "3221225472"
+    "bucket_size" = "1073741824"
 )
 ```
 
