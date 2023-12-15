@@ -654,6 +654,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
+<<<<<<< HEAD
     public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
 
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
@@ -670,6 +671,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * And this parameter is to define how huge this file is.
      */
     public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
+=======
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+>>>>>>> 859ebaa890 ([Enhancement]hyperscan with vectorization (#36805))
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1293,6 +1297,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
 
@@ -1303,6 +1308,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
         this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
     }
+=======
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
+>>>>>>> 859ebaa890 ([Enhancement]hyperscan with vectorization (#36805))
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
     }
@@ -3490,9 +3500,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+<<<<<<< HEAD
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
         tResult.setOrc_use_column_names(orcUseColumnNames);
+=======
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+>>>>>>> 859ebaa890 ([Enhancement]hyperscan with vectorization (#36805))
         return tResult;
     }
 

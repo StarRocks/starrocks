@@ -251,6 +251,7 @@ struct TQueryOptions {
   111: optional bool enable_file_metacache;
 
   112: optional bool enable_pipeline_level_shuffle;
+<<<<<<< HEAD
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 
@@ -261,6 +262,9 @@ struct TQueryOptions {
 
   132: optional bool enable_datacache_async_populate_mode;
   133: optional bool enable_datacache_io_adaptor;
+=======
+  113: optional bool enable_hyperscan_vec;
+>>>>>>> 859ebaa890 ([Enhancement]hyperscan with vectorization (#36805))
 }
 
 
