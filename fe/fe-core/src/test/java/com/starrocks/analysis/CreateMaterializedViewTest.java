@@ -40,6 +40,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -4057,5 +4058,79 @@ public class CreateMaterializedViewTest {
                     AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
         starRocksAssert.dropView("view_1");
+    }
+
+    @Test
+    public void testUseSubQueryWithStar1() {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1) tbl";
+
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
+    public void testUseSubQueryWithStar2() {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by random " +
+                "refresh deferred manual " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1 where k1 > '19930101') tbl";
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
+    public void testUseSubQueryWithStar3() throws Exception {
+        starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;",
+                () -> {
+                    String sql = "create materialized view mv1\n" +
+                            "partition by date_trunc('month',k1)\n" +
+                            "distributed by hash(k2) buckets 10\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "as with cte1 as (select * from (select * from tbl1 tb1) t where t.k1 > 10) " +
+                            " select * from cte1;";
+                    starRocksAssert.withMaterializedView(sql, () -> {});
+                });
+    }
+
+    @Test
+    public void testPartitionByWithOrderBy1() {
+        starRocksAssert.withTable(new MTable("tt1", "k1",
+                        List.of(
+                                "k1 datetime",
+                                "k2 string",
+                                "v1 int"
+                        ),
+
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    String sql = "create materialized view mv1 " +
+                            "partition by date_trunc('day', k1) " +
+                            "distributed by random " +
+                            "order by (k3) \n" +
+                            "refresh deferred manual " +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ") " +
+                            "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
+                    starRocksAssert.withMaterializedView(sql, () -> {});
+                });
     }
 }
