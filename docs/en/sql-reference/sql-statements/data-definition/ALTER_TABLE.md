@@ -190,12 +190,34 @@ Note:
 
 Syntax:
 
+<<<<<<< HEAD
 ```sql
 ALTER TABLE [database.]table
 ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
 [TO rollup_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
+=======
+- Add multiple columns
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...),
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
+
+- Add multiple columns and use AFTER to specify locations of the added columns
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name),
+  ADD COLUMN column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name)
+  [, ...]
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
+>>>>>>> 1d337244ab ([Doc] correctify the syntax of adding multiple cols after certain cols in one stmt (#37115))
 
 Note:
 
