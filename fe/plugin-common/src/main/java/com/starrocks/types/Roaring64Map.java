@@ -34,8 +34,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Comparator;

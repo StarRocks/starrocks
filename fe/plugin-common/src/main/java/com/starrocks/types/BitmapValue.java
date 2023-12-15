@@ -103,7 +103,7 @@ public class BitmapValue {
         } catch (IOException e) {
             throw new IOException("Error serializing bitmap: ", e);
         } finally {
-            outputStream.close();;
+            outputStream.close();
         }
 
         try (DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()))) {
@@ -334,13 +334,13 @@ public class BitmapValue {
                         convertBitmapToSmallerType();
                         break;
                     case SET_VALUE:
-                        Set<Long> new_set = new HashSet<>();
+                        Set<Long> newSet = new HashSet<>();
                         for (Long v : set) {
                             if (other.bitmap.contains(v)) {
-                                new_set.add(v);
+                                newSet.add(v);
                             }
                         }
-                        set = new_set;
+                        set = newSet;
                         break;
                 }
                 break;
@@ -354,24 +354,24 @@ public class BitmapValue {
                         }
                         break;
                     case BITMAP_VALUE: {
-                        Set<Long> new_set = new HashSet<>();
+                        Set<Long> newSet = new HashSet<>();
                         for (Long v : other.set) {
                             if (this.bitmap.contains(v)) {
-                                new_set.add(v);
+                                newSet.add(v);
                             }
                         }
-                        set = new_set;
+                        set = newSet;
                         bitmapType = SET_VALUE;
                         break;
                     }
                     case SET_VALUE: {
-                        Set<Long> new_set = new HashSet<>();
+                        Set<Long> newSet = new HashSet<>();
                         for (Long v : other.set) {
                             if (this.set.contains(v)) {
-                                new_set.add(v);
+                                newSet.add(v);
                             }
                         }
-                        set = new_set;
+                        set = newSet;
                         break;
                     }
                 }
