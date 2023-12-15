@@ -86,7 +86,7 @@ public class InformationSchemaDataSource {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }
@@ -104,8 +104,7 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
