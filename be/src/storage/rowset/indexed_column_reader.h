@@ -57,6 +57,11 @@ class TypeInfo;
 class EncodingInfo;
 class IndexedColumnReader;
 
+struct IndexedColumnIteratorOptions {
+    std::unique_ptr<RandomAccessFile> read_file;
+    OlapReaderStatistics* stats = nullptr;
+};
+
 class IndexedColumnIterator {
     friend class IndexedColumnReader;
 
@@ -86,12 +91,12 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts);
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexedColumnIteratorOptions opts);
 
     Status _read_data_page(const PagePointer& pp);
 
     const IndexedColumnReader* _reader = nullptr;
-    IndexReadOptions _opts;
+    IndexedColumnIteratorOptions _opts;
 
     // iterator for ordinal index page
     IndexPageIterator _ordinal_iter;
@@ -112,11 +117,18 @@ class IndexedColumnReader {
     friend class IndexedColumnIterator;
 
 public:
-    IndexedColumnReader(IndexedColumnMetaPB meta) : _meta(std::move(meta)) {}
+    // Does *NOT* take the ownership of |fs|.
+    IndexedColumnReader(const IndexReadOptions& opts, IndexedColumnMetaPB meta)
+            : _fs(opts.fs),
+              _file_name(opts.file_name),
+              _meta(std::move(meta)),
+              _use_page_cache(opts.use_page_cache),
+              _kept_in_memory(opts.kept_in_memory),
+              _skip_fill_local_cache(opts.skip_fill_local_cache) {}
 
-    Status load(const IndexReadOptions& opts);
+    Status load();
 
-    Status new_iterator(const IndexReadOptions& opts, std::unique_ptr<IndexedColumnIterator>* iter);
+    Status new_iterator(std::unique_ptr<IndexedColumnIterator>* iter, const IndexReadOptions& opts);
 
     int64_t num_values() const { return _num_values; }
     const EncodingInfo* encoding_info() const { return _encoding_info; }
@@ -131,14 +143,20 @@ public:
     }
 
 private:
-    Status load_index_page(const IndexReadOptions& opts, const PagePointerPB& pp, PageHandle* handle,
+    Status load_index_page(RandomAccessFile* read_file, const PagePointerPB& pp, PageHandle* handle,
                            IndexPageReader* reader);
 
     // read a page specified by `pp' from `file' into `handle'
-    Status read_page(const IndexReadOptions& opts, const PagePointer& pp, PageHandle* handle, Slice* body,
-                     PageFooterPB* footer) const;
+    Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
+                     PageFooterPB* footer, OlapReaderStatistics* stats) const;
 
+    FileSystem* _fs;
+    std::string _file_name;
     IndexedColumnMetaPB _meta;
+
+    bool _use_page_cache = true;
+    bool _kept_in_memory = false;
+    bool _skip_fill_local_cache = false;
 
     int64_t _num_values = 0;
     // whether this column contains any index page.

@@ -201,7 +201,6 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     }
 
     std::string new_meta_file;
-    std::string dcgs_snapshot_path;
     bool need_remove_new_path = false;
     do {
         // 2. copy all index and data files without lock
@@ -325,49 +324,6 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
             _generate_new_header(_dest_store, shard, tablet, consistent_rowsets, new_tablet_meta);
         }
 
-        // snapshot dcgs for non-PrimaryKey tablet from source data dir
-        auto meta_store = tablet->data_dir()->get_meta();
-        DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
-        for (const auto& rs : consistent_rowsets) {
-            for (int i = 0; i < rs->num_segments(); ++i) {
-                int64_t tablet_id = tablet->tablet_id();
-                RowsetId rowsetid = rs->rowset_meta()->rowset_id();
-
-                DeltaColumnGroupList dcgs;
-                res = TabletMetaManager::get_delta_column_group(meta_store, tablet_id, rowsetid, i, INT64_MAX, &dcgs);
-                if (!res.ok()) {
-                    break;
-                }
-
-                DeltaColumnGroupListPB dcg_list_pb;
-                DeltaColumnGroupListSerializer::serialize_delta_column_group_list(dcgs, &dcg_list_pb);
-
-                dcg_snapshot_pb.add_tablet_id(tablet_id);
-                dcg_snapshot_pb.add_rowset_id(rowsetid.to_string());
-                dcg_snapshot_pb.add_segment_id(i);
-
-                auto add_dcg_list_pb = dcg_snapshot_pb.add_dcg_lists();
-                add_dcg_list_pb->CopyFrom(dcg_list_pb);
-            }
-            if (!res.ok()) {
-                break;
-            }
-        }
-
-        if (!res.ok()) {
-            LOG(WARNING) << "snapshot dcgs failed, " << res.get_error_msg() << " tablet id: " << _tablet_id;
-            need_remove_new_path = true;
-            break;
-        }
-
-        dcgs_snapshot_path = schema_hash_path + "/" + std::to_string(_tablet_id) + ".dcgs_snapshot";
-        res = DeltaColumnGroupListHelper::save_snapshot(dcgs_snapshot_path, dcg_snapshot_pb);
-        if (!res.ok()) {
-            LOG(WARNING) << "save dcg snapshot failed, " << res.get_error_msg() << " tablet id: " << _tablet_id;
-            need_remove_new_path = true;
-            break;
-        }
-
         new_meta_file = schema_hash_path + "/" + std::to_string(_tablet_id) + ".hdr";
         res = new_tablet_meta->save(new_meta_file);
         if (!res.ok()) {
@@ -391,56 +347,6 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
             need_remove_new_path = true;
             res = Status::InternalError(fmt::format("Fail to convert rowset id. path: {}", schema_hash_path));
             break;
-        }
-
-        // recover dcg meta
-        DeltaColumnGroupSnapshotPB modified_dcg_snapshot_pb;
-        // the dcgs meta has been reset by new rowsetid
-        st = DeltaColumnGroupListHelper::parse_snapshot(dcgs_snapshot_path, modified_dcg_snapshot_pb);
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to parse dcgs meta";
-            need_remove_new_path = true;
-            break;
-        }
-
-        if (modified_dcg_snapshot_pb.dcg_lists().size() != 0) {
-            int idx = 0;
-            rocksdb::WriteBatch wb;
-
-            for (const auto& dcg_list_pb : modified_dcg_snapshot_pb.dcg_lists()) {
-                // dcgs for each segment
-                DeltaColumnGroupList dcgs;
-                res = DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs);
-                if (!res.ok()) {
-                    break;
-                }
-
-                if (dcgs.size() == 0) {
-                    ++idx;
-                    continue;
-                }
-
-                res = TabletMetaManager::put_delta_column_group(
-                        _dest_store, &wb, modified_dcg_snapshot_pb.tablet_id(idx),
-                        modified_dcg_snapshot_pb.rowset_id(idx), modified_dcg_snapshot_pb.segment_id(idx), dcgs);
-                if (!res.ok()) {
-                    break;
-                }
-                ++idx;
-            }
-
-            if (!res.ok()) {
-                LOG(WARNING) << "recover dcgs meta failed, tablet id: " << _tablet_id;
-                need_remove_new_path = true;
-                break;
-            }
-
-            res = _dest_store->get_meta()->write_batch(&wb);
-            if (!res.ok()) {
-                LOG(WARNING) << "recover dcgs meta failed, tablet id: " << _tablet_id;
-                need_remove_new_path = true;
-                break;
-            }
         }
 
         st = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(_dest_store, _tablet_id, _schema_hash,
@@ -519,6 +425,7 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
                 break;
             }
         }
+<<<<<<< Updated upstream
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
@@ -554,6 +461,15 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
             LOG(WARNING) << "Not found tablet: " << _tablet_id;
             res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
             break;
+=======
+    }
+    if (!res.ok() && need_remove_new_path) {
+        // remove all index and data files if migration failed
+        Status st = fs::remove_all(schema_hash_path);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to remove storage migration path"
+                         << ". schema_hash_path=" << schema_hash_path << ", error=" << st.to_string();
+>>>>>>> Stashed changes
         }
     } while (false);
 
@@ -591,7 +507,7 @@ Status EngineStorageMigrationTask::_copy_index_and_data_files(
             status = Status::InternalError("Process is going to quit.");
             break;
         }
-        status = rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path);
+        status = rs->copy_files_to(schema_hash_path);
         if (!status.ok()) {
             break;
         }

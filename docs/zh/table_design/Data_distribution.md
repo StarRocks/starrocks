@@ -642,7 +642,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 > **注意**
 >
-> StarRocks [存算分离模式](../deployment/deploy_shared_data.md)暂不支持该特性。
+> StarRocks [存算分离模式](../deployment/shared_data/)暂不支持该特性。
 
 随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
 

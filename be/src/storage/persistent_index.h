@@ -23,7 +23,6 @@
 #include "storage/edit_version.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
-#include "storage/storage_engine.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -32,10 +31,6 @@ namespace starrocks {
 class Tablet;
 class Schema;
 class Column;
-
-namespace lake {
-class LakeLocalPersistentIndex;
-}
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
@@ -57,25 +52,6 @@ enum CommitType {
     kFlush = 0,
     kSnapshot = 1,
     kAppendWAL = 2,
-};
-
-struct IOStat {
-    uint32_t get_in_shard_cnt = 0;
-    uint64_t get_in_shard_cost = 0;
-    uint64_t read_io_bytes = 0;
-    uint64_t l0_write_cost = 0;
-    uint64_t l1_l2_read_cost = 0;
-    uint64_t flush_or_wal_cost = 0;
-    uint64_t compaction_cost = 0;
-    uint64_t reload_meta_cost = 0;
-
-    std::string print_str() {
-        return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
-    }
 };
 
 // Use `uint8_t[8]` to store the value of a `uint64_t` to reduce memory cost in phmap
@@ -367,7 +343,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -395,9 +370,8 @@ public:
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
     // |key_size|: the key size of keys array
-    // |stat|: used for collect statistic
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
-               size_t key_size, IOStat* stat = nullptr);
+               size_t key_size);
 
     // batch check key existence
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
@@ -469,7 +443,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -510,7 +483,7 @@ private:
                                  std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
-                         IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
+                         IndexValue* values, KeysInfo* found_keys_info) const;
 
     Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
                                             std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -613,7 +586,7 @@ class PersistentIndex {
 public:
     // |path|: directory that contains index files
     PersistentIndex(std::string path);
-    virtual ~PersistentIndex();
+    ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }
 
@@ -650,15 +623,13 @@ public:
     Status load_from_tablet(Tablet* tablet);
 
     // start modification with intended version
-    // | version |: intended commit version
-    // | n |: deprecated
     Status prepare(const EditVersion& version, size_t n);
 
     // abort modification
     Status abort();
 
     // commit modification
-    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
+    Status commit(PersistentIndexMetaPB* index_meta);
 
     // apply modification
     Status on_commited();
@@ -679,9 +650,13 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
+<<<<<<< Updated upstream
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                           IOStat* stat = nullptr);
+=======
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values);
+>>>>>>> Stashed changes
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
@@ -793,7 +768,7 @@ private:
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                     std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
+                                     std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     Status _get_from_immutable_index_parallel(size_t n, const Slice* keys, IndexValue* values,
                                               std::map<size_t, KeysInfo>& keys_info_by_key_size);
@@ -839,10 +814,6 @@ protected:
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
-    bool _has_l1 = false;
-    std::shared_ptr<FileSystem> _fs;
-    bool _dump_snapshot = false;
-    bool _flushed = false;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
     // The usage and size is not exactly accurate after reload persistent index from disk becaues
@@ -851,14 +822,21 @@ protected:
     // write cost of PersistentIndexMeta
     std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_length;
     std::vector<int> _l1_merged_num;
+    bool _has_l1 = false;
+    std::shared_ptr<FileSystem> _fs;
     // l2 files's version
     std::vector<EditVersionWithMerge> _l2_versions;
     // all l2
     std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
 
+<<<<<<< Updated upstream
     bool _cancel_major_compaction = false;
 
 private:
+=======
+    bool _dump_snapshot = false;
+    bool _flushed = false;
+>>>>>>> Stashed changes
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;

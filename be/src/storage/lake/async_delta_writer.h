@@ -46,6 +46,18 @@ public:
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
     using Callback = std::function<void(Status st)>;
 
+<<<<<<< Updated upstream
+=======
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+
+    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
+
+>>>>>>> Stashed changes
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
     ~AsyncDeltaWriter();
@@ -90,8 +102,6 @@ public:
     //
     // [thread-safe]
     void close();
-
-    [[nodiscard]] int64_t queueing_memtable_num() const;
 
     [[nodiscard]] int64_t tablet_id() const;
 

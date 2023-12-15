@@ -17,12 +17,14 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/utils/threading/Executor.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/DeleteObjectsResult.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
@@ -129,29 +131,31 @@ private:
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
-// Get an AWSCredentialsProvider based on CloudCredential
+// Get a AWSCredentialsProvider based on CloudCredential
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
         const AWSCloudCredential& aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
-    // Create a base credentials provider
     if (aws_cloud_credential.use_aws_sdk_default_behavior) {
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
-    } else if (aws_cloud_credential.use_instance_profile) {
-        credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
-    } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
-        credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
     } else {
-        DCHECK(false) << "Unreachable!";
-        credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
-    }
+        // Create a base credentials provider
+        if (aws_cloud_credential.use_instance_profile) {
+            credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+        } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
+            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
+                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key);
+        } else {
+            DCHECK(false) << "Unreachable!";
+            credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
+        }
 
-    if (!aws_cloud_credential.iam_role_arn.empty()) {
-        // Do assume role
-        auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
-        credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
-                aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
-                Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+        if (!aws_cloud_credential.iam_role_arn.empty()) {
+            // Do assume role
+            auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+            credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
+                    aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
+                    Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+        }
     }
     return credential_provider;
 }

@@ -33,7 +33,8 @@ namespace starrocks {
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
-    OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader);
+    OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
+                       OrcChunkReader* reader);
     bool filterOnOpeningStripe(uint64_t stripeIndex, const orc::proto::StripeInformation* stripeInformation) override;
     bool filterOnPickRowGroup(size_t rowGroupIdx, const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) override;
@@ -47,6 +48,7 @@ public:
     void setWriterTimezone(const std::string& tz) override;
 
 private:
+    const HdfsScannerParams& _scanner_params;
     const HdfsScannerContext& _scanner_ctx;
     uint64_t _current_stripe_index{0};
     bool _init_use_dict_filter_slots{false};
@@ -78,15 +80,20 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
     }
 }
 
-OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader)
-        : _scanner_ctx(scanner_ctx), _reader(reader), _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
-    if (_scanner_ctx.min_max_tuple_desc != nullptr) {
-        VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_ctx.min_max_tuple_desc->debug_string();
-        for (ExprContext* ctx : _scanner_ctx.min_max_conjunct_ctxs) {
+OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
+                                       OrcChunkReader* reader)
+        : _scanner_params(scanner_params),
+          _scanner_ctx(scanner_ctx),
+
+          _reader(reader),
+          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
+    if (_scanner_params.min_max_tuple_desc != nullptr) {
+        VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
+        for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
-    for (const auto& r : _scanner_ctx.scan_ranges) {
+    for (const auto& r : _scanner_params.scan_ranges) {
         _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
     }
 }
@@ -106,7 +113,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-    const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
@@ -174,7 +181,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
                                               const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) {
-    if (_scanner_ctx.min_max_tuple_desc != nullptr) {
+    if (_scanner_params.min_max_tuple_desc != nullptr) {
         if (filterMinMax(rowGroupIdx, rowIndexes, bloomFilters)) {
             VLOG_FILE << "OrcRowReaderFilter: skip row group " << rowGroupIdx << ", stripe " << _current_stripe_index;
             return true;
@@ -314,7 +321,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                                                             _shared_buffered_input_stream.get());
     ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
 
-    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
@@ -323,17 +330,20 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
+<<<<<<< Updated upstream
         if (errno == ENOENT || s.find("404") != std::string::npos) {
             return Status::RemoteFileNotFound(s);
         }
 
+=======
+>>>>>>> Stashed changes
         return Status::InternalError(s);
     }
 
     std::unordered_set<std::string> known_column_names;
-    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
-                                          _scanner_ctx.case_sensitive);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType(),
+                                          _scanner_params.case_sensitive);
+    _scanner_ctx.set_columns_from_file(known_column_names);
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
@@ -347,27 +357,27 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // we don't need to eval conjunct ctxs at outside any more
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
-    for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
+    for (const auto& it : _scanner_params.materialize_slots) {
+        auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(it->id());
         if (is_lazy_slot) {
-            _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
+            _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.lazy_load_orc_positions.emplace_back(0);
         } else {
-            _lazy_load_ctx.active_load_slots.emplace_back(column.slot_desc);
+            _lazy_load_ctx.active_load_slots.emplace_back(it);
             _lazy_load_ctx.active_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
-        _src_slot_descriptors.emplace_back(column.slot_desc);
+        _src_slot_descriptors.emplace_back(it);
         src_slot_index++;
     }
 
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
-    _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_ctx, _orc_reader.get());
+    _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_params, _scanner_ctx, _orc_reader.get());
     _orc_reader->disable_broker_load_mode();
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
@@ -376,16 +386,16 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
-        for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+        for (const auto& it : _scanner_params.conjunct_ctxs_by_slot) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
         }
         RETURN_IF_ERROR(
-                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_ctx.runtime_filter_collector));
+                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector));
     }
-    _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
-    _orc_reader->set_case_sensitive(_scanner_ctx.case_sensitive);
+    _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
+    _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
         _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
@@ -402,7 +412,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             s.offset = stripeInfo.offset();
             s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
             stripes.emplace_back(s);
-            _app_stats.stripe_sizes.push_back(s.length);
+            _stats.stripe_sizes.push_back(s.length);
         }
         orc_hdfs_file_stream->setStripes(std::move(stripes));
     }
@@ -429,12 +439,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         bool has_used_dict_filter = false;
         ColumnPtr row_delete_filter = BooleanColumn::create();
         {
-            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
-            {
-                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_filter_ns);
-                row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
-            }
+            row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
@@ -448,11 +455,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         size_t chunk_size = 0;
         size_t chunk_size_ori = 0;
         if (_orc_reader->get_cvb_size() != 0) {
-            chunk_size = _orc_reader->get_cvb_size();
-            chunk_size_ori = chunk_size;
             {
                 StatusOr<ChunkPtr> ret;
-                SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
+                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
                 if (!_orc_reader->has_lazy_load_context()) {
                     ret = _orc_reader->get_chunk();
                 } else {
@@ -464,13 +469,20 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+<<<<<<< Updated upstream
             _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
             _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
+=======
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
+            chunk_size_ori = chunk_size;
+>>>>>>> Stashed changes
             // do stats before we filter rows which does not match.
-            _app_stats.raw_rows_read += chunk_size;
+            _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
             {
-                SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
                 for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
                     // do evaluation.
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
@@ -505,16 +517,16 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.late_materialize_skip_rows += chunk_size_ori;
+            _stats.skip_read_rows += chunk_size_ori;
             continue;
         }
         {
-            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
             RETURN_IF_ERROR(_orc_reader->lazy_read_next(read_num_values));
         }
         {
-            SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
+            SCOPED_RAW_TIMER(&_stats.column_convert_ns);
             if (has_used_dict_filter) {
                 _orc_reader->lazy_filter_on_cvb(&_dict_filter);
             }
@@ -535,14 +547,14 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
     if (!scanner_params.deletes.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+        SCOPED_RAW_TIMER(&_stats.delete_build_ns);
         IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
                                                     scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
                                                     &_need_skip_rowids);
         for (const auto& tdelete_file : scanner_params.deletes) {
             RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
         }
-        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
+        _stats.delete_file_per_scan += scanner_params.deletes.size();
     }
 
     return Status::OK();
@@ -551,23 +563,28 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 static const std::string kORCProfileSectionPrefix = "ORC";
 
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+    RuntimeProfile::Counter* delete_build_timer = nullptr;
+    RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
     RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
     RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
+    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
 
-    do_update_iceberg_v2_counter(root, kORCProfileSectionPrefix);
+    delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
+    delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
+    COUNTER_UPDATE(delete_build_timer, _stats.delete_build_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _stats.delete_file_per_scan);
 
     // we expect to get average stripe size instead of sum.
     stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
                                                    RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
                                                    kORCProfileSectionPrefix);
     stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
-    for (auto v : _app_stats.stripe_sizes) {
+    for (auto v : _stats.stripe_sizes) {
         COUNTER_UPDATE(stripe_sizes_counter, v);
     }
-    COUNTER_UPDATE(stripe_number_counter, _app_stats.stripe_sizes.size());
+    COUNTER_UPDATE(stripe_number_counter, _stats.stripe_sizes.size());
 }
 
 } // namespace starrocks

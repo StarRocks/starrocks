@@ -329,11 +329,15 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_
     return std::make_shared<TabletSchema>(schema_pb, schema_map);
 }
 
+<<<<<<< Updated upstream
 // Be careful
 // When you use this function to create a new partial tablet schema, please make sure `referenced_column_ids` include
 // all sort key column index of `src_tablet_schema`. Otherwise you need to recalculate the short key columns of the
 // partial tablet schema
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_tablet_schema,
+=======
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
+>>>>>>> Stashed changes
                                                    const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
     partial_tablet_schema_pb.set_id(src_tablet_schema->id());
@@ -344,20 +348,22 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
-    std::vector<ColumnId> sort_key_idxes;
-    uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
+<<<<<<< Updated upstream
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
         if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
             sort_key_idxes.emplace_back(cid);
         }
         cid++;
+=======
+        src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
+>>>>>>> Stashed changes
     }
-    partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
+<<<<<<< Updated upstream
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCSPtr& tablet_schema,
                                                             const std::vector<uint32_t>& unique_column_ids) {
     std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
@@ -386,6 +392,8 @@ void TabletSchema::_fill_index_map(const TabletIndex& index) {
                   [&](int32_t uid) { _index_map_col_unique_id[idx_type]->insert(uid); });
 }
 
+=======
+>>>>>>> Stashed changes
 void TabletSchema::_init_schema() const {
     starrocks::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {

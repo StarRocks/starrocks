@@ -133,7 +133,7 @@ uint32_t BinaryDictPageBuilder::count() const {
 }
 
 uint64_t BinaryDictPageBuilder::size() const {
-    return _data_page_builder->size();
+    return _pool.total_allocated_bytes() + _data_page_builder->size();
 }
 
 faststring* BinaryDictPageBuilder::get_dictionary_page() {
@@ -246,18 +246,17 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
     using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
-    raw::stl_vector_resize_uninitialized(&slices, nread);
-
+    slices.reserve(nread);
     if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
             element.size = strnlen(element.data, element.size);
-            slices[i] = element;
+            slices.emplace_back(element);
         }
     } else {
         for (int i = 0; i < nread; ++i) {
-            slices[i] = _dict_decoder->string_at_index(codewords[i]);
+            slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
         }
     }
 

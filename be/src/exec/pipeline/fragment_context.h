@@ -75,10 +75,7 @@ public:
     size_t num_drivers() const;
 
     bool all_pipelines_finished() const { return _num_finished_pipelines == _pipelines.size(); }
-    void count_down_pipeline(size_t val = 1);
-
-    bool need_report_exec_state();
-    void report_exec_state_if_necessary();
+    void count_down_pipeline(RuntimeState* state, size_t val = 1);
 
     void set_final_status(const Status& status);
 
@@ -138,14 +135,6 @@ public:
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-
-    size_t expired_log_count() { return _expired_log_count; }
-
-    void set_expired_log_count(size_t val) { _expired_log_count = val; }
-
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -187,14 +176,9 @@ private:
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
     bool _is_stream_pipeline = false;
-    bool _is_stream_test = false;
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
-
-    size_t _expired_log_count = 0;
-
-    std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
 };
 
 class FragmentContextManager {

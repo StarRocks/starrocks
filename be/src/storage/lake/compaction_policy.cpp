@@ -86,39 +86,26 @@ struct RowsetStat {
 
 class RowsetCandidate {
 public:
-    RowsetCandidate(RowsetMetadataPtr rp, const RowsetStat& rs) : rowset_meta_ptr(std::move(rp)), stat(rs) {
-        calculate_score();
-    }
-    // The goal of lake primary table compaction is to reduce the overhead of reading data.
-    // So the first thing we need to do is quantify the overhead of reading the data.
-    // In object storage, we can use this to define overhead:
-    //
-    // OverHead (score) = IO count / Read bytes
-    //
-    // Same bytes, if we use more io to fetch it, that means more overhead.
-    // And in one rowset, the IO count is equal overlapped segment count plus their delvec files.
-    double io_count() const {
-        // rowset_meta_ptr->segments_size() could be zero here, so make sure this >= 1 using max.
-        double cnt = rowset_meta_ptr->overlapped() ? std::max(rowset_meta_ptr->segments_size(), 1) : 1;
-        if (stat.num_dels > 0) {
-            // if delvec file exist, that means we need to read segment files and delvec files both
-            // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.
-            // Bigger update_compaction_delvec_file_io_amp_ratio means high priority about merge rowset with delvec files.
-            cnt *= config::update_compaction_delvec_file_io_amp_ratio;
+    RowsetCandidate(RowsetMetadataPtr rp, const RowsetStat& rs) : rowset_meta_ptr(std::move(rp)), stat(rs) {}
+    double calc_del_bytes() const { return (double)stat.bytes * (double)stat.num_dels / (double)stat.num_rows; }
+    // The goal of lake primary table compaction:
+    // 1. clean up deleted bytes.
+    // 2. merge small rowsets to bigger rowset.
+    // so we pick rowset to compact by this logic:
+    // First, pick out rowset with more deleted bytes.
+    // Second, pick out rowset with less bytes.
+    bool operator<(const RowsetCandidate& other) const {
+        if (calc_del_bytes() < other.calc_del_bytes()) {
+            return true;
+        } else if (calc_del_bytes() > other.calc_del_bytes()) {
+            return false;
+        } else {
+            // may happen when deleted rows is zero
+            return stat.bytes > other.stat.bytes;
         }
-        return cnt;
     }
-    double delete_bytes() const {
-        if (stat.num_rows == 0) return 0.0;
-        if (stat.num_dels >= stat.num_rows) return (double)stat.bytes;
-        return (double)stat.bytes * ((double)stat.num_dels / (double)stat.num_rows);
-    }
-    double read_bytes() const { return (double)stat.bytes - delete_bytes() + 1; }
-    void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
-    bool operator<(const RowsetCandidate& other) const { return score < other.score; }
     RowsetMetadataPtr rowset_meta_ptr;
     RowsetStat stat;
-    double score;
 };
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
@@ -128,89 +115,117 @@ public:
 
     ~PrimaryCompactionPolicy() override = default;
 
+<<<<<<< Updated upstream
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                   std::vector<bool>* has_dels);
+=======
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
+>>>>>>> Stashed changes
 
 private:
-    int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
-        int size = 0;
-        for (const auto& rowset : tablet_metadata->rowsets()) {
-            size += rowset.data_size();
-        }
-        return size;
-    }
+    static const size_t kCompactionResultBytesThreashold = 1000000000;
+    static const size_t kCompactionResultRowsThreashold = 10000000;
 };
 
+<<<<<<< Updated upstream
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+=======
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
+    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
+
+>>>>>>> Stashed changes
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet_mgr->update_mgr();
     std::priority_queue<RowsetCandidate> rowset_queue;
+<<<<<<< Updated upstream
     const auto tablet_id = tablet_metadata->id();
     const auto tablet_version = tablet_metadata->version();
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+=======
+>>>>>>> Stashed changes
     for (const auto& rowset_pb : tablet_metadata->rowsets()) {
         RowsetStat stat;
         stat.num_rows = rowset_pb.num_rows();
         stat.bytes = rowset_pb.data_size();
+<<<<<<< Updated upstream
         if (rowset_pb.has_num_dels()) {
             stat.num_dels = rowset_pb.num_dels();
         } else {
             stat.num_dels = mgr->get_rowset_num_deletes(tablet_id, tablet_version, rowset_pb);
         }
+=======
+        stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), version, rowset_pb);
+>>>>>>> Stashed changes
         rowset_queue.emplace(std::make_shared<const RowsetMetadata>(rowset_pb), stat);
     }
     size_t cur_compaction_result_bytes = 0;
+    size_t cur_compaction_result_rows = 0;
 
     const Tablet tablet(_tablet_mgr, tablet_id);
     std::stringstream input_infos;
     while (!rowset_queue.empty()) {
         const auto& rowset_candidate = rowset_queue.top();
+<<<<<<< Updated upstream
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
         input_rowsets.emplace_back(std::make_shared<Rowset>(tablet, std::move(rowset_candidate.rowset_meta_ptr)));
         if (has_dels != nullptr) {
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
+=======
+        cur_compaction_result_bytes += rowset_candidate.stat.bytes;
+        cur_compaction_result_rows += rowset_candidate.stat.num_rows;
+        if (input_rowsets.size() > 0 && ((cur_compaction_result_bytes > kCompactionResultBytesThreashold * 3 / 2) ||
+                                         (cur_compaction_result_rows > kCompactionResultRowsThreashold * 3 / 2))) {
+            break;
+        }
+        input_rowsets.emplace_back(
+                std::make_shared<Rowset>(_tablet.get(), std::move(rowset_candidate.rowset_meta_ptr)));
+>>>>>>> Stashed changes
         input_infos << input_rowsets.back()->id() << "|";
 
-        if (cur_compaction_result_bytes >
-                    std::max(config::update_compaction_result_bytes, compaction_data_size_threshold) ||
+        if (cur_compaction_result_bytes > kCompactionResultBytesThreashold ||
+            cur_compaction_result_rows > kCompactionResultRowsThreashold ||
             input_rowsets.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }
         rowset_queue.pop();
     }
+<<<<<<< Updated upstream
     VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
                                    tablet_id, tablet_metadata->version(), input_infos.str());
+=======
+    LOG(INFO) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
+                                     _tablet->id(), version, input_infos.str());
+>>>>>>> Stashed changes
 
     return input_rowsets;
 }
 
+<<<<<<< Updated upstream
 StatusOr<uint32_t> primary_compaction_score_by_policy(const std::shared_ptr<const TabletMetadataPB>& metadata) {
     auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     PrimaryCompactionPolicy policy(tablet_mgr, metadata);
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowsets, policy.pick_rowsets(metadata, &has_dels));
+=======
+double primary_compaction_score(const TabletMetadataPB& metadata) {
+>>>>>>> Stashed changes
     uint32_t segment_num_score = 0;
-    for (int i = 0; i < pick_rowsets.size(); i++) {
-        const auto& pick_rowset = pick_rowsets[i];
-        const bool has_del = has_dels[i];
-        auto current_score = pick_rowset->is_overlapped() ? pick_rowset->num_segments() : 1;
-        if (has_del) {
-            // if delvec file exist, expand score by config.
-            current_score *= config::update_compaction_delvec_file_io_amp_ratio;
-        }
-        segment_num_score += current_score;
+    for (uint32_t i = 0; i < metadata.rowsets_size(); i++) {
+        const auto& rowset = metadata.rowsets(i);
+        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
     }
     return segment_num_score;
 }
 
+<<<<<<< Updated upstream
 double primary_compaction_score(const std::shared_ptr<const TabletMetadataPB>& metadata) {
     // calc compaction score by picked rowsets
     auto score_st = primary_compaction_score_by_policy(metadata);
@@ -224,6 +239,8 @@ double primary_compaction_score(const std::shared_ptr<const TabletMetadataPB>& m
     }
 }
 
+=======
+>>>>>>> Stashed changes
 StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulative_rowsets() {
     std::vector<RowsetPtr> input_rowsets;
     std::vector<uint32_t> input_rowset_ids;

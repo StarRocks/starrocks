@@ -108,6 +108,7 @@ struct RunTimeTypeTraits<TYPE_TINYINT> {
 };
 
 template <>
+<<<<<<< Updated upstream
 struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
     using CppType = uint8_t;
     using ColumnType = UInt8Column;
@@ -115,6 +116,8 @@ struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
 };
 
 template <>
+=======
+>>>>>>> Stashed changes
 struct RunTimeTypeTraits<TYPE_SMALLINT> {
     using CppType = int16_t;
     using ColumnType = Int16Column;
@@ -122,6 +125,7 @@ struct RunTimeTypeTraits<TYPE_SMALLINT> {
 };
 
 template <>
+<<<<<<< Updated upstream
 struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
     using CppType = uint16_t;
     using ColumnType = UInt16Column;
@@ -129,6 +133,8 @@ struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
 };
 
 template <>
+=======
+>>>>>>> Stashed changes
 struct RunTimeTypeTraits<TYPE_INT> {
     using CppType = int32_t;
     using ColumnType = Int32Column;
@@ -136,6 +142,7 @@ struct RunTimeTypeTraits<TYPE_INT> {
 };
 
 template <>
+<<<<<<< Updated upstream
 struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
     using CppType = uint32_t;
     using ColumnType = UInt32Column;
@@ -143,6 +150,8 @@ struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
 };
 
 template <>
+=======
+>>>>>>> Stashed changes
 struct RunTimeTypeTraits<TYPE_BIGINT> {
     using CppType = int64_t;
     using ColumnType = Int64Column;
@@ -150,6 +159,7 @@ struct RunTimeTypeTraits<TYPE_BIGINT> {
 };
 
 template <>
+<<<<<<< Updated upstream
 struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
     using CppType = uint64_t;
     using ColumnType = UInt64Column;
@@ -157,6 +167,8 @@ struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
 };
 
 template <>
+=======
+>>>>>>> Stashed changes
 struct RunTimeTypeTraits<TYPE_LARGEINT> {
     using CppType = int128_t;
     using ColumnType = Int128Column;
@@ -303,6 +315,7 @@ struct RunTimeTypeTraits<TYPE_MAP> {
     using ProxyContainerType = void;
 };
 
+<<<<<<< Updated upstream
 template <>
 struct RunTimeTypeTraits<TYPE_ARRAY> {
     using CppType = DatumArray;
@@ -310,6 +323,8 @@ struct RunTimeTypeTraits<TYPE_ARRAY> {
     using ProxyContainerType = void;
 };
 
+=======
+>>>>>>> Stashed changes
 template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 

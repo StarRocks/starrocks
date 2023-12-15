@@ -14,17 +14,13 @@
 
 #pragma once
 
-#include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
 #include "common/object_pool.h"
-#include "exprs/function_helper.h"
-#include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -129,49 +125,48 @@ public:
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
-        if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            if (Type != _children[0]->type().type) {
-                if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
-                    return Status::InternalError("VectorizedInPredicate type is error");
-                }
+
+        if (Type != _children[0]->type().type) {
+            if (!isSliceLT<Type> || !_children[0]->type().is_string_type()) {
+                return Status::InternalError("VectorizedInPredicate type is error");
+            }
+        }
+
+        bool use_array = is_use_array();
+        for (int i = 1; i < _children.size(); ++i) {
+            if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
+                (_children[0]->type().type == _children[i]->type().type) ||
+                (LogicalType::TYPE_NULL == _children[i]->type().type)) {
+                // pass
+            } else {
+                return Status::InternalError("VectorizedInPredicate type not same");
             }
 
-            bool use_array = is_use_array();
-            for (int i = 1; i < _children.size(); ++i) {
-                if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
-                    (_children[0]->type().type == _children[i]->type().type) ||
-                    (LogicalType::TYPE_NULL == _children[i]->type().type)) {
-                    // pass
-                } else {
-                    return Status::InternalError("VectorizedInPredicate type not same");
-                }
+            ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
+            if (!value->is_constant() && !value->only_null()) {
+                return Status::InternalError("VectorizedInPredicate value not const");
+            }
 
-                ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
-                if (!value->is_constant() && !value->only_null()) {
-                    return Status::InternalError("VectorizedInPredicate value not const");
-                }
+            ColumnViewer<Type> viewer(value);
+            if (viewer.is_null(0)) {
+                _null_in_set = true;
+                continue;
+            }
 
-                ColumnViewer<Type> viewer(value);
-                if (viewer.is_null(0)) {
-                    _null_in_set = true;
-                    continue;
+            // insert into set
+            if constexpr (isSliceLT<Type>) {
+                if (_hash_set.emplace(viewer.value(0)).second) {
+                    _string_values.emplace_back(value);
                 }
+                continue;
+            }
 
-                // insert into set
-                if constexpr (isSliceLT<Type>) {
-                    if (_hash_set.emplace(viewer.value(0)).second) {
-                        _string_values.emplace_back(value);
-                    }
-                    continue;
+            if (use_array) {
+                if constexpr (can_use_array()) {
+                    _set_array_index(viewer.value(0));
                 }
-
-                if (use_array) {
-                    if constexpr (can_use_array()) {
-                        _set_array_index(viewer.value(0));
-                    }
-                } else {
-                    _hash_set.emplace(viewer.value(0));
-                }
+            } else {
+                _hash_set.emplace(viewer.value(0));
             }
         }
         return Status::OK();
@@ -393,6 +388,7 @@ private:
     std::vector<ColumnPtr> _string_values;
 };
 
+<<<<<<< Updated upstream
 class VectorizedInConstPredicateGeneric final : public Predicate {
 public:
     VectorizedInConstPredicateGeneric(const TExprNode& node)
@@ -512,6 +508,8 @@ private:
     Columns _const_input;
 };
 
+=======
+>>>>>>> Stashed changes
 class VectorizedInConstPredicateBuilder {
 public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)

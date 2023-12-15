@@ -45,10 +45,7 @@ namespace starrocks::spill {
 struct SpillProcessMetrics {
 public:
     SpillProcessMetrics() = default;
-    SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
-
-    // For query statistics
-    std::atomic_int64_t* total_spill_bytes;
+    SpillProcessMetrics(RuntimeProfile* profile);
 
     // time spent to append data into Spiller
     RuntimeProfile::Counter* append_data_timer = nullptr;
@@ -102,7 +99,7 @@ public:
 };
 
 // major spill interfaces
-class Spiller : public std::enable_shared_from_this<Spiller> {
+class Spiller {
 public:
     Spiller(SpilledOptions opts, const std::shared_ptr<SpillerFactory>& factory)
             : _opts(std::move(opts)), _parent(factory) {}
@@ -150,8 +147,6 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
-            auto defer = DeferOp([&]() { guard.scoped_end(); });
-            RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
@@ -172,7 +167,7 @@ public:
 
     bool restore_finished() const { return _reader->restore_finished(); }
 
-    bool is_cancel() const { return _is_cancel; }
+    bool is_cancel() { return _is_cancel; }
 
     void cancel() {
         _is_cancel = true;

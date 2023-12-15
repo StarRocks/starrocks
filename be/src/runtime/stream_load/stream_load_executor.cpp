@@ -135,11 +135,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
-
                 if (ctx->unref()) {
                     delete ctx;
                 }
@@ -422,7 +417,6 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_filteredRows(ctx->number_filtered_rows);
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
-        manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

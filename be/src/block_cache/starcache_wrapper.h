@@ -16,8 +16,12 @@
 
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
+<<<<<<< Updated upstream
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
+=======
+#include "thirdparty/starcache/src/star_cache.h"
+>>>>>>> Stashed changes
 
 namespace starrocks {
 
@@ -28,10 +32,17 @@ public:
 
     Status init(const CacheOptions& options) override;
 
+<<<<<<< Updated upstream
     Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
 
     Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
                         CacheHandle* handle, WriteCacheOptions* options) override;
+=======
+    Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                       bool overwrite) override;
+
+    StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) override;
+>>>>>>> Stashed changes
 
     Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                        ReadCacheOptions* options) override;
@@ -49,6 +60,8 @@ public:
     Status shutdown() override;
 
 private:
+    void _load_starcache_conf();
+
     std::unique_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
 };

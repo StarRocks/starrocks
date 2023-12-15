@@ -61,7 +61,7 @@ size_t ArrayColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     return _elements->byte_size(_offsets->get_data()[from],
                                 _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
-           _offsets->byte_size(from, size);
+           _offsets->Column::byte_size(from, size);
 }
 
 size_t ArrayColumn::byte_size(size_t idx) const {
@@ -148,7 +148,6 @@ bool ArrayColumn::append_nulls(size_t count) {
     return false;
 }
 
-// append an empty array []
 void ArrayColumn::append_default() {
     _offsets->append(_offsets->get_data().back());
 }
@@ -208,20 +207,6 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
             new_array_column->append(*this, idx_begin, remain_count);
         }
         swap_column(*new_array_column.get());
-    }
-}
-
-void ArrayColumn::remove_first_n_values(size_t count) {
-    if (count >= _offsets->size()) {
-        count = _offsets->size() - 1;
-    }
-
-    size_t offset = _offsets->get_data()[count];
-    _elements->remove_first_n_values(offset);
-    _offsets->remove_first_n_values(count);
-
-    for (size_t i = 0; i < _offsets->size(); i++) {
-        _offsets->get_data()[i] -= offset;
     }
 }
 
@@ -397,7 +382,7 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
-int ArrayColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
     const auto& rhs_array = down_cast<const ArrayColumn&>(rhs);
 
     size_t lhs_offset = _offsets->get_data()[left];
@@ -407,32 +392,31 @@ int ArrayColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_
     size_t rhs_end = rhs_array._offsets->get_data()[right + 1];
 
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
-        return EQUALS_FALSE;
+        return false;
     }
-
-    int ret = EQUALS_TRUE;
+    auto lhs_elements = ColumnHelper::get_data_column(_elements.get());
+    auto rhs_elements = ColumnHelper::get_data_column(rhs_array._elements.get());
     while (lhs_offset < lhs_end) {
-        auto tmp = _elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset, safe_eq);
-
-        // return directly if false
-        if (tmp == EQUALS_FALSE) {
-            return EQUALS_FALSE;
-        } else if (tmp == EQUALS_NULL) {
-            // need check all if is null
-            ret = EQUALS_NULL;
+        if (_elements->is_null(lhs_offset)) {
+            if (!rhs_array._elements->is_null(rhs_offset)) {
+                return false;
+            }
+        } else {
+            if (rhs_array._elements->is_null(rhs_offset)) {
+                return false;
+            }
+            if (!lhs_elements->equals(lhs_offset, *rhs_elements, rhs_offset)) {
+                return false;
+            }
         }
-
         lhs_offset++;
         rhs_offset++;
     }
-
-    return safe_eq ? EQUALS_TRUE : ret;
+    return true;
 }
 
 void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
-    if (size() != rhs_column.size()) {
-        throw std::runtime_error("Two input columns in comparison must have same rows");
-    }
+    CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
 
     size_t rows = size();
     output->resize(rows);
@@ -547,11 +531,11 @@ bool ArrayColumn::set_null(size_t idx) {
     return false;
 }
 
-size_t ArrayColumn::reference_memory_usage(size_t from, size_t size) const {
+size_t ArrayColumn::element_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t start_offset = _offsets->get_data()[from];
     size_t elements_num = _offsets->get_data()[from + size] - start_offset;
-    return _elements->reference_memory_usage(start_offset, elements_num) + _offsets->reference_memory_usage(from, size);
+    return _elements->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
 }
 
 void ArrayColumn::swap_column(Column& rhs) {

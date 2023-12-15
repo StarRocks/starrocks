@@ -31,6 +31,7 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
+    RACE_DETECT(mem_table, detect);
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
@@ -38,6 +39,7 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 }
 
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    RACE_DETECT(mem_table, detect);
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
@@ -55,6 +57,7 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 }
 
 Status UnorderedMemTable::flush(FlushCallBack callback) {
+    RACE_DETECT(mem_table, detect);
     for (const auto& chunk : _chunks) {
         RETURN_IF_ERROR(callback(chunk));
     }
@@ -69,6 +72,7 @@ StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(b
     if (shared) {
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
+        RACE_DETECT(mem_table, detect);
         return SpillInputStream::as_stream(std::move(_chunks), _spiller);
     }
 }
@@ -78,6 +82,7 @@ bool OrderedMemTable::is_empty() {
 }
 
 Status OrderedMemTable::append(ChunkPtr chunk) {
+    RACE_DETECT(mem_table, detect);
     if (_chunk == nullptr) {
         _chunk = chunk->clone_empty();
     }
@@ -90,6 +95,7 @@ Status OrderedMemTable::append(ChunkPtr chunk) {
 }
 
 Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    RACE_DETECT(mem_table, detect);
     if (_chunk == nullptr) {
         _chunk = src.clone_empty();
     }
@@ -105,6 +111,7 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 }
 
 Status OrderedMemTable::flush(FlushCallBack callback) {
+    RACE_DETECT(mem_table, detect);
     while (!_chunk_slice.empty()) {
         auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         RETURN_IF_ERROR(callback(chunk));
@@ -118,6 +125,7 @@ Status OrderedMemTable::flush(FlushCallBack callback) {
 }
 
 Status OrderedMemTable::done() {
+    RACE_DETECT(mem_table, detect);
     // do sort
     ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
     _chunk_slice.reset(_chunk);

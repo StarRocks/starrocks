@@ -44,10 +44,17 @@ public:
 
     Status init(const CacheOptions& options) override;
 
+<<<<<<< Updated upstream
     Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
 
     Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
                         CacheHandle* handle, WriteCacheOptions* options) override;
+=======
+    Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                       bool overwrite) override;
+
+    StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) override;
+>>>>>>> Stashed changes
 
     Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                        ReadCacheOptions* options) override;

@@ -232,7 +232,14 @@ Status DeltaWriter::_init() {
             average_row_size = _tablet_schema->estimate_row_size(16);
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
+<<<<<<< Updated upstream
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
+=======
+
+        writer_context.partial_update_tablet_schema =
+                TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
+        auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
+>>>>>>> Stashed changes
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
@@ -241,6 +248,7 @@ Status DeltaWriter::_init() {
         if (!_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
+<<<<<<< Updated upstream
         auto partial_update_schema = TabletSchema::create(_tablet_schema, writer_context.referenced_column_ids);
         // In column mode partial update, we need to modify sort key idxes and short key column num in partial
         // tablet schema
@@ -257,6 +265,9 @@ Status DeltaWriter::_init() {
         writer_context.is_partial_update = true;
         writer_context.partial_update_mode = _opt.partial_update_mode;
         _tablet_schema = partial_update_schema;
+=======
+        writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+>>>>>>> Stashed changes
     } else {
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
@@ -276,8 +287,8 @@ Status DeltaWriter::_init() {
     }
 
     if (auto_increment_in_sort_key && _opt.miss_auto_increment_column) {
-        LOG(WARNING) << "auto increment column in sort key do not support partial update";
-        return Status::NotSupported("auto increment column in sort key do not support partial update");
+        LOG(WARNING) << "table with sort key do not support partial update";
+        return Status::NotSupported("table with sort key do not support partial update");
     }
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
@@ -572,7 +583,11 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
+<<<<<<< Updated upstream
     _write_buffer_size = _mem_table->write_buffer_size();
+=======
+    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
+>>>>>>> Stashed changes
 }
 
 Status DeltaWriter::commit() {

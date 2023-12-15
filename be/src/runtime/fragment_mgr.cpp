@@ -181,8 +181,7 @@ FragmentExecState::~FragmentExecState() = default;
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
                                                     params.query_options, params.query_globals, _exec_env);
-    int func_version = params.__isset.func_version ? params.func_version
-                                                   : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
+    int func_version = params.__isset.func_version ? params.func_version : 2;
     _runtime_state->set_func_version(func_version);
     _runtime_state->init_mem_trackers(_query_id);
     _executor.set_runtime_state(_runtime_state.get());
@@ -241,8 +240,12 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     if (!coord_status.ok()) {
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
+<<<<<<< Updated upstream
         LOG(WARNING) << ss.str();
         (void)update_status(Status::InternalError(ss.str()));
+=======
+        update_status(Status::InternalError(ss.str()));
+>>>>>>> Stashed changes
         return;
     }
 
@@ -289,9 +292,6 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         }
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
-        }
-        if (!runtime_state->get_rejected_record_file_path().empty()) {
-            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
         }
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
@@ -362,12 +362,11 @@ FragmentMgr::FragmentMgr(ExecEnv* exec_env)
     });
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
-    auto st = ThreadPoolBuilder("fragment_mgr")
-                      .set_min_threads(config::fragment_pool_thread_num_min)
-                      .set_max_threads(config::fragment_pool_thread_num_max)
-                      .set_max_queue_size(config::fragment_pool_queue_size)
-                      .build(&_thread_pool);
-    CHECK(st.ok()) << st;
+    ThreadPoolBuilder("fragment_mgr")
+            .set_min_threads(config::fragment_pool_thread_num_min)
+            .set_max_threads(config::fragment_pool_thread_num_max)
+            .set_max_queue_size(config::fragment_pool_queue_size)
+            .build(&_thread_pool);
 }
 
 FragmentMgr::~FragmentMgr() {
@@ -928,7 +927,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_type = TQueryType::EXTERNAL;
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
-    query_options.use_column_pool = false;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();

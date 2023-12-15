@@ -56,16 +56,22 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     std::set<SlotId> hit_flags;
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
-        phmap::flat_hash_map<SlotId, TypeDescriptor> slot_id_to_type;
-        std::for_each(slots.begin(), slots.end(), [&](SlotDescriptor* slot) {
-            slot_id_to_type.insert({slot->id(), slot->type()});
-        });
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
+<<<<<<< Updated upstream
             auto iter = slot_id_to_type.find(kv.first);
             if (iter != slot_id_to_type.end()) {
                 _chunk_meta.types[kv.second] = iter->second;
                 ++column_index;
                 hit_flags.insert(kv.first);
+=======
+            //TODO: performance?
+            for (auto slot : slots) {
+                if (kv.first == slot->id()) {
+                    _chunk_meta.types[kv.second] = slot->type();
+                    ++column_index;
+                    break;
+                }
+>>>>>>> Stashed changes
             }
         }
     }
@@ -619,29 +625,17 @@ void DataStreamRecvr::PipelineSenderQueue::check_leak_closure() {
 
 Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request,
                                                                      Metrics& metrics) {
-    // We only need to build chunk meta on first chunk and not use_pass_through
-    // By using pass through, chunks are transmitted in shared memory without ser/deser
-    // So there is no need to build chunk meta.
-    if (request.use_pass_through()) {
-        return Status::OK();
-    }
-    if (_is_chunk_meta_built) {
-        return Status::OK();
-    }
-
     ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     std::lock_guard<Mutex> l(_lock);
     wait_timer.stop();
-
-    if (_is_chunk_meta_built) {
-        return Status::OK();
+    // We only need to build chunk meta on first chunk and not use_pass_through
+    // By using pass through, chunks are transmitted in shared memory without ser/deser
+    // So there is no need to build chunk meta.
+    if (_chunk_meta.types.empty() && !request.use_pass_through()) {
+        SCOPED_TIMER(metrics.deserialize_chunk_timer);
+        auto& pchunk = request.chunks(0);
+        return _build_chunk_meta(pchunk);
     }
-
-    SCOPED_TIMER(metrics.deserialize_chunk_timer);
-    auto& pchunk = request.chunks(0);
-    RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-    _is_chunk_meta_built = true;
-
     return Status::OK();
 }
 

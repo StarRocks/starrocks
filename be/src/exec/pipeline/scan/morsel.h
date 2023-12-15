@@ -81,15 +81,8 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
-    void set_rowsets(const std::vector<RowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
-    void set_delta_rowsets(std::vector<RowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
-    const std::vector<RowsetSharedPtr>& rowsets() const {
-        if (_delta_rowsets.has_value()) {
-            return _delta_rowsets.value();
-        } else {
-            return *_rowsets;
-        }
-    }
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
 
     virtual const std::unordered_set<std::string>& skip_min_max_metrics() const {
         static const std::unordered_set<std::string> metrics;
@@ -100,10 +93,7 @@ private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
 
-    static const std::vector<RowsetSharedPtr> kEmptyRowsets;
-    // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
-    const std::vector<RowsetSharedPtr>* _rowsets = &kEmptyRowsets;
-    std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
+    std::vector<RowsetSharedPtr> _rowsets;
 };
 
 class ScanMorsel : public Morsel {
@@ -119,12 +109,13 @@ public:
                                 : _owner_id;
             _partition_id = _scan_range->internal_scan_range.partition_id;
         }
+<<<<<<< Updated upstream
         if (_scan_range->__isset.binlog_scan_range) {
             _owner_id = _scan_range->binlog_scan_range.tablet_id;
         }
+=======
+>>>>>>> Stashed changes
     }
-
-    ~ScanMorsel() override = default;
 
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
@@ -147,6 +138,32 @@ private:
     int64_t _partition_id = 0;
 };
 
+<<<<<<< Updated upstream
+=======
+class PhysicalSplitScanMorsel final : public ScanMorsel {
+public:
+    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
+            : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
+
+    void init_tablet_reader_params(TabletReaderParams* params) override;
+
+private:
+    RowidRangeOptionPtr _rowid_range_option;
+};
+
+class LogicalSplitScanMorsel final : public ScanMorsel {
+public:
+    LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
+                           std::vector<ShortKeyRangeOptionPtr> short_key_ranges)
+            : ScanMorsel(plan_node_id, scan_range), _short_key_ranges(std::move(short_key_ranges)) {}
+
+    void init_tablet_reader_params(TabletReaderParams* params) override;
+
+private:
+    std::vector<ShortKeyRangeOptionPtr> _short_key_ranges;
+};
+
+>>>>>>> Stashed changes
 /// MorselQueueFactory.
 class MorselQueueFactory {
 public:
@@ -381,9 +398,6 @@ private:
     // Load the meta of the new rowset and the index of the new segment,
     // and find the rowid range of each key range in this segment.
     Status _init_segment();
-    // Obtain row id ranges from multiple segments of multiple rowsets within a single tablet,
-    // until _splitted_scan_rows rows are retrieved.
-    StatusOr<RowidRangeOptionPtr> _try_get_split_from_single_tablet();
 
 private:
     std::mutex _mutex;

@@ -29,7 +29,6 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -84,6 +83,7 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
 }
 
 Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
+<<<<<<< Updated upstream
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
@@ -115,6 +115,205 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
+=======
+    const TMaterializedViewStatus& tbl_status = _mv_results.materialized_views[_table_index];
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+        switch (slot_id) {
+        case 1: {
+            // TABLE_ID
+            {
+                const std::string* str = &tbl_status.id;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // TABLE_SCHEMA
+            {
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // TABLE_NAME
+            {
+                const std::string* str = &tbl_status.name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // REFRESH_TYPE
+            {
+                const std::string* str = &tbl_status.refresh_type;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 5: {
+            // is_active
+            {
+                const std::string* str = &tbl_status.is_active;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 6: {
+            // partition_type
+            {
+                const std::string* str = &tbl_status.partition_type;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 7: {
+            // task_id
+            {
+                const std::string* str = &tbl_status.task_id;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 8: {
+            // task_name
+            {
+                const std::string* str = &tbl_status.task_name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 9: {
+            // last_refresh_start_time
+            {
+                const std::string* str = &tbl_status.last_refresh_start_time;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 10: {
+            // last_refresh_finished_time
+            {
+                const std::string* str = &tbl_status.last_refresh_finished_time;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 11: {
+            // last_refresh_duration
+            {
+                const std::string* str = &tbl_status.last_refresh_duration;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 12: {
+            // last_refresh_state
+            {
+                const std::string* str = &tbl_status.last_refresh_state;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 13: {
+            // last_refresh_force_refresh
+            {
+                const std::string* str = &tbl_status.last_refresh_force_refresh;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 14: {
+            // last_refresh_start_partition
+            {
+                const std::string* str = &tbl_status.last_refresh_start_partition;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 15: {
+            // last_refresh_end_partition
+            {
+                const std::string* str = &tbl_status.last_refresh_end_partition;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 16: {
+            // last_refresh_base_refresh_partitions
+            {
+                const std::string* str = &tbl_status.last_refresh_base_refresh_partitions;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 17: {
+            // last_refresh_mv_refresh_partitions
+            {
+                const std::string* str = &tbl_status.last_refresh_mv_refresh_partitions;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 18: {
+            // last_refresh_error_code
+            {
+                const std::string* str = &tbl_status.last_refresh_error_code;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 19: {
+            // last_refresh_error_message
+            {
+                const std::string* str = &tbl_status.last_refresh_error_message;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 20: {
+            // table_rows
+            {
+                const std::string* str = &tbl_status.rows;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 21: {
+            // view_definition
+            {
+                const std::string* str = &tbl_status.text;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+>>>>>>> Stashed changes
     }
     _table_index++;
     return {};

@@ -124,8 +124,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     _tablet->pick_all_candicate_rowsets(&candidate_rowsets);
 
     if (candidate_rowsets.size() <= 1) {
-        VLOG(1) << "no suitable rowset to compact. tablet_id=" << _tablet->tablet_id()
-                << " candidate_rowsets.size=" << candidate_rowsets.size();
         return Status::NotFound("compaction no suitable version error.");
     }
 
@@ -135,8 +133,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         candidate_rowsets[1]->rowset_meta()->get_compaction_score() <= 1) {
         // the tablet is with rowset: [0-1], [2-y]
         // and [0-1] has no data. in this situation, no need to do base compaction.
-        VLOG(1) << "no need to do base compaction. tablet_id=" << _tablet->tablet_id()
-                << " candidate_rowsets.size=" << candidate_rowsets.size();
         return Status::NotFound("compaction no suitable version error.");
     }
 
@@ -269,11 +265,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
                     auto level = std::make_unique<SizeTieredLevel>(
                             transient_rowsets, segment_num, level_size, total_size,
                             _cal_compaction_score(segment_num, level_size, total_size, keys_type, reached_max_version));
-                    VLOG(1) << "Add level for tablet " << _tablet->tablet_id()
-                            << " for size-tiered compaction rowset version=" << level->rowsets.front()->start_version()
-                            << "-" << level->rowsets.back()->end_version() << " score=" << level->score
-                            << " level_size=" << level->level_size << " total_size=" << level->total_size
-                            << " segment_num=" << level->segment_num;
                     priority_levels.emplace(level.get());
                     order_levels.emplace_back(std::move(level));
                 }
@@ -293,11 +284,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
                 auto level = std::make_unique<SizeTieredLevel>(
                         transient_rowsets, segment_num, level_size, total_size,
                         _cal_compaction_score(segment_num, level_size, total_size, keys_type, reached_max_version));
-                VLOG(1) << "Add level for tablet " << _tablet->tablet_id()
-                        << " for size-tiered compaction rowset version=" << level->rowsets.front()->start_version()
-                        << "-" << level->rowsets.back()->end_version() << " score=" << level->score
-                        << " level_size=" << level->level_size << " total_size=" << level->total_size
-                        << " segment_num=" << level->segment_num;
                 priority_levels.emplace(level.get());
                 order_levels.emplace_back(std::move(level));
             }
@@ -317,11 +303,6 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         auto level = std::make_unique<SizeTieredLevel>(
                 transient_rowsets, segment_num, level_size, total_size,
                 _cal_compaction_score(segment_num, level_size, total_size, keys_type, reached_max_version));
-        VLOG(1) << "Add level for tablet " << _tablet->tablet_id()
-                << " for size-tiered compaction rowset version=" << level->rowsets.front()->start_version() << "-"
-                << level->rowsets.back()->end_version() << " score=" << level->score
-                << " level_size=" << level->level_size << " total_size=" << level->total_size
-                << " segment_num=" << level->segment_num;
         priority_levels.emplace(level.get());
         order_levels.emplace_back(std::move(level));
     }
@@ -342,10 +323,10 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         }
     }
 
-    // compaction will process with at least 1 rowset.
-    // So when there is no rowset being chosen, we should return Status::NotFound("compaction no suitable version error.");
+    // Cumulative compaction will process with at least 1 rowset.
+    // So when there is no rowset being chosen, we should return Status::NotFound("cumulative compaction no suitable version error.");
     if (input_rowsets->empty()) {
-        return Status::NotFound("compaction no suitable version error.");
+        return Status::NotFound("cumulative compaction no suitable version error.");
     }
 
     RETURN_IF_ERROR(_check_version_continuity(*input_rowsets));

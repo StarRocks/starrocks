@@ -59,7 +59,11 @@ public:
 
     [[nodiscard]] Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
+<<<<<<< Updated upstream
     [[nodiscard]] Status open(RuntimeState* state);
+=======
+    Status open(RuntimeState* state);
+>>>>>>> Stashed changes
 
     // Process input's chunks util `Epoch` chunk is received.
     [[nodiscard]] Status process_chunk(StreamChunk* chunk);

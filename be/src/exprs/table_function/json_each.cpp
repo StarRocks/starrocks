@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-std::pair<Columns, UInt32Column::Ptr> JsonEach::process(TableFunctionState* state) const {
+std::pair<Columns, UInt32Column::Ptr> JsonEach::process(TableFunctionState* state, bool* eos) const {
     size_t num_input_rows = 0;
     JsonColumn* json_column = nullptr;
     if (!state->get_columns().empty()) {
@@ -29,7 +29,6 @@ std::pair<Columns, UInt32Column::Ptr> JsonEach::process(TableFunctionState* stat
         num_input_rows = arg0->size();
         json_column = down_cast<JsonColumn*>(ColumnHelper::get_data_column(arg0));
     }
-    state->set_processed_rows(num_input_rows);
 
     Columns result;
     auto key_column_ptr = BinaryColumn::create();
@@ -65,6 +64,8 @@ std::pair<Columns, UInt32Column::Ptr> JsonEach::process(TableFunctionState* stat
         offset_column->append(offset);
     }
 
+    *eos = true;
+    state->set_offset(offset);
     return std::make_pair(result, offset_column);
 }
 

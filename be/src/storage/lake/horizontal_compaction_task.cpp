@@ -21,7 +21,6 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -55,7 +54,6 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id))
@@ -106,6 +104,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+<<<<<<< Updated upstream
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
@@ -113,6 +112,10 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
     }
     return Status::OK();
+=======
+    Status st = _tablet->put_txn_log(std::move(txn_log));
+    return st;
+>>>>>>> Stashed changes
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {

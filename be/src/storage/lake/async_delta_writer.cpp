@@ -37,9 +37,31 @@ public:
     // Undocumented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
+<<<<<<< Updated upstream
     AsyncDeltaWriterImpl(std::unique_ptr<DeltaWriter> writer) : _writer(std::move(writer)) {
         CHECK(_writer != nullptr) << "delta writer is null";
     }
+=======
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                          mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+>>>>>>> Stashed changes
 
     ~AsyncDeltaWriterImpl();
 
@@ -54,8 +76,6 @@ public:
     void finish(Callback cb);
 
     void close();
-
-    [[nodiscard]] int64_t queueing_memtable_num() const { return _writer->queueing_memtable_num(); }
 
     [[nodiscard]] int64_t tablet_id() const { return _writer->tablet_id(); }
 
@@ -183,7 +203,7 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
     }
 }
 
@@ -212,7 +232,7 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
     }
 }
 
@@ -272,10 +292,6 @@ void AsyncDeltaWriter::close() {
     _impl->close();
 }
 
-int64_t AsyncDeltaWriter::queueing_memtable_num() const {
-    return _impl->queueing_memtable_num();
-}
-
 int64_t AsyncDeltaWriter::tablet_id() const {
     return _impl->tablet_id();
 }
@@ -296,6 +312,7 @@ Status AsyncDeltaWriter::check_immutable() {
     return _impl->check_immutable();
 }
 
+<<<<<<< Updated upstream
 int64_t AsyncDeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
 }
@@ -318,4 +335,6 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 
+=======
+>>>>>>> Stashed changes
 } // namespace starrocks::lake

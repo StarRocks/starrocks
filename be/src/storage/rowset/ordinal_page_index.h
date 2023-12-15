@@ -111,7 +111,12 @@ public:
 
     bool loaded() const { return invoked(_load_once); }
 
-    size_t mem_usage() const {
+private:
+    friend OrdinalPageIndexIterator;
+
+    void _reset();
+
+    size_t _mem_usage() const {
         if (_num_pages == 0) {
             return sizeof(OrdinalIndexReader);
         } else {
@@ -119,11 +124,6 @@ public:
                    (_num_pages + 1) * sizeof(uint64_t);
         }
     }
-
-private:
-    friend OrdinalPageIndexIterator;
-
-    void _reset();
 
     Status _do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
 

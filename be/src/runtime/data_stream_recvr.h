@@ -39,7 +39,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
 #include "runtime/local_pass_through_buffer.h"
@@ -104,8 +103,6 @@ public:
                          const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
     Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
-
-    std::vector<merge_path::MergePathChunkProvider> create_merge_path_chunk_providers();
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
     // input streams. Must only be called if _is_merging is true.
@@ -247,7 +244,7 @@ private:
     PassThroughContext _pass_through_context;
 
     int _encode_level;
-    bool _closed = false;
+    bool _close = false;
 };
 
 } // end namespace starrocks

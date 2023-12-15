@@ -48,6 +48,7 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
+<<<<<<< Updated upstream
 
     IndexReadOptions index_opts;
     index_opts.use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
@@ -56,6 +57,9 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
+=======
+    RETURN_IF_ERROR(_reader->load_ordinal_index(_skip_fill_local_cache()));
+>>>>>>> Stashed changes
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -309,14 +313,17 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
                                                         SparseRange<>* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+<<<<<<< Updated upstream
         IndexReadOptions opts;
         opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
         opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
         opts.skip_fill_data_cache = _skip_fill_data_cache();
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
+=======
+>>>>>>> Stashed changes
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
-                                                 row_ranges, opts));
+                                                 row_ranges, _skip_fill_local_cache()));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
@@ -331,14 +338,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
         support = support | pred->support_bloom_filter();
     }
     RETURN_IF(!support, Status::OK());
-
-    IndexReadOptions opts;
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = _skip_fill_data_cache();
-    opts.read_file = _opts.read_file;
-    opts.stats = _opts.stats;
-    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
+    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, _skip_fill_local_cache()));
     return Status::OK();
 }
 

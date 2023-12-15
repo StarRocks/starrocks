@@ -28,7 +28,7 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
     DCHECK_EQ(2, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    auto keys_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+    auto& keys_column = columns[0];
     NullColumn* keys_null = nullptr;
     ArrayColumn* keys_data = nullptr;
     if (keys_column->is_nullable()) {
@@ -39,7 +39,7 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
         keys_data = down_cast<ArrayColumn*>(keys_column.get());
     }
 
-    auto values_column = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]);
+    auto& values_column = columns[1];
     NullColumn* values_null = nullptr;
     ArrayColumn* values_data = nullptr;
     if (values_column->is_nullable()) {
@@ -128,9 +128,10 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+    Column* arg0 = columns[0].get();
     const size_t num_rows = arg0->size();
-    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
+
+    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0));
     auto col_result = Int32Column::create();
     raw::make_room(&col_result->get_data(), num_rows);
     DCHECK_EQ(num_rows, col_result->size());
@@ -143,7 +144,7 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     }
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(col_result), down_cast<NullableColumn*>(arg0.get())->null_column());
+        return NullableColumn::create(std::move(col_result), down_cast<NullableColumn*>(arg0)->null_column());
     } else {
         return col_result;
     }
@@ -153,15 +154,16 @@ StatusOr<ColumnPtr> MapFunctions::map_keys(FunctionContext* context, const Colum
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
-    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
+    Column* arg0 = columns[0].get();
+
+    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0));
     auto map_keys = col_map->keys_column();
     auto map_keys_array = ArrayColumn::create(map_keys->clone_shared(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(map_keys_array),
-                                      std::static_pointer_cast<NullColumn>(
-                                              down_cast<NullableColumn*>(arg0.get())->null_column()->clone_shared()));
+        return NullableColumn::create(
+                std::move(map_keys_array),
+                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0)->null_column()->clone_shared()));
     } else {
         return map_keys_array;
     }
@@ -171,21 +173,22 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+    Column* arg0 = columns[0].get();
 
-    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
+    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0));
     auto map_values = col_map->values_column();
     auto map_values_array = ArrayColumn::create(map_values->clone_shared(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(map_values_array),
-                                      std::static_pointer_cast<NullColumn>(
-                                              down_cast<NullableColumn*>(arg0.get())->null_column()->clone_shared()));
+        return NullableColumn::create(
+                std::move(map_values_array),
+                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0)->null_column()->clone_shared()));
     } else {
         return map_values_array;
     }
 }
 
+<<<<<<< Updated upstream
 // by design map_filter(map, bool_array), if bool_array is null, return an empty map. We do not return null, as
 // it will change the null property of return results which keeps the same with the first argument map.
 StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Columns& columns) {
@@ -482,4 +485,6 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
     return NullableColumn::create(std::move(map_column), std::move(dest_null));
 }
 
+=======
+>>>>>>> Stashed changes
 } // namespace starrocks

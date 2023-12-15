@@ -28,14 +28,13 @@ public:
                                         const TypeDescriptor& slot_desc);
 
     ORCScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               starrocks::ScannerCounter* counter, bool schema_only = false);
+               starrocks::ScannerCounter* counter);
 
     ~ORCScanner() override = default;
 
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
-    Status get_schema(std::vector<SlotDescriptor>* schema) override;
 
     void close() override;
 

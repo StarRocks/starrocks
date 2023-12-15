@@ -90,6 +90,7 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+<<<<<<< Updated upstream
 
       - name: docusaurus-mdx-checker
         if: always()
@@ -117,6 +118,8 @@ jobs:
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
           yarn install --frozen-lockfile
           yarn build
+=======
+>>>>>>> Stashed changes
 
   behavior-unchange:
     runs-on: ubuntu-latest

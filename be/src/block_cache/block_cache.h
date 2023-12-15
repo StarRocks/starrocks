@@ -30,6 +30,7 @@ public:
     // Init the block cache instance
     Status init(const CacheOptions& options);
 
+<<<<<<< Updated upstream
     // Write data buffer to cache, the `offset` must be aligned by block size
     Status write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
                         WriteCacheOptions* options = nullptr);
@@ -53,6 +54,19 @@ public:
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`
     // function, the corresponding pointer will never be freed by the cache system.
     Status read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options = nullptr);
+=======
+    // Write data to cache, the offset must be aligned by block size
+    Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer, size_t ttl_seconds = 0,
+                       bool overwrite = true);
+
+    // Read data from cache, it returns the data size if successful; otherwise the error status
+    // will be returned. The offset and size must be aligned by block size.
+    StatusOr<size_t> read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer);
+
+    // NOTICE: This function is not safe now, as the returned buffer may be evicted before visited
+    // by users. We need to implement it more safe by cachelib item handle.
+    Status read_cache_zero_copy(const CacheKey& cache_key, off_t offset, size_t size, const char** buf);
+>>>>>>> Stashed changes
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);

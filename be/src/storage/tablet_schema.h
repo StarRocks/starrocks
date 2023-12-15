@@ -112,7 +112,6 @@ public:
     void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
 
     bool is_auto_increment() const { return _check_flag(kHasAutoIncrementShift); }
-    void set_is_auto_increment(bool value) { _set_flag(kHasAutoIncrementShift, value); }
 
     bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
@@ -242,9 +241,12 @@ public:
     static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchemaCSPtr& tablet_schema,
                                                 const std::vector<int32_t>& column_indexes);
+<<<<<<< Updated upstream
     static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchemaCSPtr& tablet_schema,
                                                          const std::vector<uint32_t>& unique_column_ids);
     static std::unique_ptr<TabletSchema> copy(const std::shared_ptr<const TabletSchema>& tablet_schema);
+=======
+>>>>>>> Stashed changes
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -268,11 +270,9 @@ public:
     const std::vector<TabletColumn>& columns() const;
     void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
-
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
-
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
@@ -286,31 +286,19 @@ public:
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
-    // Please call the following function with caution. Most of the time,
-    // the following two functions should not be called explicitly.
-    // When we do column partial update for primary key table which seperate primary keys
-    // and sort keys, we will create a partial tablet schema for rowset writer. However,
-    // the sort key columns maybe not exist in the partial tablet schema and the partial tablet
-    // schema will keep a wrong sort key idxes and short key column num. So BE will crash in ASAN
-    // mode. However, the sort_key_idxes and short_key_column_num in partial tablet schema is not
-    // important actually, because the update segment file does not depend on it and the update
-    // segment file will be rewrite to col file after apply. So these function are used to modify
-    // the sort_key_idxes and short_key_column_num in partial tablet schema to avoid BE crash so far.
-    void set_sort_key_idxes(std::vector<ColumnId> sort_key_idxes) {
-        for (auto idx : _sort_key_idxes) {
-            _cols[idx].set_is_sort_key(false);
-        }
-        _sort_key_idxes.clear();
-        _sort_key_idxes.assign(sort_key_idxes.begin(), sort_key_idxes.end());
-        for (auto idx : _sort_key_idxes) {
-            _cols[idx].set_is_sort_key(true);
-        }
-    }
-    void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
-
     std::string debug_string() const;
 
+<<<<<<< Updated upstream
     int64_t mem_usage() const;
+=======
+    int64_t mem_usage() const {
+        int64_t mem_usage = sizeof(TabletSchema);
+        for (const auto& col : _cols) {
+            mem_usage += col.mem_usage();
+        }
+        return mem_usage;
+    }
+>>>>>>> Stashed changes
 
     bool shared() const { return _schema_map != nullptr; }
 

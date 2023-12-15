@@ -43,6 +43,25 @@ public:
         kDontWriteTxnLog,
     };
 
+<<<<<<< Updated upstream
+=======
+    // for load
+    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+
+    // for condition update
+    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      MemTracker* mem_tracker);
+
+    // for schema change
+    // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
+                      MemTracker* mem_tracker);
+
+>>>>>>> Stashed changes
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
 
@@ -80,8 +99,6 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker();
 
-    const int64_t queueing_memtable_num() const;
-
     // Return the list of files created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
     std::vector<std::string> files() const;
@@ -96,10 +113,13 @@ public:
 
     bool is_immutable() const;
 
+<<<<<<< Updated upstream
     Status check_immutable();
 
     int64_t last_write_ts() const;
 
+=======
+>>>>>>> Stashed changes
 private:
     DeltaWriterImpl* _impl;
 };

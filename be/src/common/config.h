@@ -49,10 +49,6 @@ CONF_Int32(brpc_port, "8060");
 // The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
 CONF_Int32(brpc_num_threads, "-1");
 
-// The max number of single connections maintained by the brpc client and each server.
-// Theses connections are created during the first few access and will be used thereafter
-CONF_Int32(brpc_max_connections_per_server, "1");
-
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
@@ -86,7 +82,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_mInt32(drop_tablet_worker_count, "3");
+CONF_Int32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -95,10 +91,10 @@ CONF_Int32(push_worker_count_high_priority, "3");
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
 
+CONF_mInt32(get_pindex_worker_count, "0");
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
-CONF_mInt32(get_pindex_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -121,7 +117,7 @@ CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
 CONF_Int32(download_worker_count, "1");
 // The count of thread to make snapshot.
-CONF_mInt32(make_snapshot_worker_count, "5");
+CONF_Int32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
 CONF_Int32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
@@ -260,7 +256,7 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 // Cache for storage page size
 CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
-CONF_mBool(disable_storage_page_cache, "false");
+CONF_Bool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
 // whether to enable the zonemap index memory cache
@@ -302,10 +298,6 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
-// This config controls the io amp ratio of delvec files.
-CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
-// This config defines the maximum percentage of data allowed per compaction
-CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -365,10 +357,14 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+<<<<<<< Updated upstream
 CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
 CONF_mInt64(stale_memtable_flush_time_sec, "30");
+=======
+CONF_Int32(number_tablet_writer_threads, "16");
+>>>>>>> Stashed changes
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -528,6 +524,10 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // Max pulsar consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
+// The size of thread pool for routine load task.
+// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
+CONF_Int32(routine_load_thread_pool_size, "10");
+
 // kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
@@ -601,8 +601,6 @@ CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 // The tablet map shard size, the value must be power of two.
 // this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
-// The value must be power of two.
-CONF_Int32(pk_index_map_shard_size, "4096");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
@@ -697,9 +695,6 @@ CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
-// *  "n": positive integer, fixed number of threads to n.
-// *  "0": default value, means the same as number of cpu cores.
-// * "-n": negative integer, means n times of number of cpu cores.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
@@ -714,24 +709,7 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
-// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
-CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
-// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
-// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
-// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
-//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
-CONF_Int64(pipeline_scan_queue_mode, "0");
-// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
-// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
-CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
-CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
-
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
-CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
-CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
-CONF_Bool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -831,13 +809,6 @@ CONF_Int32(hdfs_client_io_read_retry, "0");
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 CONF_String(aws_sdk_logging_trace_level, "trace");
 
-// Enable RFC-3986 encoding.
-// When Querying data on Google Cloud Storage, if the objects key contain special characters like '=', '$', it will fail
-// to Authenticate because the request URL does not translate these special characters.
-// This is critical for Hive partitioned tables. The object key usually contains '=' like 'dt=20230101'.
-// Enabling RFC-3986 encoding will make sure these characters are properly encoded.
-CONF_mBool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
-
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
@@ -856,9 +827,9 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 // in passthrough style, the number of inflight RPCs of parallel deliveries are issued is not exceeds this limit.
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
-// if runtime filter size is larger than send_runtime_filter_via_http_rpc_min_size, be will transmit runtime filter via http protocol.
-// this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
-CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
+
+// enable optimized implementation of schema change
+CONF_Bool(enable_schema_change_v2, "true");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
@@ -887,6 +858,7 @@ CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
+<<<<<<< Updated upstream
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_mBool(starlet_use_star_cache, "false");
 // TODO: support runtime change
@@ -904,22 +876,26 @@ CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+=======
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+>>>>>>> Stashed changes
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
+CONF_mInt64(lake_gc_metadata_max_versions, "10");
+CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
+CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+// This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
+CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
+CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
-CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
-CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
-CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
-CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
-CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
-CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
-CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
-CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
+CONF_mBool(lake_enable_aggressive_gc, "false");
+CONF_mBool(lake_aggressive_gc_high_priority, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -961,6 +937,10 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
 CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1022,9 +1002,23 @@ CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
+<<<<<<< Updated upstream
 CONF_Bool(block_cache_checksum_enable, "false");
 CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_String(block_cache_engine, "");
+=======
+// Total memory limit for in-flight parcels.
+// Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
+CONF_Int64(block_cache_max_parcel_memory_mb, "256");
+CONF_Bool(block_cache_report_stats, "false");
+// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
+// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
+// It is only useful for the cachelib engine currently.
+CONF_Int64(block_cache_lru_insertion_point, "1");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
+CONF_Bool(block_cache_direct_io_enable, "false");
+>>>>>>> Stashed changes
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -1043,10 +1037,14 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+<<<<<<< Updated upstream
 // control the local persistent index in shared_data gc/evict interval
 CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
+=======
+
+>>>>>>> Stashed changes
 // enable persistent index compression
 CONF_mBool(enable_pindex_compression, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
@@ -1083,14 +1081,13 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-// only used for test. default: 128M
-CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 // pipeline streaming aggregate chunk buffer size
 CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
-CONF_mInt64(wait_apply_time, "6000"); // 6s
+CONF_mInt64(wait_apply_time, "6000") // 6s
 
-// Max size of a binlog file. The default is 512MB.
-CONF_Int64(binlog_file_max_size, "536870912");
+        // Max size of a binlog file. The default is 512MB.
+        CONF_Int64(binlog_file_max_size, "536870912");
+
 // Max size of a binlog page. The default is 1MB.
 CONF_Int32(binlog_page_max_size, "1048576");
 
@@ -1100,24 +1097,14 @@ CONF_mInt64(file_write_history_size, "10000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
+CONF_Bool(enable_preload_column_mode_update_cache, "true");
+
 CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
-// Used by default mv resource group
-CONF_Double(default_mv_resource_group_memory_limit, "0.8");
-CONF_Int32(default_mv_resource_group_cpu_limit, "1");
-
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
-
-// used for control the max memory cost when batch get pk index in each tablet
-CONF_mInt64(primary_key_batch_get_index_memory_limit, "104857600"); // 100MB
-
-// If your sort key cardinality is very high,
-// You could enable this config to speed up the point lookup query,
-// otherwise, StarRocks will use zone map for one column filter
-CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
 CONF_mInt32(finish_publish_version_internal, "100");
@@ -1126,6 +1113,7 @@ CONF_mBool(enable_stream_load_verbose_log, "false");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
+<<<<<<< Updated upstream
 CONF_mBool(dump_metrics_with_bvar, "true");
 
 CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
@@ -1135,6 +1123,8 @@ CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
+=======
+>>>>>>> Stashed changes
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 

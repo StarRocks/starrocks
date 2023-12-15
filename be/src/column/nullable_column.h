@@ -104,7 +104,7 @@ public:
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->byte_size(from, size) + _null_column->byte_size(from, size);
+        return _data_column->byte_size(from, size) + _null_column->Column::byte_size(from, size);
     }
 
     size_t byte_size(size_t idx) const override { return _data_column->byte_size(idx) + sizeof(bool); }
@@ -203,8 +203,6 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
@@ -257,9 +255,9 @@ public:
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }
 
-    size_t reference_memory_usage(size_t from, size_t size) const override {
+    size_t element_memory_usage(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return _data_column->reference_memory_usage(from, size) + _null_column->reference_memory_usage(from, size);
+        return _data_column->element_memory_usage(from, size) + _null_column->element_memory_usage(from, size);
     }
 
     void swap_column(Column& rhs) override {
@@ -268,13 +266,6 @@ public:
         _null_column->swap_column(*r._null_column);
         std::swap(_delete_state, r._delete_state);
         std::swap(_has_null, r._has_null);
-    }
-
-    void swap_by_data_column(ColumnPtr& src) {
-        reset_column();
-        _data_column.swap(src);
-        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
-        update_has_null();
     }
 
     void reset_column() override {

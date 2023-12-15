@@ -20,14 +20,11 @@
 namespace starrocks {
 
 class ExecEnv;
-
-namespace lake {
-class TabletManager;
-}
+class ThreadPool;
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr);
+    explicit LakeServiceImpl(ExecEnv* env);
 
     ~LakeServiceImpl() override;
 
@@ -91,13 +88,8 @@ public:
                           ::starrocks::lake::AbortCompactionResponse* response,
                           ::google::protobuf::Closure* done) override;
 
-    void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumRequest* request,
-                ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) override;
-
-    void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumFullRequest* request,
-                     ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
-
 private:
+<<<<<<< Updated upstream
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
                                           const int64_t* log_versions, size_t txn_size,
                                           ::starrocks::lake::PublishLogVersionResponse* response);
@@ -106,8 +98,9 @@ private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
     static constexpr int64_t kDefaultTimeoutForPublishVersion = 1 * 60 * 1000L; // 1 minute
 
+=======
+>>>>>>> Stashed changes
     ExecEnv* _env;
-    lake::TabletManager* _tablet_mgr;
 };
 
 } // namespace starrocks

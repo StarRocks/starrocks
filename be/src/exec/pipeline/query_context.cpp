@@ -44,7 +44,6 @@ QueryContext::QueryContext()
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
-    _lifetime_sw.start();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -127,12 +126,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
-Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
-        std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
+        std::call_once(_init_query_once, [this, &st, wg]() {
             this->init_query_begin_time();
-            auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
+            auto maybe_token = wg->acquire_running_query_token();
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
                 _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
@@ -190,7 +189,6 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
-    res->add_spill_bytes(get_spill_bytes());
 
     {
         std::lock_guard l(_scan_stats_lock);
@@ -500,7 +498,6 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_scan_rows(scan_rows);
             query_statistics->set_scan_bytes(scan_bytes);
             query_statistics->set_mem_usage_bytes(mem_usage_bytes);
-            query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
         }
     }
 }

@@ -41,7 +41,6 @@
 #include "common/status.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/base_load_path_mgr.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -103,6 +102,7 @@ class DirManager;
 
 class GlobalEnv {
 public:
+<<<<<<< Updated upstream
     static GlobalEnv* GetInstance() {
         static GlobalEnv s_global_env;
         return &s_global_env;
@@ -118,6 +118,45 @@ public:
     }
 
     static bool is_init();
+=======
+    // Initial exec environment. must call this to init all
+    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static bool is_init();
+    static void destroy(ExecEnv* exec_env);
+
+    /// Returns the first created exec env instance. In a normal starrocks, this is
+    /// the only instance. In test setups with multiple ExecEnv's per process,
+    /// we return the most recently created instance.
+    static ExecEnv* GetInstance() {
+        static ExecEnv s_exec_env;
+        return &s_exec_env;
+    }
+
+    // only used for test
+    ExecEnv() = default;
+
+    // Empty destructor because the compiler-generated one requires full
+    // declarations for classes in scoped_ptrs.
+    ~ExecEnv() = default;
+
+    std::string token() const;
+    ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
+    MetricRegistry* metrics() const { return _metrics; }
+    DataStreamMgr* stream_mgr() { return _stream_mgr; }
+    ResultBufferMgr* result_mgr() { return _result_mgr; }
+    ResultQueueMgr* result_queue_mgr() { return _result_queue_mgr; }
+    ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
+    ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
+    ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
+
+    static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
+    // using template to simplify client cache management
+    template <typename T>
+    ClientCache<T>* get_client_cache() {
+        return nullptr;
+    }
+>>>>>>> Stashed changes
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
@@ -144,9 +183,89 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
+<<<<<<< Updated upstream
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+=======
+    PriorityThreadPool* thread_pool() { return _thread_pool; }
+    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
+    workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
+    workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
+    workgroup::ScanExecutor* connector_scan_executor_without_workgroup() {
+        return _connector_scan_executor_without_workgroup;
+    }
+    workgroup::ScanExecutor* connector_scan_executor_with_workgroup() {
+        return _connector_scan_executor_with_workgroup;
+    }
+
+    PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
+    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
+    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
+    PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
+    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
+    starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
+    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
+    LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
+    BfdParser* bfd_parser() const { return _bfd_parser; }
+    BrokerMgr* broker_mgr() const { return _broker_mgr; }
+    BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
+    LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
+    LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
+    SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
+    StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
+    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+
+    const std::vector<StorePath>& store_paths() const { return _store_paths; }
+    void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
+
+    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
+    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
+    HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
+
+    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
+
+    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    Status init_mem_tracker();
+
+    RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
+
+    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
+
+    void add_rf_event(const RfTracePoint& pt);
+
+    pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
+
+    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+
+    int64_t max_executor_threads() const { return _max_executor_threads; }
+
+    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
+
+    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
+
+    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+
+    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
+
+    AgentServer* agent_server() const { return _agent_server; }
+
+    int64_t get_storage_page_cache_size();
+    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
+
+    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+
+    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
+
+private:
+    Status _init(const std::vector<StorePath>& store_paths);
+    void _destroy();
+    void _reset_tracker();
+    template <class... Args>
+    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+
+    Status _init_storage_page_cache();
+>>>>>>> Stashed changes
 
 private:
     static bool _is_init;
@@ -329,22 +448,28 @@ private:
     PriorityThreadPool* _thread_pool = nullptr;
     ThreadPool* _streaming_load_thread_pool = nullptr;
 
-    workgroup::ScanExecutor* _scan_executor = nullptr;
-    workgroup::ScanExecutor* _connector_scan_executor = nullptr;
+    workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;
+    workgroup::ScanExecutor* _connector_scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _connector_scan_executor_with_workgroup = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
+<<<<<<< Updated upstream
     std::unique_ptr<ThreadPool> _load_rpc_pool;
     std::unique_ptr<ThreadPool> _dictionary_cache_pool;
+=======
+>>>>>>> Stashed changes
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
+    pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
-    BaseLoadPathMgr* _load_path_mgr = nullptr;
+    LoadPathMgr* _load_path_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

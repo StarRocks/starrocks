@@ -368,7 +368,11 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            auto arg_type = ctx->get_arg_type(i);
+            state.data_columns->emplace_back(
+                    ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
+                                                                                  arg_type->precision, arg_type->scale),
+                                                true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }

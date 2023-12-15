@@ -20,12 +20,11 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::pipeline {
-
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                    AggregatorPtr aggregator)
-            : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, false, driver_sequence),
+            : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)),
               _auto_state(AggrAutoState::INIT_PREAGG) {
         _aggregator->set_aggr_phase(AggrPhase1);
@@ -34,9 +33,7 @@ public:
     ~AggregateStreamingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override {
-        return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
-    }
+    bool need_input() const override { return !is_finished() && !_aggregator->is_chunk_buffer_full(); }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
@@ -62,9 +59,12 @@ private:
     [[nodiscard]] Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size,
                                                                  bool need_build);
 
+<<<<<<< Updated upstream
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     [[nodiscard]] Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
+=======
+>>>>>>> Stashed changes
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -75,7 +75,6 @@ private:
     bool _is_finished = false;
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
-    LimitedMemAggState _limited_mem_state;
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {

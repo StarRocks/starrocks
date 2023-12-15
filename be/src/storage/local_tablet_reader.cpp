@@ -144,8 +144,13 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
+<<<<<<< Updated upstream
     RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids, _version, false, rowids_by_rssid,
                                                           &read_columns, nullptr, tablet_schema));
+=======
+    RETURN_IF_ERROR(
+            _tablet->updates()->get_column_values(value_column_ids, false, rowids_by_rssid, &read_columns, nullptr));
+>>>>>>> Stashed changes
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();

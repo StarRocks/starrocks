@@ -72,7 +72,7 @@ public:
     DirManager() = default;
     ~DirManager() = default;
 
-    Status init(const std::string& spill_dirs);
+    Status init();
 
     StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
 

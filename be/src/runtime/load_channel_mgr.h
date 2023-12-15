@@ -86,16 +86,18 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
+<<<<<<< Updated upstream
     void abort_txn(int64_t txn_id);
 
     void close();
 
+=======
+>>>>>>> Stashed changes
 private:
     static void* load_channel_clean_bg_worker(void* arg);
 
     Status _start_bg_worker();
     std::shared_ptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
-    std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
     void _start_load_channels_clean();
 
     // lock protect the load channel map

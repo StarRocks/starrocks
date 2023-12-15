@@ -71,14 +71,6 @@ DEFINE_bool(cn, false, "start as compute node");
 // After all existing fragments executed, BE will exit.
 std::atomic<bool> k_starrocks_exit = false;
 
-// NOTE: when call `/api/_stop_be` http interface, this flag will be set to true. Then BE will reject
-// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
-// After all existing fragments executed, BE will exit.
-// The difference between k_starrocks_exit and the flag is that
-// k_starrocks_exit not only require waiting for all existing fragment to complete,
-// but also waiting for all threads to exit gracefully.
-std::atomic<bool> k_starrocks_exit_quick = false;
-
 class ReleaseColumnPool {
 public:
     explicit ReleaseColumnPool(double ratio) : _ratio(ratio) {}
@@ -213,19 +205,14 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
 }
 
-void sigterm_handler(int signo, siginfo_t* info, void* context) {
-    if (info == nullptr) {
-        LOG(ERROR) << "got signal: " << strsignal(signo) << "from unknown pid, is going to exit";
-    } else {
-        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
-    }
+void sigterm_handler(int signo) {
     k_starrocks_exit.store(true);
 }
 
-int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
+int install_signal(int signo, void (*handler)(int)) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
-    sa.sa_sigaction = handler;
+    sa.sa_handler = handler;
     sigemptyset(&sa.sa_mask);
     auto ret = sigaction(signo, &sa, nullptr);
     if (ret != 0) {

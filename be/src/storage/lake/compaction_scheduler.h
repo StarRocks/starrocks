@@ -23,7 +23,6 @@
 #include "gutil/macros.h"
 #include "storage/lake/compaction_task.h"
 #include "util/blocking_queue.hpp"
-#include "util/stack_trace_mutex.h"
 
 namespace google::protobuf {
 class RpcController;
@@ -63,30 +62,18 @@ public:
         return !_status.ok();
     }
 
-    Status error() const {
-        std::lock_guard l(_mtx);
-        return _status;
-    }
-
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
-    bool timeout_exceeded() const { return butil::gettimeofday_ms() >= _timeout_deadline_ms; }
-
-    int64_t timeout_ms() const;
-
 private:
-    const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
-
     CompactionScheduler* _scheduler;
-    mutable StackTraceMutex<bthread::Mutex> _mtx;
+    mutable bthread::Mutex _mtx;
     const lake::CompactRequest* _request;
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
-    int64_t _timeout_deadline_ms;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
@@ -136,7 +123,7 @@ class CompactionScheduler {
     //    Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
-        constexpr const static int16_t kConcurrencyRestoreTimes = 2;
+        constexpr const static int16_t kConcurrencyRestoreTimes = 10;
 
         explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
 
@@ -215,7 +202,7 @@ private:
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    StackTraceMutex<bthread::Mutex> _contexts_lock;
+    bthread::Mutex _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;

@@ -16,18 +16,18 @@
 
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
-#include "storage/rowset/column_reader.h"
 
 namespace starrocks {
 
 class Column;
-class ColumnAccessPath;
 
 class ArrayColumnIterator final : public ColumnIterator {
 public:
-    ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
+    ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator,
                         std::unique_ptr<ColumnIterator> array_size_iterator,
-                        std::unique_ptr<ColumnIterator> element_iterator, const ColumnAccessPath* paths);
+                        std::unique_ptr<ColumnIterator> element_iterator);
+    ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
+                        ColumnIterator* element_iterator);
 
     ~ArrayColumnIterator() override = default;
 
@@ -44,21 +44,24 @@ public:
     ordinal_t get_current_ordinal() const override { return _array_size_iterator->get_current_ordinal(); }
 
     /// for vectorized engine
+<<<<<<< Updated upstream
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
+=======
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
+        CHECK(false) << "array column does not has zone map index";
+        return Status::OK();
+    }
+>>>>>>> Stashed changes
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
-    ColumnReader* _reader;
-
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
-    const ColumnAccessPath* _path;
-
-    bool _access_values = true;
 };
 
 } // namespace starrocks

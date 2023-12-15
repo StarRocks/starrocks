@@ -105,8 +105,6 @@ public:
 
     Status init();
 
-    Status init(bool has_key);
-
     // Used for vertical compaction
     // footer is used for partial update
     Status init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer = nullptr);

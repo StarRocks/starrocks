@@ -31,6 +31,5 @@ add_library(Agent STATIC
         finish_task.cpp
         report_task.cpp
         agent_task.cpp
-        task_signatures_manager.cpp
-        resource_group_usage_recorder.cpp
+        task_singatures_manager.cpp
         )

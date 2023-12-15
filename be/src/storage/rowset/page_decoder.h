@@ -83,7 +83,22 @@ public:
         return Status::NotSupported("seek_at_or_after_value"); // FIXME
     }
 
+<<<<<<< Updated upstream
     [[nodiscard]] virtual Status next_batch(size_t* n, Column* column) {
+=======
+    // Seek the decoder forward by a given number of rows, or to the end
+    // of the page. This is primarily used to skip over data.
+    //
+    // Return the step skipped.
+    virtual size_t seek_forward(uint32_t n) {
+        uint32_t step = std::min(n, count() - current_index());
+        DCHECK_GE(step, 0);
+        seek_to_position_in_page(current_index() + step);
+        return step;
+    }
+
+    virtual Status next_batch(size_t* n, Column* column) {
+>>>>>>> Stashed changes
         return Status::NotSupported("vectorized not supported yet");
     }
 

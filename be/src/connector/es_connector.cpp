@@ -51,10 +51,6 @@ const TupleDescriptor* ESDataSourceProvider::tuple_descriptor(RuntimeState* stat
 ESDataSource::ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.es_scan_range) {}
 
-std::string ESDataSource::name() const {
-    return "ESDataSource";
-}
-
 Status ESDataSource::open(RuntimeState* state) {
     _runtime_state = state;
     const TEsScanNode& es_scan_node = _provider->_es_scan_node;
@@ -66,17 +62,6 @@ Status ESDataSource::open(RuntimeState* state) {
 
     if (es_scan_node.__isset.fields_context) {
         _fields_context = es_scan_node.fields_context;
-    }
-
-    {
-        const auto& it = _properties.find(ESScanReader::KEY_TIME_ZONE);
-        if (it != _properties.end()) {
-            // Use user customer timezone
-            _timezone = it->second;
-        } else {
-            // Use default timezone in StarRocks
-            _timezone = _runtime_state->timezone();
-        }
     }
 
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(es_scan_node.tuple_id);
@@ -123,7 +108,8 @@ Status ESDataSource::_build_conjuncts() {
     _predicate_idx.reserve(conjunct_sz);
 
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _timezone, _pool));
+        EsPredicate* predicate =
+                _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _runtime_state->timezone(), _pool));
         predicate->set_field_context(_fields_context);
         status = predicate->build_disjuncts_list();
         if (status.ok()) {
@@ -244,7 +230,7 @@ Status ESDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         COUNTER_UPDATE(_read_counter, 1);
         if (_line_eof || _es_scroll_parser == nullptr) {
             RETURN_IF_ERROR(_es_reader->get_next(&_batch_eof, _es_scroll_parser));
-            _es_scroll_parser->set_params(_tuple_desc, &_docvalue_context, _timezone);
+            _es_scroll_parser->set_params(_tuple_desc, &_docvalue_context);
             if (_batch_eof) {
                 return Status::EndOfFile("");
             }

@@ -125,7 +125,6 @@ public:
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
-    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_us / 1000; }
     int64_t timestamp_us() const { return _timestamp_us; }
@@ -231,27 +230,18 @@ public:
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
 
-    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
+    void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
 
-    int64_t load_job_id() const { return _txn_id; }
-
-    void set_db(const std::string& db) { _db = db; }
-
-    const std::string& db() const { return _db; }
-
-    void set_load_label(const std::string& label) { _load_label = label; }
-
-    const std::string& load_label() const { return _load_label; }
+    int64_t load_job_id() const { return _load_job_id; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
-
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
     // is_summary is true, means we are going to write the summary line
     void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
+<<<<<<< Updated upstream
     [[nodiscard]] Status create_rejected_record_file();
 
     bool enable_log_rejected_record() {
@@ -262,6 +252,8 @@ public:
     void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
                                         const std::string& source);
 
+=======
+>>>>>>> Stashed changes
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
     int64_t num_rows_load_from_source() const noexcept { return _num_rows_load_total_from_source.load(); }
@@ -299,8 +291,6 @@ public:
         load_params->__set_unselected_rows(num_rows_load_unselected());
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
     }
-
-    std::atomic_int64_t* mutable_total_spill_bytes();
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -371,16 +361,6 @@ public:
         _tablet_fail_infos.emplace_back(std::move(fail_info));
     }
 
-    std::vector<TSinkCommitInfo>& sink_commit_infos() {
-        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        return _sink_commit_infos;
-    }
-
-    void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
-        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
-    }
-
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -447,10 +427,6 @@ private:
 
     // Logs error messages.
     std::vector<std::string> _error_log;
-
-    std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
 
     // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
     int _unreported_error_idx;
@@ -523,22 +499,16 @@ private:
     std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
 
     std::atomic<int64_t> _num_print_error_rows{0};
-    std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
 
     std::vector<std::string> _export_output_files;
 
-    int64_t _txn_id = 0;
-    std::string _load_label;
-    std::string _db;
+    int64_t _load_job_id = 0;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
     std::mutex _tablet_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
-
-    std::mutex _sink_commit_infos_lock;
-    std::vector<TSinkCommitInfo> _sink_commit_infos;
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;

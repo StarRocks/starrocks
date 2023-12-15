@@ -94,12 +94,9 @@ static Status _validate_options(const EngineOptions& options) {
 }
 
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
-    if (options.need_write_cluster_id) {
-        RETURN_IF_ERROR(_validate_options(options));
-    }
-
+    RETURN_IF_ERROR(_validate_options(options));
     std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
-    RETURN_IF_ERROR_WITH_WARN(engine->_open(options), "open engine failed");
+    RETURN_IF_ERROR_WITH_WARN(engine->_open(), "open engine failed");
     *engine_ptr = engine.release();
     return Status::OK();
 }
@@ -127,8 +124,12 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     REGISTER_GAUGE_STARROCKS_METRIC(unused_rowsets_count, [this]() {
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
+<<<<<<< Updated upstream
     })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
+=======
+    });
+>>>>>>> Stashed changes
 }
 
 StorageEngine::~StorageEngine() {
@@ -186,12 +187,11 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     }
 }
 
-Status StorageEngine::_open(const EngineOptions& options) {
+Status StorageEngine::_open() {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
     _effective_cluster_id = config::cluster_id;
-    _need_write_cluster_id = options.need_write_cluster_id;
     RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
 
     _update_storage_medium_type_count();
@@ -284,7 +284,6 @@ Status StorageEngine::_init_store_map() {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
     }
-
     release_guard.cancel();
     return Status::OK();
 }
@@ -440,8 +439,13 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
     RETURN_IF_ERROR(_judge_and_update_effective_cluster_id(cluster_id));
 
     // write cluster id into cluster_id_path if get effective cluster id success
+<<<<<<< Updated upstream
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
         RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
+=======
+    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist) {
+        set_cluster_id(_effective_cluster_id);
+>>>>>>> Stashed changes
     }
 
     return Status::OK();
@@ -530,6 +534,7 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
+<<<<<<< Updated upstream
 // maybe nullptr if as cn
 DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     auto stores = get_stores<false>();
@@ -539,6 +544,8 @@ DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
     return stores[tablet_id % stores.size()];
 }
 
+=======
+>>>>>>> Stashed changes
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
     return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
@@ -619,10 +626,13 @@ void StorageEngine::stop() {
 
     JOIN_THREAD(_pk_index_major_compaction_thread)
 
+<<<<<<< Updated upstream
 #ifdef USE_STAROS
     JOIN_THREAD(_local_pk_index_shared_data_gc_evict_thread)
 #endif
 
+=======
+>>>>>>> Stashed changes
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
 
@@ -1239,12 +1249,6 @@ double StorageEngine::delete_unused_rowset() {
                 << rowset->version().second;
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
-        if (rowset->keys_type() != PRIMARY_KEYS) {
-            clear_rowset_delta_column_group_cache(*rowset.get());
-            status = rowset->remove_delta_column_group();
-        }
-        LOG_IF(WARNING, !status.ok()) << "remove delta column group error rowset:" << rowset->rowset_id()
-                                      << " finished. status:" << status;
     }
     LOG(INFO) << fmt::format("remove {}/{} rowsets num_multi_ref_rowsets:{} {} collect cost {}ms total {}ms",
                              delete_rowsets.size(), total_unused_rowsets, num_multi_ref_rowsets,
@@ -1459,64 +1463,22 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
     return Status::OK();
 }
 
-// calc the total memory usage of delta column group list, can be optimazed later if need.
-size_t StorageEngine::delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs) {
-    size_t res = 0;
-    for (const auto& dcg : dcgs) {
-        res += dcg->memory_usage();
-    }
-    return res;
+DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
+        : StorageEngine(options), _conf_path(options.conf_path) {
+    _s_instance = this;
+    _effective_cluster_id = config::cluster_id;
+    cluster_id_mgr = std::make_unique<ClusterIdMgr>(options.conf_path);
 }
 
-// Search delta column group from `all_dcgs` which version isn't larger than `version`.
-// Using it because we record all version dcgs in cache
-void StorageEngine::search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
-                                                          DeltaColumnGroupList* dcgs) {
-    for (const auto& dcg : all_dcgs) {
-        if (dcg->version() <= version) {
-            dcgs->push_back(dcg);
-        }
-    }
-}
-
-Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
-                                             int64_t version, DeltaColumnGroupList* dcgs) {
-    StarRocksMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
-    // Currently non-Primary Key tablet can generate cols file only through
-    // schema change which will change tablet_id. Every time we do schema change
-    // we will get cache miss and guarantee that we always can get the newest
-    // cols file.
-    DeltaColumnGroupKey dcg_key;
-    dcg_key.tablet_id = tablet_id;
-    dcg_key.rowsetid = rowsetid;
-    dcg_key.segment_id = segment_id;
-    {
-        // find in delta column group cache
-        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
-        auto itr = _delta_column_group_cache.find(dcg_key);
-        if (itr != _delta_column_group_cache.end()) {
-            search_delta_column_groups_by_version(itr->second, version, dcgs);
-            StarRocksMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
-            return Status::OK();
-        }
-    }
-    // find from rocksdb
-    DeltaColumnGroupList new_dcgs;
-    RETURN_IF_ERROR(
-            TabletMetaManager::get_delta_column_group(meta, tablet_id, rowsetid, segment_id, INT64_MAX, &new_dcgs));
-    search_delta_column_groups_by_version(new_dcgs, version, dcgs);
-    {
-        // fill delta column group cache
-        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
-        bool ok = _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
-        if (ok) {
-            // insert success
-            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
-        }
-    }
+Status DummyStorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
+    std::unique_ptr<DummyStorageEngine> engine = std::make_unique<DummyStorageEngine>(options);
+    RETURN_IF_ERROR(engine->cluster_id_mgr->init());
+    *engine_ptr = engine.release();
+    LOG(INFO) << "Opened Empty storage engine";
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     for (const auto& dcg_key : dcg_keys) {
@@ -1539,6 +1501,12 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         }
         return dcg_keys;
     }());
+=======
+Status DummyStorageEngine::set_cluster_id(int32_t cluster_id) {
+    RETURN_IF_ERROR(cluster_id_mgr->set_cluster_id(cluster_id));
+    _effective_cluster_id = cluster_id;
+    return Status::OK();
+>>>>>>> Stashed changes
 }
 
 } // namespace starrocks

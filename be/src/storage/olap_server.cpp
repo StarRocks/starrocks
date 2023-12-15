@@ -44,10 +44,12 @@
 
 #include "common/config.h"
 #include "common/status.h"
-#include "fs/fs_util.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+<<<<<<< Updated upstream
 #include "storage/lake/local_pk_index_manager.h"
+=======
+>>>>>>> Stashed changes
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -56,7 +58,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "tablet_meta_manager.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
@@ -97,6 +98,7 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
+<<<<<<< Updated upstream
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
@@ -106,6 +108,8 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_local_pk_index_shared_data_gc_evict_thread, "pk_index_shared_data_gc_evict");
 #endif
 
+=======
+>>>>>>> Stashed changes
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
@@ -218,7 +222,7 @@ Status StorageEngine::start_bg_threads() {
 
     for (uint32_t i = 0; i < config::manual_compaction_threads; i++) {
         _manual_compaction_threads.emplace_back([this] { _manual_compaction_thread_callback(nullptr); });
-        Thread::set_thread_name(_manual_compaction_threads.back(), "manual_compact");
+        Thread::set_thread_name(_update_compaction_threads.back(), "manual_compact");
     }
 
     // tablet checkpoint thread
@@ -405,6 +409,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
     return nullptr;
 }
 
+<<<<<<< Updated upstream
 #ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
     if (is_as_cn()) {
@@ -434,6 +439,8 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
 }
 #endif
 
+=======
+>>>>>>> Stashed changes
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -659,12 +666,10 @@ void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::finish_publish_version_internal;
         {
-            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
-            auto wait_timeout = std::chrono::seconds(1);
             std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
             while (!_publish_version_manager->has_pending_task() &&
                    !_bg_worker_stopped.load(std::memory_order_consume)) {
-                _finish_publish_version_cv.wait_for(wl, wait_timeout);
+                _finish_publish_version_cv.wait(wl);
             }
             _publish_version_manager->finish_publish_version_task();
             if (interval <= 0) {
@@ -793,8 +798,6 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
-        // perform dcg files gc
-        ((DataDir*)arg)->perform_delta_column_files_gc();
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {

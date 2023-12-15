@@ -22,7 +22,6 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
@@ -98,12 +97,16 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+<<<<<<< Updated upstream
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
+=======
+    RETURN_IF_ERROR(_tablet->put_txn_log(std::move(txn_log)));
+>>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -115,8 +118,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // load segments (footer and column index) every time if segments are not in the cache.
         //
         // test case: 4k columns, 150 segments, 60w rows
-        // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
+        // compaction task cost: 272s (fill cache) vs 2400s (not fill cache)
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(true));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
@@ -139,19 +142,23 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
+<<<<<<< Updated upstream
     Schema schema = column_group_index == 0 ? (_tablet_schema->sort_key_idxes().empty()
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
     Tablet tablet(_tablet.tablet_manager(), _tablet.id());
     TabletReader reader(tablet, _tablet.version(), schema, _input_rowsets, is_key, mask_buffer);
+=======
+    Schema schema = ChunkHelper::convert_schema(*_tablet_schema, column_group);
+    TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
+>>>>>>> Stashed changes
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);

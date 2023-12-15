@@ -26,7 +26,6 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "column/struct_column.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -90,12 +89,8 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
-        };
-
-        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
-                                   _build_tie);
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>

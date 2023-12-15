@@ -20,7 +20,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
-#include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/tablet.h"
@@ -64,9 +63,12 @@ struct DeltaWriterOptions {
     std::string merge_condition;
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
+<<<<<<< Updated upstream
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     POlapTableSchemaParam ptable_schema_param;
     int64_t immutable_tablet_size = 0;
+=======
+>>>>>>> Stashed changes
 };
 
 enum State {
@@ -150,6 +152,7 @@ public:
 
     Status get_err_status() const;
 
+<<<<<<< Updated upstream
     const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
     bool is_immutable() const { return _is_immutable.load(std::memory_order_relaxed); }
@@ -158,6 +161,8 @@ public:
 
     int64_t write_buffer_size() const { return _write_buffer_size; }
 
+=======
+>>>>>>> Stashed changes
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 

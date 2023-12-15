@@ -18,7 +18,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
@@ -57,10 +56,6 @@ struct TabletReaderParams {
     //     if config::disable_storage_page_cache is false, we use page cache
     bool use_page_cache = false;
 
-    // Allow this query to cache remote data on local disk or not.
-    // Only work for cloud native tablet(LakeTablet) now.
-    bool fill_data_cache = true;
-
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
@@ -82,7 +77,6 @@ struct TabletReaderParams {
     bool sorted_by_keys_per_tablet = false;
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
-    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;
 
 public:

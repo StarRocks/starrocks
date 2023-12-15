@@ -8,7 +8,6 @@
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/types_fwd.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -156,6 +155,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
@@ -249,6 +249,9 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 }
 
 Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaCSPtr& tschema,
+=======
+Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
+>>>>>>> Stashed changes
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
                                 uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(src_path));

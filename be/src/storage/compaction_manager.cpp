@@ -426,6 +426,7 @@ void CompactionManager::clear_tasks() {
     _cumulative_compaction_concurrency = 0;
 }
 
+<<<<<<< Updated upstream
 // for http action
 void CompactionManager::get_running_status(std::string* json_result) {
     int32_t max_task_num;
@@ -561,6 +562,8 @@ std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const Ta
     return res;
 }
 
+=======
+>>>>>>> Stashed changes
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         return _compaction_pool->update_max_threads(max_threads);

@@ -14,12 +14,17 @@
 
 #include "storage/schema_change_utils.h"
 
+<<<<<<< Updated upstream
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
+=======
+#include "column/datum_convert.h"
+#include "runtime/mem_pool.h"
+>>>>>>> Stashed changes
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -41,6 +46,7 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSch
 
 ChunkChanger::~ChunkChanger() {
     _schema_mapping.clear();
+<<<<<<< Updated upstream
     for (auto it : _gc_exprs) {
         if (it.second != nullptr) {
             it.second->close(_state);
@@ -51,6 +57,8 @@ ChunkChanger::~ChunkChanger() {
 void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
     _state = _obj_pool.add(
             new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
+=======
+>>>>>>> Stashed changes
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -212,6 +220,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
+<<<<<<< Updated upstream
 Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
     ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
@@ -223,6 +232,152 @@ Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
         filter[i] = !col.is_null(i) && col.value(i);
     }
     return filter;
+=======
+const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(const std::string& materialized_function,
+                                                                             LogicalType type) {
+    if (materialized_function == "to_bitmap") {
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
+    } else if (materialized_function == "hll_hash") {
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_HLL);
+    } else if (materialized_function == "count_field") {
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_COUNT);
+    } else if (materialized_function == "percentile_hash") {
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_PERCENTILE);
+    } else {
+        return nullptr;
+    }
+}
+
+bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
+                                const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool) {
+    if (new_chunk->num_columns() != _schema_mapping.size()) {
+        LOG(WARNING) << "new chunk does not match with schema mapping rules. "
+                     << "chunk_schema_size=" << new_chunk->num_columns()
+                     << ", mapping_schema_size=" << _schema_mapping.size();
+        return false;
+    }
+
+    for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
+        int ref_column = _schema_mapping[i].ref_column;
+        if (ref_column >= 0) {
+            LogicalType ref_type = base_tablet_meta->tablet_schema().column(ref_column).type();
+            LogicalType new_type = new_tablet_meta->tablet_schema().column(i).type();
+            if (!_schema_mapping[i].materialized_function.empty()) {
+                const auto& materialized_function = _schema_mapping[i].materialized_function;
+                const MaterializeTypeConverter* converter =
+                        get_materialize_type_converter(materialized_function, ref_type);
+                VLOG(3) << "_schema_mapping[" << i << "].materialized_function: " << materialized_function;
+                if (converter == nullptr) {
+                    LOG(WARNING) << "error materialized view function : " << materialized_function;
+                    return false;
+                }
+                ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
+                ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+                Field ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
+                if (!st.ok()) {
+                    return false;
+                }
+                continue;
+            }
+
+            int reftype_precision = base_tablet_meta->tablet_schema().column(ref_column).precision();
+            int reftype_scale = base_tablet_meta->tablet_schema().column(ref_column).scale();
+            int newtype_precision = new_tablet_meta->tablet_schema().column(i).precision();
+            int newtype_scale = new_tablet_meta->tablet_schema().column(i).scale();
+
+            ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
+            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+
+            if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
+                                         (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
+                if (new_type == TYPE_CHAR) {
+                    for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                        Datum base_datum = base_col->get(row_index);
+                        Datum new_datum;
+                        if (base_datum.is_null()) {
+                            new_datum.set_null();
+                            new_col->append_datum(new_datum);
+                            continue;
+                        }
+                        Slice base_slice = base_datum.get_slice();
+                        Slice slice;
+                        slice.size = new_tablet_meta->tablet_schema().column(i).length();
+                        slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
+                        if (slice.data == nullptr) {
+                            LOG(WARNING) << "failed to allocate memory in mem_pool";
+                            return false;
+                        }
+                        memset(slice.data, 0, slice.size);
+                        size_t copy_size = slice.size < base_slice.size ? slice.size : base_slice.size;
+                        memcpy(slice.data, base_slice.data, copy_size);
+                        new_datum.set(slice);
+                        new_col->append_datum(new_datum);
+                    }
+                } else if (new_col->is_nullable() != base_col->is_nullable()) {
+                    new_col->append(*base_col.get());
+                } else {
+                    new_col = base_col;
+                }
+            } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
+                auto converter = get_type_converter(ref_type, new_type);
+                if (converter == nullptr) {
+                    LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
+                    return false;
+                }
+
+                Field ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
+
+                Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
+                                 << logical_type_to_string(new_type);
+                    return false;
+                }
+            } else {
+                // copy and alter the field
+                switch (ref_type) {
+                case TYPE_TINYINT:
+                    CONVERT_FROM_TYPE(int8_t);
+                case TYPE_UNSIGNED_TINYINT:
+                    CONVERT_FROM_TYPE(uint8_t);
+                case TYPE_SMALLINT:
+                    CONVERT_FROM_TYPE(int16_t);
+                case TYPE_UNSIGNED_SMALLINT:
+                    CONVERT_FROM_TYPE(uint16_t);
+                case TYPE_INT:
+                    CONVERT_FROM_TYPE(int32_t);
+                case TYPE_UNSIGNED_INT:
+                    CONVERT_FROM_TYPE(uint32_t);
+                case TYPE_BIGINT:
+                    CONVERT_FROM_TYPE(int64_t);
+                case TYPE_UNSIGNED_BIGINT:
+                    CONVERT_FROM_TYPE(uint64_t);
+                default:
+                    LOG(WARNING) << "the column type which was altered from was unsupported."
+                                 << " from_type=" << ref_type << ", to_type=" << new_type;
+                    return false;
+                }
+                if (new_type < ref_type) {
+                    LOG(INFO) << "type degraded while altering column. "
+                              << "column=" << new_tablet_meta->tablet_schema().column(i).name()
+                              << ", origin_type=" << logical_type_to_string(ref_type)
+                              << ", alter_type=" << logical_type_to_string(new_type);
+                }
+            }
+        } else {
+            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                new_col->append_datum(_schema_mapping[i].default_value_datum);
+            }
+        }
+    }
+    return true;
+>>>>>>> Stashed changes
 }
 
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
@@ -233,6 +388,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
+<<<<<<< Updated upstream
     if (_alter_job_type == TAlterJobType::ROLLUP) {
         for (auto slot : _query_slots) {
             size_t column_index = base_chunk->schema()->get_field_index_by_name(slot->col_name());
@@ -310,6 +466,41 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
 
             ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+=======
+
+    for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
+        int ref_column = _schema_mapping[i].ref_column;
+        int base_index = _schema_mapping[i].ref_base_reader_column_index;
+        if (ref_column >= 0) {
+            const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
+            const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
+            ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
+            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+
+            if (!_schema_mapping[i].materialized_function.empty()) {
+                const auto& materialized_function = _schema_mapping[i].materialized_function;
+                const MaterializeTypeConverter* converter =
+                        get_materialize_type_converter(materialized_function, ref_type_info->type());
+                VLOG(3) << "_schema_mapping[" << i << "].materialized_function: " << materialized_function;
+                if (converter == nullptr) {
+                    LOG(WARNING) << "error materialized view function : " << materialized_function;
+                    return false;
+                }
+                Status st = converter->convert_materialized(base_col, new_col, ref_type_info.get());
+                if (!st.ok()) {
+                    return false;
+                }
+                continue;
+            }
+
+            int reftype_precision = ref_type_info->precision();
+            int reftype_scale = ref_type_info->scale();
+            int newtype_precision = new_type_info->precision();
+            int newtype_scale = new_type_info->scale();
+            auto ref_type = ref_type_info->type();
+            auto new_type = new_type_info->type();
+
+>>>>>>> Stashed changes
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
                 if (new_col->is_nullable() != base_col->is_nullable()) {
@@ -351,8 +542,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
                     LOG(WARNING) << "the column type which was altered from was unsupported."
+<<<<<<< Updated upstream
                                  << " from_type=" << logical_type_to_string(ref_type)
                                  << ", to_type=" << logical_type_to_string(new_type);
+=======
+                                 << " from_type=" << ref_type << ", to_type=" << new_type;
+>>>>>>> Stashed changes
                     return false;
                 }
                 if (new_type < ref_type) {
@@ -373,6 +568,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
     return true;
 }
 
+<<<<<<< Updated upstream
 Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
     if (_gc_exprs.size() == 0) {
         return Status::OK();
@@ -510,6 +706,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
     return Status::OK();
 }
 
+=======
+>>>>>>> Stashed changes
 #undef CONVERT_FROM_TYPE
 #undef TYPE_REINTERPRET_CAST
 #undef ASSIGN_DEFAULT_VALUE
@@ -536,14 +734,45 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
         }
     }
 
+<<<<<<< Updated upstream
     if (request.__isset.where_expr) {
         where_expr = std::make_unique<starrocks::TExpr>(request.where_expr);
+=======
+    for (auto item : request.materialized_view_params) {
+        AlterMaterializedViewParam mv_param;
+        mv_param.column_name = item.column_name;
+        /*
+         * origin_column_name is always be set now,
+         * but origin_column_name may be not set in some materialized view function. eg:count(1)
+        */
+        if (item.__isset.origin_column_name) {
+            mv_param.origin_column_name = item.origin_column_name;
+        }
+
+        /*
+        * TODO(lhy)
+        * Building the materialized view function for schema_change here based on defineExpr.
+        * This is a trick because the current storage layer does not support expression evaluation.
+        * We can refactor this part of the code until the uniform expression evaluates the logic.
+        * count distinct materialized view will set mv_expr with to_bitmap or hll_hash.
+        * count materialized view will set mv_expr with count.
+        */
+        if (item.__isset.mv_expr) {
+            if (item.mv_expr.nodes[0].node_type == TExprNodeType::FUNCTION_CALL) {
+                mv_param.mv_expr = item.mv_expr.nodes[0].fn.name.function_name;
+            } else if (item.mv_expr.nodes[0].node_type == TExprNodeType::CASE_EXPR) {
+                mv_param.mv_expr = "count_field";
+            }
+        }
+        materialized_view_param_map->insert(std::make_pair(item.column_name, mv_param));
+>>>>>>> Stashed changes
     }
 }
 
 Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                         ChunkChanger* chunk_changer,
                                         const MaterializedViewParamMap& materialized_view_param_map,
+<<<<<<< Updated upstream
                                         const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates,
                                         bool* sc_sorting, bool* sc_directly,
                                         std::unordered_set<int>* generated_column_idxs) {
@@ -565,10 +794,17 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     bool is_modify_generated_column = false;
     for (int i = 0; i < new_schema->num_columns(); ++i) {
         const TabletColumn& new_column = new_schema->column(i);
+=======
+                                        bool has_delete_predicates, bool* sc_sorting, bool* sc_directly) {
+    std::map<ColumnId, ColumnId> base_to_new;
+    for (int i = 0; i < new_schema.num_columns(); ++i) {
+        const TabletColumn& new_column = new_schema.column(i);
+>>>>>>> Stashed changes
         std::string column_name(new_column.name());
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
+<<<<<<< Updated upstream
             auto& mvParam = materialized_view_param_map.find(column_name)->second;
             if (mvParam.mv_expr != nullptr) {
                 RuntimeState* runtime_state = chunk_changer->get_runtime_state();
@@ -582,30 +818,34 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             }
 
             int32_t column_index = base_schema->field_index(mvParam.origin_column_name);
+=======
+            AlterMaterializedViewParam mvParam = materialized_view_param_map.find(column_name)->second;
+            column_mapping->materialized_function = mvParam.mv_expr;
+            int32_t column_index = base_schema.field_index(mvParam.origin_column_name);
+>>>>>>> Stashed changes
             if (column_index >= 0) {
                 column_mapping->ref_column = column_index;
                 continue;
             } else {
                 LOG(WARNING) << "referenced column was missing. "
-                             << "[column=" << column_name << " referenced_column=" << column_index << "]"
-                             << "[original_column_name=" << mvParam.origin_column_name << "]";
+                             << "[column=" << column_name << " referenced_column=" << column_index << "]";
                 return Status::InternalError("referenced column was missing");
             }
         }
 
+<<<<<<< Updated upstream
         int32_t column_index = base_schema->field_index(column_name);
         // if generated_column_idxs contain column_index, it means that
         // MODIFY GENERATED COLUMN is executed. The value for the new schema
         // must be re-compute by the new expression so the column mapping can not be set.
         if (column_index >= 0 && ((generated_column_idxs == nullptr) ||
                                   generated_column_idxs->find(column_index) == generated_column_idxs->end())) {
+=======
+        int32_t column_index = base_schema.field_index(column_name);
+        if (column_index >= 0) {
+>>>>>>> Stashed changes
             column_mapping->ref_column = column_index;
             continue;
-        }
-
-        if (!is_modify_generated_column) {
-            is_modify_generated_column = (generated_column_idxs != nullptr) &&
-                                         (generated_column_idxs->find(column_index) != generated_column_idxs->end());
         }
 
         // to handle new added column
@@ -627,12 +867,30 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
         }
     }
 
+<<<<<<< Updated upstream
     if (where_expr) {
         RETURN_IF_ERROR(chunk_changer->prepare_where_expr(*where_expr));
     }
 
     // initialized chunk charger state.
     RETURN_IF_ERROR(chunk_changer->prepare());
+=======
+    // base tablet schema: k1 k2 k3 v1 v2
+    // new tablet schema: k3 k1 v2
+    // base reader schema: k1 k3 v2
+    // selected_column_index: 0 2 4
+    // ref_column: 2 0 4
+    // ref_base_reader_column_index: 1 0 2
+    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexes();
+    int32_t index = 0;
+    for (const auto& iter : base_to_new) {
+        ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(iter.second);
+        // new tablet column index -> base reader column index
+        column_mapping->ref_base_reader_column_index = index++;
+        // selected column index from base tablet for base reader
+        selected_column_indexs->emplace_back(iter.first);
+    }
+>>>>>>> Stashed changes
 
     // Check if re-aggregation is needed.
     *sc_sorting = false;
@@ -687,9 +945,15 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
         if (column_mapping->ref_column < 0) {
             continue;
         } else {
+<<<<<<< Updated upstream
             auto& new_column = new_schema->column(i);
             auto& ref_column = base_schema->column(column_mapping->ref_column);
             if (new_column.type() != ref_column.type() || is_modify_generated_column) {
+=======
+            auto& new_column = new_schema.column(i);
+            auto& ref_column = base_schema.column(column_mapping->ref_column);
+            if (new_column.type() != ref_column.type()) {
+>>>>>>> Stashed changes
                 *sc_directly = true;
                 return Status::OK();
             } else if (is_decimalv3_field_type(new_column.type()) &&
@@ -720,6 +984,7 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
                                                const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
                                                bool* sc_directly) {
@@ -754,6 +1019,8 @@ Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
+=======
+>>>>>>> Stashed changes
 Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                               const std::string& value) {
     if (column_schema.is_nullable() && value.length() == 0) {

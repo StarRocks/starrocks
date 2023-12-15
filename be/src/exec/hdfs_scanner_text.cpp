@@ -259,7 +259,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     }
     RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
-    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
     for (const auto slot : _scanner_params.materialize_slots) {
         DCHECK(slot != nullptr);
@@ -285,10 +285,10 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
-    _app_stats.raw_rows_read += ck->num_rows();
+    _stats.raw_rows_read += ck->num_rows();
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         // do evaluation.
-        SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
+        SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
         if (ck->num_rows() == 0) {
             break;
@@ -459,16 +459,6 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 }
 
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
-    // For some table like file table, there is no hive_column_names at all.
-    // So we use slot order defined in table schema.
-    if (_scanner_params.hive_column_names->empty()) {
-        _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
-        for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
-            _materialize_slots_index_2_csv_column_index[i] = i;
-        }
-        return Status::OK();
-    }
-
     const bool case_sensitive = _scanner_params.case_sensitive;
 
     // The map's value is the position of column name in hive's table(Not in StarRocks' table)

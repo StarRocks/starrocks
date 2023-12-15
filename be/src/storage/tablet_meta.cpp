@@ -129,7 +129,7 @@ TabletMeta::~TabletMeta() {
 
 Status TabletMeta::create_from_file(const string& file_path) {
     TabletMetaPB tablet_meta_pb;
-    ProtobufFileWithHeader file(file_path);
+    ProtobufFile file(file_path);
     Status st = file.load(&tablet_meta_pb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load tablet meta file: " << st;
@@ -170,7 +170,7 @@ Status TabletMeta::save(const string& file_path) {
 
 Status TabletMeta::save(const string& file_path, const TabletMetaPB& tablet_meta_pb) {
     DCHECK(!file_path.empty());
-    ProtobufFileWithHeader file(file_path);
+    ProtobufFile file(file_path);
     return file.save(tablet_meta_pb, true);
 }
 
@@ -303,6 +303,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         binlog_config.update(tablet_meta_pb.binlog_config());
         set_binlog_config(binlog_config);
     }
+<<<<<<< Updated upstream
 
     if (tablet_meta_pb.has_binlog_min_lsn()) {
         auto& lsnPb = tablet_meta_pb.binlog_min_lsn();
@@ -311,6 +312,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
     _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
+=======
+>>>>>>> Stashed changes
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -366,13 +369,13 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     if (_binlog_config != nullptr) {
         _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
-        BinlogLsnPB* lsn = tablet_meta_pb->mutable_binlog_min_lsn();
-        lsn->set_version(_binlog_min_lsn.version());
-        lsn->set_seq_id(_binlog_min_lsn.seq_id());
     }
+<<<<<<< Updated upstream
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
     tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
+=======
+>>>>>>> Stashed changes
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
@@ -542,11 +545,12 @@ std::string TabletMeta::full_name() const {
     return ss.str();
 }
 
-void TabletMeta::set_partition_id(int64_t partition_id) {
+Status TabletMeta::set_partition_id(int64_t partition_id) {
     if ((_partition_id > 0 && _partition_id != partition_id) || partition_id < 1) {
         LOG(FATAL) << "cur partition id=" << _partition_id << " new partition id=" << partition_id << " not equal";
     }
     _partition_id = partition_id;
+    return Status::OK();
 }
 
 void TabletMeta::create_inital_updates_meta() {

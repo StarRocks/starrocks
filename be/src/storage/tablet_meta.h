@@ -92,10 +92,10 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                                       uint32_t next_unique_id,
-                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                       TabletMetaSharedPtr* tablet_meta);
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
 
@@ -112,15 +112,15 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    [[nodiscard]] Status create_from_file(const std::string& file_path);
-    [[nodiscard]] Status save(const std::string& file_path);
-    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
+    Status create_from_file(const std::string& file_path);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    [[nodiscard]] Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir);
 
-    [[nodiscard]] Status serialize(std::string* meta_binary);
-    [[nodiscard]] Status deserialize(std::string_view data);
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
@@ -184,7 +184,7 @@ public:
     bool version_for_delete_predicate(const Version& version);
     std::string full_name() const;
 
-    void set_partition_id(int64_t partition_id);
+    Status set_partition_id(int64_t partition_id);
 
     // used when create new tablet
     void create_inital_updates_meta();
@@ -209,19 +209,28 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
-    void set_binlog_config(const BinlogConfig& new_config) {
-        _binlog_config = std::make_shared<BinlogConfig>();
-        _binlog_config->update(new_config);
+    void set_binlog_config(const TBinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
+                         << _binlog_config->version << ", update version is " << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
     }
 
-    BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
-
-    void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
-
-    bool enable_shortcut_compaction() const { return _enable_shortcut_compaction; }
-
-    void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
-        _enable_shortcut_compaction = enable_shortcut_compaction;
+    void set_binlog_config(const BinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
+                         << _binlog_config->version << ", update version is " << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
     }
 
 private:
@@ -270,6 +279,7 @@ private:
 
     std::shared_ptr<BinlogConfig> _binlog_config;
 
+<<<<<<< Updated upstream
     // The minimum lsn of binlog that is valid. It will be updated when deleting expired
     // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
     // useless binlog when recovery in Tablet#finish_load_rowsets. We can not only depend
@@ -285,6 +295,8 @@ private:
 
     std::string _storage_type;
 
+=======
+>>>>>>> Stashed changes
     std::shared_mutex _meta_lock;
 };
 

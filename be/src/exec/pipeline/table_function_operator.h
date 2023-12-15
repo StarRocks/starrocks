@@ -26,7 +26,7 @@ class TableFunctionOperator final : public Operator {
 public:
     TableFunctionOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           const TPlanNode& tnode)
-            : Operator(factory, id, "table_function", plan_node_id, false, driver_sequence), _tnode(tnode) {}
+            : Operator(factory, id, "table_function", plan_node_id, driver_sequence), _tnode(tnode) {}
 
     ~TableFunctionOperator() override = default;
 
@@ -51,8 +51,12 @@ public:
 
 private:
     ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
+<<<<<<< Updated upstream
     [[nodiscard]] Status _process_table_function();
     void _copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_column_size);
+=======
+    Status _process_table_function();
+>>>>>>> Stashed changes
 
     const TPlanNode& _tnode;
     const TableFunction* _table_function = nullptr;
@@ -66,14 +70,14 @@ private:
 
     // Input chunk currently being processed
     ChunkPtr _input_chunk;
-    // The subscript in "input_chunk" of the input row corresponding to the first row of "_table_function_result.first".
-    size_t _input_index_of_first_result = 0;
-    // How many rows of "_table_function_result.first" have been output to downstream operator.
-    size_t _next_output_row = 0;
-    // The subscript in "_table_function_result.second" corresponding to the "_next_output_row".
-    size_t _next_output_row_offset = 0;
+    // The current chunk is processed to which row
+    size_t _input_chunk_index = 0;
+    // The current outer line needs to be repeated several times
+    size_t _remain_repeat_times = 0;
     // table function result
     std::pair<Columns, UInt32Column::Ptr> _table_function_result;
+    // table function return result end ?
+    bool _table_function_result_eos = false;
     // table function param and return offset
     TableFunctionState* _table_function_state = nullptr;
 

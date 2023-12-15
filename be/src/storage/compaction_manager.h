@@ -65,8 +65,6 @@ public:
 
     void clear_tasks();
 
-    void get_running_status(std::string* json_result);
-
     uint16_t running_tasks_num() {
         std::lock_guard lg(_tasks_mutex);
         size_t res = 0;

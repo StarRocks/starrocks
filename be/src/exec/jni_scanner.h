@@ -34,8 +34,12 @@ public:
     void do_update_counter(HdfsScanProfile* profile) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
+<<<<<<< Updated upstream
     [[nodiscard]] Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     bool is_jni_scanner() override { return true; }
+=======
+    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+>>>>>>> Stashed changes
 
 protected:
     [[nodiscard]] Status fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
@@ -64,11 +68,19 @@ private:
 
     [[nodiscard]] Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
+<<<<<<< Updated upstream
     template <LogicalType type>
     [[nodiscard]] Status _append_primitive_data(const FillColumnArgs& args);
 
     template <LogicalType type>
     [[nodiscard]] Status _append_decimal_data(const FillColumnArgs& args);
+=======
+    template <LogicalType type, typename CppType>
+    Status _append_primitive_data(const FillColumnArgs& args);
+
+    template <LogicalType type, typename CppType>
+    Status _append_decimal_data(const FillColumnArgs& args);
+>>>>>>> Stashed changes
 
     template <LogicalType type>
     [[nodiscard]] Status _append_string_data(const FillColumnArgs& args);

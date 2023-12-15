@@ -27,6 +27,7 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "storage/column_predicate.h"
 #include "util/runtime_profile.h"
 namespace starrocks {
 class RandomAccessFile;
@@ -53,7 +54,6 @@ struct GroupReaderParam {
         const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
 
         SlotId slot_id;
-        bool decode_needed;
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -83,8 +83,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
-                int64_t row_group_first_row);
+    GroupReader(GroupReaderParam& param, int row_group_number);
     ~GroupReader() = default;
 
     // init used to init column reader, init dict_filter_ctx and devide active/lazy
@@ -103,22 +102,56 @@ public:
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
 
-    void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
-    Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
+private:
+    struct DictFilterContext {
+    public:
+        void init(size_t column_number);
+        void use_as_dict_filter_column(int col_idx, SlotId slot_id, const std::vector<ExprContext*>& conjunct_ctxs);
+        Status rewrite_conjunct_ctxs_to_predicates(
+                const GroupReaderParam& param,
+                std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers, ObjectPool* obj_pool,
+                bool* is_group_filtered);
 
+<<<<<<< Updated upstream
     void _init_chunk_dict_column(ChunkPtr* chunk);
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
     Status _fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk);
+=======
+        void init_chunk(const GroupReaderParam& param, ChunkPtr* chunk);
+        bool filter_chunk(ChunkPtr* chunk, Filter* filter);
+        Status decode_chunk(const GroupReaderParam& param,
+                            std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
+                            const ChunkPtr& read_chunk, ChunkPtr* chunk);
+        ColumnContentType column_content_type(int col_idx) {
+            if (_is_dict_filter_column[col_idx]) {
+                return ColumnContentType::DICT_CODE;
+            }
+            return ColumnContentType::VALUE;
+        }
+
+    private:
+        // if this column use as dict filter?
+        std::vector<bool> _is_dict_filter_column;
+        // columns(index) use as dict filter column
+        std::vector<int> _dict_column_indices;
+        // conjunct ctxs for each dict filter column
+        std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
+        // preds transformed from `_conjunct_ctxs_by_slot` for each dict filter column
+        std::unordered_map<SlotId, ColumnPredicate*> _predicates;
+    };
+
+    using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
+>>>>>>> Stashed changes
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
-
-    bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                 std::vector<std::string>& sub_field_path, bool is_decode_needed);
-
+    bool _can_use_as_dict_filter_column(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
+                                        const tparquet::ColumnMetaData& column_metadata);
+    // Returns true if all of the data pages in the column chunk are dict encoded
+    static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
     Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
@@ -138,9 +171,6 @@ public:
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
-    int64_t _row_group_first_row = 0;
-    const std::set<int64_t>* _need_skip_rowids;
-    int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
@@ -169,6 +199,7 @@ public:
 
     int64_t _end_offset = 0;
 
+<<<<<<< Updated upstream
     // columns(index) use as dict filter column
     std::vector<int> _dict_column_indices;
     std::unordered_map<int, std::vector<std::vector<std::string>>> _dict_column_sub_field_paths;
@@ -179,6 +210,9 @@ public:
 
     // round by round ctx
     std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
+=======
+    DictFilterContext _dict_filter_ctx;
+>>>>>>> Stashed changes
 };
 
 } // namespace starrocks::parquet

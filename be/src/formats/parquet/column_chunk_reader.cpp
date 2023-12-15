@@ -103,7 +103,6 @@ Status ColumnChunkReader::_parse_page_header() {
     RETURN_IF_ERROR(_page_reader->next_header());
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
-    _opts.stats->request_bytes_read_uncompressed += (now - off);
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
@@ -139,11 +138,9 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
                                                          bool is_compressed) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     is_compressed = is_compressed && (_compress_codec != nullptr);
-
     size_t read_size = is_compressed ? compressed_size : uncompressed_size;
     std::vector<uint8_t>& read_buffer = is_compressed ? _compressed_buf : _uncompressed_buf;
     _opts.stats->request_bytes_read += read_size;
-    _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
     // check if we can zero copy read.
     Slice read_data;
@@ -212,8 +209,13 @@ Status ColumnChunkReader::_parse_data_page() {
         _decoders[static_cast<int>(encoding)] = std::move(decoder);
     }
 
+<<<<<<< Updated upstream
     _cur_decoder->set_type_length(_type_length);
     RETURN_IF_ERROR(_cur_decoder->set_data(_data));
+=======
+    _cur_decoder->set_type_legth(_type_length);
+    _cur_decoder->set_data(_data);
+>>>>>>> Stashed changes
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
@@ -245,8 +247,13 @@ Status ColumnChunkReader::_parse_dict_page() {
     const EncodingInfo* code_info = nullptr;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
+<<<<<<< Updated upstream
     RETURN_IF_ERROR(dict_decoder->set_data(_data));
     dict_decoder->set_type_length(_type_length);
+=======
+    dict_decoder->set_data(_data);
+    dict_decoder->set_type_legth(_type_length);
+>>>>>>> Stashed changes
 
     // initialize decoder
     std::unique_ptr<Decoder> decoder;

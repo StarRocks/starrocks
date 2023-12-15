@@ -95,6 +95,9 @@ private:
         _encoding_map.emplace(key, info.release());
     }
 
+    // Add fixed length byte array
+    void _add_flba_map() {}
+
     std::unordered_map<TypeEncodingPair, EncodingInfo*, EncodingMapHash> _encoding_map;
 };
 

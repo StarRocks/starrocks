@@ -24,10 +24,10 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
-#include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
 
+<<<<<<< Updated upstream
 struct ScanTaskGroup {
     int64_t runtime_ns = 0;
     int sub_queue_level = 0;
@@ -51,6 +51,8 @@ struct YieldContext {
     const workgroup::WorkGroup* wg = nullptr;
 };
 
+=======
+>>>>>>> Stashed changes
 struct ScanTask {
 public:
     using WorkFunction = std::function<void(YieldContext&)>;
@@ -81,17 +83,8 @@ public:
     YieldContext work_context;
     WorkFunction work_function;
     int priority = 0;
-    std::shared_ptr<ScanTaskGroup> task_group = nullptr;
-    RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
 };
 
-/// There are three types of ScanTaskQueue:
-/// - WorkGroupScanTaskQueue, which is a two-level queue.
-///   - The first level selects the workgroup with the shortest execution time.
-///   - The second level selects an appropriate task using either PriorityScanTaskQueue or MultiLevelFeedScanTaskQueue.
-/// - PriorityScanTaskQueue, which prioritizes scan tasks with lower committed times.
-/// - MultiLevelFeedScanTaskQueue, which prioritizes scan tasks with shorter execution time.
-///   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
 class ScanTaskQueue {
 public:
     ScanTaskQueue() = default;
@@ -106,10 +99,11 @@ public:
     virtual size_t size() const = 0;
     bool empty() const { return size() == 0; }
 
-    virtual void update_statistics(ScanTask& task, int64_t runtime_ns) = 0;
+    virtual void update_statistics(WorkGroup* wg, int64_t runtime_ns) = 0;
     virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
 };
 
+<<<<<<< Updated upstream
 class MultiLevelFeedScanTaskQueue final : public ScanTaskQueue {
 public:
     MultiLevelFeedScanTaskQueue();
@@ -157,6 +151,8 @@ private:
     std::atomic<size_t> _num_tasks = 0;
 };
 
+=======
+>>>>>>> Stashed changes
 class PriorityScanTaskQueue final : public ScanTaskQueue {
 public:
     explicit PriorityScanTaskQueue(size_t max_elements);
@@ -170,7 +166,7 @@ public:
 
     size_t size() const override { return _queue.get_size(); }
 
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override {}
+    void update_statistics(WorkGroup* wg, int64_t runtime_ns) override {}
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override { return false; }
 
 private:
@@ -192,7 +188,7 @@ public:
 
     size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
 
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
+    void update_statistics(WorkGroup* wg, int64_t runtime_ns) override;
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
 private:
@@ -256,7 +252,5 @@ private:
 
     std::atomic<size_t> _num_tasks = 0;
 };
-
-std::unique_ptr<ScanTaskQueue> create_scan_task_queue();
 
 } // namespace starrocks::workgroup

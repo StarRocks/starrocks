@@ -312,8 +312,7 @@ Status ScalarColumnWriter::init() {
     RETURN_IF_ERROR(get_block_compression_codec(_opts.meta->compression(), &_compress_codec));
 
     if (!_opts.need_speculate_encoding) {
-        auto st = set_encoding(_opts.meta->encoding());
-        CHECK(st.ok()) << st;
+        set_encoding(_opts.meta->encoding());
     }
     // create ordinal builder
     _ordinal_index_builder = std::make_unique<OrdinalIndexWriter>();
@@ -733,18 +732,16 @@ Status StringColumnWriter::append(const Column& column) {
 }
 
 inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& column) {
-    Status st;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
         const auto& bin_col = down_cast<BinaryColumn&>(*data_col);
         const auto detect_encoding = speculate_string_encoding(bin_col);
-        st = _scalar_column_writer->set_encoding(detect_encoding);
+        _scalar_column_writer->set_encoding(detect_encoding);
     } else if (column.is_binary()) {
         const auto& bin_col = down_cast<const BinaryColumn&>(column);
         auto detect_encoding = speculate_string_encoding(bin_col);
-        st = _scalar_column_writer->set_encoding(detect_encoding);
+        _scalar_column_writer->set_encoding(detect_encoding);
     }
-    CHECK(st.ok()) << st;
 }
 
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
@@ -810,7 +807,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
         Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),
-                                                       limit, slice.to_string()));
+                                                       limit, slice.get_data()));
         }
     }
     return Status::OK();

@@ -33,8 +33,6 @@
 #include "io/input_stream.h"
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
-#include "io/throttled_output_stream.h"
-#include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
 #include "util/string_parser.hpp"
@@ -175,16 +173,13 @@ public:
 
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(9);
+        stats->reserve(6);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
         stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
-        stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
-        stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
-        stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
         return std::move(stats);
     }
 
@@ -277,11 +272,7 @@ public:
         }
 
         bool is_cache_hit = (*file_st)->is_cache_hit();
-        std::unique_ptr<io::SeekableInputStream> istream = std::make_unique<StarletInputStream>(std::move(*file_st));
-        if (!is_cache_hit && config::experimental_lake_wait_per_get_ms > 0) {
-            istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
-                                                                         config::experimental_lake_wait_per_get_ms);
-        }
+        auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
         return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
@@ -323,11 +314,8 @@ public:
             return to_status(file_st.status());
         }
 
-        std::unique_ptr<io::OutputStream> os = std::make_unique<StarletOutputStream>(std::move(*file_st));
-        if (config::experimental_lake_wait_per_put_ms > 0) {
-            os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
-        }
-        return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
+        auto outputstream = std::make_unique<StarletOutputStream>(std::move(*file_st));
+        return std::make_unique<starrocks::OutputStreamAdapter>(std::move(outputstream), path);
     }
 
     Status delete_file(const std::string& path) override {
@@ -522,6 +510,7 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
+<<<<<<< Updated upstream
     Status delete_files(const std::vector<std::string>& paths) override {
         if (paths.empty()) {
             return Status::OK();
@@ -549,6 +538,8 @@ public:
         return to_status(fs->delete_files(parsed_paths));
     }
 
+=======
+>>>>>>> Stashed changes
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
         return g_worker->get_shard_filesystem(shard_id, _conf);

@@ -95,15 +95,6 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 std::min(_olap_scan_node.max_parallel_scan_instance_num, _io_tasks_per_scan_operator);
     }
 
-    if (_olap_scan_node.__isset.column_access_paths) {
-        for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto path = std::make_unique<ColumnAccessPath>();
-            if (path->init(_olap_scan_node.column_access_paths[i], state, _pool).ok()) {
-                _column_access_paths.emplace_back(std::move(path));
-            }
-        }
-    }
-
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
@@ -204,7 +195,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -559,7 +550,6 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
-    _get_delta_column_group_timer = ADD_TIMER(_scan_profile, "GetDeltaColumnGroup");
 
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
@@ -712,7 +702,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

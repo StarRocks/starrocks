@@ -265,7 +265,14 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     // 2. For each tablet, remove the metadata first and then upload snapshot.
     // we only support overwriting now.
     for (auto& restore_info : request->restore_infos()) {
+<<<<<<< Updated upstream
         // 2.1. Get remote files
+=======
+        // 2.1 Remove the tablet metadata
+        _env->lake_tablet_manager()->delete_tablet(restore_info.tablet_id());
+
+        // 2.2. Get remote files
+>>>>>>> Stashed changes
         std::map<std::string, FileStat> remote_files;
         RETURN_IF_ERROR(
                 _get_existing_files_from_remote(*client, restore_info.snapshot_path(), broker_prop, &remote_files));
@@ -300,7 +307,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
                 return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
             }
             meta->set_id(restore_info.tablet_id());
-            RETURN_IF_ERROR(_env->lake_tablet_manager()->put_tablet_metadata(meta));
+            _env->lake_tablet_manager()->put_tablet_metadata(meta);
         }
 
         // 2.3. upload the segment files.

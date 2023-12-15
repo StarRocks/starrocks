@@ -34,10 +34,13 @@
 
 #include "runtime/datetime_value.h"
 
+<<<<<<< Updated upstream
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
 #include <fmt/format.h>
 
+=======
+>>>>>>> Stashed changes
 #include <cctype>
 #include <cstring>
 #include <ctime>
@@ -61,6 +64,7 @@ static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday"
                                    "Friday", "Saturday", "Sunday",    nullptr};
 static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
+<<<<<<< Updated upstream
 static bool str_to_int64(const char* ptr, const char** endptr, int64_t* ret);
 static int check_word(const char* lib[], const char* str, const char* end, const char** endptr);
 
@@ -522,6 +526,8 @@ bool JodaFormat::parse(std::string_view str, DateTimeValue* output) {
 
 } // namespace joda
 
+=======
+>>>>>>> Stashed changes
 uint8_t mysql_week_mode(uint32_t mode) {
     mode &= 7;
     if (!(mode & WEEK_MONDAY_FIRST)) {
@@ -1058,19 +1064,6 @@ static char* append_with_prefix(const char* str, int str_len, char prefix, int f
     return to;
 }
 
-static char* append_with_suffix(const char* str, int str_len, char suffix, int full_len, char* to) {
-    int len = (str_len > full_len) ? str_len : full_len;
-    len -= str_len;
-    while (str_len-- > 0) {
-        *to++ = *str++;
-    }
-    while (len-- > 0) {
-        *to++ = suffix;
-    }
-
-    return to;
-}
-
 int DateTimeValue::compute_format_len(const char* format, int len) {
     int size = 0;
     const char* ptr = format;
@@ -1198,20 +1191,18 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        case 'Y': {
+        case 'Y':
             // year of era
-            int output_year = same_ch_size == 2 ? (_year % 100) : _year;
             if (_year <= 0) {
-                pos = int_to_str(1 - output_year, buf);
+                pos = int_to_str(1 - _year, buf);
             } else {
-                pos = int_to_str(output_year, buf);
+                pos = int_to_str(_year, buf);
             }
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        }
         case 'x': {
             // weekyear
             if (_type == TIME_TIME) {
@@ -1219,8 +1210,7 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             }
             uint32_t year = 0;
             calc_week(*this, mysql_week_mode(3), &year);
-            int output_year = same_ch_size == 2 ? (year % 100) : year;
-            pos = int_to_str(output_year, buf);
+            pos = int_to_str(year, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
@@ -1265,16 +1255,14 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
                 to = append_string(s_ab_day_name[weekday()], to);
             }
             break;
-        case 'y': {
+        case 'y':
             // year
-            int output_year = same_ch_size == 2 ? _year % 100 : _year;
-            pos = int_to_str(output_year, buf);
+            pos = int_to_str(_year, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        }
         case 'D':
             // day of year (001..366)
             pos = int_to_str(daynr() - calc_daynr(_year, 1, 1) + 1, buf);
@@ -1374,20 +1362,14 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        case 'S': {
+        case 'S':
             // fraction of second
-            RETURN_IF(same_ch_size > 6, false);
-            uint64_t val = _microsecond;
-            for (int i = 0; i < 6 - same_ch_size; i++) {
-                val /= 10;
-            }
-            pos = int_to_str(val, buf);
+            pos = int_to_str(_microsecond / 100000, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
-            to = append_with_suffix(buf, pos - buf, '0', actual_size, to);
+            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        }
         case 'z':
         case 'Z':
             // sr do not support datetime with timezone type， just ignore

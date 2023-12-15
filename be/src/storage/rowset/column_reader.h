@@ -91,9 +91,9 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, const Segment* segment);
 
-    ColumnReader(const private_type&, Segment* segment);
+    ColumnReader(const private_type&, const Segment* segment);
     ~ColumnReader();
 
     ColumnReader(const ColumnReader&) = delete;
@@ -102,11 +102,11 @@ public:
     void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator. Caller should free the returned iterator after unused.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator();
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
-    Status new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator);
+    Status new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator);
 
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
@@ -138,8 +138,13 @@ public:
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
+<<<<<<< Updated upstream
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
                            const IndexReadOptions& opts);
+=======
+                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
+                           bool skip_fill_local_cache);
+>>>>>>> Stashed changes
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
@@ -147,18 +152,28 @@ public:
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
+<<<<<<< Updated upstream
     Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
                         const IndexReadOptions& opts);
+=======
+    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges,
+                        bool skip_fill_local_cache);
+>>>>>>> Stashed changes
 
-    Status load_ordinal_index(const IndexReadOptions& opts);
+    Status load_ordinal_index(bool skip_fill_local_cache);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
-
-    size_t mem_usage() const;
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
+<<<<<<< Updated upstream
+=======
+    FileSystem* file_system() const { return _segment->file_system(); }
+
+    bool keep_in_memory() const { return _segment->keep_in_memory(); }
+
+>>>>>>> Stashed changes
     struct private_type {
         explicit private_type(int) {}
     };
@@ -169,9 +184,10 @@ private:
 
     Status _init(ColumnMetaPB* meta);
 
-    Status _load_zonemap_index(const IndexReadOptions& opts);
-    Status _load_bitmap_index(const IndexReadOptions& opts);
-    Status _load_bloom_filter_index(const IndexReadOptions& opts);
+    Status _load_zonemap_index(bool skip_fill_local_cache);
+    Status _load_ordinal_index(bool skip_fill_local_cache);
+    Status _load_bitmap_index(const IndexReadOptions& options);
+    Status _load_bloom_filter_index(bool skip_fill_local_cache);
 
     Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
@@ -209,11 +225,9 @@ private:
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
-    Segment* _segment = nullptr;
+    const Segment* _segment = nullptr;
 
     uint8_t _flags = 0;
-    // counter to record the reader's mem usage, sub readers excluded.
-    std::atomic<size_t> _meta_mem_usage = 0;
 };
 
 } // namespace starrocks

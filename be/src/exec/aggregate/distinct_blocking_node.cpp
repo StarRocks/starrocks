@@ -134,8 +134,7 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
                                                                    bool per_bucket_optimize) {
     using namespace pipeline;
 
-    auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
@@ -144,7 +143,7 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     }
 
     // shared by sink operator and source operator
-    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
+    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     auto operators_generator = [this, should_cache, &upstream_source_op, context,
                                 &spill_channel_factory](bool post_cache) {
@@ -189,8 +188,7 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source =
-                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
 
@@ -207,7 +205,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
-        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
             WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
                                                   runtime_state()),
@@ -245,15 +243,14 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
         ops_with_source = try_interpolate_local_shuffle(ops_with_source);
     }
 
-    if (limit() != -1) {
-        ops_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
-
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
+    if (limit() != -1) {
+        ops_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
     return ops_with_source;
 }
 

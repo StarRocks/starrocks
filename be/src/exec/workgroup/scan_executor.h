@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"

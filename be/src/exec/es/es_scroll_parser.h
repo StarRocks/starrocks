@@ -40,8 +40,7 @@ public:
     int get_size() { return _size; }
     bool current_eos() { return _cur_line == _size; }
 
-    void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context,
-                    std::string& timezone);
+    void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context);
 
 private:
     static bool _is_pure_doc_value(const rapidjson::Value& obj);
@@ -65,8 +64,7 @@ private:
     static Status _append_bool_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     template <LogicalType type, typename T = RunTimeCppType<type>>
-    static Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value,
-                                   const std::string& timezone);
+    static Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     // The representation of array value in _source and doc_value (column storage) is inconsistent
     // in Elasticsearch, we need to do different processing to show consistent behavior.
@@ -78,9 +76,6 @@ private:
     Status _append_array_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
                              bool pure_doc_value);
 
-    Status _append_json_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
-                            bool pure_doc_value);
-
     Status _append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                            Column* column);
 
@@ -90,7 +85,6 @@ private:
 
     const TupleDescriptor* _tuple_desc;
     const std::map<std::string, std::string>* _doc_value_context;
-    std::string _timezone;
 
     std::string _scroll_id;
     size_t _size;

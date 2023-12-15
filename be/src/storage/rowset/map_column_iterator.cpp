@@ -14,23 +14,28 @@
 
 #include "storage/rowset/map_column_iterator.h"
 
+<<<<<<< Updated upstream
 #include "column/column_access_path.h"
 #include "column/const_column.h"
+=======
+>>>>>>> Stashed changes
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
 
-MapColumnIterator::MapColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> nulls,
-                                     std::unique_ptr<ColumnIterator> offsets, std::unique_ptr<ColumnIterator> keys,
-                                     std::unique_ptr<ColumnIterator> values, const ColumnAccessPath* path)
-        : _reader(reader),
-          _nulls(std::move(nulls)),
-          _offsets(std::move(offsets)),
-          _keys(std::move(keys)),
-          _values(std::move(values)),
-          _path(std::move(path)) {}
+MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
+                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values)
+        : _nulls(std::move(nulls)), _offsets(std::move(offsets)), _keys(std::move(keys)), _values(std::move(values)) {}
+
+MapColumnIterator::MapColumnIterator(ColumnIterator* nulls_iterator, ColumnIterator* offsets_iterator,
+                                     ColumnIterator* keys_iterator, ColumnIterator* values_iterator) {
+    _nulls.reset(nulls_iterator);
+    _offsets.reset(offsets_iterator);
+    _keys.reset(keys_iterator);
+    _values.reset(values_iterator);
+}
 
 Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_nulls != nullptr) {
@@ -39,30 +44,6 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(_offsets->init(opts));
     RETURN_IF_ERROR(_keys->init(opts));
     RETURN_IF_ERROR(_values->init(opts));
-
-    if (_path == nullptr || _path->children().empty()) {
-        _access_keys = true;
-        _access_values = true;
-        return Status::OK();
-    }
-
-    _access_keys = false;
-    _access_values = false;
-
-    // KEY: read key & offset
-    // OFFSET: read offset
-    // ALL/INDEX: read key & value & offset
-    for (const auto& p : _path->children()) {
-        if (p->is_key()) {
-            _access_keys |= true;
-        }
-
-        if (p->is_all() || p->is_index()) {
-            _access_values |= true;
-            _access_keys |= true;
-        }
-    }
-
     return Status::OK();
 }
 
@@ -104,6 +85,7 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     num_to_read = end_offset - num_to_read;
 
     // 3. Read elements
+<<<<<<< Updated upstream
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
     } else {
@@ -125,6 +107,10 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
             map_column->values_column()->append_default(num_to_read);
         }
     }
+=======
+    RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
+    RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
+>>>>>>> Stashed changes
 
     return Status::OK();
 }
@@ -155,7 +141,6 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _offsets->get_current_ordinal()));
     SparseRange element_read_range;
-    size_t read_rows = 0;
     while (iter.has_more()) {
         Range<> r = iter.next(to_read);
 
@@ -186,13 +171,13 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
             data[i] = end_offset;
         }
         num_to_read = end_offset - num_to_read;
-        read_rows += num_to_read;
 
         element_read_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
     }
 
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _keys->get_current_ordinal()));
+<<<<<<< Updated upstream
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
     } else {
@@ -214,6 +199,10 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
             map_column->values_column()->append_default(read_rows);
         }
     }
+=======
+    RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
+    RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
+>>>>>>> Stashed changes
 
     return Status::OK();
 }
@@ -243,7 +232,6 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     auto* offsets = map_column->offsets_column().get();
     offsets->reserve(offsets->size() + array_size.size());
     size_t offset = offsets->get_data().back();
-    size_t start = offset;
     for (size_t i = 0; i < array_size.size(); ++i) {
         offset += array_size.get_data()[i];
         offsets->append(offset);
@@ -256,15 +244,12 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
         size_t size_to_read = array_size.get_data()[i];
 
         RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
-        if (_access_keys) {
-            RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column().get()));
-        }
+        RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column().get()));
 
         RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
-        if (_access_values) {
-            RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
-        }
+        RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
     }
+<<<<<<< Updated upstream
 
     if (!_access_keys) {
         if (!map_column->keys_column()->is_constant()) {
@@ -284,6 +269,8 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
         }
     }
 
+=======
+>>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -308,10 +295,13 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 Status MapColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 
+=======
+>>>>>>> Stashed changes
 } // namespace starrocks

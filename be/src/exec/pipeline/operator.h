@@ -45,8 +45,7 @@ class Operator {
     friend class StreamPipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -137,10 +136,6 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
-    // Some operator's metrics are updated in the finishing stage, which is not suitable to the runtime profile mechanism.
-    // So we add this function for manual updation of metrics when reporting the runtime profile.
-    virtual void update_metrics(RuntimeState* state) {}
-
     virtual size_t output_amplification_factor() const { return 1; }
     enum class OutputAmplificationType { ADD, MAX };
     virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
@@ -180,8 +175,15 @@ public:
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(Chunk* chunk);
 
-    // Pseudo plan_node_id for final sink, such as result_sink, table_sink
-    static const int32_t s_pseudo_plan_node_id_for_final_sink;
+    // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
+    // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
+    // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
+    // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
+    static const int32_t s_pseudo_plan_node_id_for_export_sink;
+    static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
+    static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_upper_bound;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
@@ -259,11 +261,6 @@ public:
     // memory to be reserved before executing set_finishing
     virtual size_t estimated_memory_reserved() { return 0; }
 
-    // if return true it means the operator has child operators
-    virtual bool is_combinatorial_operator() const { return false; }
-    // apply operation for each child operator
-    virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
-
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -338,7 +335,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_(" + std::to_string(_plan_node_id) + ")"; }
+    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
     std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.

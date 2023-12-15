@@ -28,7 +28,7 @@
 #include "block_cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/statusor.h"
-#include "starcache/common/types.h"
+#include "thirdparty/starcache/src/common/config.h"
 #include "util/logging.h"
 #include "util/random.h"
 #include "util/time.h"
@@ -304,6 +304,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB});
     options.block_size = 4 * MB;
     options.checksum = false;
+    starcache::config::FLAGS_enable_disk_checksum = false;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -323,6 +324,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -342,6 +344,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -364,6 +367,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 1 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;

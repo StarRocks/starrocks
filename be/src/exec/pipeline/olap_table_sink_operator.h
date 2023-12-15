@@ -32,7 +32,7 @@ public:
     OlapTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           int32_t sender_id, starrocks::stream_load::OlapTableSink* sink,
                           FragmentContext* const fragment_ctx, std::atomic<int32_t>& num_sinkers)
-            : Operator(factory, id, "olap_table_sink", plan_node_id, false, driver_sequence),
+            : Operator(factory, id, "olap_table_sink", plan_node_id, driver_sequence),
               _sink(sink),
               _fragment_ctx(fragment_ctx),
               _num_sinkers(num_sinkers),
@@ -60,6 +60,11 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    bool is_epoch_finished() const override { return _is_epoch_finished; }
+    bool is_epoch_finishing() const override;
+    Status set_epoch_finishing(RuntimeState* state) override;
+    Status reset_epoch(RuntimeState* state) override;
+
 private:
     starrocks::stream_load::OlapTableSink* _sink;
     FragmentContext* const _fragment_ctx;
@@ -70,6 +75,9 @@ private:
     int32_t _sender_id;
     bool _is_cancelled = false;
 
+    // STREAM MV
+    bool _is_epoch_finished = false;
+
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;
 };
@@ -79,7 +87,7 @@ public:
     OlapTableSinkOperatorFactory(int32_t id, std::unique_ptr<starrocks::DataSink>& sink,
                                  FragmentContext* const fragment_ctx, int32_t start_sender_id, size_t tablet_sink_dop,
                                  std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>>& tablet_sinks)
-            : OperatorFactory(id, "olap_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+            : OperatorFactory(id, "olap_table_sink", Operator::s_pseudo_plan_node_id_for_olap_table_sink),
               _data_sink(std::move(sink)),
               _sink0(down_cast<starrocks::stream_load::OlapTableSink*>(_data_sink.get())),
               _fragment_ctx(fragment_ctx),

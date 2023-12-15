@@ -61,7 +61,8 @@ public:
     }
 
     // TODO: The TableFunction framework should support streaming processing to avoid generating large Column
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override {
+        *eos = true;
         if (state->get_columns().size() != 2) {
             state->set_status(Status::InternalError("The number of parameters of unnest_bitmap is not equal to 2"));
             return {};
@@ -70,7 +71,6 @@ public:
         const ColumnPtr& c0 = state->get_columns()[0];
         const ColumnPtr& c1 = state->get_columns()[1];
         size_t rows = c0->size();
-        state->set_processed_rows(rows);
 
         Columns dst_columns;
 

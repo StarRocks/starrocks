@@ -46,8 +46,8 @@ private:
 };
 
 ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
-                       const TBrokerScanRange& scan_range, starrocks::ScannerCounter* counter, bool schema_only)
-        : FileScanner(state, profile, scan_range.params, counter, schema_only),
+                       const TBrokerScanRange& scan_range, starrocks::ScannerCounter* counter)
+        : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
           _next_range(0),
@@ -86,14 +86,10 @@ Status ORCScanner::open() {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
-    _orc_reader->set_case_sensitive(_case_sensitive);
+    _orc_reader->set_case_sensitive(true);
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
-}
-
-Status ORCScanner::get_schema(std::vector<SlotDescriptor>* schema) {
-    return _orc_reader->get_schema(schema);
 }
 
 StatusOr<ChunkPtr> ORCScanner::get_next() {

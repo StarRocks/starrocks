@@ -37,7 +37,6 @@
 #include <iostream>
 #include <utility>
 
-#include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
@@ -50,6 +49,7 @@ DataStreamMgr::DataStreamMgr() {
     REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); });
 }
 
+<<<<<<< Updated upstream
 DataStreamMgr::~DataStreamMgr() {
     std::vector<std::shared_ptr<DataStreamRecvr>> recvrs;
     // ensure receivers are properly closed before the instances are released
@@ -78,6 +78,8 @@ DataStreamMgr::~DataStreamMgr() {
     _pass_through_chunk_buffer_manager.close();
 }
 
+=======
+>>>>>>> Stashed changes
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
     uint32_t value = HashUtil::hash(&fragment_instance_id.lo, 8, 0);
     value = HashUtil::hash(&fragment_instance_id.hi, 8, value);

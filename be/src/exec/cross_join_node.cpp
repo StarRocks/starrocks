@@ -585,8 +585,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     std::copy(conjunct_ctxs().begin(), conjunct_ctxs().end(), std::back_inserter(context_params.filters));
 
     size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
-    auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
     auto spill_process_factory_ptr =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;
@@ -611,8 +610,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                            std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
-    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                              context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
 
     if (limit() != -1) {

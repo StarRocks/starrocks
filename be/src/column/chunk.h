@@ -111,7 +111,11 @@ public:
     void update_column(ColumnPtr column, SlotId slot_id);
     void update_column_by_index(ColumnPtr column, size_t idx);
 
+<<<<<<< Updated upstream
     void update_rows(const Chunk& src, const uint32_t* indexes);
+=======
+    void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
+>>>>>>> Stashed changes
 
     void append_default();
 
@@ -145,10 +149,6 @@ public:
     size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
     void set_columns(const Columns& columns) { _columns = columns; }
-
-    void set_source_filename(const std::string& source_filename) { _source_filename = source_filename; }
-
-    const std::string& source_filename() const { return _source_filename; }
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     ChunkUniquePtr clone_empty() const;
@@ -224,9 +224,9 @@ public:
     // Column container memory usage
     size_t container_memory_usage() const;
     // Element memory usage that is not in the container, such as memory referenced by pointer.
-    size_t reference_memory_usage() const { return reference_memory_usage(0, num_rows()); }
+    size_t element_memory_usage() const { return element_memory_usage(0, num_rows()); }
     // Element memory usage of |size| rows from |from| in chunk
-    size_t reference_memory_usage(size_t from, size_t size) const;
+    size_t element_memory_usage(size_t from, size_t size) const;
 
     // Chunk bytes usage, used for memtable data size statistic.
     // Including element data size only.
@@ -266,8 +266,6 @@ public:
 
     std::string debug_columns() const;
 
-    std::string rebuild_csv_row(size_t index, const std::string& delimiter) const;
-
     bool capacity_limit_reached(std::string* msg = nullptr) const {
         for (const auto& column : _columns) {
             if (column->capacity_limit_reached(msg)) {
@@ -293,7 +291,6 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
-    std::string _source_filename;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

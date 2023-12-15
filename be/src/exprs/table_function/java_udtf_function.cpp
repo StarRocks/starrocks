@@ -123,7 +123,7 @@ Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* 
     return Status::OK();
 }
 
-std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state) const {
+std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state, bool* eos) const {
     Columns res;
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);
@@ -146,7 +146,6 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionSta
     });
     size_t num_rows = cols[0]->size();
     size_t num_cols = cols.size();
-    state->set_processed_rows(num_rows);
 
     call_stack.reserve(num_cols);
     rets.resize(num_rows);
@@ -198,6 +197,7 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionSta
         helper.getEnv()->ExceptionClear();
     }
 
+    *eos = true;
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
 

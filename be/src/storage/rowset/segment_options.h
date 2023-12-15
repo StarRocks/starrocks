@@ -17,7 +17,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "column/column_access_path.h"
 #include "column/datum.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
@@ -32,12 +31,10 @@ class Condition;
 struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
-class DeltaColumnGroupLoader;
 } // namespace starrocks
 
 namespace starrocks {
 
-class ColumnAccessPath;
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -63,8 +60,6 @@ public:
     uint64_t tablet_id = 0;
     uint32_t rowset_id = 0;
     int64_t version = 0;
-    // used for primary key tablet to get delta column group
-    std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -72,7 +67,6 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
-    bool fill_data_cache = true;
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
@@ -82,22 +76,29 @@ public:
 
     bool has_delete_pred = false;
 
+<<<<<<< Updated upstream
     /// Mark whether this is the first split of a segment.
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
+=======
+    RowidRangeOptionPtr rowid_range_option = nullptr;
+>>>>>>> Stashed changes
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
+<<<<<<< Updated upstream
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
 
     TabletSchemaCSPtr tablet_schema = nullptr;
 
+=======
+>>>>>>> Stashed changes
     bool asc_hint = true;
 
 public:

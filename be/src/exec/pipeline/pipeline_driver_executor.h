@@ -50,7 +50,7 @@ public:
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
     // to objects owned by FragmentContext.
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
-                                   bool done, bool attach_profile) = 0;
+                                   bool done) = 0;
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
@@ -75,9 +75,14 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
+<<<<<<< Updated upstream
     void close() override;
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
                            bool attach_profile) override;
+=======
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                           bool done) override;
+>>>>>>> Stashed changes
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
@@ -90,16 +95,13 @@ public:
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
-    StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx);
+    void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
+    void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
-    // The maximum duration that a driver could stay in local_driver_queue
-    static constexpr int64_t LOCAL_MAX_WAIT_TIME_SPENT_NS = 1'000'000L;
-
     LimitSetter _num_threads_setter;
     std::unique_ptr<DriverQueue> _driver_queue;
     // _thread_pool must be placed after _driver_queue, because worker threads in _thread_pool use _driver_queue.

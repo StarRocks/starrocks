@@ -109,6 +109,7 @@ protected:
     Spiller* _spiller;
     RuntimeState* _runtime_state;
     std::atomic_uint64_t _running_flush_tasks{};
+    std::atomic_bool _write_finished{};
 
     FlushAllCallBack _flush_all_callback;
 };
@@ -312,7 +313,7 @@ private:
 
     size_t _partition_rows() {
         size_t total_rows = 0;
-        for (const auto& [pid, partition] : _id_to_partitions) {
+        for (const auto [pid, partition] : _id_to_partitions) {
             total_rows += partition->num_rows;
         }
         return total_rows;

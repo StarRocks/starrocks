@@ -14,24 +14,16 @@
 
 #pragma once
 
-#include <queue>
-
 #include "common/logging.h"
 #include "connector/connector.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
-
-class FragmentContext;
-class StreamChunkSource;
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
@@ -51,6 +43,7 @@ public:
     StreamScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
                        bool is_stream_pipeline);
 
+<<<<<<< Updated upstream
     ~StreamScanOperator() override;
     [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override {
         std::lock_guard guard(_task_mutex);
@@ -80,30 +73,37 @@ public:
                                    int64_t scan_bytes) override;
 
     bool is_epoch_finished() const override;
+=======
+    ~StreamScanOperator() override = default;
+
+    bool is_finished() const override;
+    bool has_output() const override;
+    Status reset_epoch(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    bool is_epoch_finished() const override { return _is_epoch_finished; }
+>>>>>>> Stashed changes
 
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
 private:
+<<<<<<< Updated upstream
     [[nodiscard]] StatusOr<ChunkPtr> _mark_mock_data_finished();
     [[nodiscard]] Status _reset_chunk_source(RuntimeState* state, int chunk_source_index);
+=======
+    StatusOr<ChunkPtr> _mark_mock_data_finished();
+>>>>>>> Stashed changes
 
     std::atomic<int32_t> _chunk_num{0};
-    bool _is_epoch_start{false};
-    bool _is_epoch_finished{true};
     bool _is_stream_pipeline{false};
+    bool _is_epoch_finished{true};
     int64_t _run_time = 0;
-
-    StreamEpochManager* _stream_epoch_manager = nullptr;
-    starrocks::EpochInfo _current_epoch_info;
-
-    std::queue<ChunkSourcePtr> _old_chunk_sources;
-    std::queue<ChunkSourcePtr> _closed_chunk_sources;
 };
 
 class StreamChunkSource : public ConnectorChunkSource {
 public:
     StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+<<<<<<< Updated upstream
 
     [[nodiscard]] Status prepare(RuntimeState* state) override;
 
@@ -124,6 +124,8 @@ protected:
 
     int64_t _epoch_rows_limit = -1; // -1: not limit;
     int64_t _epoch_time_limit = -1; // -1: not limit;
+=======
+>>>>>>> Stashed changes
 };
 
 } // namespace starrocks::pipeline

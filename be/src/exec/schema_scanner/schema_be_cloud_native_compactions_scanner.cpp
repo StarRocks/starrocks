@@ -125,7 +125,7 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 10: {
-                auto s = info.status.message();
+                auto s = info.status.to_string();
                 Slice v(s);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;

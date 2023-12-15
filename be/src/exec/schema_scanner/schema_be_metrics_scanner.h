@@ -25,7 +25,6 @@ struct MetricsInfo {
     std::string name;
     std::string labels;
     int64_t value{0};
-    std::string id;
 };
 
 class SchemaBeMetricsScanner : public SchemaScanner {

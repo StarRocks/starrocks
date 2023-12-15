@@ -55,23 +55,33 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 Status CacheLibWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+=======
+Status CacheLibWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                                    bool overwrite) {
+>>>>>>> Stashed changes
     //  Simulate the behavior of skipping if exists
     if (options && !options->overwrite && _cache->find(key)) {
         return Status::AlreadyExist("the cache item already exists");
     }
     // TODO: check size for chain item
-    auto handle = _cache->allocate(_default_pool, key, buffer.size());
+    auto handle = _cache->allocate(_default_pool, key, size);
     if (!handle) {
         return Status::InternalError("allocate cachelib item failed");
     }
-    buffer.copy_to(handle->getMemory());
+    // std::memcpy(handle->getMemory(), value, size);
+    strings::memcpy_inlined(handle->getMemory(), value, size);
     _cache->insertOrReplace(handle);
     return Status::OK();
 }
 
+<<<<<<< Updated upstream
 Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                                     ReadCacheOptions* options) {
+=======
+StatusOr<size_t> CacheLibWrapper::read_cache(const std::string& key, char* value, size_t off, size_t size) {
+>>>>>>> Stashed changes
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -79,12 +89,17 @@ Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t s
     if (!handle) {
         return Status::NotFound("not found cachelib item");
     }
+    // to check if cached.
+    if (value == nullptr) {
+        return 0;
+    }
     DCHECK((off + size) <= handle->getSize());
     // std::memcpy(value, (char*)handle->getMemory() + off, size);
-    void* data = malloc(size);
-    strings::memcpy_inlined(data, (char*)handle->getMemory() + off, size);
-    buffer->append_user_data(data, size, nullptr);
-    return Status::OK();
+    strings::memcpy_inlined(value, (char*)handle->getMemory() + off, size);
+
+    if (handle->hasChainedItem()) {
+    }
+    return size;
 }
 
 Status CacheLibWrapper::remove(const std::string& key) {

@@ -26,6 +26,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "util/race_detect.h"
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
@@ -99,6 +100,7 @@ public:
 
 private:
     std::vector<ChunkPtr> _chunks;
+    DECLARE_RACE_DETECTOR(mem_table);
 };
 
 class OrderedMemTable final : public SpillableMemTable {
@@ -123,5 +125,6 @@ private:
     Permutation _permutation;
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
+    DECLARE_RACE_DETECTOR(mem_table);
 };
 } // namespace starrocks::spill

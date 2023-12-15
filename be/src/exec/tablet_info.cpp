@@ -479,7 +479,7 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
 
 Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                             std::vector<int>* invalid_row_indexs, int64_t txn_id,
+                                             int* invalid_row_index, int64_t txn_id,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
     partitions->resize(num_rows);
@@ -529,8 +529,8 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                     << row.debug_string();
                             (*partitions)[i] = nullptr;
                             (*selection)[i] = 0;
-                            if (invalid_row_indexs != nullptr) {
-                                invalid_row_indexs->emplace_back(i);
+                            if (invalid_row_index != nullptr) {
+                                *invalid_row_index = i;
                             }
                         }
                     }
@@ -561,8 +561,8 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                     << row.debug_string();
                             (*partitions)[i] = nullptr;
                             (*selection)[i] = 0;
-                            if (invalid_row_indexs != nullptr) {
-                                invalid_row_indexs->emplace_back(i);
+                            if (invalid_row_index != nullptr) {
+                                *invalid_row_index = i;
                             }
                         }
                     }
@@ -591,14 +591,6 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
     for (size_t i = 0; i < _distributed_slot_descs.size(); ++i) {
         _distributed_columns[i] = chunk->get_column_by_slot_id(_distributed_slot_descs[i]->id()).get();
         _distributed_columns[i]->crc32_hash(&(*indexes)[0], 0, num_rows);
-    }
-
-    // if no distributed columns, use random distribution
-    if (_distributed_slot_descs.size() == 0) {
-        uint32_t r = _rand.Next();
-        for (auto i = 0; i < num_rows; ++i) {
-            (*indexes)[i] = r++;
-        }
     }
 }
 

@@ -387,14 +387,4 @@ bool valid_bool(const std::string& value_str) {
     return result == StringParser::PARSE_SUCCESS;
 }
 
-std::string parent_name(const std::string& fullpath) {
-    std::filesystem::path path(fullpath);
-    return path.parent_path().string();
-}
-
-std::string file_name(const std::string& fullpath) {
-    std::filesystem::path path(fullpath);
-    return path.filename().string();
-}
-
 } // namespace starrocks

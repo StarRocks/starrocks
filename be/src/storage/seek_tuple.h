@@ -32,9 +32,8 @@ public:
     SeekTuple(Schema schema, std::vector<Datum> values) : _schema(std::move(schema)), _values(std::move(values)) {
 #ifndef NDEBUG
         if (_schema.sort_key_idxes().empty()) {
-            // Ensure the key columns are continuous and started from zero.
-            // But the value columns may not be continuous in delta column.
-            for (size_t i = 0; i < _schema.num_key_fields(); i++) {
+            // Ensure the columns are continuous and started from zero.
+            for (size_t i = 0; i < _schema.num_fields(); i++) {
                 CHECK_EQ(ColumnId(i), _schema.field(i)->id());
             }
         }

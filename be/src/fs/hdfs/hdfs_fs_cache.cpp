@@ -24,9 +24,8 @@ namespace starrocks {
 
 // Try to get cloud properties from FSOptions, if cloud configuration not existed, return nullptr.
 // TODO(SmithCruise): Should remove when using cpp sdk
-static const std::map<std::string, std::string> get_cloud_properties(const FSOptions& options) {
+static const std::vector<TCloudProperty>* get_cloud_properties(const FSOptions& options) {
     const TCloudConfiguration* cloud_configuration = nullptr;
-    std::map<std::string, std::string> properties;
     if (options.cloud_configuration != nullptr) {
         // This branch is used by data lake
         cloud_configuration = options.cloud_configuration;
@@ -35,16 +34,9 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
         cloud_configuration = &options.hdfs_properties()->cloud_configuration;
     }
     if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                properties.insert({cloud_property.key, cloud_property.value});
-            }
-            return properties;
-        } else {
-            return cloud_configuration->cloud_properties_v2;
-        }
+        return &cloud_configuration->cloud_properties;
     }
-    return properties;
+    return nullptr;
 }
 
 static Status create_hdfs_fs_handle(const std::string& namenode, const std::shared_ptr<HdfsFsClient>& hdfs_client,
@@ -63,12 +55,10 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
 
     // Insert cloud properties(key-value paired) into Hadoop configuration
     // TODO(SmithCruise): Should remove when using cpp sdk
-    const std::map<std::string, std::string> cloud_properties = get_cloud_properties(options);
-    if (!cloud_properties.empty()) {
-        for (const auto& cloud_property : cloud_properties) {
-            VLOG_FILE << "[xxx] cloud property: key = " << cloud_property.first.data()
-                      << ", value = " << cloud_property.second.data();
-            hdfsBuilderConfSetStr(hdfs_builder, cloud_property.first.data(), cloud_property.second.data());
+    const std::vector<TCloudProperty>* cloud_properties = get_cloud_properties(options);
+    if (cloud_properties != nullptr) {
+        for (const auto& cloud_property : *cloud_properties) {
+            hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
         }
     }
 
@@ -100,11 +90,11 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
     }
 
     // Insert cloud properties into cache key
-    const std::map<std::string, std::string> cloud_properties = get_cloud_properties(options);
-    if (!cloud_properties.empty()) {
-        for (const auto& cloud_property : cloud_properties) {
-            cache_key += cloud_property.first;
-            cache_key += cloud_property.second;
+    const std::vector<TCloudProperty>* cloud_properties = get_cloud_properties(options);
+    if (cloud_properties != nullptr) {
+        for (const auto& cloud_property : *cloud_properties) {
+            cache_key += cloud_property.key;
+            cache_key += cloud_property.value;
         }
     }
 

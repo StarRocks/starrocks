@@ -111,7 +111,7 @@ public:
             Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
             const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
+    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 
@@ -140,8 +140,6 @@ public:
     virtual bool is_full() { return false; }
 
     virtual bool has_pending_data() { return false; }
-
-    bool has_output() { return spiller() == nullptr || !spiller()->spilled() || spiller()->has_output_data(); }
 
     const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
 

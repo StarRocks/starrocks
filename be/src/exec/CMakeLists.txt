@@ -88,7 +88,6 @@ set(EXEC_FILES
     parquet_scanner.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
-    parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
@@ -98,7 +97,6 @@ set(EXEC_FILES
     hdfs_scanner_orc.cpp
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
-    hdfs_scanner_partition.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -110,7 +108,6 @@ set(EXEC_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -137,7 +134,6 @@ set(EXEC_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
-    schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
@@ -154,13 +150,11 @@ set(EXEC_FILES
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
-    sorting/merge_path.cpp
     sorting/merge_cascade.cpp
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
-    pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -192,6 +186,7 @@ set(EXEC_FILES
     pipeline/scan/meta_scan_prepare_operator.cpp
     pipeline/scan/olap_meta_scan_prepare_operator.cpp
     pipeline/scan/lake_meta_scan_prepare_operator.cpp
+<<<<<<< Updated upstream
     pipeline/scan/schema_chunk_source.cpp
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
@@ -199,6 +194,11 @@ set(EXEC_FILES
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
+=======
+    pipeline/scan/olap_schema_chunk_source.cpp
+    pipeline/scan/olap_schema_scan_operator.cpp
+    pipeline/scan/olap_schema_scan_context.cpp
+>>>>>>> Stashed changes
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
@@ -218,7 +218,6 @@ set(EXEC_FILES
     pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
-    pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp

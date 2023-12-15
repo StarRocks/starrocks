@@ -95,6 +95,7 @@ public:
 
     const std::vector<PNetworkAddress>& replicas() const { return _writer->replicas(); }
 
+<<<<<<< Updated upstream
     const FlushStatistic& get_flush_stats() const { return _writer->get_flush_stats(); }
 
     bool is_immutable() const { return _writer->is_immutable(); }
@@ -103,6 +104,8 @@ public:
 
     int64_t write_buffer_size() const { return _writer->write_buffer_size(); }
 
+=======
+>>>>>>> Stashed changes
 private:
     struct private_type {
         explicit private_type(int) {}

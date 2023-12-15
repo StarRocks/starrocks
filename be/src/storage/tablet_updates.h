@@ -22,7 +22,6 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/row_store_encoder_factory.h"
@@ -50,20 +49,7 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
-
-// save the context when reading from delta column files
-struct GetDeltaColumnContext {
-    DeltaColumnGroupList dcgs;
-    // from delta column filename to segment
-    std::unordered_map<std::string, std::shared_ptr<Segment>> dcg_segments;
-    // from delta column filename to read file
-    std::unordered_map<std::string, std::unique_ptr<RandomAccessFile>> dcg_read_files;
-    // main segment
-    std::shared_ptr<Segment> segment;
-
-    Status prepareGetDeltaColumnContext(std::shared_ptr<Segment> segment, KVStore* kvstore, const TabletSegmentId& tsid,
-                                        int64_t read_version);
-};
+class ChunkAllocator;
 
 struct CompactionInfo {
     EditVersion start_version;
@@ -102,9 +88,6 @@ public:
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
-    TabletUpdates(const TabletUpdates&) = delete;
-    const TabletUpdates& operator=(const TabletUpdates&) = delete;
-
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
 
@@ -135,9 +118,6 @@ public:
 
     // get total number of committed and pending rowsets
     size_t version_count() const;
-
-    // if need do apply
-    bool need_apply() const;
 
     // get num of pending rowsets
     size_t num_pending() const;
@@ -221,6 +201,7 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
+<<<<<<< Updated upstream
     Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
                      const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header = "");
 
@@ -231,6 +212,15 @@ public:
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                         const std::string& err_msg_header = "");
+=======
+    Status link_from(Tablet* base_tablet, int64_t request_version);
+
+    Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        ChunkChanger* chunk_changer);
+
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        ChunkChanger* chunk_changer);
+>>>>>>> Stashed changes
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -287,7 +277,7 @@ public:
     //          column 2 value@rssid:6 rowid:4,
     //   ]
     // ]
-    Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
+    Status get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state,
                              const TabletSchemaCSPtr& tablet_schema);
@@ -320,8 +310,6 @@ public:
     Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
                                          std::vector<uint32_t>* rowset_ids);
 
-    bool check_delta_column_generate_from_version(EditVersion begin_version);
-
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
     double get_pk_index_write_amp_score();
@@ -348,9 +336,14 @@ private:
         size_t byte_size = 0;
         size_t row_size = 0;
         int64_t compaction_score = 0;
-        bool partial_update_by_column = false;
         std::string to_string() const;
     };
+
+    Status _get_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_version);
+
+    // used for PrimaryIndex load
+    Status _get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                          std::vector<uint32_t>* rowset_ids);
 
     void _redo_edit_version_log(const EditVersionMetaPB& v);
 
@@ -368,11 +361,14 @@ private:
 
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
+<<<<<<< Updated upstream
     // used for normal update or row-mode partial update
     void _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
     // used for column-mode partial update
     void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
+=======
+>>>>>>> Stashed changes
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 
     RowsetSharedPtr _get_rowset(uint32_t rowset_id);
@@ -390,9 +386,15 @@ private:
 
     void _calc_compaction_score(RowsetStats* stats);
 
+<<<<<<< Updated upstream
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                       const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                       DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
+=======
+    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+                      DeletesMap* new_deletes);
+>>>>>>> Stashed changes
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -428,16 +430,12 @@ private:
 
     void _clear_rowset_del_vec_cache(const Rowset& rowset);
 
-    void _clear_rowset_delta_column_group_cache(const Rowset& rowset);
-
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const Schema& base_schema, const ChunkIteratorPtr& seg_iterator,
                                      ChunkChanger* chunk_changer, const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
-
-    Status _check_conflict_with_partial_update(CompactionInfo* info);
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
@@ -503,6 +501,11 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    ChunkAllocator* _chunk_allocator = nullptr;
+
+    TabletUpdates(const TabletUpdates&) = delete;
+    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 };
 
 } // namespace starrocks

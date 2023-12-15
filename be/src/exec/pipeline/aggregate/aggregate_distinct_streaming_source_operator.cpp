@@ -26,10 +26,6 @@ bool AggregateDistinctStreamingSourceOperator::has_output() const {
         return true;
     }
 
-    if (_aggregator->is_streaming_all_states()) {
-        return true;
-    }
-
     // There are two cases where chunk buffer is null,
     // it will apply local aggregate, so need to wait sink operator finish
     // case1：streaming mode is 'FORCE_PREAGGREGATION'
@@ -60,13 +56,13 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeS
     }
 
     ChunkPtr chunk = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(_output_chunk_from_hash_set(&chunk, state));
+    _output_chunk_from_hash_set(&chunk, state);
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-Status AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state) {
+void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_set_variant().visit(
                 [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
@@ -74,15 +70,6 @@ Status AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(Chu
     }
 
     _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
-
-    if (_aggregator->is_streaming_all_states() && _aggregator->is_ht_eos()) {
-        if (!_aggregator->is_sink_complete()) {
-            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
-        }
-        _aggregator->set_streaming_all_states(false);
-    }
-
-    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

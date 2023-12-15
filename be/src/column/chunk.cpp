@@ -111,6 +111,7 @@ void Chunk::set_num_rows(size_t count) {
     }
 }
 
+<<<<<<< Updated upstream
 void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
     for (int i = 0; i < _columns.size(); i++) {
@@ -119,6 +120,8 @@ void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     }
 }
 
+=======
+>>>>>>> Stashed changes
 std::string_view Chunk::get_column_name(size_t idx) const {
     DCHECK_LT(idx, _columns.size());
     return _schema->field(idx)->name();
@@ -301,13 +304,13 @@ size_t Chunk::container_memory_usage() const {
     return container_memory_usage;
 }
 
-size_t Chunk::reference_memory_usage(size_t from, size_t size) const {
+size_t Chunk::element_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, num_rows()) << "Range error";
-    size_t reference_memory_usage = 0;
+    size_t element_memory_usage = 0;
     for (const auto& column : _columns) {
-        reference_memory_usage += column->reference_memory_usage(from, size);
+        element_memory_usage += column->element_memory_usage(from, size);
     }
-    return reference_memory_usage;
+    return element_memory_usage;
 }
 
 size_t Chunk::bytes_usage() const {
@@ -356,18 +359,6 @@ std::string Chunk::debug_row(size_t index) const {
         os << ", ";
     }
     os << _columns[_columns.size() - 1]->debug_item(index) << "]";
-    return os.str();
-}
-
-std::string Chunk::rebuild_csv_row(size_t index, const std::string& delimiter) const {
-    std::stringstream os;
-    for (size_t col = 0; col < _columns.size() - 1; ++col) {
-        os << _columns[col]->debug_item(index);
-        os << delimiter;
-    }
-    if (_columns.size() > 0) {
-        os << _columns[_columns.size() - 1]->debug_item(index);
-    }
     return os.str();
 }
 

@@ -45,7 +45,6 @@ set(RUNTIME_FILES
     large_int_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
-    dummy_load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
@@ -78,7 +77,6 @@ set(RUNTIME_FILES
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
-    tablets_channel.cpp
     time_types.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
@@ -92,11 +90,14 @@ set(RUNTIME_FILES
     profile_report_worker.cpp
     schema_table_sink.cpp
     command_executor.cpp
+<<<<<<< Updated upstream
     iceberg_table_sink.cpp
     hive_table_sink.cpp
     table_function_table_sink.cpp
     blackhole_table_sink.cpp
     dictionary_cache_sink.cpp
+=======
+>>>>>>> Stashed changes
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
