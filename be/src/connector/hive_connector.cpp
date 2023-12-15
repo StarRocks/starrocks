@@ -374,7 +374,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_datacache) {
         static const char* prefix = "DataCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
