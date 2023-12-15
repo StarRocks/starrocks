@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1109,12 +1110,9 @@ public class MaterializedViewRewriter {
             }
         }
         if (tableKeyType == KeysType.DUP_KEYS) {
-            List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
-            if (uniqueConstraints == null) {
-                uniqueConstraints = mvUniqueConstraints;
-            } else {
-                uniqueConstraints.addAll(mvUniqueConstraints);
-            }
+            List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+            uniqueConstraints.addAll(ListUtils.emptyIfNull(table.getUniqueConstraints()));
+            uniqueConstraints.addAll(ListUtils.emptyIfNull(mvUniqueConstraints));
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
                 if (uniqueConstraint.isMatch(table, keySet)) {
                     return true;
