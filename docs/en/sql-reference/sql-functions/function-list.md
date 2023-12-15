@@ -397,11 +397,6 @@ You can find a function based on the following categories:
 
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
 
-## Struct functions
-
-- [named_struct](./struct-functions/named_struct.md)
-- [row](./struct-functions/row.md)
-
 ## Table functions
 
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
