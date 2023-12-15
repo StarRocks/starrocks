@@ -21,7 +21,10 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 - `datetime`: the time to truncate, which can be of the DATETIME or DATE type. The date and time must exist. Otherwise, NULL will be returned. For example, `2021-02-29 11:12:13` does not exist as a date and NULL will be returned.
 
 - `fmt`: the date part, that is, to which precision `datetime` will be truncated. The value must be a VARCHAR constant.
+
   `fmt` must be set to a value listed in the following table. If the value is incorrect, an error will be returned.
+
+  If `datetime` is a DATE value, `fmt` can only be `year`，`quarter`，`month`，`week`，or `day`. If you set `fmt` to other date units, for example `hour`, an error is reported. See Example 5.
 
 | Value   | Description                                                  |
 | ------- | ------------------------------------------------------------ |
@@ -86,13 +89,10 @@ select date_trunc("year", "2020-11-04 11:12:13");
 +-------------------------------------------+
 ```
 
-Example 5: Truncate a DATE value to the hour. `00:00:00` is returned as the time part.
+Example 5: Truncate a DATE value to the hour. An error is returned.
 
 ```Plain
-select date_trunc("hour", "2020-11-04");
-+----------------------------------+
-| date_trunc('hour', '2020-11-04') |
-+----------------------------------+
-| 2020-11-04 00:00:00              |
-+----------------------------------+
+select date_trunc("hour", cast("2020-11-04" as date));
+
+ERROR 1064 (HY000): Getting analyzing error from line 1, column 26 to line 1, column 51. Detail message: date_trunc function can't support argument other than year|quarter|month|week|day.
 ```

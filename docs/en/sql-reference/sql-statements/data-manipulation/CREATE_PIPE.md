@@ -20,7 +20,11 @@ AS <INSERT_SQL>
 
 ### db_name
 
-The name of the database to which the pipe belongs.
+The unique name of the database to which the pipe belongs.
+
+> **NOTICE**
+>
+> Each pipe belongs to a specific database. If you drop the database to which a pipe belongs, the pipe is deleted along with the database, and cannot be recovered even if the database is recovered.
 
 ### pipe_name
 

@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Load data using INSERT
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
 Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files on cloud storage using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
@@ -27,6 +29,12 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 - If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and [swaps the original partitions with the temporary partitions](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#use-a-temporary-partition-to-replace-current-partition). All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
+
+### Check privileges
+
+<InsertPrivNote />
+
+### Create objects
 
 Create a database named `load_test`, and create a table `insert_wiki_edit` as the destination table and a table `source_wiki_edit` as the source table.
 

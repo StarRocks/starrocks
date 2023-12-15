@@ -33,6 +33,8 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/blackhole_table_sink_operator.h"
+#include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/hive_table_sink_operator.h"
@@ -44,12 +46,13 @@
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/dictionary_cache_sink.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
@@ -62,7 +65,6 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
-#include "util/pretty_printer.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -218,7 +220,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& query_globals = request.common().query_globals;
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
-    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
     auto& wg = _wg;
 
     _fragment_ctx->set_runtime_state(
@@ -228,13 +229,18 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
+    // Only consider the `query_mem_limit` variable
+    // If query_mem_limit is <= 0, it would set to -1, which means no limit
     auto* parent_mem_tracker = wg->mem_tracker();
-    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
-                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    if (option_query_mem_limit <= 0) option_query_mem_limit = -1;
     int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
-    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
+    int64_t spill_mem_limit_bytes = -1;
+    if (query_options.__isset.enable_spill && query_options.enable_spill && option_query_mem_limit > 0) {
+        spill_mem_limit_bytes = option_query_mem_limit * query_options.spill_mem_limit_threshold;
+    }
+    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
+                                 wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -566,7 +572,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         const auto& tsink = request.output_sink();
         if (tsink.type == TDataSinkType::RESULT_SINK || tsink.type == TDataSinkType::OLAP_TABLE_SINK ||
             tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK || tsink.type == TDataSinkType::ICEBERG_TABLE_SINK ||
-            tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK) {
+            tsink.type == TDataSinkType::HIVE_TABLE_SINK || tsink.type == TDataSinkType::EXPORT_SINK ||
+            tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK || tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK) {
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
@@ -618,6 +625,10 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     auto* runtime_state = _fragment_ctx->runtime_state();
     if (fragment.__isset.query_global_dicts) {
         RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
+    }
+
+    if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {
@@ -807,6 +818,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::BlackHoleTableSink)) {
+        OpFactoryPtr op = std::make_shared<BlackHoleTableSinkOperatorFactory>(context->next_operator_id());
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         auto* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
@@ -1063,6 +1077,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
                     sink_dop);
         }
+    } else if (typeid(*datasink) == typeid(starrocks::DictionaryCacheSink)) {
+        OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 
     return Status::OK();

@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# PERCENTILE_APPROX
+# percentile_approx
 
 ## Description
 

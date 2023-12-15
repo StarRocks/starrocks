@@ -24,9 +24,11 @@ import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MapExpr;
@@ -103,6 +105,16 @@ public class ComplexFunctionCallTransformer {
                 ArithmeticExpr addExpr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, mulExpr, args[0]);
                 return new FunctionCallExpr("floor", ImmutableList.of(addExpr));
             }
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], false);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNOTNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnotnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], true);
         }
         return null;
     }

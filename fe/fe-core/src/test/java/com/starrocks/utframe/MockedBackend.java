@@ -24,10 +24,15 @@ import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PClearDictionaryCacheRequest;
+import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetDictionaryStatisticRequest;
+import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
@@ -36,6 +41,10 @@ import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
+import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
+import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
+import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
@@ -45,6 +54,7 @@ import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
@@ -450,6 +460,34 @@ public class MockedBackend {
 
         @Override
         public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
+            return null;
+        }
+
+        public Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(
+                PRefreshDictionaryCacheBeginRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(
+                PRefreshDictionaryCacheCommitRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PClearDictionaryCacheResult> clearDictionaryCache(
+                PClearDictionaryCacheRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PGetDictionaryStatisticResult> getDictionaryStatistic(
+                PGetDictionaryStatisticRequest request) {
             return null;
         }
     }

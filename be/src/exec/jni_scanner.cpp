@@ -118,10 +118,13 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
-        message.append(it.first);
-        message.append("->");
-        message.append(it.second);
-        message.append(", ");
+        // skip encoded object
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.first);
+            message.append("->");
+            message.append(it.second);
+            message.append(", ");
+        }
 
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
         _jni_env->DeleteLocalRef(key);
@@ -457,11 +460,16 @@ Status JniScanner::fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk
 Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column exclude partition columns
     Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.materialize_slots);
-
-    // ====== conjunct evaluation ======
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
+    if (!_scanner_params.materialize_slots.empty()) {
+        // when the chunk has partition column and non partition column
+        // fill_empty_chunk will only fill partition column for HiveJniScanner
+        // In this situation, Chunk.num_rows() is not reliable  temporally
+        auto slot_desc = _scanner_params.materialize_slots[0];
+        ColumnPtr& first_non_partition_column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        chunk_size = first_non_partition_column->size();
+    }
+
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
     // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);

@@ -4,19 +4,13 @@ displayed_sidebar: "Chinese"
 
 # 从 HDFS 导入
 
+import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 StarRocks 支持通过以下方式从 HDFS 导入数据：
 
-- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
-- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
-- 使用 [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md) 进行持续的异步导入。
-
-三种导入方式各有优势，具体将在下面分章节详细阐述。
-
-一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
-
-但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
-
-如果需要导入超大数据（比如超过 100 GB、特别是 1 TB 以上的数据量），建议您使用 Pipe。Pipe 会按文件数量或大小，自动对目录下的文件进行拆分，将一个大的导入作业拆分成多个较小的串行的导入任务，从而降低出错重试的代价。另外，在进行持续性的数据导入时，也推荐使用 Pipe，它能监听远端存储目录的文件变化，并持续导入有变化的文件数据。
+<LoadMethodIntro />
 
 ## 准备工作
 
@@ -26,7 +20,7 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 ### 查看权限
 
-导入操作需要目标表的 INSERT 权限。如果您的 StarRocks 用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+<InsertPrivNote />
 
 ### 获取资源访问配置
 
@@ -420,11 +414,11 @@ SELECT * from user_behavior LIMIT 3;
 
 ## 通过 Pipe 导入
 
-从 3.2 版本起，StarRocks 支持使用 Pipe 以微批次的方式从 HDFS 持续导入数据，使数据在几分钟内对用户可用，同时您无需按计划手动执行导入命令。适用于大规模批量导入数据、以及持续导入数据的场景。
-
-当前只支持 Parquet 和 ORC 文件格式。
+从 3.2 版本起，StarRocks 提供 Pipe 导入方式，当前只支持 Parquet 和 ORC 文件格式。
 
 ### Pipe 优势
+
+Pipe 适用于大规模批量导入数据、以及持续导入数据的场景：
 
 - **大规模分批导入，降低出错重试成本。**
 
@@ -432,11 +426,9 @@ SELECT * from user_behavior LIMIT 3;
 
 - **不间断持续导入，减少人力操作成本。**
 
-  需要将新增或变化的数据文件写入到某个文件夹下，并且新增的数据需要持续地导入到 StarRocks 中。通过 Pipe，您只需要创建一个基于 Pipe 的持续导入作业，该 Pipe 会持续监控目录下的数据文件变化，将新增或有变动的数据文件自动导入到 StarRocks 目标表中。
+  需要将新增或变化的数据文件写入到某个文件夹下，并且新增的数据需要持续地导入到 StarRocks 中。您只需要创建一个基于 Pipe 的持续导入作业（在语句中指定 `"AUTO_INGEST" = "TRUE"`），该 Pipe 会持续监控该作业中指定的路径下的数据文件变化，将新增或有变动的数据文件自动导入到 StarRocks 目标表中。
 
-- **文件唯一性判断，避免重复数据导入。**
-
-  在导入过程中，Pipe 会根据文件名和文件对应的摘要值判断数据文件是否重复。如果文件名和文件摘要值在同一个 Pipe 导入作业中已经处理过，后续导入会自动跳过已经处理过的文件。注意，HDFS 使用 `LastModifiedTime` 作为文件摘要。
+此外，Pipe 还支持文件唯一性判断，避免重复数据导入。在导入过程中，Pipe 会根据文件名和文件对应的摘要值判断数据文件是否重复。如果文件名和文件摘要值在同一个 Pipe 导入作业中已经处理过，后续导入会自动跳过已经处理过的文件。注意，HDFS 使用 `LastModifiedTime` 作为文件摘要。
 
 导入过程中的文件状态会记录到 `information_schema.pipe_files` 视图下，您可以通过该视图查看 Pipe 导入作业下各文件的导入状态。如果该视图关联的 Pipe 作业被删除，那么该视图下相关的记录也会同步清理。
 
@@ -524,7 +516,7 @@ SELECT * FROM FILES
   如果您提交了多个导入作业，您可以通过 `NAME` 过滤出想要查看哪个导入作业。例如：
 
   ```SQL
-  SHOW PIPES WHERE NAME = "user_behavior_replica" \G
+  SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
   *************************** 1. row ***************************
   DATABASE_NAME: mydatabase
         PIPE_ID: 10252

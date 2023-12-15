@@ -110,6 +110,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
     }
 
+    if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+    }
+
     if (request.fragment.__isset.load_global_dicts) {
         RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
     }

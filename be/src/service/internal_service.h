@@ -163,6 +163,31 @@ public:
     void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
                          PListFailPointResponse* response, google::protobuf::Closure* done) override;
 
+    void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
+                            PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
+
+    void refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PRefreshDictionaryCacheRequest* request,
+                                  PRefreshDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
+    void refresh_dictionary_cache_begin(google::protobuf::RpcController* controller,
+                                        const PRefreshDictionaryCacheBeginRequest* request,
+                                        PRefreshDictionaryCacheBeginResult* response,
+                                        google::protobuf::Closure* done) override;
+
+    void refresh_dictionary_cache_commit(google::protobuf::RpcController* controller,
+                                         const PRefreshDictionaryCacheCommitRequest* request,
+                                         PRefreshDictionaryCacheCommitResult* response,
+                                         google::protobuf::Closure* done) override;
+
+    void clear_dictionary_cache(google::protobuf::RpcController* controller,
+                                const PClearDictionaryCacheRequest* request, PClearDictionaryCacheResult* response,
+                                google::protobuf::Closure* done) override;
+
+    void get_dictionary_statistic(google::protobuf::RpcController* controller,
+                                  const PGetDictionaryStatisticRequest* request,
+                                  PGetDictionaryStatisticResult* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -206,6 +231,10 @@ private:
     Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
     Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
     Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+
+    // short circuit
+    Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
+                               PExecShortCircuitResult* response);
 
 protected:
     ExecEnv* _exec_env;

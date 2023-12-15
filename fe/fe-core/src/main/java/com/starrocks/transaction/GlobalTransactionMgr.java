@@ -945,6 +945,14 @@ public class GlobalTransactionMgr implements Writable {
         return txnInfos.size() > limit ? new ArrayList<>(txnInfos.subList(0, limit)) : txnInfos;
     }
 
+    public Long getTransactionNumByCoordinateBe(String coordinateHost) {
+        Long txnNum = 0L;
+        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += databaseTransactionMgr.getTransactionNumByCoordinateBe(coordinateHost);
+        }
+        return txnNum;
+    }
+
     /**
      * If a Coordinate BE is down when running txn, the txn will remain in FE until killed by timeout
      * So when FE identify the Coordiante BE is down, FE should cancel it initiative

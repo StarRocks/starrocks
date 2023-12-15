@@ -61,7 +61,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.OptimizerSetting;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -73,12 +72,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import javax.net.ssl.SSLContext;
@@ -164,8 +163,8 @@ public class ConnectContext {
     protected StmtExecutor executor;
     // Command this connection is processing.
     protected MysqlCommand command;
-    // Timestamp in millisecond last command starts at
-    protected long startTime = System.currentTimeMillis();
+    // last command start time
+    protected Instant startTime = Instant.now();
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -216,8 +215,6 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
-
-    protected Optional<OptimizerSetting> optimizerSetting = Optional.empty();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -429,11 +426,15 @@ public class ConnectContext {
     }
 
     public long getStartTime() {
+        return startTime.toEpochMilli();
+    }
+
+    public Instant getStartTimeInstant() {
         return startTime;
     }
 
     public void setStartTime() {
-        startTime = System.currentTimeMillis();
+        startTime = Instant.now();
         returnRows = 0;
     }
 
@@ -738,11 +739,12 @@ public class ConnectContext {
     }
 
     public void checkTimeout(long now) {
-        if (startTime <= 0) {
+        long startTimeMillis = getStartTime();
+        if (startTimeMillis <= 0) {
             return;
         }
 
-        long delta = now - startTime;
+        long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
         if (command == MysqlCommand.COM_SLEEP) {
@@ -823,22 +825,6 @@ public class ConnectContext {
         }
     }
 
-    public Optional<OptimizerSetting> getOptimizerSetting() {
-        return optimizerSetting;
-    }
-
-    public void setOptimizerSetting(OptimizerSetting optimizerSetting) {
-        this.optimizerSetting = Optional.of(optimizerSetting);
-    }
-
-    // 1. enable queryDump need analyze table to collect table info
-    // 2. some ingest data scenes we need set specific values in individual tableRelation
-    // The above two scenes cannot reuse viewDef
-    public boolean cannotReuseViewDef() {
-        return dumpInfo != null || (optimizerSetting.isPresent() && !optimizerSetting.get().isReuseViewDef());
-    }
-
-
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
@@ -871,7 +857,7 @@ public class ConnectContext {
             // connection start Time
             row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
-            row.add("" + (nowMs - startTime) / 1000);
+            row.add("" + (nowMs - getStartTime()) / 1000);
             // State
             row.add(state.toString());
             // Info

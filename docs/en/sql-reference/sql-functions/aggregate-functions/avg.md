@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# AVG
+# avg
 
 ## Description
 

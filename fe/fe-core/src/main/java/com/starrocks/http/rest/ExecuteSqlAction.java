@@ -37,7 +37,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
@@ -167,10 +166,6 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
             throws StarRocksHttpException {
-        if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "only support default_catalog right now");
-        }
-
         try {
             context.getGlobalStateMgr().changeCatalog(context, catalogName);
             if (databaseName != null) {

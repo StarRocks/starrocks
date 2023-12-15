@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# COVAR_SAMP
+# covar_samp
 
 ## 功能
 

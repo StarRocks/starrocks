@@ -11,8 +11,6 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 - 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
 - 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
 
-<InsertPrivNote />
-
 两种导入方式各有优势：
 
 - Stream Load 支持 CSV 和 JSON 两种数据文件格式，适用于数据文件数量较少且单个文件的大小不超过 10 GB 的场景。
@@ -24,6 +22,12 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
 
 Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
+
+## 准备工作
+
+### 查看权限
+
+<InsertPrivNote />
 
 ## 使用 Stream Load 从本地导入
 
@@ -242,7 +246,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/Configuration.md#配置-be-动态参数)。
+- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/BE_configuration.md)。
 
   建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
@@ -257,7 +261,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/Configuration.md#配置-fe-动态参数)。
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/FE_configuration.md)。
 
   如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 

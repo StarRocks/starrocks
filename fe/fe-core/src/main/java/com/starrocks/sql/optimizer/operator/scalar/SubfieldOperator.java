@@ -33,6 +33,7 @@ public class SubfieldOperator extends ScalarOperator {
     // Only one child
     private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
+    private boolean copyFlag = true;
 
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
@@ -50,14 +51,28 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
+        this(child, type, fieldNames, true);
+    }
+
+    public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames, boolean copyFlag) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
-        this.fieldNames = ImmutableList.copyOf(fieldNames); 
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
+        this.copyFlag = copyFlag;
     }
 
     public List<String> getFieldNames() {
         return fieldNames;
     }
+
+    public boolean getCopyFlag() {
+        return copyFlag;
+    }
+
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
+    }
+
 
     @Override
     public boolean isNullable() {
@@ -98,7 +113,7 @@ public class SubfieldOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(getChild(0), fieldNames);
+        return Objects.hash(getChild(0), fieldNames, copyFlag);
     }
 
     @Override
@@ -111,7 +126,8 @@ public class SubfieldOperator extends ScalarOperator {
             return false;
         }
         SubfieldOperator otherOp = (SubfieldOperator) other;
-        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0));
+        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0))
+                && copyFlag == otherOp.getCopyFlag();
     }
 
     @Override

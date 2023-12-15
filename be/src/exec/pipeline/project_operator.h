@@ -101,7 +101,6 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
-    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace pipeline

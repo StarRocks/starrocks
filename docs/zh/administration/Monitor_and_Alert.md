@@ -365,6 +365,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |starrocks_be_resource_group_cpu_use_ratio|百分比|平均值|该资源组 CPU 使用时间占所有资源组 CPU 时间的比率|
 |starrocks_be_resource_group_mem_limit_bytes|Byte|瞬时值|该资源组内存配额比率的瞬时值|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|瞬时值|该资源组内存使用率瞬时值|
+|starrocks_be_pipe_prepare_pool_queue_len|个|瞬时值|Pipeline 准备线程池任务队列长度的瞬时值|
 
 ## 最佳实践
 

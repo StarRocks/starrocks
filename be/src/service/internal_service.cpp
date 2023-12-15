@@ -57,6 +57,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -75,6 +76,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
@@ -775,6 +777,84 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PRefreshDictionaryCacheRequest* request,
+                                                           PRefreshDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache_begin(google::protobuf::RpcController* controller,
+                                                                 const PRefreshDictionaryCacheBeginRequest* request,
+                                                                 PRefreshDictionaryCacheBeginResult* response,
+                                                                 google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_txn_id() || !request->has_dict_id()) {
+        std::stringstream ss;
+        ss << "Incomplete request information for refresh dictionary cache begin";
+        LOG(WARNING) << ss.str();
+        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+        return;
+    }
+
+    int64_t dict_id = request->dict_id();
+    int64_t txn_id = request->txn_id();
+    auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
+    if (!st.ok()) {
+        LOG(WARNING) << st.get_error_msg();
+        Status::InternalError(st.get_error_msg()).to_protobuf(response->mutable_status());
+    }
+
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache_commit(google::protobuf::RpcController* controller,
+                                                                  const PRefreshDictionaryCacheCommitRequest* request,
+                                                                  PRefreshDictionaryCacheCommitResult* response,
+                                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_txn_id() || !request->has_dict_id()) {
+        std::stringstream ss;
+        ss << "Incomplete request information for refresh dictionary cache commit";
+        LOG(WARNING) << ss.str();
+        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+        return;
+    }
+
+    int64_t dict_id = request->dict_id();
+    int64_t txn_id = request->txn_id();
+    auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
+    if (!st.ok()) {
+        LOG(WARNING) << st.get_error_msg();
+        Status::InternalError(st.get_error_msg()).to_protobuf(response->mutable_status());
+    }
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::clear_dictionary_cache(google::protobuf::RpcController* controller,
+                                                         const PClearDictionaryCacheRequest* request,
+                                                         PClearDictionaryCacheResult* response,
+                                                         google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::get_dictionary_statistic(google::protobuf::RpcController* controller,
+                                                           const PGetDictionaryStatisticRequest* request,
+                                                           PGetDictionaryStatisticResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -1121,6 +1201,46 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
     });
 #endif
     Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+                                                        PExecShortCircuitResult* response) {
+    auto ser_request = cntl->request_attachment().to_string();
+    std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+    }
+    ShortCircuitExecutor executor{_exec_env};
+    RETURN_IF_ERROR(executor.prepare(*t_requests));
+    RETURN_IF_ERROR(executor.execute());
+    RETURN_IF_ERROR(executor.fetch_data(cntl, *response));
+    return Status::OK();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base,
+                                                     const PExecShortCircuitRequest* request,
+                                                     PExecShortCircuitResult* response,
+                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    MonotonicStopWatch watch;
+    watch.start();
+
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        return;
+    }
+
+    auto st = _exec_short_circuit(cntl, request, response);
+    st.to_protobuf(response->mutable_status());
+    uint64_t elapsed_time_ns = watch.elapsed_time();
+    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template class PInternalServiceImplBase<PInternalService>;
