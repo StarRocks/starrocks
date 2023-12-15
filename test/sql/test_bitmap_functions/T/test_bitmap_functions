@@ -161,3 +161,34 @@ insert into t4 select 6, 10, bitmap_agg(generate_series) from table(generate_ser
 insert into t4 select 6, 10, bitmap_agg(generate_series) from table(generate_series(8589934592, 8589934610));
 
 select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide_bitmap) from t4, subdivide_bitmap(t4.c3, c2) order by c1, min_value;
+
+-- name: test_bitmap_to_array
+
+-- create table
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- bitmap(empty)
+truncate table t1;
+insert into t1 select 1, bitmap_empty();
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(single)
+truncate table t1;
+insert into t1 select 1, to_bitmap(1);
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(set)
+truncate table t1;
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 10));
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(bitmap)
+truncate table t1;
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 40));
+select bitmap_to_array(c2) from t1;
