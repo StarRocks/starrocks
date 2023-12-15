@@ -31,9 +31,8 @@ Returns multiple sub-bitmaps not larger than `length`.
 
 Suppose there is a table `t1`, in which the `c2` column is a BITMAP column.
 
-Use bitmap_to_string() to convert values in `c2` into a string.
-
 ```Plain
+-- Use bitmap_to_string() to convert values in `c2` into a string.
 mysql> select c1, bitmap_to_string(c2) from t1;
 +------+----------------------+
 | c1   | bitmap_to_string(c2) |
@@ -41,7 +40,7 @@ mysql> select c1, bitmap_to_string(c2) from t1;
 |    1 | 1,2,3,4,5,6,7,8,9,10 |
 +------+----------------------+
 
-Split `c2` into small bitmaps whose maximum length is 3.
+-- Split `c2` into small bitmaps whose maximum length is 3.
 
 mysql> select c1, bitmap_to_string(subdivide_bitmap) from t1, subdivide_bitmap(c2, 3);
 +------+------------------------------------+
