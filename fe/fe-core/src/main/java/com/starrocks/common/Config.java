@@ -2599,6 +2599,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
 
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
