@@ -1,6 +1,6 @@
 #!/bin/bash
 
-declare -a branches=("branch-3.2" "branch-3.1" "branch-3.0" "branch-2.5" "branch-2.3" "branch-2.2" "branch-2.1")
+declare -a branches=("branch-3.2" "branch-3.1" "branch-3.0" "branch-2.5")
 
 export DISABLE_VERSIONING=true
 cd starrocks/docs
