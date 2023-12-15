@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Splits a large bitmap into multiple sub-bitmaps.
 
-This function is mainly used to export bitmaps. Bitmaps that are too large will exceed the maximum packet size allowed in the Mysql protocol.
+This function is mainly used to export bitmaps. Bitmaps that are too large will exceed the maximum packet size allowed in the MySQL protocol.
 
 This function is supported from v2.5.
 
