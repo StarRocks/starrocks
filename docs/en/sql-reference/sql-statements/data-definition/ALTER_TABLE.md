@@ -11,7 +11,7 @@ Modifies an existing table, including:
 - [Rename table, partition, index](#rename)
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
-- [Modify bucketing method and the number of buckets](#modify-bucketing-method-and-the-number-of-buckets-from-v32)
+- [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
 - [Modify columns (add/delete columns and change the order of columns)](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
@@ -30,12 +30,12 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into operations, including rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap and compaction.
+`alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
-- bucket: modifies bucketing method and the number of buckets.
+- bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
 - rollup index: creates or drops a rollup index.
 - bitmap index: modifies index (only Bitmap index can be modified).
@@ -182,7 +182,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 - Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
 
-### Modify bucketing method and the number of buckets (from v3.2)
+### Modify the bucketing method and number of buckets (from v3.2)
 
 Syntax:
 
@@ -284,7 +284,7 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
    ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10;
    ```
 
-- Modify the key for hash bucketing, and change the number of buckets to 10 from being automatically set by StarRocks.
+- Modify the key for hash bucketing, and change the number of buckets to 10 from being automatically set by StarRocks. The key used for hashing bucketing is modified to `user_id, event_time` from the original `event_time, event_type`. The number of buckets is modified to 10 from automatically set by StarRocks.
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
@@ -430,7 +430,7 @@ order_desc ::=
 
 Example:
 
-For example, the original table is a Primary Key table where the sort key is coupled with the primary key `dt, order_id`.
+For example, the original table is a Primary Key table where the sort key and  the primary key are coupled, which is `dt, order_id`.
 
 ```SQL
 create table orders (

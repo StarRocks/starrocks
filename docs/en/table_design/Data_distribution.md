@@ -649,7 +649,7 @@ As query patterns and data volume evolve in business scenarios, the configuratio
 
 - **Increase the number of buckets when data volume within partitions is significantly increased**
 
-  When the data volume within partitions becomes significantly larger than before, it is necessary to modify the number of buckets to maintain tablet sizes generally within the range of 1GB to 10GB.
+  When the data volume within partitions becomes significantly larger than before, it is necessary to modify the number of buckets to maintain tablet sizes generally within the range of 1 GB to 10 GB.
   
 - **Modify the bucketing key to avoid data skew**
 
@@ -657,7 +657,7 @@ As query patterns and data volume evolve in business scenarios, the configuratio
   
   ```SQL
   ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
-  -- When the StarRocks's version is 3.1 or above, and the table is  Duplicate Key table, you can consider directly using the system's default bucketing settings, that is, random bucketing and the number of buckets automatically set by StarRocks.
+  -- When the StarRocks's version is 3.1 or later, and the table is Duplicate Key table, you can consider directly using the system's default bucketing settings, that is, random bucketing and the number of buckets automatically set by StarRocks.
   ALTER TABLE t DISTRIBUTED BY RANDOM;
   ```
 
