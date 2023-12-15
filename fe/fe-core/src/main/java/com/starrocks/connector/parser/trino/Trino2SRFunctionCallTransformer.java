@@ -229,8 +229,7 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerURLFunctionTransformer() {
-        // url_extract_path('https://www.starrocks.io/showcase')
-        // parse_url('https://www.starrocks.io/showcase', 'PATH');
+        // url_extract_path('https://www.starrocks.io/showcase') -> parse_url('https://www.starrocks.io/showcase', 'PATH')
         registerFunctionTransformer("url_extract_path", 1, new FunctionCallExpr("parse_url",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("PATH"))));
     }
