@@ -26,9 +26,9 @@
 namespace starrocks {
 
 namespace {
-std::set<int64_t> get_authorized_table_ids(const TGetTablesConfigResponse &_tables_config_response) {
+std::set<int64_t> get_authorized_table_ids(const TGetTablesConfigResponse& _tables_config_response) {
     std::set<int64_t> authorized_table_ids;
-    for (const auto &v: _tables_config_response.tables_config_infos) {
+    for (const auto& v : _tables_config_response.tables_config_infos) {
         if (v.__isset.table_id) {
             authorized_table_ids.insert(v.table_id);
         }
