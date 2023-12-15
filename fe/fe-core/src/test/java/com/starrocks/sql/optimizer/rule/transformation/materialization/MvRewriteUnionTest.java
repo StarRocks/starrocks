@@ -407,7 +407,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                         "7:SELECT\n" +
                                                 "  |  predicates: 2: k2 LIKE 'a%'")
                         );
-                        for (Pair<String, String> p: sqls) {
+                        for (Pair<String, String> p : sqls) {
                             String query = p.first;
                             String plan = getFragmentPlan(query, "MV");
                             PlanTestBase.assertContains(plan, ":UNION");
@@ -431,7 +431,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         QueryDebugOptions debugOptions = new QueryDebugOptions();
                         debugOptions.setEnableMVEagerUnionAllRewrite(true);
                         connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
-                        for (Pair<String, String> p: sqls) {
+                        for (Pair<String, String> p : sqls) {
                             String query = p.first;
                             String plan = getFragmentPlan(query, "MV");
                             PlanTestBase.assertContains(plan, ":UNION");
