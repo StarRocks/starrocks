@@ -44,7 +44,6 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "common/configbase.h"
-#include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -67,6 +66,7 @@
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
+#include "common/gflags_utils.h"
 #include "service/staros_worker.h"
 #endif // USE_STAROS
 

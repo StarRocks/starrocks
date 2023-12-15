@@ -210,7 +210,6 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
  * PlanFragmentBuilder used to transform physical operator to exec plan fragment
  */
 public class PlanFragmentBuilder {
-
     private static final Logger LOG = LogManager.getLogger(PlanFragmentBuilder.class);
 
     public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,

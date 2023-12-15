@@ -58,6 +58,7 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/rowset/rowset_meta.h"
@@ -114,7 +115,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
-          _publish_version_manager(new PublishVersionManager()) {
+          _publish_version_manager(new PublishVersionManager()),
+          _dictionary_cache_manager(new DictionaryCacheManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
