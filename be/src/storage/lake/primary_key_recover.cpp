@@ -50,7 +50,7 @@ Status PrimaryKeyRecover::_init_schema(const TabletMetadata& metadata) {
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    _pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    _pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
 
     if (pk_columns.size() > 1) {
         // more than one key column

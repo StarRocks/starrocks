@@ -28,6 +28,7 @@ using TabletPtr = std::shared_ptr<Tablet>;
 class CompactionPolicy;
 using CompactionPolicyPtr = std::shared_ptr<CompactionPolicy>;
 class TabletMetadataPB;
+class TabletManager;
 
 // Compaction policy for lake tablet
 class CompactionPolicy {
@@ -44,10 +45,6 @@ protected:
     TabletPtr _tablet;
 };
 
-<<<<<<< HEAD
-double compaction_score(const TabletMetadataPB& metadata);
-=======
-double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata);
->>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
+double compaction_score(TabletManager* tablet_mgr, const TabletMetadataPB& metadata);
 
 } // namespace starrocks::lake
