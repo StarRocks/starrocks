@@ -248,7 +248,7 @@ CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 CONF_mInt32(max_garbage_sweep_interval, "3600");
 CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
-CONF_mInt32(trash_file_expire_time_sec, "259200");
+CONF_mInt32(trash_file_expire_time_sec, "86400");
 //file descriptors cache, by default, cache 16384 descriptors
 CONF_Int32(file_descriptor_cache_capacity, "16384");
 // minimum file descriptor number
