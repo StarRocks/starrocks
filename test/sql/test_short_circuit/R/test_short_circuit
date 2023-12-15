@@ -1,0 +1,42 @@
+-- name: testShortCircuit
+set enable_short_circuit=true;
+-- result:
+-- !result
+CREATE TABLE short_circuit
+    (c1 int,
+    c2  int)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 4
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into short_circuit values
+(1, 1),
+(2, 2),
+(3, 3),
+(4, 4),
+(5, 5),
+(6, 6),
+(7, 7),
+(8, 8),
+(9, 9),
+(10, 10);
+-- result:
+-- !result
+select * from short_circuit where c1 in (1, 7, 8) order by c1;
+-- result:
+1	1
+7	7
+8	8
+-- !result
+select * from short_circuit where c1 = 6;
+-- result:
+6	6
+-- !result
+select * from short_circuit where c1 in (10);
+-- result:
+10	10
+-- !result
+set enable_short_circuit=false;
+-- result:

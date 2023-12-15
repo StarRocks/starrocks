@@ -72,6 +72,7 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+
 /**
  * Each PlanNode represents a single relational operator
  * and encapsulates the information needed by the planner to
