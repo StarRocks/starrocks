@@ -99,10 +99,9 @@ EXPLAIN ANALYZE <sql_statement>
 ![img](../assets/Profile/text_based_explain_analyze_select.jpeg)
 
 
-示例二：模拟分析 INSERT INTO 语句。完成后，导入事务会被中止。
+示例二：模拟分析 INSERT INTO 语句。完成后，导入事务会被中止，数据不会被实际导入。
 
 ![img](../assets/Profile/text_based_explain_analyze_insert.jpeg)
-
 
 ## 限制
 
