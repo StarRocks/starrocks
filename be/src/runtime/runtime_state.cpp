@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -137,14 +138,11 @@ RuntimeState::~RuntimeState() {
         delete _error_log_file;
         _error_log_file = nullptr;
     }
-<<<<<<< Updated upstream
     // close rejected record file
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
     _process_status.permit_unchecked_error();
-=======
->>>>>>> Stashed changes
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -280,6 +278,17 @@ bool RuntimeState::use_page_cache() {
     return true;
 }
 
+bool RuntimeState::use_column_pool() const {
+    if (config::disable_column_pool) {
+        return false;
+    }
+
+    if (_query_options.__isset.use_column_pool) {
+        return _query_options.use_column_pool;
+    }
+    return true;
+}
+
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
                                             const std::string* msg) {
     DCHECK_GE(failed_allocation_size, 0);
@@ -342,6 +351,23 @@ Status RuntimeState::create_error_log_file() {
     return Status::OK();
 }
 
+Status RuntimeState::create_rejected_record_file() {
+    auto rejected_record_absolute_path = _exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
+            "", _db, _load_label, _txn_id, _fragment_instance_id);
+    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
+
+    _rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
+    if (!_rejected_record_file->is_open()) {
+        std::stringstream error_msg;
+        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
+        LOG(WARNING) << error_msg.str();
+        return Status::InternalError(error_msg.str());
+    }
+    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
+    _rejected_record_file_path = rejected_record_absolute_path;
+    return Status::OK();
+}
+
 bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
     if (_num_print_error_rows.load(std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
         return true;
@@ -387,6 +413,32 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (!out.str().empty()) {
         (*_error_log_file) << out.str() << std::endl;
     }
+}
+
+void RuntimeState::append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
+                                                  const std::string& source) {
+    std::lock_guard<std::mutex> l(_rejected_record_lock);
+    // Only load job need to write rejected record
+    if (_query_options.query_type != TQueryType::LOAD) {
+        return;
+    }
+
+    // If file havn't been opened, open it here
+    if (_rejected_record_file == nullptr) {
+        Status status = create_rejected_record_file();
+        if (!status.ok()) {
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+            if (_rejected_record_file != nullptr) {
+                _rejected_record_file->close();
+                _rejected_record_file.reset();
+            }
+            return;
+        }
+    }
+    _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+
+    // TODO(meegoo): custom delimiter
+    (*_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
 }
 
 int64_t RuntimeState::get_load_mem_limit() const {
@@ -456,6 +508,10 @@ std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     return _query_ctx->maintained_query_recv();
+}
+
+std::atomic_int64_t* RuntimeState::mutable_total_spill_bytes() {
+    return _query_ctx->mutable_total_spill_bytes();
 }
 
 Status RuntimeState::reset_epoch() {

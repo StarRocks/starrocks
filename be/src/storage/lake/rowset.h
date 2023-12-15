@@ -72,10 +72,10 @@ public:
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-private:
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_data_cache, bool fill_metadata_cache);
+
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
 
-<<<<<<< Updated upstream
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache,
                                        bool fill_metadata_cache);
 
@@ -83,10 +83,6 @@ private:
 
 private:
     Tablet _tablet;
-=======
-    // _tablet is owned by TabletReader
-    Tablet* _tablet;
->>>>>>> Stashed changes
     RowsetMetadataPtr _rowset_metadata;
     int _index{kInvalidRowsetIndex};
 };

@@ -23,7 +23,8 @@
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(NLJoinBuildOperator::prepare(state));
-    _spill_channel->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _spill_channel->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
@@ -60,24 +61,15 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-<<<<<<< Updated upstream
     RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     RETURN_IF_ERROR(spiller->set_flush_all_call_back(
-=======
-    RETURN_IF_ERROR(spiller->flush(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
-    spiller->set_flush_all_call_back(
->>>>>>> Stashed changes
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
                 _is_finished = true;
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-<<<<<<< Updated upstream
             state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
-=======
-            state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
->>>>>>> Stashed changes
 
     return Status::OK();
 }

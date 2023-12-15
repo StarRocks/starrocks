@@ -53,6 +53,7 @@ public:
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
+    int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -87,9 +88,11 @@ public:
         _query_deadline =
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
-    void set_report_profile() { _is_report_profile = true; }
-    bool is_report_profile() {
-        if (_is_report_profile) {
+    void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
+    bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
+    void set_enable_profile() { _enable_profile = true; }
+    bool enable_profile() {
+        if (_enable_profile) {
             return true;
         }
         if (_big_query_profile_threshold_ns <= 0) {
@@ -100,6 +103,10 @@ public:
     void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
         _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
     }
+    void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
+        _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
+    }
+    int64_t get_runtime_profile_report_interval_ns() { return _runtime_profile_report_interval_ns; }
     void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
     const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
@@ -128,7 +135,7 @@ public:
                           int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    Status init_query_once(workgroup::WorkGroup* wg);
+    Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
     /// This method should only be invoked while the QueryContext is still valid,
     /// to avoid double-free between the destruction and this method.
@@ -155,6 +162,8 @@ public:
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
+    std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
+    int64_t get_spill_bytes() { return _total_spill_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -195,6 +204,7 @@ public:
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
+    MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -205,9 +215,11 @@ private:
     seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
+    bool _enable_pipeline_level_shuffle = true;
     std::shared_ptr<RuntimeProfile> _profile;
-    bool _is_report_profile = false;
+    bool _enable_profile = false;
     int64_t _big_query_profile_threshold_ns = 0;
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
@@ -221,6 +233,7 @@ private:
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;

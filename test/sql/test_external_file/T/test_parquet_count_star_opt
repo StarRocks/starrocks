@@ -1,0 +1,61 @@
+-- name: testParquetCountStarOpt
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/array_data_only >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/map_data_only >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/struct_data_only >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/array_data_only.parquet oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/array_data_only/array_data_only.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/map_data_only.parquet oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/map_data_only/map_data_only.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/struct_data_only.parquet oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/struct_data_only/struct_data_only.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE array_data_only
+(
+    data array<int>    
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/array_data_only/", 
+    "format" = "parquet"
+);
+
+set enable_count_star_optimization = true;
+select count(*) from array_data_only;
+set enable_count_star_optimization = false;
+select count(*) from array_data_only;
+
+
+CREATE EXTERNAL TABLE map_data_only
+(
+    data map<string, int>    
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/map_data_only/", 
+    "format" = "parquet"
+);
+set enable_count_star_optimization = true;
+select count(*) from map_data_only;
+-- set enable_count_star_optimization = false;
+-- select count(*) from map_data_only;
+
+
+CREATE EXTERNAL TABLE struct_data_only
+(
+    -- not supported yet.
+    -- data struct<k:int, v:int>
+    data map<string, int>
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/struct_data_only/", 
+    "format" = "parquet"
+);
+set enable_count_star_optimization = true;
+select count(*) from struct_data_only;
+-- set enable_count_star_optimization = false;
+-- select count(*) from struct_data_only;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_count_star_opt/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

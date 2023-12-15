@@ -71,14 +71,9 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _mem_pool.reset();
 }
 
-<<<<<<< Updated upstream
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                  std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
-=======
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                 bool is_incremental) {
->>>>>>> Stashed changes
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -108,6 +103,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                       PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
     if (it == _delta_writers.end()) {
@@ -126,13 +122,13 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 
     delta_writer->write_segment(req);
     closure_guard.release();
-
-    _num_ref_senders.fetch_sub(1);
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response) {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
+    int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -234,6 +230,19 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         DCHECK(it != _delta_writers.end());
         auto& delta_writer = it->second;
 
+        // back pressure OlapTableSink since there are too many memtables need to flush
+        while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
+                          << "ms still has queueing num " << delta_writer->get_flush_stats().queueing_memtable_num;
+                break;
+            }
+            bthread_usleep(10000); // 10ms
+            wait_memtable_flush_time_us += 10000;
+        }
+
         AsyncDeltaWriterRequest req;
         req.chunk = chunk;
         req.indexes = row_indexes + from;
@@ -328,7 +337,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
-<<<<<<< Updated upstream
     std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
         auto& writer = _delta_writers[tablet_id];
@@ -345,9 +353,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     // which prevents triggering a flush,
     // we need to proactively perform a flush when memory resources are insufficient.
     _flush_stale_memtables();
-=======
-    _num_ref_senders.fetch_sub(1);
->>>>>>> Stashed changes
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
@@ -364,24 +369,14 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
     } else if (request.eos() && request.wait_all_sender_close()) {
-        int i = 0;
-        while (_num_remaining_senders.load(std::memory_order_acquire) != 0) {
-            bthread_usleep(10000); // 10ms
-            auto t1 = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
-                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                          << " wait all sender close timeout " << request.timeout_ms() << "ms still has "
-                          << _num_remaining_senders << " sender";
-                break;
-            }
+        std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
+        auto remain = request.timeout_ms();
+        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
 
-            if (++i % 6000 == 0) {
-                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                          << " wait all sender close already "
-                          << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
-                          << "ms still has " << _num_remaining_senders << " sender";
-            }
-        }
+        // unlock write lock so that incremental open can aquire read lock
+        lk.unlock();
+        // wait for all senders closed, may be timed out
+        drain_senders(remain * 1000, msg);
     }
 
     int64_t last_execution_time_us = 0;
@@ -392,6 +387,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     response->set_execution_time_us(last_execution_time_us +
                                     std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
+    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     // reset error message if it already set by other replica
     {
@@ -626,11 +622,8 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             options.replica_state = Peer;
         }
         options.merge_condition = params.merge_condition();
-<<<<<<< Updated upstream
         options.partial_update_mode = params.partial_update_mode();
         options.immutable_tablet_size = params.immutable_tablet_size();
-=======
->>>>>>> Stashed changes
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
@@ -672,12 +665,14 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 }
 
 void LocalTabletsChannel::cancel() {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     for (auto& it : _delta_writers) {
         it.second->cancel(Status::Cancelled("cancel"));
     }
 }
 
 void LocalTabletsChannel::abort() {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
@@ -689,10 +684,10 @@ void LocalTabletsChannel::abort() {
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
               << " tablet_ids:" << tablet_id_list_str;
-    _num_ref_senders.fetch_sub(1);
 }
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
+    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     bool abort_with_exception = !reason.empty();
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
@@ -762,6 +757,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
 
 Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                              std::shared_ptr<OlapTableSchemaParam> schema) {
+    std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {

@@ -1,0 +1,41 @@
+-- name: testParquetStructInStruct
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE struct_in_struct (
+c0 int,
+c1 int,
+c_struct struct<c0 string, c1 string>,
+c_struct_struct struct<c0 string, c_struct struct<c0 string, c1 string>>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/test_parquet_struct_in_struct.parquet",
+    "format" = "parquet"
+);
+
+select c_struct_struct from struct_in_struct where c_struct_struct.c_struct.c0 = '55' and c0 = 155;
+
+-- only one no-dict filter
+select * from struct_in_struct where c0 = 100;
+
+-- two no-dict filter
+select * from struct_in_struct where c0 > 100 and c1 > 9899;
+
+-- only one dict filter
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 = '55';
+
+-- two dict filter
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct.c0 in ('56', '57');
+
+-- one dict filter and one no-dict filter
+select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c0 = 155;
+
+select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct.c0 in ('56', '57') and c0 < 1000;
+
+-- filed is not output column but in conjunct of multi-slot, decode is needed
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct_struct.c_struct.c0 = c_struct.c0;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

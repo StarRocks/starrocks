@@ -43,17 +43,19 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     if (!_aggregator->is_none_group_by_exprs()) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
         // If hash map is empty, we don't need to return value
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            if (!_aggregator->it_hash().has_value()) {
-                _aggregator->it_hash() = _aggregator->_state_allocator.begin();
-            }
-        });
+        _aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
 
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,

@@ -14,11 +14,11 @@
 
 #include "exprs/struct_functions.h"
 
+#include "column/column_helper.h"
 #include "column/struct_column.h"
 
 namespace starrocks {
 
-<<<<<<< Updated upstream
 StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const Columns& columns) {
     ColumnPtr res = context->create_column(context->get_return_type(), false);
 
@@ -37,14 +37,17 @@ StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const 
         } else {
             fields[i]->append(*column, 0, column->size());
         }
-=======
-StatusOr<ColumnPtr> StructFunctions::row(FunctionContext* context, const Columns& columns) {
-    Columns field_columns;
-    for (auto& column : columns) {
-        field_columns.emplace_back(column->clone());
->>>>>>> Stashed changes
     }
-    return StructColumn::create(std::move(field_columns));
+
+    return res;
 }
 
+StatusOr<ColumnPtr> StructFunctions::named_struct(FunctionContext* context, const Columns& columns) {
+    Columns cols;
+    for (int i = 1; i < columns.size(); i = i + 2) {
+        cols.emplace_back(columns[i]);
+    }
+
+    return new_struct(context, cols);
+}
 } // namespace starrocks

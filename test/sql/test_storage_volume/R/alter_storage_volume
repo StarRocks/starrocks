@@ -1,0 +1,25 @@
+-- name: testAlterStorageVolume
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_alter type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
+-- result:
+-- !result
+DESC STORAGE VOLUME storage_volume_alter;
+-- result:
+storage_volume_alter	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint"}	false	comment
+-- !result
+ALTER STORAGE VOLUME storage_volume_alter SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
+-- result:
+-- !result
+DESC STORAGE VOLUME storage_volume_alter;
+-- result:
+storage_volume_alter	S3	false	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_aws_sdk_default_behavior":"true","aws.s3.endpoint":"endpoint1"}	true	comment
+-- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_alter;
+-- result:
+-- !result
+DESC STORAGE VOLUME storage_volume_alter;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Unknown storage volume: storage_volume_alter.')
+-- !result
+SHOW STORAGE VOLUMES LIKE 'storage_volume_alter';
+-- result:
+-- !result

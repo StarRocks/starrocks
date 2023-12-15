@@ -127,11 +127,7 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
-<<<<<<< Updated upstream
     google::ParseCommandLineFlags(&argc, &argv, true);
-=======
-    bool without_storage = as_cn;
->>>>>>> Stashed changes
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -209,31 +205,39 @@ int main(int argc, char** argv) {
                   << "\n";
         aws_sdk_options.loggingOptions.logLevel = level;
     }
+    if (starrocks::config::aws_sdk_enable_compliant_rfc3986_encoding) {
+        aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
+    }
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
-    if (!without_storage) {
-        auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
-        if (!olap_res.ok()) {
-            LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
-            exit(-1);
-        }
-        auto it = paths.begin();
-        for (; it != paths.end();) {
-            if (!starrocks::check_datapath_rw(it->path)) {
-                if (starrocks::config::ignore_broken_disk) {
-                    LOG(WARNING) << "read write test file failed, path=" << it->path;
-                    it = paths.erase(it);
-                } else {
-                    LOG(FATAL) << "read write test file failed, path=" << it->path;
-                    exit(-1);
-                }
-            } else {
-                ++it;
-            }
-        }
+    auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+    if (!olap_res.ok() && !as_cn) {
+        LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
+        exit(-1);
+    }
 
-        if (paths.empty()) {
+    auto it = paths.begin();
+    for (; it != paths.end();) {
+        if (!starrocks::check_datapath_rw(it->path)) {
+            if (starrocks::config::ignore_broken_disk) {
+                LOG(WARNING) << "read write test file failed, path=" << it->path;
+                it = paths.erase(it);
+            } else {
+                LOG(FATAL) << "read write test file failed, path=" << it->path;
+                exit(-1);
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    if (paths.empty()) {
+        if (as_cn) {
+#ifdef USE_STAROS
+            starrocks::config::starlet_cache_dir = "";
+#endif
+        } else {
             LOG(FATAL) << "All disks are broken, exit.";
             exit(-1);
         }
@@ -242,133 +246,16 @@ int main(int argc, char** argv) {
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-<<<<<<< Updated upstream
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
-=======
-    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
 
-    // init jdbc driver manager
-    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
-                                                                    "/lib/jdbc_drivers"));
-
-    if (!starrocks::BackendOptions::init()) {
-        exit(-1);
+    if (starrocks::k_starrocks_exit_quick.load()) {
+        LOG(INFO) << "BE is shutting down，will exit quickly";
+        exit(0);
     }
-
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init_mem_tracker());
-
-    // Init and open storage engine.
-    starrocks::EngineOptions options;
-    options.store_paths = paths;
-    options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
-    options.conf_path = string(getenv("STARROCKS_HOME")) + "/conf/";
-    starrocks::StorageEngine* engine = nullptr;
-
-    if (without_storage) {
-        auto st = starrocks::DummyStorageEngine::open(options, &engine);
-        if (!st.ok()) {
-            LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-            exit(-1);
-        }
-    } else {
-        auto st = starrocks::StorageEngine::open(options, &engine);
-        if (!st.ok()) {
-            LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-            exit(-1);
-        }
-    }
-
-    // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
-
-    // Start all background threads of storage engine.
-    // SHOULD be called after exec env is initialized.
-    EXIT_IF_ERROR(engine->start_bg_threads());
-
-    // Begin to start Heartbeat services
-    starrocks::ThriftRpcHelper::setup(exec_env);
-    auto res = starrocks::create_heartbeat_server(exec_env, starrocks::config::heartbeat_service_port,
-                                                  starrocks::config::heartbeat_service_thread_count);
-    CHECK(res.ok()) << res.status();
-    auto heartbeat_thrift_server = std::move(res).value();
-
-    starrocks::Status status = heartbeat_thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
-        starrocks::shutdown_logging();
-        exit(1);
-    }
-
-#ifdef USE_STAROS
-    starrocks::init_staros_worker();
-#endif
-
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
-        starrocks::CacheOptions cache_options;
-        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-
-        std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
-        }
-        cache_options.meta_path = starrocks::config::block_cache_meta_path;
-        cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
-        cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
-        cache_options.enable_direct_io = starrocks::config::block_cache_direct_io_enable;
-        cache_options.engine = starrocks::config::block_cache_engine;
-        EXIT_IF_ERROR(cache->init(cache_options));
-    }
-
-    if (as_cn) {
-        start_cn();
-    } else {
-        start_be();
-    }
->>>>>>> Stashed changes
-
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache::instance()->shutdown();
-    }
-
-<<<<<<< Updated upstream
-    Aws::ShutdownAPI(aws_sdk_options);
-
-=======
-    daemon->stop();
-    daemon.reset();
-
-#ifdef USE_STAROS
-    starrocks::shutdown_staros_worker();
-#endif
 
     Aws::ShutdownAPI(aws_sdk_options);
 
-    heartbeat_thrift_server->stop();
-    heartbeat_thrift_server->join();
-
-    exec_env->agent_server()->stop();
-    engine->stop();
-    delete engine;
-    starrocks::ExecEnv::destroy(exec_env);
-
->>>>>>> Stashed changes
     return 0;
 }
 

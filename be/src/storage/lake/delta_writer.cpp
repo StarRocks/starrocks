@@ -26,11 +26,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
-<<<<<<< Updated upstream
 #include "storage/lake/meta_file.h"
 #include "storage/lake/pk_tablet_writer.h"
-=======
->>>>>>> Stashed changes
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -38,6 +35,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_sink.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::lake {
@@ -76,19 +74,6 @@ private:
 class DeltaWriterImpl {
 public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-<<<<<<< Updated upstream
-=======
-                             const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(partition_id),
-              _mem_tracker(mem_tracker),
-              _slots(slots),
-              _schema_initialized(false) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
->>>>>>> Stashed changes
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
                              MemTracker* mem_tracker, int64_t max_buffer_size, int64_t index_id)
@@ -100,26 +85,10 @@ public:
               _index_id(index_id),
               _mem_tracker(mem_tracker),
               _slots(slots),
-<<<<<<< Updated upstream
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column) {}
-=======
-              _schema_initialized(false),
-              _merge_condition(std::move(merge_condition)) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
-                             MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(-1),
-              _mem_tracker(mem_tracker),
-              _slots(nullptr),
-              _max_buffer_size(max_buffer_size),
-              _schema_initialized(false) {}
->>>>>>> Stashed changes
 
     ~DeltaWriterImpl() = default;
 
@@ -145,6 +114,8 @@ public:
 
     [[nodiscard]] Status flush_async();
 
+    int64_t queueing_memtable_num() const;
+
     std::vector<std::string> files() const;
 
     int64_t data_size() const;
@@ -155,17 +126,11 @@ public:
 
     Status check_immutable();
 
-<<<<<<< Updated upstream
     int64_t last_write_ts() const;
-=======
-    void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
-                                 const std::vector<int32_t>& referenced_column_ids);
->>>>>>> Stashed changes
 
 private:
     Status reset_memtable();
 
-<<<<<<< Updated upstream
     Status fill_auto_increment_id(const Chunk& chunk);
 
     Status init_tablet_schema();
@@ -176,8 +141,6 @@ private:
 
     Status check_partial_update_with_sort_key(const Chunk& chunk);
 
-=======
->>>>>>> Stashed changes
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -195,7 +158,6 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
 
-<<<<<<< Updated upstream
     // The full list of columns defined
     std::shared_ptr<const TabletSchema> _tablet_schema;
 
@@ -251,25 +213,6 @@ int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
 }
 
-=======
-    // for partial update
-    std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
-    std::vector<int32_t> _referenced_column_ids;
-
-    // for condition update
-    std::string _merge_condition;
-};
-
-void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
-                                              const std::vector<int32_t>& referenced_column_ids) {
-    _partial_update_tablet_schema = std::move(tschema);
-    _referenced_column_ids = referenced_column_ids;
-    build_schema_and_writer();
-    // recover _tablet_schema with partial update schema
-    _tablet_schema = _partial_update_tablet_schema;
-}
-
->>>>>>> Stashed changes
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
@@ -312,7 +255,6 @@ inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
-<<<<<<< Updated upstream
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
@@ -338,9 +280,6 @@ inline Status DeltaWriterImpl::flush_async() {
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
             }
         });
-=======
-        st = _flush_token->submit(std::move(_mem_table));
->>>>>>> Stashed changes
         _mem_table.reset(nullptr);
         _last_write_ts = 0;
     }
@@ -381,7 +320,6 @@ Status DeltaWriterImpl::open() {
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
     if (_partial_schema_with_sort_key && _slots != nullptr && _slots->back()->col_name() == "__op") {
         size_t op_column_id = chunk.num_columns() - 1;
@@ -397,19 +335,14 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
         RETURN_IF_ERROR(reset_memtable());
     }
-<<<<<<< Updated upstream
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     _last_write_ts = butil::gettimeofday_s();
-=======
->>>>>>> Stashed changes
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (_mem_tracker->limit_exceeded()) {
@@ -451,12 +384,10 @@ Status DeltaWriterImpl::init_write_schema() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(_write_column_ids.begin(), _write_column_ids.end(), sort_key_idxes.begin(),
                            sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         _write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
     }
-<<<<<<< Updated upstream
 
     auto sort_key_idxes = _write_schema->sort_key_idxes();
     std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
@@ -473,8 +404,6 @@ Status DeltaWriterImpl::init_write_schema() {
         LOG(WARNING) << "auto increment column in sort key do not support partial update";
         return Status::NotSupported("auto increment column in sort key do not support partial update");
     }
-=======
->>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -535,7 +464,6 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         if (_merge_condition != "") {
             op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
-<<<<<<< Updated upstream
         // handle auto increment
         if (_miss_auto_increment_column) {
             for (auto i = 0; i < _write_schema->num_columns(); ++i) {
@@ -557,14 +485,12 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
                 }
             }
         }
-=======
->>>>>>> Stashed changes
     }
+    RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
-<<<<<<< Updated upstream
     return Status::OK();
 }
 
@@ -633,9 +559,6 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
         }
     }
 
-=======
-    RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
->>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -675,6 +598,14 @@ int64_t DeltaWriterImpl::data_size() const {
 
 int64_t DeltaWriterImpl::num_rows() const {
     return (_tablet_writer != nullptr) ? _tablet_writer->num_rows() : 0;
+}
+
+int64_t DeltaWriterImpl::queueing_memtable_num() const {
+    if (_flush_token != nullptr) {
+        return _flush_token->get_stats().queueing_memtable_num;
+    } else {
+        return 0;
+    }
 }
 
 //// DeltaWriter
@@ -732,6 +663,10 @@ std::vector<std::string> DeltaWriter::files() const {
     return _impl->files();
 }
 
+const int64_t DeltaWriter::queueing_memtable_num() const {
+    return _impl->queueing_memtable_num();
+}
+
 int64_t DeltaWriter::data_size() const {
     return _impl->data_size();
 }
@@ -744,33 +679,12 @@ bool DeltaWriter::is_immutable() const {
     return _impl->is_immutable();
 }
 
-<<<<<<< Updated upstream
 Status DeltaWriter::check_immutable() {
     return _impl->check_immutable();
 }
 
 int64_t DeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
-=======
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
-                                                 MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(
-            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
-                                                 const std::string& merge_condition, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(
-            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t max_buffer_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(
-            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, max_buffer_size, mem_tracker));
->>>>>>> Stashed changes
 }
 
 ThreadPool* DeltaWriter::io_threads() {

@@ -27,7 +27,7 @@ class IntersectOutputSourceOperator final : public SourceOperator {
 public:
     IntersectOutputSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                   std::shared_ptr<IntersectContext> intersect_ctx, const int32_t dependency_index)
-            : SourceOperator(factory, id, "intersect_output_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "intersect_output_source", plan_node_id, false, driver_sequence),
               _intersect_ctx(std::move(intersect_ctx)),
               _dependency_index(dependency_index) {
         _intersect_ctx->ref();

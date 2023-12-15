@@ -53,24 +53,15 @@ BitmapIndexReader::BitmapIndexReader() {
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
-<<<<<<< Updated upstream
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
-=======
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
->>>>>>> Stashed changes
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-<<<<<<< Updated upstream
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                      mem_usage() - sizeof(BitmapIndexReader));
-=======
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                     _mem_usage() - sizeof(BitmapIndexReader));
->>>>>>> Stashed changes
         } else {
             _reset();
         }
@@ -90,18 +81,18 @@ Status BitmapIndexReader::_do_load(const IndexReadOptions& opts, const BitmapInd
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
     _has_null = meta.has_null();
-    _dict_column_reader = std::make_unique<IndexedColumnReader>(opts, dict_meta);
-    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(opts, bitmap_meta);
-    RETURN_IF_ERROR(_dict_column_reader->load());
-    RETURN_IF_ERROR(_bitmap_column_reader->load());
+    _dict_column_reader = std::make_unique<IndexedColumnReader>(dict_meta);
+    _bitmap_column_reader = std::make_unique<IndexedColumnReader>(bitmap_meta);
+    RETURN_IF_ERROR(_dict_column_reader->load(opts));
+    RETURN_IF_ERROR(_bitmap_column_reader->load(opts));
     return Status::OK();
 }
 
-Status BitmapIndexReader::new_iterator(BitmapIndexIterator** iterator, const IndexReadOptions& opts) {
+Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
     std::unique_ptr<IndexedColumnIterator> dict_iter;
     std::unique_ptr<IndexedColumnIterator> bitmap_iter;
-    RETURN_IF_ERROR(_dict_column_reader->new_iterator(&dict_iter, opts));
-    RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(&bitmap_iter, opts));
+    RETURN_IF_ERROR(_dict_column_reader->new_iterator(opts, &dict_iter));
+    RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(opts, &bitmap_iter));
     *iterator = new BitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter), _has_null, bitmap_nums());
     return Status::OK();
 }

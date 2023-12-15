@@ -37,6 +37,7 @@
 #include <fmt/format.h>
 
 #include <atomic>
+#include <memory>
 #include <shared_mutex>
 #include <sstream>
 #include <utility>
@@ -49,6 +50,8 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/orc_scanner.h"
+#include "exec/parquet_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -57,17 +60,21 @@
 #include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/MVMaintenance_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/types.h"
 #include "service/brpc.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
@@ -81,15 +88,13 @@
 namespace starrocks {
 
 extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_exit_quick;
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
-        : _exec_env(exec_env),
-          _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
-                             config::internal_service_async_thread_num) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -293,7 +298,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -543,8 +548,35 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
                                                          PTriggerProfileReportResult* result,
                                                          google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    auto st = _exec_env->fragment_mgr()->trigger_profile_report(request);
-    st.to_protobuf(result->mutable_status());
+    result->mutable_status()->set_status_code(TStatusCode::OK);
+
+    TUniqueId query_id;
+    DCHECK(request->has_query_id());
+    query_id.__set_hi(request->query_id().hi());
+    query_id.__set_lo(request->query_id().lo());
+
+    auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) {
+        LOG(WARNING) << "query context is null, query_id=" << print_id(query_id);
+        result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
+        return;
+    }
+
+    for (size_t i = 0; i < request->instance_ids_size(); i++) {
+        TUniqueId instance_id;
+        instance_id.__set_hi(request->instance_ids(i).hi());
+        instance_id.__set_lo(request->instance_ids(i).lo());
+
+        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+        if (fragment_ctx == nullptr) {
+            LOG(WARNING) << "fragment context is null, query_id=" << print_id(query_id)
+                         << ", instance_id=" << print_id(instance_id);
+            result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
+            return;
+        }
+        pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+    }
 }
 
 template <typename T>
@@ -559,36 +591,29 @@ void PInternalServiceImplBase<T>::collect_query_statistics(google::protobuf::Rpc
 template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
-    MonotonicStopWatch watch;
-    watch.start();
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_info_impl(request, response, done, timeout_ms);
+    };
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_info_impl(request, response, &latch, timeout_ms);
-        })) {
+    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms
+                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+        ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
-                "too busy to get kafka info, please check the kafka broker status, or set "
-                "internal_service_async_thread_num bigger")
+                fmt::format("too busy to get kafka info, please check the kafka broker status, timeout ms: {}",
+                            timeout_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_info_impl(
-        const PProxyRequest* request, PProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
+void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                                                 google::protobuf::Closure* done, int timeout_ms) {
+    ClosureGuard closure_guard(done);
 
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
@@ -658,36 +683,30 @@ template <typename T>
 void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcController* controller,
                                                   const PPulsarProxyRequest* request, PPulsarProxyResult* response,
                                                   google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
-    MonotonicStopWatch watch;
-    watch.start();
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_pulsar_info_impl(request, response, done, timeout_ms);
+    };
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_pulsar_info_impl(request, response, &latch, timeout_ms);
-        })) {
-        Status::ServiceUnavailable(
-                "too busy to get pulsar info, please check the pulsar service status, or set "
-                "internal_service_async_thread_num bigger")
+    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms
+                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable(fmt::format("too busy to get pulsar info, please check the pulsar status, "
+                                               "timeout ms: {}",
+                                               timeout_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
-        const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
+void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyRequest* request,
+                                                        PPulsarProxyResult* response, google::protobuf::Closure* done,
+                                                        int timeout_ms) {
+    ClosureGuard closure_guard(done);
 
     if (timeout_ms <= 0) {
         Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());
@@ -743,7 +762,6 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
 }
 
 template <typename T>
-<<<<<<< Updated upstream
 void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcController* controller,
                                                   const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                   google::protobuf::Closure* done) {
@@ -909,8 +927,6 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
 }
 
 template <typename T>
-=======
->>>>>>> Stashed changes
 void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::RpcController* controller,
                                                              const PMVMaintenanceTaskRequest* request,
                                                              PMVMaintenanceTaskResult* response,

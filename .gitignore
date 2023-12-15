@@ -22,6 +22,7 @@ core.*
 extension/spark-doris-connector/.classpath
 extension/spark-doris-connector/target
 fe/log
+**/ut_ports
 custom_env.sh
 ut_dir
 log/
@@ -40,17 +41,11 @@ fe/fe-core/src/main/java/com/starrocks/thrift
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
 fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
-<<<<<<< Updated upstream
 dependency-reduced-pom.xml
 test/conf/
 test/conf/sr.conf
 test/nosetests.xml
 test/common/data
-=======
-test/nosetests.xml
-test/common/data
-dependency-reduced-pom.xml
->>>>>>> Stashed changes
 tags
 .tags
 .cache
@@ -60,6 +55,7 @@ compile_commands.json
 .factorypath
 .classpath
 .vimspector.json
+.gdb_history
 
 # ignore generated files
 StarRocksLex.tokens
@@ -70,6 +66,7 @@ StarRocksLex.tokens
 .project
 .settings/
 .idea/
+.gradle/
 /Default/
 be/cmake-build*
 be/.vscode

@@ -34,14 +34,10 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <fmt/format.h>
 #include <util/time.h>
 
 #include <condition_variable>
 #include <deque>
-#include <memory>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #include "column/chunk.h"
@@ -53,7 +49,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "serde/protobuf_serde.h"
 #include "util/compression/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -131,6 +126,29 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
     }
     RETURN_IF_ERROR(_cascade_merger->init(providers, &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
     return Status::OK();
+}
+
+std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_path_chunk_providers() {
+    DCHECK(_is_merging);
+    std::vector<merge_path::MergePathChunkProvider> chunk_providers;
+    for (SenderQueue* q : _sender_queues) {
+        chunk_providers.emplace_back([q](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
+            if (!q->has_chunk()) {
+                return false;
+            }
+
+            if (!only_check_if_has_data) {
+                Chunk* chunk_ptr;
+                if (q->try_get_chunk(&chunk_ptr)) {
+                    chunk->reset(chunk_ptr);
+                } else {
+                    *eos = true;
+                }
+            }
+            return true;
+        });
+    }
+    return chunk_providers;
 }
 
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
@@ -249,6 +267,10 @@ void DataStreamRecvr::cancel_stream() {
 }
 
 void DataStreamRecvr::close() {
+    if (_closed) {
+        return;
+    }
+
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
@@ -258,11 +280,11 @@ void DataStreamRecvr::close() {
     _mgr = nullptr;
     _chunks_merger.reset();
     _cascade_merger.reset();
-    _close = true;
+    _closed = true;
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
-    if (!_close) {
+    if (!_closed) {
         close();
     }
     DCHECK(_mgr == nullptr) << "Must call close()";

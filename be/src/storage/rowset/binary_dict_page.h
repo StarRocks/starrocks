@@ -117,8 +117,6 @@ private:
     EncodingTypePB _encoding_type;
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
-    // TODO(zc): rethink about this mem pool
-    MemPool _pool;
     faststring _first_value;
 };
 

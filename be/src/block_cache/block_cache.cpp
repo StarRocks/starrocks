@@ -21,7 +21,9 @@
 #ifdef WITH_CACHELIB
 #include "block_cache/cachelib_wrapper.h"
 #endif
+#ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
+#endif
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -62,7 +64,6 @@ Status BlockCache::init(const CacheOptions& options) {
         }
     }
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
-<<<<<<< Updated upstream
 #ifdef WITH_CACHELIB
     if (options.engine == "cachelib") {
         _kv_cache = std::make_unique<CacheLibWrapper>();
@@ -74,35 +75,20 @@ Status BlockCache::init(const CacheOptions& options) {
         _kv_cache = std::make_unique<StarCacheWrapper>();
         LOG(INFO) << "init starcache engine, block_size: " << _block_size;
     }
-=======
-    if (options.engine == "starcache") {
-        _kv_cache = std::make_unique<StarCacheWrapper>();
-        LOG(INFO) << "init starcache engine, block_size: " << _block_size;
-#ifdef WITH_CACHELIB
-    } else if (options.engine == "cachelib") {
-        _kv_cache = std::make_unique<CacheLibWrapper>();
-        LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
->>>>>>> Stashed changes
 #endif
-    } else {
+    if (!_kv_cache) {
         LOG(ERROR) << "unsupported block cache engine: " << options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
     return _kv_cache->init(options);
 }
 
-<<<<<<< Updated upstream
 Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
                                 WriteCacheOptions* options) {
-=======
-Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
-                               size_t ttl_seconds, bool overwrite) {
->>>>>>> Stashed changes
     if (offset % _block_size != 0) {
         LOG(WARNING) << "write block key: " << cache_key << " with invalid args, offset: " << offset;
         return Status::InvalidArgument(strings::Substitute("offset must be aligned by block size $0", _block_size));
     }
-<<<<<<< Updated upstream
     if (buffer.empty()) {
         return Status::OK();
     }
@@ -135,18 +121,12 @@ Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size
 
 Status BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
                                ReadCacheOptions* options) {
-=======
-    if (!buffer) {
-        return Status::InvalidArgument("invalid data buffer");
-    }
->>>>>>> Stashed changes
     if (size == 0) {
         return Status::OK();
     }
 
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-<<<<<<< Updated upstream
     return _kv_cache->read_buffer(block_key, offset - index * _block_size, size, buffer, options);
 }
 
@@ -156,19 +136,6 @@ StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset
     RETURN_IF_ERROR(read_buffer(cache_key, offset, size, &buffer, options));
     buffer.copy_to(data);
     return buffer.size();
-=======
-    return _kv_cache->write_cache(block_key, buffer, size, ttl_seconds, overwrite);
-}
-
-StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {
-    // when buffer == nullptr, it can check if cached.
-    if (size == 0) {
-        return 0;
-    }
-    size_t index = offset / _block_size;
-    std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->read_cache(block_key, buffer, offset - index * _block_size, size);
->>>>>>> Stashed changes
 }
 
 Status BlockCache::read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options) {

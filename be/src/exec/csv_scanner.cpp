@@ -25,7 +25,6 @@
 
 namespace starrocks {
 
-<<<<<<< Updated upstream
 static std::string string_2_asc(const std::string& input) {
     std::stringstream oss;
     oss << "'";
@@ -68,8 +67,6 @@ const std::string& CSVScanner::ScannerCSVReader::filename() {
     return _file->filename();
 }
 
-=======
->>>>>>> Stashed changes
 Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
@@ -338,7 +335,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (status.is_end_of_file()) {
                 break;
             }
-<<<<<<< Updated upstream
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg = make_column_count_not_matched_error_message(_num_fields_in_csv,
                                                                                     row.columns.size(), _parse_options);
@@ -349,20 +345,15 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                                                                                     row.columns.size(), _parse_options);
                 _report_rejected_record(record, error_msg);
             }
-=======
-            if (_counter->num_rows_filtered++ < 50) {
-                std::stringstream error_msg;
-                error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
-
-                _report_error(record.to_string(), error_msg.str());
-            }
->>>>>>> Stashed changes
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 _report_error(record, "Invalid UTF-8 row");
+            }
+            if (_state->enable_log_rejected_record()) {
+                _state->append_rejected_record_to_file(record.to_string(), "Invalid UTF-8 row",
+                                                       _curr_reader->filename());
             }
             continue;
         }
@@ -386,7 +377,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             options.type_desc = &(slot->type());
             if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], data, options)) {
                 chunk->set_num_rows(num_rows);
-<<<<<<< Updated upstream
                 if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                     std::string error_msg = make_value_type_not_matched_error_message(j, data, slot);
                     _report_error(record, error_msg);
@@ -395,14 +385,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                     std::string error_msg = make_value_type_not_matched_error_message(j, data, slot);
                     _report_rejected_record(record, error_msg);
                 }
-=======
-                if (_counter->num_rows_filtered++ < 50) {
-                    std::stringstream error_msg;
-                    error_msg << "Value '" << data.to_string() << "' is out of range. "
-                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _report_error(record.to_string(), error_msg.str());
-                }
->>>>>>> Stashed changes
                 has_error = true;
                 break;
             }
@@ -446,7 +428,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         _curr_reader->split_record(record, &fields);
 
         if (fields.size() != _num_fields_in_csv) {
-<<<<<<< Updated upstream
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg =
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
@@ -457,26 +438,15 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
                 _report_rejected_record(record, error_msg);
             }
-=======
-            if (_counter->num_rows_filtered++ < 50) {
-                std::stringstream error_msg;
-                error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
-                _report_error(record.to_string(), error_msg.str());
-            }
->>>>>>> Stashed changes
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 _report_error(record, "Invalid UTF-8 row");
             }
-<<<<<<< Updated upstream
             if (_state->enable_log_rejected_record()) {
                 _report_rejected_record(record, "Invalid UTF-8 row");
             }
-=======
->>>>>>> Stashed changes
             continue;
         }
 
@@ -491,7 +461,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             options.type_desc = &(slot->type());
             if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], field, options)) {
                 chunk->set_num_rows(num_rows);
-<<<<<<< Updated upstream
                 if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                     std::string error_msg = make_value_type_not_matched_error_message(j, field, slot);
                     _report_error(record, error_msg);
@@ -500,14 +469,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                     std::string error_msg = make_value_type_not_matched_error_message(j, field, slot);
                     _report_rejected_record(record, error_msg);
                 }
-=======
-                if (_counter->num_rows_filtered++ < 50) {
-                    std::stringstream error_msg;
-                    error_msg << "Value '" << field.to_string() << "' is out of range. "
-                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _report_error(record.to_string(), error_msg.str());
-                }
->>>>>>> Stashed changes
                 has_error = true;
                 break;
             }

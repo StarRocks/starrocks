@@ -193,6 +193,19 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_probe_column_timer = _output_probe_column_timer;
     param->output_slots = _output_slots;
 
+    std::set<SlotId> predicate_slots;
+    for (ExprContext* expr_context : _conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    param->predicate_slots = std::move(predicate_slots);
+
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();
         if (expr->is_slotref()) {
@@ -416,14 +429,14 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
-        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
         // partitions in this case. Otherwise, NULL value in right table will only occur
         // in some partition hash table, and other partition hash table can output chunk.
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
         } else {
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
@@ -432,14 +445,15 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
+            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
                                                                               _build_equivalence_partition_expr_ctxs);
         }
     }
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto build_side_spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
 
@@ -496,20 +510,29 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism());
     } else {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators);
         } else {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
             DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
-            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
+            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), lhs_operators,
                                                                               _probe_equivalence_partition_expr_ctxs);
         }
     }
     lhs_operators.emplace_back(std::move(probe_op));
+
+    if (limit() != -1) {
+        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough) {
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
+                                                                              context->degree_of_parallelism(), true);
+    }
 
     // Use ChunkAccumulateOperator, when any following condition occurs:
     // - not left outer join,
@@ -518,10 +541,6 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                                  !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
         may_add_chunk_accumulate_operator(lhs_operators, context, id());
-    }
-
-    if (limit() != -1) {
-        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     return lhs_operators;

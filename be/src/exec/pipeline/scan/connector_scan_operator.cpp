@@ -466,6 +466,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
+    _data_source->update_has_any_predicate();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -479,6 +480,10 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
     RETURN_IF_ERROR(_data_source->parse_runtime_filters(state));
     return Status::OK();
+}
+
+const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
+    return _data_source->get_custom_coredump_msg();
 }
 
 ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_limiter() const {
@@ -497,6 +502,26 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
+Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
+    if (_opened) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_data_source->open(state));
+    if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+        _ck_acc.set_max_size(_limit);
+    } else {
+        _ck_acc.set_max_size(state->chunk_size());
+    }
+
+    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+    limiter->update_running_chunk_source_count(1);
+
+    _opened = true;
+
+    return Status::OK();
+}
+
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
     ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
@@ -511,24 +536,14 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         int64_t prev_io_time_ns = get_io_time_spent();
         int64_t prev_scan_bytes = get_scan_bytes();
 
-        if (!_opened) {
-            RETURN_IF_ERROR(_data_source->open(state));
-            if (_data_source->skip_predicate() && _limit != -1 && _limit < state->chunk_size()) {
-                _ck_acc.set_max_size(_limit);
-            } else {
-                _ck_acc.set_max_size(state->chunk_size());
-            }
-            ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-            limiter->update_running_chunk_source_count(1);
-            _opened = true;
-        }
-
+        RETURN_IF_ERROR(_open_data_source(state));
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
         }
 
         // Improve for select * from table limit x, x is small
-        if (_limit != -1 && _rows_read >= _limit) {
+        if (_reach_eof()) {
+            _reach_limit.store(true);
             return Status::EndOfFile("limit reach");
         }
 

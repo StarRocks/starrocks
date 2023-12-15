@@ -17,11 +17,8 @@
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
-<<<<<<< Updated upstream
 #include "storage/column_predicate.h"
 #include "storage/range.h"
-=======
->>>>>>> Stashed changes
 
 namespace starrocks {
 class RandomAccessFile;
@@ -43,10 +40,28 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
-    io::SharedBufferedInputStream* sb_stream = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
     ColumnReaderContext* context = nullptr;
+};
+
+class StoredColumnReader;
+
+struct ColumnDictFilterContext {
+    constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
+    constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
+    // conjunct ctxs for each dict filter column
+    std::vector<ExprContext*> conjunct_ctxs;
+    // preds transformed from `_conjunct_ctxs` for each dict filter column
+    ColumnPredicate* predicate;
+    // is output column ? if just used for filter, decode is no need
+    bool is_decode_needed;
+    SlotId slot_id;
+    std::vector<std::string> sub_field_path;
+    ObjectPool obj_pool;
+
+public:
+    Status rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader, bool* is_group_filtered);
 };
 
 class ColumnReader {
@@ -72,11 +87,11 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) = 0;
+    virtual Status prepare_batch(size_t* num_records, Column* column) = 0;
     virtual Status finish_batch() = 0;
 
-    Status next_batch(size_t* num_records, ColumnContentType content_type, Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, content_type, column));
+    Status next_batch(size_t* num_records, Column* column) {
+        RETURN_IF_ERROR(prepare_batch(num_records, column));
         return finish_batch();
     }
 
@@ -86,14 +101,11 @@ public:
 
     virtual void set_need_parse_levels(bool need_parse_levels) = 0;
 
-    virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
-
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-<<<<<<< Updated upstream
     virtual bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                         const std::vector<std::string>& sub_field_path, const size_t& layer) {
         return false;
@@ -118,8 +130,6 @@ public:
         return Status::OK();
     }
 
-=======
->>>>>>> Stashed changes
     std::unique_ptr<ColumnConverter> converter;
 };
 

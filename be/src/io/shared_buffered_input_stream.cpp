@@ -111,7 +111,6 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
         return Status::OK();
@@ -187,10 +186,6 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
 
 StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::find_shared_buffer(size_t offset,
                                                                                                  size_t count) {
-=======
-StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_find_shared_buffer(size_t offset,
-                                                                                                  size_t count) {
->>>>>>> Stashed changes
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");
@@ -202,8 +197,8 @@ StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_f
     return &sb;
 }
 
-Status SharedBufferedInputStream::_get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
-    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, nbytes));
+Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
+    ASSIGN_OR_RETURN(auto ret, find_shared_buffer(offset, nbytes));
     SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
         RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read into shared buffer"));
@@ -230,7 +225,7 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 }
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    auto st = _find_shared_buffer(offset, count);
+    auto st = find_shared_buffer(offset, count);
     if (!st.ok()) {
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
@@ -239,7 +234,7 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
         return Status::OK();
     }
     const uint8_t* buffer = nullptr;
-    RETURN_IF_ERROR(_get_bytes(&buffer, offset, count));
+    RETURN_IF_ERROR(get_bytes(&buffer, offset, count));
     strings::memcpy_inlined(out, buffer, count);
     return Status::OK();
 }
@@ -256,10 +251,10 @@ StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
 }
 
 StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
-    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
+    ASSIGN_OR_RETURN(auto ret, find_shared_buffer(_offset, count));
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
-    RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
+    RETURN_IF_ERROR(get_bytes(&buf, _offset, count));
     return std::string_view((const char*)buf, count);
 }
 

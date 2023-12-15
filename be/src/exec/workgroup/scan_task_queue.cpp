@@ -33,10 +33,12 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
+    }
     return _queue.try_put(std::move(task));
 }
 
-<<<<<<< Updated upstream
 void PriorityScanTaskQueue::force_put(ScanTask task) {
     if (task.peak_scan_task_queue_size_counter != nullptr) {
         task.peak_scan_task_queue_size_counter->set(_queue.get_size());
@@ -144,8 +146,6 @@ int MultiLevelFeedScanTaskQueue::_compute_queue_level(const ScanTask& task) cons
     return NUM_QUEUES - 1;
 }
 
-=======
->>>>>>> Stashed changes
 /// WorkGroupScanTaskQueue.
 bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
         const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const {
@@ -207,6 +207,10 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
+    if (task.peak_scan_task_queue_size_counter != nullptr) {
+        task.peak_scan_task_queue_size_counter->set(_num_tasks);
+    }
+
     auto* wg_entity = _sched_entity(task.workgroup);
     wg_entity->set_in_queue(this);
     RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
@@ -220,7 +224,6 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     return true;
 }
 
-<<<<<<< Updated upstream
 void WorkGroupScanTaskQueue::force_put(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
@@ -241,11 +244,8 @@ void WorkGroupScanTaskQueue::force_put(ScanTask task) {
 }
 
 void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
-=======
-void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns) {
->>>>>>> Stashed changes
     std::lock_guard<std::mutex> lock(_global_mutex);
-
+    auto* wg = task.workgroup;
     auto* wg_entity = _sched_entity(wg);
 
     // Update bandwidth control information.
@@ -260,6 +260,7 @@ void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns
         _wg_entities.erase(wg_entity);
     }
     DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+    wg_entity->queue()->update_statistics(task, runtime_ns);
     wg_entity->incr_runtime_ns(runtime_ns);
     if (is_in_queue) {
         _wg_entities.emplace(wg_entity);
@@ -378,6 +379,17 @@ const workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity
         return wg->connector_scan_sched_entity();
     } else {
         return wg->scan_sched_entity();
+    }
+}
+
+std::unique_ptr<ScanTaskQueue> create_scan_task_queue() {
+    switch (config::pipeline_scan_queue_mode) {
+    case 0:
+        return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
+    case 1:
+        return std::make_unique<MultiLevelFeedScanTaskQueue>();
+    default:
+        return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
     }
 }
 

@@ -34,12 +34,8 @@ ScanExecutor::~ScanExecutor() {
 void ScanExecutor::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-<<<<<<< Updated upstream
         auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
         st.permit_unchecked_error();
-=======
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
->>>>>>> Stashed changes
     }
 }
 
@@ -49,12 +45,8 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-<<<<<<< Updated upstream
         auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
         st.permit_unchecked_error();
-=======
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
->>>>>>> Stashed changes
     }
 }
 
@@ -85,16 +77,12 @@ void ScanExecutor::worker_thread() {
         if (current_thread != nullptr) {
             current_thread->inc_finished_tasks();
         }
-<<<<<<< Updated upstream
         _task_queue->update_statistics(task, time_spent_ns);
 
         // task
         if (!task.is_finished()) {
             _task_queue->force_put(std::move(task));
         }
-=======
-        _task_queue->update_statistics(task.workgroup, time_spent_ns);
->>>>>>> Stashed changes
     }
 }
 

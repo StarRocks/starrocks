@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "exprs/expr.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet.h"
@@ -30,7 +31,7 @@ class ChunkChanger;
 struct AlterMaterializedViewParam {
     std::string column_name;
     std::string origin_column_name;
-    std::string mv_expr;
+    std::unique_ptr<TExpr> mv_expr;
 };
 using MaterializedViewParamMap = std::unordered_map<std::string, AlterMaterializedViewParam>;
 
@@ -72,18 +73,17 @@ public:
     }
     ExprContext* get_where_expr() { return _where_expr; }
 
-<<<<<<< Updated upstream
     const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
-=======
-    std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
->>>>>>> Stashed changes
 
-    const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
+    ObjectPool* get_object_pool() { return &_obj_pool; }
+
+    RuntimeState* get_runtime_state() { return _state; }
+
+    std::unordered_map<int, ExprContext*>* get_gc_exprs() { return &_gc_exprs; }
 
     bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema, const Schema& new_schema,
                          MemPool* mem_pool);
 
-<<<<<<< Updated upstream
     Status fill_generated_columns(ChunkPtr& new_chunk);
 
     void init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals);
@@ -110,18 +110,12 @@ private:
     TabletSchemaCSPtr _base_schema;
     std::vector<std::string> _base_table_column_names;
     TAlterJobType::type _alter_job_type = TAlterJobType::SCHEMA_CHANGE;
-=======
-private:
-    const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
-                                                                   LogicalType type);
->>>>>>> Stashed changes
 
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;
 
     std::vector<ColumnId> _selected_column_indexes;
 
-<<<<<<< Updated upstream
     ObjectPool _obj_pool;
     RuntimeState* _state = nullptr;
     // columnId -> expr
@@ -139,8 +133,6 @@ private:
     //                              2 -> 2 (c is in 2th slot of fetched chunk)
     std::unordered_map<int, int> _column_ref_mapping;
 
-=======
->>>>>>> Stashed changes
     DISALLOW_COPY(ChunkChanger);
 };
 
@@ -152,20 +144,14 @@ public:
 
     static Status parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                 ChunkChanger* chunk_changer,
-<<<<<<< Updated upstream
                                 const MaterializedViewParamMap& materialized_view_param_map,
                                 const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates, bool* sc_sorting,
                                 bool* sc_directly, std::unordered_set<int>* materialized_column_idxs);
-=======
-                                const MaterializedViewParamMap& materialized_view_param_map, bool has_delete_predicates,
-                                bool* sc_sorting, bool* sc_directly);
->>>>>>> Stashed changes
 
 private:
     // default_value for new column is needed
     static Status init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                       const std::string& value);
-<<<<<<< Updated upstream
 
     static Status parse_request_normal(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                        ChunkChanger* chunk_changer,
@@ -176,8 +162,6 @@ private:
 
     static Status parse_request_for_pk(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                        bool* sc_sorting, bool* sc_directly);
-=======
->>>>>>> Stashed changes
 };
 
 } // namespace starrocks

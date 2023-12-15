@@ -17,6 +17,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "gutil/macros.h"
 
 namespace google::protobuf {
 class Message;
@@ -28,16 +29,30 @@ class FileSystem;
 
 class ProtobufFile {
 public:
-    ProtobufFile(std::string path, FileSystem* fs = nullptr);
-    ~ProtobufFile() = default;
+    explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
 
-    Status save(const ::google::protobuf::Message& message, bool sync);
+    DISALLOW_COPY_AND_MOVE(ProtobufFile);
 
-    Status load(::google::protobuf::Message* message);
+    Status save(const ::google::protobuf::Message& message, bool sync = true);
+
+    Status load(::google::protobuf::Message* message, bool fill_cache = true);
 
 private:
     std::string _path;
-    FileSystem* _fs;
+};
+
+class ProtobufFileWithHeader {
+public:
+    explicit ProtobufFileWithHeader(std::string path) : _path(std::move(path)) {}
+
+    DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
+
+    Status save(const ::google::protobuf::Message& message, bool sync = true);
+
+    Status load(::google::protobuf::Message* message, bool fill_cache = true);
+
+private:
+    std::string _path;
 };
 
 } // namespace starrocks

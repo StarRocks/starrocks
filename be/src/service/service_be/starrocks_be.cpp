@@ -73,14 +73,8 @@ Status init_datacache(GlobalEnv* global_env) {
     }
 #endif
 
-<<<<<<< Updated upstream
     if (config::datacache_enable) {
         BlockCache* cache = BlockCache::instance();
-=======
-    starrocks::BackendInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
-    starrocks::BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    starrocks::LakeServiceImpl lake_service(exec_env);
->>>>>>> Stashed changes
 
         CacheOptions cache_options;
         int64_t mem_limit = MemInfo::physical_mem();
@@ -218,7 +212,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
-<<<<<<< Updated upstream
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.lake.LakeService";
     const auto methods = {
@@ -232,11 +225,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
-=======
-    if (brpc_server.Start(starrocks::config::brpc_port, &options) != 0) {
-        LOG(ERROR) << "BRPC service did not start correctly, exiting";
-        starrocks::shutdown_logging();
->>>>>>> Stashed changes
         exit(1);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start brpc server successfully";
@@ -250,7 +238,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start http server successfully";
 
-<<<<<<< Updated upstream
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
     ThriftRpcHelper::setup(exec_env);
@@ -273,9 +260,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " started successfully";
 
     while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
-=======
-    while (!starrocks::k_starrocks_exit.load()) {
->>>>>>> Stashed changes
         sleep(1);
     }
 

@@ -47,6 +47,9 @@ class WorkGroupManager;
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 using WorkGroupType = TWorkGroupType::type;
 
+struct WorkGroupMetrics;
+using WorkGroupMetricsPtr = std::shared_ptr<WorkGroupMetrics>;
+
 template <typename Q>
 class WorkGroupSchedEntity {
 public:
@@ -78,6 +81,8 @@ public:
     void mark_curr_runtime_ns() { _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns; }
     /// Update last runtime to the curr runtime.
     void mark_last_runtime_ns() { _last_unadjusted_runtime_ns = _curr_unadjusted_runtime_ns; }
+
+    int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns; }
 
     void incr_runtime_ns(int64_t runtime_ns);
     void adjust_runtime_ns(int64_t runtime_ns);
@@ -137,6 +142,8 @@ public:
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
+    int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
+
     bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
@@ -180,7 +187,7 @@ public:
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
     Status check_big_query(const QueryContext& query_context);
-    StatusOr<RunningQueryTokenPtr> acquire_running_query_token();
+    StatusOr<RunningQueryTokenPtr> acquire_running_query_token(bool enable_group_level_query_queue);
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }
     int64_t num_total_queries() const { return _num_total_queries; }
@@ -193,9 +200,13 @@ public:
     }
     int64_t big_query_cpu_second_limit() const { return _big_query_cpu_nanos_limit / NANOS_PER_SEC; }
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
+    void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
+    int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
     static constexpr int64 DEFAULT_WG_ID = 0;
+    static constexpr int64 DEFAULT_MV_WG_ID = 1;
     static constexpr int64 DEFAULT_VERSION = 0;
+    static constexpr int64 DEFAULT_MV_VERSION = 1;
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -240,6 +251,9 @@ private:
     std::atomic<int64_t> _num_total_queries = 0;
     std::atomic<int64_t> _concurrency_overflow_count = 0;
     std::atomic<int64_t> _bigquery_count = 0;
+    /// The total CPU runtime cost in nanos unit, including driver execution time, and the cpu execution time of
+    /// other threads including Source and Sink threads.
+    std::atomic<int64_t> _cpu_runtime_ns = 0;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
@@ -252,17 +266,15 @@ public:
     WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
     // return reserved beforehand default workgroup for query is not bound to any workgroup
     WorkGroupPtr get_default_workgroup();
+    // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
+    WorkGroupPtr get_default_mv_workgroup();
     // destruct workgroups
     void destroy();
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
-<<<<<<< Updated upstream
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(WorkGroupConsumer consumer) const;
-=======
-    std::vector<TWorkGroup> list_all_workgroups();
->>>>>>> Stashed changes
 
     void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
     void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }
@@ -286,7 +298,7 @@ private:
     WorkGroupPtr get_default_workgroup_unlocked();
 
 private:
-    std::shared_mutex _mutex;
+    mutable std::shared_mutex _mutex;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
@@ -296,18 +308,7 @@ private:
     std::atomic<size_t> _rt_cpu_limit = 0;
 
     std::once_flag init_metrics_once_flag;
-    std::unordered_map<std::string, int128_t> _wg_metrics;
-
-    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_scan_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_connector_scan_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_total_queries;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
+    std::unordered_map<std::string, WorkGroupMetricsPtr> _wg_metrics;
 };
 
 class DefaultWorkGroupInitialization {

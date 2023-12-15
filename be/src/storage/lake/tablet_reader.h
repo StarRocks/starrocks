@@ -95,8 +95,9 @@ private:
                                    MemPool* mempool);
 
     Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _tablet_schema;
     int64_t _version;
+    std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
 
     // _rowsets is specified in the constructor when compaction
     bool _rowsets_inited = false;

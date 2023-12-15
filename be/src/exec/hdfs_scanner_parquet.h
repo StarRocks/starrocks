@@ -34,6 +34,7 @@ public:
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
+    std::set<int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks

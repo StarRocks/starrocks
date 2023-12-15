@@ -225,6 +225,13 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                     slot_desc->col_name()));
         }
         return TYPE_BIGINT;
+    } else if (java_class == "java.math.BigInteger") {
+        if (type != TYPE_LARGEINT && type != TYPE_VARCHAR) {
+            return Status::NotSupported(fmt::format(
+                    "Type mismatches on column[{}], JDBC result type is BigInteger, please set the type to largeint",
+                    slot_desc->col_name()));
+        }
+        return TYPE_VARCHAR;
     } else if (java_class == "java.lang.Boolean") {
         if (type != TYPE_BOOLEAN && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(

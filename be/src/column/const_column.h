@@ -194,6 +194,8 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
+
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
@@ -214,11 +216,11 @@ public:
 
     size_t container_memory_usage() const override { return _data->container_memory_usage(); }
 
-    size_t element_memory_usage() const override { return _data->element_memory_usage(); }
+    size_t reference_memory_usage() const override { return _data->reference_memory_usage(); }
 
-    size_t element_memory_usage(size_t from, size_t size) const override {
+    size_t reference_memory_usage(size_t from, size_t size) const override {
         // const column has only one element
-        return size == 0 ? 0 : element_memory_usage();
+        return size == 0 ? 0 : reference_memory_usage();
     }
 
     void swap_column(Column& rhs) override {

@@ -25,29 +25,24 @@ RowsetSharedPtr DupKeyRowsetFetcher::get_rowset(int64_t rowset_id) {
     return _tablet.get_inc_rowset_by_version(Version(rowset_id, rowset_id));
 }
 
-BinlogManager::BinlogManager(int64_t _tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
+BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                              CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher)
-        : _tablet_id(_tablet_id),
+        : _tablet_id(tablet_id),
           _path(std::move(path)),
           _max_file_size(max_file_size),
           _max_page_size(max_page_size),
           _compression_type(compression_type),
-<<<<<<< Updated upstream
           _rowset_fetcher(std::move(rowset_fetcher)),
           _unused_binlog_file_ids(UINT64_MAX) {}
-=======
-          _rowset_fetcher(rowset_fetcher) {}
->>>>>>> Stashed changes
 
 BinlogManager::~BinlogManager() {
-    std::lock_guard lock(_meta_lock);
+    std::unique_lock lock(_meta_lock);
     if (_active_binlog_writer != nullptr) {
         WARN_IF_ERROR(_active_binlog_writer->close(true), "Close binlog writer failed");
         _active_binlog_writer.reset();
     }
 }
 
-<<<<<<< Updated upstream
 Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted_valid_versions) {
     // 1. list all of binlog files
     std::list<int64_t> binlog_file_ids;
@@ -230,16 +225,15 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::_recover_file_meta_for_version(int6
     return Status::InternalError(err_msg);
 }
 
-=======
->>>>>>> Stashed changes
 StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version) {
     VLOG(3) << "Begin ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(-1, _ingestion_version);
+    RETURN_IF_ERROR(_check_init_failure());
 
     std::shared_lock meta_lock(_meta_lock);
-    if (!_binlog_file_metas.empty()) {
-        BinlogFileMetaPBPtr file_meta = _binlog_file_metas.rbegin()->second;
-        int64_t max_version = file_meta->end_version();
+    if (!_alive_binlog_files.empty()) {
+        BinlogFilePtr binlog_file = _alive_binlog_files.rbegin()->second;
+        int64_t max_version = binlog_file->file_meta()->end_version();
         if (max_version >= version) {
             VLOG(3) << "The version already existed in binlog, tablet: " << _tablet_id
                     << ", max version: " << max_version << ", new version: " << version;
@@ -255,8 +249,8 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
     params->compression_type = _compression_type;
     params->start_file_id = _next_file_id;
     if (_active_binlog_writer != nullptr) {
-        params->active_file_meta = _binlog_file_metas.rbegin()->second;
-        params->active_file_writer.swap(_active_binlog_writer);
+        params->active_file_meta = _alive_binlog_files.rbegin()->second->file_meta();
+        params->active_file_writer = _active_binlog_writer;
     }
     return params;
 }
@@ -303,11 +297,12 @@ void BinlogManager::commit_ingestion(int64_t version) {
 void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     std::unique_lock lock(_meta_lock);
     for (auto& meta : result->metas) {
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
-        auto it = _binlog_file_metas.find(lsn);
-        bool override_meta = it != _binlog_file_metas.end();
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
+        auto it = _alive_binlog_files.find(lsn);
+        bool override_meta = it != _alive_binlog_files.end();
         if (override_meta) {
-            BinlogFileMetaPBPtr& old_file_meta = it->second;
+            BinlogFilePtr binlog_file = it->second;
+            BinlogFileMetaPBPtr& old_file_meta = binlog_file->file_meta();
             std::unordered_set<int64_t> old_rowsets;
             for (auto rowset_id : old_file_meta->rowsets()) {
                 old_rowsets.emplace(rowset_id);
@@ -315,24 +310,24 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
 
             for (auto rowset_id : meta->rowsets()) {
                 if (old_rowsets.count(rowset_id) == 0) {
-                    if (_rowset_count_map.count(rowset_id) == 0) {
-                        _total_rowset_disk_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+                    if (_alive_rowset_count_map.count(rowset_id) == 0) {
+                        _total_alive_rowset_data_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
                     }
-                    _rowset_count_map[rowset_id] += 1;
+                    _alive_rowset_count_map[rowset_id] += 1;
                 }
             }
 
-            _total_binlog_file_disk_size += meta->file_size() - old_file_meta->file_size();
-            _binlog_file_metas[lsn] = meta;
+            _total_alive_binlog_file_size += meta->file_size() - old_file_meta->file_size();
+            binlog_file->update_file_meta(meta);
         } else {
-            _binlog_file_metas[lsn] = meta;
+            _alive_binlog_files[lsn] = std::make_shared<BinlogFile>(meta);
             for (auto rowset_id : meta->rowsets()) {
-                if (_rowset_count_map.count(rowset_id) == 0) {
-                    _total_rowset_disk_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+                if (_alive_rowset_count_map.count(rowset_id) == 0) {
+                    _total_alive_rowset_data_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
                 }
-                _rowset_count_map[rowset_id] += 1;
+                _alive_rowset_count_map[rowset_id] += 1;
             }
-            _total_binlog_file_disk_size += meta->file_size();
+            _total_alive_binlog_file_size += meta->file_size();
         }
     }
 
@@ -340,7 +335,6 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     _active_binlog_writer = result->active_writer;
 }
 
-<<<<<<< Updated upstream
 bool BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     std::unique_lock lock(_meta_lock);
@@ -594,6 +588,4 @@ Status BinlogManager::_check_init_failure() {
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 } // namespace starrocks

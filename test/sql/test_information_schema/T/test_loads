@@ -1,0 +1,20 @@
+-- name: test_information_schema_loads
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY RANGE(event_day)(PARTITION p1 VALUES LESS THAN ("2020-01-31")) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+insert into ss values('2020-01-14', 2);
+select state,type,TRACKING_SQL from information_schema.loads where database_name='db_${uuid0}';
+create database db_${uuid1};
+use db_${uuid1};
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY RANGE(event_day)(PARTITION p1 VALUES LESS THAN ("2020-01-31")) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+insert into ss values('2022-01-14', 2);
+select state,type from information_schema.loads where database_name='db_${uuid1}';
+select TRACKING_SQL from information_schema.loads where database_name='db_${uuid1}';
+id=select job_id from information_schema.loads where database_name='db_${uuid1}';
+select tracking_log from information_schema.load_tracking_logs where job_id=${id};
+label=select label from information_schema.loads where database_name='db_${uuid1}';
+select tracking_log from information_schema.load_tracking_logs where label='${label}';
+select * from information_schema.loads where database_name='db_${uuid1}';
+select * from information_schema.load_tracking_logs where database_name='db_${uuid1}';
+select * from information_schema.load_tracking_logs where job_id=0;
+select * from information_schema.load_tracking_logs where label="not exist";

@@ -292,6 +292,23 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
                 return set_status(st);
             }
         }
+        if (segment->has_update_path()) {
+            auto res = _fs->new_random_access_file(segment->update_path());
+            if (!res.ok()) {
+                LOG(WARNING) << "Failed to open update file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << res.status();
+                return set_status(res.status());
+            }
+            auto rfile = std::move(res.value());
+            auto buf = new uint8[segment->update_data_size()];
+            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            auto st = rfile->read_fully(buf, segment->update_data_size());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << st;
+                return set_status(st);
+            }
+        }
     }
 
     // 2. send segment to secondary replica
@@ -322,7 +339,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
 Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
-    int max_threads = data_dir_num * min_threads;
+    int max_threads = std::max(data_dir_num * min_threads, min_threads);
     return ThreadPoolBuilder("segment_replicate")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)

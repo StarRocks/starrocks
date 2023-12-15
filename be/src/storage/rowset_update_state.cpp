@@ -30,6 +30,7 @@
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -145,6 +146,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 }
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("rowset_update_state_load");
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
@@ -410,14 +412,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     vector<uint32_t> idxes;
     plan_read_by_rssid(_partial_update_states[idx].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     total_rows += _partial_update_states[idx].src_rss_rowids.size();
-<<<<<<< Updated upstream
     RETURN_IF_ERROR(tablet->updates()->get_column_values(
             read_column_ids, _partial_update_states[idx].read_version.major_number(), num_default > 0, rowids_by_rssid,
             &read_columns, nullptr, tablet_schema));
-=======
-    RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                         &read_columns, nullptr));
->>>>>>> Stashed changes
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         _partial_update_states[idx].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
                                                                              idxes.size());
@@ -441,13 +438,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
-<<<<<<< Updated upstream
                                                                         EditVersion latest_applied_version,
                                                                         const std::vector<uint32_t>& column_id,
                                                                         const TabletSchemaCSPtr& tablet_schema) {
-=======
-                                                                        const std::vector<uint32_t>& column_id) {
->>>>>>> Stashed changes
     if (_auto_increment_partial_update_states.size() == 0) {
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
@@ -510,14 +503,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         }
     }
 
-<<<<<<< Updated upstream
     RETURN_IF_ERROR(tablet->updates()->get_column_values(column_id, latest_applied_version.major_number(), new_rows > 0,
                                                          rowids_by_rssid, &read_column,
                                                          &_auto_increment_partial_update_states[idx], tablet_schema));
-=======
-    RETURN_IF_ERROR(tablet->updates()->get_column_values(column_id, new_rows > 0, rowids_by_rssid, &read_column,
-                                                         &_auto_increment_partial_update_states[idx]));
->>>>>>> Stashed changes
 
     _auto_increment_partial_update_states[idx].write_column->append_selective(*read_column[0], idxes.data(), 0,
                                                                               idxes.size());
@@ -602,11 +590,16 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 
     // _read_version is equal to latest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
-    LOG(INFO) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
-              << _partial_update_states[segment_id].read_version.to_string();
+    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+            << _partial_update_states[segment_id].read_version.to_string();
     if (latest_applied_version == _partial_update_states[segment_id].read_version) {
         return Status::OK();
     }
+
+    // check if there are delta column files generated from read_version to now.
+    // If yes, then need to force resolve conflict.
+    const bool need_resolve_conflict = tablet->updates()->check_delta_column_generate_from_version(
+            _partial_update_states[segment_id].read_version);
 
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
@@ -625,7 +618,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
         uint32_t rssid = rss_rowid >> 32;
 
-        if (rssid != new_rssid) {
+        if (rssid != new_rssid || need_resolve_conflict) {
             conflict_idxes.emplace_back(i);
             conflict_rowids.emplace_back(new_rss_rowid);
         }
@@ -642,14 +635,9 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-<<<<<<< Updated upstream
         RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, latest_applied_version.major_number(),
                                                              num_default > 0, rowids_by_rssid, &read_columns, nullptr,
                                                              tablet_schema));
-=======
-        RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid,
-                                                             &read_columns, nullptr));
->>>>>>> Stashed changes
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =
@@ -761,12 +749,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
             }
         }
         std::vector<uint32_t> column_id(1, id);
-<<<<<<< Updated upstream
         RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(
                 tablet, rowset, segment_id, latest_applied_version, column_id, _tablet_schema));
-=======
-        RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(tablet, rowset, segment_id, column_id));
->>>>>>> Stashed changes
     }
 
     // segment maybe keep redundant column data. For example

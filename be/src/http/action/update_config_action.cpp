@@ -65,14 +65,11 @@
 #include "util/bthreads/executor.h"
 #include "util/priority_thread_pool.hpp"
 
-<<<<<<< Updated upstream
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
 #include "service/staros_worker.h"
 #endif // USE_STAROS
 
-=======
->>>>>>> Stashed changes
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
@@ -90,7 +87,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
-<<<<<<< Updated upstream
         _config_callback.emplace("disable_storage_page_cache", [&]() {
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
@@ -100,8 +96,6 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
-=======
->>>>>>> Stashed changes
         _config_callback.emplace("max_compaction_concurrency", [&]() {
             (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
                     config::max_compaction_concurrency);
@@ -136,7 +130,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            thread_pool->update_max_threads(
+            (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
@@ -150,19 +144,35 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
-        _config_callback.emplace("get_pindex_worker_count", [&]() {
-            int max_thread_cnt = CpuInfo::num_cores();
-            if (config::get_pindex_worker_count > 0) {
-                max_thread_cnt = config::get_pindex_worker_count;
-            }
-            StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(max_thread_cnt);
-        });
+#ifdef USE_STAROS
+        _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
+#endif
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::transaction_apply_worker_count > 0) {
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
-            StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("get_pindex_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::get_pindex_worker_count > 0) {
+                max_thread_cnt = config::get_pindex_worker_count;
+            }
+            (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+                    max_thread_cnt);
+        });
+        _config_callback.emplace("drop_tablet_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+            (void)thread_pool->update_max_threads(config::drop_tablet_worker_count);
+        });
+        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::make_snapshot_worker_count);
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::release_snapshot_worker_count);
         });
         _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
             LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"

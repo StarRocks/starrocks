@@ -65,7 +65,7 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
-    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
@@ -157,7 +157,7 @@ private:
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                         uint32_t idx_end, DeletesMap* deletes);
+                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 
@@ -174,6 +174,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
+    std::unique_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;
@@ -181,7 +182,6 @@ private:
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
-    std::unique_ptr<PersistentIndex> _persistent_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {

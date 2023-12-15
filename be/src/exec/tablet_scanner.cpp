@@ -171,13 +171,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _predicate_free_pool.emplace_back(std::move(p));
     }
 
-<<<<<<< Updated upstream
     GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
     RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
-=======
-    ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
->>>>>>> Stashed changes
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -356,6 +351,7 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_parent->_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;

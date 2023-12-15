@@ -57,6 +57,11 @@ public:
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
     virtual bool could_local_shuffle() const { return _could_local_shuffle; }
     void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
+    // This information comes from the hint of the sql, like `sum(v1) over ([skewed] partition by v2 order by v3)`
+    // and if this pipeline is connected by a full sort node and it can have better performance with a uniformed distribution.
+    // So we will use this method to determine whether a random local exchange should be introduced.
+    bool is_skewed() const { return _is_skewed; }
+    void set_skewed(bool is_skewed) { _is_skewed = is_skewed; }
     virtual TPartitionType::type partition_type() const { return _partition_type; }
     void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; }
     virtual const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
@@ -107,6 +112,7 @@ public:
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
+    bool _is_skewed = false;
     TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
 
@@ -121,11 +127,16 @@ protected:
 class SourceOperator : public Operator {
 public:
     SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-                   int32_t driver_sequence)
-            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
+                   bool is_subordinate, int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, is_subordinate, driver_sequence) {}
     ~SourceOperator() override = default;
 
     bool need_input() const override { return false; }
+
+    // Return true if the output of `has_output` shift frequently between true and false.
+    // We need to avoid this kind of mutable pipeline being moved frequently between ready queue and pending queue,
+    // which will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
+    virtual bool is_mutable() const { return false; }
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");

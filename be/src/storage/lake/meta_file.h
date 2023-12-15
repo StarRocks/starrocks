@@ -38,7 +38,8 @@ public:
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write);
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, std::string>& replace_segments,
+                       const std::vector<std::string>& orphan_files);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
@@ -50,9 +51,18 @@ public:
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
     bool has_update_index() const { return _has_update_index; }
+    void set_has_update_index() { _has_update_index = true; }
+    // collect files that need to removed
+    std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
+
+    // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
+    Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
 private:
+    // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
+    // fill delvec cache, for better reading latency
+    void _fill_delvec_cache();
 
 private:
     Tablet _tablet;
@@ -64,23 +74,15 @@ private:
     bool _has_finalized = false;
     // whether update the state of pk index.
     bool _has_update_index = false;
+    // from segment id to delvec, used for fill cache in finalize stage.
+    std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
+    // from cache key to segment id
+    std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
+    // ready to be removed
+    std::shared_ptr<std::vector<std::string>> _trash_files;
 };
 
-class MetaFileReader {
-public:
-    explicit MetaFileReader(const std::string& filepath, bool fill_cache);
-    ~MetaFileReader() {}
-    Status load();
-    Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
-    StatusOr<TabletMetadataPtr> get_meta();
-
-private:
-    std::unique_ptr<RandomAccessFile> _access_file;
-    std::shared_ptr<TabletMetadata> _tablet_meta;
-    Status _err_status;
-    bool _load;
-};
-
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 

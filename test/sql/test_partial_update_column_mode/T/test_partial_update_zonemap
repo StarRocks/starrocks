@@ -1,0 +1,20 @@
+-- name: test_partial_update_zonemap
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into tab1 values(100, "100", 100, 100, 100), (200, "200", 200, 200, 200), (300, "300", 300, 300, 300);
+select * from tab1 where v2 = 200;
+update tab1 set v2 = 500;
+select * from tab1 where v2 = 500;

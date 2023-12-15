@@ -25,18 +25,10 @@ public:
     JavaUDTFFunction() = default;
     ~JavaUDTFFunction() override = default;
 
-<<<<<<< Updated upstream
     [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override;
     [[nodiscard]] Status prepare(TableFunctionState* state) const override;
     [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override;
     std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override;
     [[nodiscard]] Status close(RuntimeState* _runtime_state, TableFunctionState* state) const override;
-=======
-    Status init(const TFunction& fn, TableFunctionState** state) const override;
-    Status prepare(TableFunctionState* state) const override;
-    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override;
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override;
-    Status close(RuntimeState* _runtime_state, TableFunctionState* state) const override;
->>>>>>> Stashed changes
 };
 } // namespace starrocks

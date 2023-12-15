@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 #include <glog/logging.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -38,34 +39,14 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
-<<<<<<< Updated upstream
 
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
     total_spill_bytes = total_spill_bytes_;
-=======
-SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
-    _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
-    profile->add_child(_spiller_metrics.get(), true, nullptr);
->>>>>>> Stashed changes
 
-    append_data_timer = ADD_TIMER(_spiller_metrics.get(), "AppendDataTime");
-    spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
-    flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
-    write_io_timer = ADD_TIMER(_spiller_metrics.get(), "WriteIOTime");
-    restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
-    restore_from_buffer_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
-    read_io_timer = ADD_TIMER(_spiller_metrics.get(), "ReadIOTime");
-    flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesFlushToDisk", TUnit::BYTES);
-    restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromDisk", TUnit::BYTES);
-    serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SerializeTime");
-    deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "DeserializeTime");
-    mem_table_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    std::string parent = "SpillStatistics";
+    ADD_COUNTER(profile, parent, TUnit::NONE);
 
-<<<<<<< Updated upstream
     append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
     spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
     flush_timer = ADD_CHILD_TIMER(profile, "FlushTime", parent);
@@ -99,14 +80,6 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_io_task_count = ADD_CHILD_COUNTER(profile, "RestoreIOTaskCount", TUnit::UNIT, parent);
     peak_restore_io_task_count = profile->AddHighWaterMarkCounter(
             "PeakRestoreIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
-=======
-    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
-    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
-    restore_from_mem_table_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemTable", TUnit::UNIT);
-    restore_from_mem_table_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemTable", TUnit::UNIT);
-    partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
->>>>>>> Stashed changes
 }
 
 Status Spiller::prepare(RuntimeState* state) {

@@ -1,0 +1,1953 @@
+-- name: test_hash_based_process
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t0` (v1, v2, v3) values
+    (1, 1, 1),
+    (1, 1, 2),
+    (1, 1, 3),
+    (1, 2, 4),
+    (1, 2, 5),
+    (1, 2, 6),
+    (2, 3, 7),
+    (2, 3, 8),
+    (2, 3, 9),
+    (2, 4, 10),
+    (2, 4, 11),
+    (2, 4, 12);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `v1` int(11) NULL,
+  `v2` int(11) NULL,
+  `v3` int(11) NOT NULL,
+  `v4` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t1` (v1, v2, v3, v4) values
+    (1, 1, 1, NULL),
+    (1, 1, 2, NULL),
+    (1, NULL, 3, NULL),
+    (1, NULL, 4, NULL),
+    (1, 2, 5, NULL),
+    (1, 2, 6, NULL),
+    (1, NULL, 7, NULL),
+    (1, NULL, 8, NULL),
+    (2, 3, 9, NULL),
+    (2, 3, 10, NULL),
+    (2, NULL, 11, NULL),
+    (2, NULL, 12, NULL),
+    (2, 4, 13, NULL),
+    (2, 4, 14, NULL),
+    (2, NULL, 15, NULL),
+    (2, NULL, 16, NULL),
+    (NULL, 3, 17, NULL),
+    (NULL, 3, 18, NULL),
+    (NULL, NULL, 19, NULL),
+    (NULL, NULL, 20, NULL),
+    (NULL, 4, 21, NULL),
+    (NULL, 4, 22, NULL),
+    (NULL, NULL, 23, NULL),
+    (NULL, NULL, 24, NULL);
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t0` SELECT * FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t0` (v1, v2, v3) values
+    (101, 101, 101),
+    (101, 101, 102),
+    (101, 101, 103),
+    (101, 102, 104),
+    (101, 102, 105),
+    (101, 102, 106),
+    (102, 103, 107),
+    (102, 103, 108),
+    (102, 103, 109),
+    (102, 104, 110),
+    (102, 104, 111),
+    (102, 104, 112);
+-- result:
+-- !result
+INSERT INTO `t1` (v1, v2, v3, v4) values
+    (101, 101, 101, NULL),
+    (101, 101, 102, NULL),
+    (101, NULL, 103, NULL),
+    (101, NULL, 104, NULL),
+    (101, 102, 105, NULL),
+    (101, 102, 106, NULL),
+    (101, NULL, 107, NULL),
+    (101, NULL, 108, NULL),
+    (102, 103, 109, NULL),
+    (102, 103, 110, NULL),
+    (102, NULL, 111, NULL),
+    (102, NULL, 112, NULL),
+    (102, 104, 113, NULL),
+    (102, 104, 114, NULL),
+    (102, NULL, 115, NULL),
+    (102, NULL, 116, NULL),
+    (NULL, 103, 117, NULL),
+    (NULL, 103, 118, NULL),
+    (NULL, NULL, 119, NULL),
+    (NULL, NULL, 120, NULL),
+    (NULL, 104, 121, NULL),
+    (NULL, 104, 122, NULL),
+    (NULL, NULL, 123, NULL),
+    (NULL, NULL, 124, NULL);
+-- result:
+-- !result
+CREATE TABLE `t4` (
+  `v1` decimal64(18,5) NOT NULL,
+  `v2` decimal64(18,5) NOT NULL,
+  `v3` decimal64(18,5) NOT NULL,
+  `v4` decimal64(18,5) NOT NULL,
+  `v5` decimal64(18,5) NOT NULL,
+  `v6` decimal64(18,5) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t5` (
+  `v1` decimal64(18,5) NULL,
+  `v2` decimal64(18,5) NULL,
+  `v3` decimal64(18,5) NOT NULL,
+  `v4` decimal64(18,5) NOT NULL,
+  `v5` decimal64(18,5) NOT NULL,
+  `v6` decimal64(18,5) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t4` (v1, v2, v3, v4, v5, v6)
+SELECT v1, v2, v3,
+row_number() OVER (ORDER BY v1, v2, v3) as v4,
+row_number() OVER (PARTITION BY v1 ORDER BY v2, v3) as v5,
+1 as v6
+FROM `t0`;
+-- result:
+-- !result
+INSERT INTO `t5` (v1, v2, v3, v4, v5, v6)
+SELECT v1, v2, v3,
+row_number() OVER (ORDER BY v1, v2, v3, v4) as v4,
+row_number() OVER (PARTITION BY v1 ORDER BY v2, v3, v4) as v5,
+1 as v6
+FROM `t1`;
+-- result:
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	1207959624	6	24576
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	6	6	6
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	603979812	3	12288
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3	3	3
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	98376	2	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	2	2	2
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	2417098896	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	49164	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	1207959624	6	24576
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	6	6	6
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	603979812	3	12288
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3	3	3
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	98376	2	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	2	2	2
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	2417098896	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	49164	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	1207959624	6	24576
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	6	6	6
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	603979812	3	12288
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3	3	3
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	98376	2	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	2	2	2
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	2417098896	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	49164	49164	49164
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	603979812	3	12288
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3	3	3
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	201326604	1	4096
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	536871040	0	16384
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	503709816	2	16392
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	2	2	2
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	67108880	0	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	98416	0	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	1612185984	32784	32784
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	32784	32784	32784
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	402784352	4	8196
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	4	4	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	167772200	0	8192
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50331660	0	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	24588	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	73764	0	3
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	1209139488	24588	24588
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	24588	24588	24588
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	805568704	8	16392
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	8	8	8
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	772341944	2	24588
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	2	2	2
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	100663320	1	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	49176	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	147592	1	5
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1	1	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	2418278976	49176	49176
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	49176	49176	49176
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	201326640	0	8192
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	67108880	0	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	67108880	0	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	73784	0	4
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	67108880	0	2048
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	32784	0	1
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT count(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	0	0	0
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	99528.00000	1.00000	103.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	73740.00000	1.00000	2.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	197856.00000	1.00000	107.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	271602.00000	1.00000	110.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	320766.00000	1.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	320766.00000	1.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	172044.00000	1.00000	6.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	49164.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	66768.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	49168.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	49176.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	116344.00000	1.00000	103.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	39324.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	49176.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	444184.00000	1.00000	109.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	279864.00000	1.00000	113.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	617100.00000	1.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	617100.00000	1.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	221798.00000	1.00000	122.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	49176.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	66340.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT min(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	100728.00000	2.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	2.00000	2.00000	2.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	5014728.00000	102.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	102.00000	102.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	148692.00000	2.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	2.00000	2.00000	2.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	124110.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	174480.00000	3.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3.00000	3.00000	3.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	5113056.00000	104.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	104.00000	104.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	443676.00000	6.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	6.00000	6.00000	6.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	369930.00000	3.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	3.00000	3.00000	3.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	320766.00000	1.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	320766.00000	1.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	469488.00000	7.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	7.00000	7.00000	7.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	5506368.00000	112.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	112.00000	112.00000	112.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv)a;
+-- result:
+49164	74946.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t4 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	2550156.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	102336.00000	2.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	5015952.00000	102.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	102.00000	102.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	1804720.00000	2.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	2.00000	2.00000	2.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	70866.00000	1.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	88516.00000	3.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	5114304.00000	104.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v2) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	104.00000	104.00000	104.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	2427616.00000	8.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v1  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	8.00000	8.00000	8.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	3410736.00000	2.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	2.00000	2.00000	2.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	617100.00000	1.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	617100.00000	1.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	1.00000	1.00000	1.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	1013420.00000	17.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	17.00000	17.00000	17.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	6097824.00000	124.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v3) OVER ([hash] PARTITION BY v6  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	124.00000	124.00000	124.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	92924.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v4  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv)a;
+-- result:
+49176	50776.00000	1.00000	102.00000
+-- !result
+SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT max(v1) OVER ([hash] PARTITION BY v1,v2,v3,v5  ) AS wv FROM t5 ORDER BY wv limit 1)a;
+-- result:
+1	None	None	None
+-- !result

@@ -243,6 +243,7 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
         }
     }
 
+    probe_state->null_array = &null_columns[0]->get_data();
     for (uint32_t i = 0; i < row_count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
@@ -338,8 +339,11 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.output_slots.empty() || std::find(param.output_slots.begin(), param.output_slots.end(),
-                                                        slot->id()) != param.output_slots.end()) {
+            if (param.output_slots.empty() ||
+                std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
+                        param.output_slots.end() ||
+                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                        param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
             } else {
                 hash_table_slot.need_output = false;
@@ -355,8 +359,11 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (param.output_slots.empty() || std::find(param.output_slots.begin(), param.output_slots.end(),
-                                                        slot->id()) != param.output_slots.end()) {
+            if (param.output_slots.empty() ||
+                std::find(param.output_slots.begin(), param.output_slots.end(), slot->id()) !=
+                        param.output_slots.end() ||
+                std::find(param.predicate_slots.begin(), param.predicate_slots.end(), slot->id()) !=
+                        param.predicate_slots.end()) {
                 hash_table_slot.need_output = true;
             } else {
                 hash_table_slot.need_output = false;

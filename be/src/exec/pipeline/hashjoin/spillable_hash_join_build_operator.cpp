@@ -36,14 +36,9 @@
 namespace starrocks::pipeline {
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
-<<<<<<< Updated upstream
     RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
     _join_builder->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
-=======
-    HashJoinBuildOperator::prepare(state);
-    _join_builder->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
->>>>>>> Stashed changes
     RETURN_IF_ERROR(_join_builder->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
@@ -99,18 +94,20 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+        auto& spiller = _join_builder->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        return _join_builder->spiller()->set_flush_all_call_back(
+        auto& spiller = _join_builder->spiller();
+        return spiller->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     WARN_IF_ERROR(publish_runtime_filters(state),

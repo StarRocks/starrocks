@@ -245,17 +245,7 @@ public:
         auto* state = new (ptr) ArrayAggAggregateStateV2;
         state->data_columns = std::make_unique<Columns>();
         for (auto i = 0; i < num; ++i) {
-            auto arg_type = ctx->get_arg_type(i);
-            // TODO: support nested type
-            if (arg_type->type == LogicalType::TYPE_STRUCT || arg_type->type == LogicalType::TYPE_ARRAY ||
-                arg_type->type == LogicalType::TYPE_MAP) {
-                ctx->set_error("array_agg can't support nested type.", false);
-                return;
-            }
-            state->data_columns->emplace_back(
-                    ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
-                                                                                  arg_type->precision, arg_type->scale),
-                                                true));
+            state->data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }

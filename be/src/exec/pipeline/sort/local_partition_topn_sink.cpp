@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* factory, int32_t id,
                                                                int32_t plan_node_id, int32_t driver_sequence,
                                                                LocalPartitionTopnContext* partition_topn_ctx)
-        : Operator(factory, id, "local_partition_topn_sink", plan_node_id, driver_sequence),
+        : Operator(factory, id, "local_partition_topn_sink", plan_node_id, false, driver_sequence),
           _partition_topn_ctx(partition_topn_ctx) {}
 
 Status LocalPartitionTopnSinkOperator::prepare(RuntimeState* state) {
@@ -40,6 +40,9 @@ Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const Chu
 Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
     RETURN_IF_ERROR(_partition_topn_ctx->transfer_all_chunks_from_partitioner_to_sorters(state));
     _partition_topn_ctx->sink_complete();
+    _unique_metrics->add_info_string("IsPassThrough", _partition_topn_ctx->is_passthrough() ? "Yes" : "No");
+    auto* partition_num_counter = ADD_COUNTER(_unique_metrics, "PartitionNum", TUnit::UNIT);
+    COUNTER_SET(partition_num_counter, static_cast<int64_t>(_partition_topn_ctx->num_partitions()));
     _is_finished = true;
     return Status::OK();
 }

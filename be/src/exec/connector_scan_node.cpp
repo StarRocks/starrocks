@@ -53,6 +53,8 @@ public:
         if (_opened) return Status::OK();
 
         _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+        ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
+        ADD_TIMER(_runtime_profile, "IOTaskExecTime");
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
@@ -199,8 +201,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
-                                                                          operators, context->degree_of_parallelism());
+        operators = context->maybe_interpolate_local_passthrough_exchange(
+                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
     }
     return operators;
 }
@@ -261,6 +263,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
+    data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
     RETURN_IF_ERROR(scanner->init(state));
     _push_pending_scanner(scanner);

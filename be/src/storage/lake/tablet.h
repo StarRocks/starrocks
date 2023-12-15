@@ -62,33 +62,26 @@ public:
 
     [[nodiscard]] std::string root_location() const;
 
-    Status put_metadata(const TabletMetadata& metadata);
+    [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
 
-    Status put_metadata(TabletMetadataPtr metadata);
+    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    Status delete_metadata(int64_t version);
+    [[nodiscard]] Status delete_metadata(int64_t version);
 
-    Status put_txn_log(const TxnLog& log);
+    bool get_enable_persistent_index(int64_t version);
 
-    Status put_txn_log(TxnLogPtr log);
+    StatusOr<PersistentIndexTypePB> get_persistent_index_type(int64_t version);
+
+    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+
+    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
-<<<<<<< Updated upstream
-=======
-    Status delete_txn_log(int64_t txn_id);
-
-    Status delete_txn_vlog(int64_t version);
-
-    Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
-
-    Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
-
->>>>>>> Stashed changes
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
@@ -106,7 +99,7 @@ public:
     StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
 
     StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                      bool fill_cache);
+                                      bool fill_data_cache, bool fill_metadata_cache);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
@@ -122,7 +115,7 @@ public:
 
     [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
-    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 

@@ -48,11 +48,8 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/dictionary_cache_sink.h"
 #include "runtime/export_sink.h"
-<<<<<<< Updated upstream
 #include "runtime/hive_table_sink.h"
 #include "runtime/iceberg_table_sink.h"
-=======
->>>>>>> Stashed changes
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -152,7 +149,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
-<<<<<<< Updated upstream
     case TDataSinkType::ICEBERG_TABLE_SINK: {
         if (!thrift_sink.__isset.iceberg_table_sink) {
             return Status::InternalError("Missing iceberg table sink");
@@ -188,8 +184,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<DictionaryCacheSink>();
         break;
     }
-=======
->>>>>>> Stashed changes
 
     default:
         std::stringstream error_msg;

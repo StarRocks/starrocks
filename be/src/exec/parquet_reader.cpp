@@ -22,12 +22,9 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-<<<<<<< Updated upstream
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
-=======
->>>>>>> Stashed changes
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -51,12 +48,8 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
-<<<<<<< Updated upstream
     _properties.set_buffer_size(1 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
-=======
-    _properties.set_buffer_size(8 * 1024 * 1024);
->>>>>>> Stashed changes
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
@@ -80,8 +73,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
     return Status::EndOfFile("End of row group");
 }
 
-Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
-                                              const std::string& timezone) {
+Status ParquetReaderWrap::_init_parquet_reader() {
     try {
         parquet::ArrowReaderProperties arrow_reader_properties;
         /*
@@ -98,15 +90,10 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
-<<<<<<< Updated upstream
             std::ostringstream oss;
             oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
             LOG(INFO) << oss.str();
             return Status::InternalError(oss.str());
-=======
-            LOG(WARNING) << "failed to create parquet file reader, errmsg=" << st.ToString();
-            return Status::InternalError("Failed to create file reader");
->>>>>>> Stashed changes
         }
 
         if (!_reader || !_reader->parquet_reader()) {
@@ -140,15 +127,25 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
 
-        _timezone = timezone;
+        return Status::OK();
+    } catch (parquet::ParquetException& e) {
+        std::stringstream str_error;
+        str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
+        LOG(WARNING) << str_error.str();
+        return Status::InternalError(str_error.str());
+    }
+}
 
+Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+    try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
 
             if (!status.ok()) {
-                LOG(WARNING) << "Get RecordBatch Failed. " << status.ToString();
-                return Status::InternalError(status.ToString());
+                LOG(WARNING) << "Get RecordBatch Failed. error: " << status.ToString() << ", filename: " << _filename;
+                return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
             if (!_rb_batch) {
                 LOG(INFO) << "Ignore the parquet file because of an unexpected nullptr "
@@ -157,8 +154,8 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
             status = _rb_batch->ReadNext(&_batch);
             if (!status.ok()) {
-                LOG(WARNING) << "The first read record. " << status.ToString();
-                return Status::InternalError(status.ToString());
+                LOG(WARNING) << "The first read record. error: " << status.ToString() << ", filename: " << _filename;
+                return Status::InternalError(fmt::format("{}. filename: {}", status.ToString(), _filename));
             }
             if (!_batch) {
                 LOG(INFO) << "Ignore the parquet file because of an expected nullptr RecordBatch";
@@ -176,12 +173,11 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     } catch (parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
-        LOG(WARNING) << str_error.str();
-        return Status::InternalError(str_error.str());
+        LOG(WARNING) << str_error.str() << " filename: " << _filename;
+        return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
     }
 }
 
-<<<<<<< Updated upstream
 Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_init_parquet_reader());
 
@@ -200,8 +196,6 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 void ParquetReaderWrap::close() {
     [[maybe_unused]] auto st = _parquet->Close();
 }
@@ -256,19 +250,19 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
         // read batch
         arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
         if (!status.ok()) {
-            return Status::InternalError("Get RecordBatchReader Failed.");
+            return Status::InternalError(fmt::format("Get RecordBatchReader Failed. filename: {}", _filename));
         }
         status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
-            return Status::InternalError("Unexpected EOF");
+                         << " got: " << _current_group << ", filename" << _filename;
+            return Status::InternalError(fmt::format("Unexpected EOF. filename: {}", _filename));
         }
 
         _current_line_of_batch = 0;
@@ -278,15 +272,15 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
                 << " is larger than batch size:" << _batch->num_rows() << ". start to read next batch";
         arrow::Status status = _rb_batch->ReadNext(&_batch);
         if (!status.ok()) {
-            return Status::InternalError("Read Batch Error With Libarrow.");
+            return Status::InternalError(fmt::format("Read Batch Error With Libarrow. filename: {}", _filename));
         }
 
         // arrow::RecordBatchReader::ReadNext returns null at end of stream.
         // Since we count the batches read, EOF implies reader source failure.
         if (_batch == nullptr) {
             LOG(WARNING) << "Unexpected EOF. Row groups less than expected. expected: " << _total_groups
-                         << " got: " << _current_group;
-            return Status::InternalError("Unexpected EOF");
+                         << " got: " << _current_group << ", filename: " << _filename;
+            return Status::InternalError(fmt::format("Unexpected EOF. filename: {}", _filename));
         }
 
         _current_line_of_batch = 0;
@@ -319,7 +313,7 @@ int64_t ParquetChunkReader::total_num_rows() const {
 Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     switch (_state) {
     case State::UNINITIALIZED: {
-        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
         _state = INITIALIZED;
         break;
     }
@@ -342,6 +336,11 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     }
     *batch = _parquet_reader->get_batch();
     return Status::OK();
+}
+
+Status ParquetChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
+    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
+    return _parquet_reader->get_schema(schema);
 }
 
 using StarRocksStatusCode = ::starrocks::TStatusCode::type;
@@ -404,6 +403,10 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nby
     } else {
         return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
     }
+}
+
+const std::string& ParquetChunkFile::filename() const {
+    return _file->filename();
 }
 
 } // namespace starrocks

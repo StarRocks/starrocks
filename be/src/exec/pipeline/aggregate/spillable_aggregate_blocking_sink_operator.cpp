@@ -64,12 +64,8 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-<<<<<<< Updated upstream
         auto& spiller = _aggregator->spiller();
         return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
-=======
-        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
->>>>>>> Stashed changes
     };
 
     _aggregator->ref();
@@ -80,11 +76,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-<<<<<<< Updated upstream
                 state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
-=======
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
->>>>>>> Stashed changes
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
@@ -102,7 +94,8 @@ void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
-    _aggregator->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _aggregator->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;

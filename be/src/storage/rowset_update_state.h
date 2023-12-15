@@ -155,13 +155,9 @@ private:
                                           const TabletSchemaCSPtr& tablet_schema);
 
     Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
-<<<<<<< Updated upstream
                                                          EditVersion latest_applied_version,
                                                          const std::vector<uint32_t>& column_id,
                                                          const TabletSchemaCSPtr& tablet_schema);
-=======
-                                                         const std::vector<uint32_t>& column_id);
->>>>>>> Stashed changes
 
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,

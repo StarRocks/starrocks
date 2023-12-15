@@ -63,6 +63,8 @@ public:
     static void union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
                                               NullColumnPtr* produce_null_column);
 
+    static void union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column);
+
     static NullColumnPtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
 
     // merge a column and null_column and generate a column with null values.

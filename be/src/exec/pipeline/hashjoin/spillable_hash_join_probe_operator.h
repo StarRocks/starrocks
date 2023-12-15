@@ -81,7 +81,7 @@ public:
 private:
     bool spilled() const { return _join_builder->spiller()->spilled(); }
 
-    SpillableHashJoinProbeOperator* raw() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
+    SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
     // acquire next build-side partitions
     void _acquire_next_partitions();

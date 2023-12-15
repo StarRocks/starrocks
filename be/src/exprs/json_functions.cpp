@@ -205,6 +205,12 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }
 
         if (index != -1) {
+            if (tvalue.is_null()) {
+                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
+                VLOG(2) << msg;
+                return Status::NotFound(msg);
+            }
+
             // try to access tvalue as array.
             // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;

@@ -118,7 +118,11 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
+    DeferOp op([&]() {
+        --_num_pending_chunks;
+        DCHECK(_num_pending_chunks >= 0);
+    });
+
     // close is already done, just skip
     if (_is_finished) {
         return;
@@ -126,7 +130,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
 
     // cancelling has happened but close is not invoked
     if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
+        if (_num_pending_chunks == 1) {
             close(_state);
         }
         return;
@@ -134,22 +138,28 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
 
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
-            LOG(WARNING) << "open file writer failed, error: " << status.to_string();
+            status = status.clone_and_prepend("open file writer failed, error");
+            LOG(WARNING) << status;
             _fragment_ctx->cancel(status);
+            close(_state);
             return;
         }
         _is_writer_opened = true;
     }
+
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
+        DCHECK_EQ(_num_pending_chunks, 1);
         close(_state);
         return;
     }
+
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
+        status = status.clone_and_prepend("add chunk to file writer failed, error");
+        LOG(WARNING) << status;
         _fragment_ctx->cancel(status);
+        close(_state);
         return;
     }
 }
@@ -195,7 +205,7 @@ Status FileSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) 
 FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> t_output_expr,
                                                  std::shared_ptr<ResultFileOptions> file_opts, int32_t _num_sinkers,
                                                  FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _file_opts(std::move(file_opts)),
           _num_sinkers(_num_sinkers),

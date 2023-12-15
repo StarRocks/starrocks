@@ -369,10 +369,16 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
 
             TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
-            // Because intersect_count has more two input types.
-            // intersect_count's first argument's type is alwasy Bitmap,
-            // So we get its second arguments type as input.
-            if (fn.name.function_name == "intersect_count" || fn.name.function_name == "max_by") {
+            // Because intersect_count have two input types.
+            // And intersect_count's first argument's type is alwasy Bitmap,
+            // so we use its second arguments type as input.
+            if (fn.name.function_name == "intersect_count") {
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
+            }
+
+            // Because max_by and min_by function have two input types,
+            // so we use its second arguments type as input.
+            if (fn.name.function_name == "max_by" || fn.name.function_name == "min_by") {
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
@@ -383,8 +389,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             }
 
             // hack for accepting various arguments
-            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed" ||
-                (fn.name.function_name == "array_agg" && state->func_version() > 5)) {
+            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed") {
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 
@@ -487,8 +492,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 }
 
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
-                               pipeline::Operator* refill_op) {
-    RETURN_IF_ERROR(_reset_state(state));
+                               pipeline::Operator* refill_op, bool reset_sink_complete) {
+    RETURN_IF_ERROR(_reset_state(state, reset_sink_complete));
     // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
     // merge method of agg functions to process these chunks.
     begin_pending_reset_state();
@@ -502,10 +507,12 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-Status Aggregator::_reset_state(RuntimeState* state) {
+Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
-    _is_sink_complete = false;
+    if (reset_sink_complete) {
+        _is_sink_complete = false;
+    }
     _it_hash.reset();
     _num_rows_processed = 0;
     _num_pass_through_rows = 0;
@@ -553,9 +560,11 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
+                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
+            // chunk_provider return eos means provider has output all data from hash_map/hash_set.
+            // then we just return OK
             return Status::OK();
         } else {
             return chunk_with_st.status();
@@ -1149,6 +1158,9 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
             size += 1; // 1 bytes for  null flag.
         }
         LogicalType ltype = ctx->root()->type().type;
+        if (ctx->root()->type().is_complex_type()) {
+            return false;
+        }
         size_t byte_size = get_size_of_fixed_length_type(ltype);
         if (byte_size == 0) return false;
         size += byte_size;

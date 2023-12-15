@@ -2458,7 +2458,7 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
-                                     IndexValue* values, KeysInfo* found_keys_info) const {
+                                     IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
@@ -2492,6 +2492,9 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
+    if (stat != nullptr) {
+        stat->read_io_bytes += shard_info.bytes;
+    }
     if (shard_info.key_size != 0) {
         return _get_in_fixlen_shard(shard_idx, n, keys, check_keys_info, values, found_keys_info, &shard);
     } else {
@@ -2680,7 +2683,7 @@ Status ImmutableIndex::_prepare_bloom_filter(size_t idx_begin, size_t idx_end) c
 }
 
 Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values,
-                           KeysInfo* found_keys_info, size_t key_size) {
+                           KeysInfo* found_keys_info, size_t key_size, IOStat* stat) {
     auto iter = _shard_info_by_length.find(key_size);
     if (iter == _shard_info_by_length.end()) {
         return Status::OK();
@@ -2689,25 +2692,21 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
     const auto [shard_off, nshard] = iter->second;
     if (nshard > 1) {
         std::vector<KeysInfo> keys_info_by_shard(nshard);
-<<<<<<< Updated upstream
         MonotonicStopWatch watch;
         watch.start();
         split_keys_info_by_shard(keys_info.key_infos, keys_info_by_shard);
         if (_need_bloom_filter(shard_off, shard_off + nshard, keys_info_by_shard)) {
             RETURN_IF_ERROR(_prepare_bloom_filter(shard_off, shard_off + nshard));
-=======
-        if (filter) {
-            split_keys_info_by_shard(check_keys_info, keys_info_by_shard);
-        } else {
-            split_keys_info_by_shard(keys_info.key_infos, keys_info_by_shard);
->>>>>>> Stashed changes
         }
         for (size_t i = 0; i < nshard; i++) {
-            RETURN_IF_ERROR(
-                    _get_in_shard(shard_off + i, n, keys, keys_info_by_shard[i].key_infos, values, found_keys_info));
+            RETURN_IF_ERROR(_get_in_shard(shard_off + i, n, keys, keys_info_by_shard[i].key_infos, values,
+                                          found_keys_info, stat));
+        }
+        if (stat != nullptr) {
+            stat->get_in_shard_cnt += nshard;
+            stat->get_in_shard_cost += watch.elapsed_time();
         }
     } else {
-<<<<<<< Updated upstream
         MonotonicStopWatch watch;
         watch.start();
         KeysInfo infos;
@@ -2719,12 +2718,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         if (stat != nullptr) {
             stat->get_in_shard_cnt++;
             stat->get_in_shard_cost += watch.elapsed_time();
-=======
-        if (filter) {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, check_keys_info, values, found_keys_info));
-        } else {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, keys_info.key_infos, values, found_keys_info));
->>>>>>> Stashed changes
         }
     }
     return Status::OK();
@@ -3373,7 +3366,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     int64_t apply_version = 0;
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
-    RETURN_IF_ERROR(tablet->updates()->_get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
+    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
@@ -3473,7 +3466,9 @@ bool PersistentIndex::_enable_minor_compaction() {
 // both case1 and case2 will create a new l1 file and a new empty l0 file
 // case3 will write a new snapshot l0
 // case4 will append wals into l0 file
-Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
+Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) {
+    MonotonicStopWatch watch;
+    watch.start();
     DCHECK_EQ(index_meta->key_size(), _key_size);
     // check if _l0 need be flush, there are two conditions:
     //   1. _l1 is not exist, _flush_l0 and build _l1
@@ -3490,6 +3485,10 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         } else {
             RETURN_IF_ERROR(_merge_compaction());
         }
+        if (stat != nullptr) {
+            stat->compaction_cost += watch.elapsed_time();
+            watch.reset();
+        }
     } else {
         if (l1_l2_file_size != 0) {
             // and l0 memory usage is large enough,
@@ -3502,12 +3501,20 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
                 } else {
                     RETURN_IF_ERROR(_merge_compaction());
                 }
+                if (stat != nullptr) {
+                    stat->compaction_cost += watch.elapsed_time();
+                    watch.reset();
+                }
             }
             // if l1 is empty, and l0 memory usage is large enough
         } else if (_l0_is_full()) {
             // do flush l0
             _flushed = true;
             RETURN_IF_ERROR(_flush_l0());
+            if (stat != nullptr) {
+                stat->flush_or_wal_cost += watch.elapsed_time();
+                watch.reset();
+            }
         }
     }
     _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
@@ -3541,15 +3548,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
-<<<<<<< Updated upstream
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }
 
     LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
                                      _version.minor_number());
-=======
->>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -3569,7 +3573,7 @@ Status PersistentIndex::on_commited() {
 }
 
 Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                                  std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                                  std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat) {
     if (_l1_vec.empty() && _l2_vec.empty()) {
         return Status::OK();
     }
@@ -3584,7 +3588,7 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
             }
             KeysInfo found_keys_info;
             // get data from tmp_l1
-            RETURN_IF_ERROR(_l1_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size));
+            RETURN_IF_ERROR(_l1_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size, stat));
             if (found_keys_info.size() != 0) {
                 std::sort(found_keys_info.key_infos.begin(), found_keys_info.key_infos.end());
                 // modify keys_info
@@ -3597,7 +3601,7 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
             }
             KeysInfo found_keys_info;
             // get data from l2
-            RETURN_IF_ERROR(_l2_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size));
+            RETURN_IF_ERROR(_l2_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size, stat));
             if (found_keys_info.size() != 0) {
                 std::sort(found_keys_info.key_infos.begin(), found_keys_info.key_infos.end());
                 // modify keys_info
@@ -3646,7 +3650,7 @@ Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index,
                                                      KeysInfo* found_keys_info) {
     Status st;
     for (auto& [key_size, keys_info] : (*keys_info_by_key_size)) {
-        st = immu_index->get(n, keys, keys_info, values, found_keys_info, key_size);
+        st = immu_index->get(n, keys, keys_info, values, found_keys_info, key_size, nullptr);
         if (!st.ok()) {
             std::string msg = strings::Substitute("get from one immutableindex failed, file: $0, status: $1",
                                                   immu_index->filename(), st.to_string());
@@ -3742,7 +3746,7 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     if (config::enable_parallel_get_and_bf) {
         return _get_from_immutable_index_parallel(n, keys, values, not_founds_by_key_size);
     }
-    return _get_from_immutable_index(n, keys, values, not_founds_by_key_size);
+    return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
 }
 
 Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
@@ -3812,14 +3816,25 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
     return Status::OK();
 }
 
-Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values) {
+Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                               IOStat* stat) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
+    if (stat != nullptr) {
+        stat->l0_write_cost += watch.elapsed_time();
+        watch.reset();
+    }
     if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
+    }
+    if (stat != nullptr) {
+        stat->l1_l2_read_cost += watch.elapsed_time();
+        watch.reset();
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
@@ -3834,7 +3849,11 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    return _flush_advance_or_append_wal(n, keys, values);
+    Status st = _flush_advance_or_append_wal(n, keys, values);
+    if (stat != nullptr) {
+        stat->flush_or_wal_cost += watch.elapsed_time();
+    }
+    return st;
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
@@ -3880,7 +3899,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, nullptr));
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
@@ -4651,16 +4670,18 @@ Status PersistentIndex::_merge_compaction_advance() {
     for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
         for (const auto& [key_size, shard_info] : _l1_vec[i]->_shard_info_by_length) {
             auto [l1_shard_offset, l1_shard_size] = shard_info;
-            const auto size = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                              std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                              0L, [](size_t s, const auto& e) { return s + e.size; });
-            const auto usage = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                               std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                               0L, [](size_t s, const auto& e) { return s + e.data_size; });
+            const int64_t size =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.size; });
+            const int64_t usage =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.data_size; });
 
             auto iter = usage_and_size_stat.find(key_size);
             if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({key_size, {usage, size}});
+                usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
             } else {
                 iter->second.first += usage;
                 iter->second.second += size;

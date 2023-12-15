@@ -58,13 +58,10 @@ private:
 
         Status _fill_buffer() override;
 
-<<<<<<< Updated upstream
         char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) override;
 
         const std::string& filename();
 
-=======
->>>>>>> Stashed changes
     private:
         std::shared_ptr<SequentialFile> _file;
         ScannerCounter* _counter = nullptr;

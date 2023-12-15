@@ -37,7 +37,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    std::int64_t make_snapshot(std::int64_t tablet_id, int schema_hash, std::string* snapshot_path);
+    int64_t make_snapshot(int64_t tablet_id, int schema_hash, std::string* snapshot_path);
 
     [[maybe_unused]] ExecEnv* _exec_env;
 

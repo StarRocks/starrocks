@@ -21,11 +21,8 @@
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
-<<<<<<< Updated upstream
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
-=======
->>>>>>> Stashed changes
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -69,7 +66,10 @@ struct ResourceMemTrackerGuard {
         return true;
     }
 
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    void scoped_end() const {
+        tls_thread_status.set_mem_tracker(old_tracker);
+        captured = {};
+    }
 
 private:
     auto capture(const std::tuple<WeakPtrs...>& weak_tup) const
@@ -91,12 +91,15 @@ private:
 };
 
 struct IOTaskExecutor {
-    IOTaskExecutor(PriorityThreadPool* pool_) : pool(pool_) {}
-    PriorityThreadPool* pool;
+    workgroup::ScanExecutor* pool;
+    workgroup::WorkGroupPtr wg;
+
+    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(std::move(wg_)) {}
+
     template <class Func>
     Status submit(Func&& func) {
-        PriorityThreadPool::WorkFunction wf = std::move(func);
-        if (pool->offer(wf)) {
+        workgroup::ScanTask task(wg.get(), func);
+        if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");
@@ -131,12 +134,9 @@ struct SyncTaskExecutor {
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
     spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
 
-<<<<<<< Updated upstream
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 
 #define TRACKER_WITH_SPILLER_READER_GUARD(state, spiller) \
     RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this(), std::weak_ptr((spiller)->reader()))
 
-=======
->>>>>>> Stashed changes
 } // namespace starrocks::spill

@@ -1,0 +1,77 @@
+-- name: test_group_by @system
+CREATE TABLE `sc2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `s2` string NULL,
+  `array1` ARRAY<INT> NULL,
+  `array2` ARRAY<MAP<INT, INT>> NULL,
+  `array3` ARRAY<STRUCT<a INT, b INT>> NULL,
+  `map1` MAP<INT, INT> NULL,
+  `map2` MAP<INT, ARRAY<INT>> NULL,
+  `map3` MAP<INT, STRUCT<c INT, b INT>> NULL,
+  `st1` STRUCT<s1 int, s2 ARRAY<INT>, s3 MAP<INT, INT>, s4 Struct<e INT, f INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+
+insert into sc2 values (0, "abc", [1,2,3], [map{2:20, 1:10, 3:30}], [row(1, 2)], map{2:20, 1:10, 4:40}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+insert into sc2 values (1, "abc", [2,1,3], [map{2:20, 1:10, 3:30}], [row(1, 3)], map{2:20, 1:10, 4:40}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+insert into sc2 values (2, "abc", [1,3,2], [map{2:20, 1:10, 3:30}], [row(1, 2)], map{2:20, 1:10, 3:30}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+insert into sc2 values (3, "abc", [1,2,3], [map{2:20, 1:10}],       [row(1, 2)], map{2:20, 1:10, 3:30}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)));
+insert into sc2 values (4, "abc", [1,2,3], [map{2:20, 1:10}],       [row(1, 3)], map{2:20, 1:10, 3:30}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)));
+insert into sc2 values (5, "abd", [1,2,3], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 3:30}, map{1:[1,2,3], 2:[2,3,4]}, map{1:row(1,3), 2:row(2,3)}, row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)));
+insert into sc2 values (6, "abd", [1,3,2], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 4:40}, map{1:[2,1,3], 2:[2,3,4]}, map{1:row(2,3), 2:row(2,3)}, row(1, [1,2,3], map{2:2, 1:1, 3:3}, row(1, 2)));
+insert into sc2 values (7, "abd", [2,1,3], [map{1:10, 3:30, 2:20}], [row(2, 1)], map{1:10, 2:20, 4:40}, map{1:[2,1,3], 2:[2,4,3]}, map{1:row(2,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 1:1, 3:3}, row(1, 2)));
+insert into sc2 values (8, "abd", [2,1,3], [map{1:10, 3:30, 2:20}], [row(2, 1)], map{2:20, 1:10, 3:30}, map{1:[1,2,3], 2:[2,4,3]}, map{1:row(2,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 3:3, 1:1}, row(1, 2)));
+insert into sc2 values (9, "abd", [1,2,3], [map{1:10, 3:30, 2:20}], [row(1, 2)], map{1:10, 2:20, 3:30}, map{1:[1,2,3], 2:[2,4,3]}, map{1:row(1,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 3:3, 1:1}, row(1, 2)));
+insert into sc2 values (0, "abc", [1,2,null], [map{2:20, 1:10, null:30}], [row(1, 2)], map{2:20, 1:10, 4:40}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+insert into sc2 values (1, "abc", [2,1,null], [map{2:20, 1:10, null:30}], [row(1, null)], map{2:20, 1:10, 4:40}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+insert into sc2 values (2, "abc", [1,null,2], [map{2:20, 1:10, null:30}], [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+insert into sc2 values (3, "abc", [1,2,null], [map{2:20, 1:10}],       [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[null,2,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{1:1, 2:2}, row(null, 2)));
+insert into sc2 values (4, "abc", [1,2,null], [map{2:20, 1:10}],       [row(1, null)], map{2:20, 1:10, null:30}, map{2:[null,2,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{1:1, 2:2}, row(1, 2)));
+insert into sc2 values (5, "abd", [1,2,null], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, null:30}, map{1:[1,2,null], 2:[2,null,4]}, map{1:row(1,null), 2:row(2,null)}, row(1, [2,1,null], map{1:1, 2:2}, row(null, 2)));
+insert into sc2 values (6, "abd", [1,null,2], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 4:40}, map{1:[2,1,null], 2:[2,null,4]}, map{1:row(2,null), 2:row(2,null)}, row(1, [1,2,null], map{2:2, 1:1, null:null}, row(1, 2)));
+insert into sc2 values (7, "abd", [2,1,null], [map{1:10, null:30, 2:20}], [row(2, 1)], map{1:10, 2:20, 4:40}, map{1:[2,1,null], 2:[2,4,null]}, map{1:row(2,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, 1:1, null:null}, row(1, 2)));
+insert into sc2 values (8, "abd", [2,1,null], [map{1:10, null:30, 2:20}], [row(2, 1)], map{2:20, 1:10, null:30}, map{1:[1,2,null], 2:[2,4,null]}, map{1:row(2,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, null:null, 1:1}, row(1, 2)));
+insert into sc2 values (9, "abd", [1,2,null], [map{1:10, null:30, 2:20}], [row(1, 2)], map{1:10, 2:20, null:30}, map{1:[1,2,null], 2:[2,4,null]}, map{1:row(1,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, null:null, 1:1}, row(1, 2)));
+
+
+
+
+select array1, count(distinct s2) from sc2 group by array1;
+select array2, count(distinct s2) from sc2 group by array2;
+select array3, count(distinct s2) from sc2 group by array3;
+select map1, count(distinct s2) from sc2 group by map1;
+select map2, count(distinct s2) from sc2 group by map2;
+select map3, count(distinct s2) from sc2 group by map3;
+select st1, count(distinct s2) from sc2 group by st1;
+select s2, s2, count(distinct s2) from sc2 group by s2, s2;
+select s2, array1, count(distinct s2) from sc2 group by s2, array1;
+select s2, array2, count(distinct s2) from sc2 group by s2, array2;
+select s2, array3, count(distinct s2) from sc2 group by s2, array3;
+select s2, map1, count(distinct s2) from sc2 group by s2, map1;
+select s2, map2, count(distinct s2) from sc2 group by s2, map2;
+select s2, map3, count(distinct s2) from sc2 group by s2, map3;
+select s2, st1, count(distinct s2) from sc2 group by s2, st1;
+select array1, array1, count(distinct s2) from sc2 group by array1, array1;
+select array1, map3, count(distinct s2) from sc2 group by array1, map3;
+select array1, st1, count(distinct s2) from sc2 group by array1, st1;
+select array2, s2, count(distinct s2) from sc2 group by array2, s2;
+select map1, s2, count(distinct s2) from sc2 group by map1, s2;
+select map1, map3, count(distinct s2) from sc2 group by map1, map3;
+select map1, st1, count(distinct s2) from sc2 group by map1, st1;
+select map2, s2, count(distinct s2) from sc2 group by map2, s2;
+select map2, map1, count(distinct s2) from sc2 group by map2, map1;
+select map3, s2, count(distinct s2) from sc2 group by map3, s2;
+select st1, s2, count(distinct s2) from sc2 group by st1, s2;
+select st1, array2, count(distinct s2) from sc2 group by st1, array2;
+select st1, map3, count(distinct s2) from sc2 group by st1, map3;
+select st1, st1, count(distinct s2) from sc2 group by st1, st1;

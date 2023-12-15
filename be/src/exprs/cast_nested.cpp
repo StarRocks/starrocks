@@ -77,12 +77,15 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
             Chunk field_chunk;
             field_chunk.append_column(struct_column->fields()[i], 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
+            casted_field = NullableColumn::wrap_if_necessary(casted_field);
             casted_fields.emplace_back(std::move(casted_field));
         } else {
-            casted_fields.emplace_back(struct_column->fields()[i]->clone_shared());
+            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(struct_column->fields()[i]->clone_shared()));
         }
+        DCHECK(casted_fields[i]->is_nullable());
     }
-    auto casted_struct = StructColumn::create(std::move(casted_fields));
+
+    auto casted_struct = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(casted_struct->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return std::move(casted_struct);

@@ -638,7 +638,7 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-    if (conditional_key_columns > 1) {
+    if (config::enable_short_key_for_one_column_filter || conditional_key_columns > 1) {
         for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
             ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
             if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
@@ -750,18 +750,16 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         // otherwise we don't need this limitation.
         const SlotDescriptor* slot_desc = slots[index];
         LogicalType ltype = slot_desc->type().type;
-        if (!is_scalar_logical_type(ltype)) continue;
-        // disable on float/double type because min/max value may lose precision
-        // The fix should be on storage layer, and this is just a temporary fix.
-        if (ltype == LogicalType::TYPE_FLOAT || ltype == LogicalType::TYPE_DOUBLE) continue;
-        {
-            auto iter = slot_index_to_expr_ctxs.find(index);
-            if (iter == slot_index_to_expr_ctxs.end()) {
-                slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
-                iter = slot_index_to_expr_ctxs.find(index);
-            }
-            iter->second.emplace_back(ctx);
+        if (!support_column_expr_predicate(ltype)) {
+            continue;
         }
+
+        auto iter = slot_index_to_expr_ctxs.find(index);
+        if (iter == slot_index_to_expr_ctxs.end()) {
+            slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
+            iter = slot_index_to_expr_ctxs.find(index);
+        }
+        iter->second.emplace_back(ctx);
         normalized_conjuncts[i] = true;
     }
 }

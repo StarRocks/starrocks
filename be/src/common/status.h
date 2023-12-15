@@ -302,14 +302,10 @@ public:
         return code() == TStatusCode::TIMEOUT;
     }
 
-<<<<<<< Updated upstream
     bool is_eagain() const {
         mark_checked();
         return code() == TStatusCode::SR_EAGAIN;
     }
-=======
-    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
->>>>>>> Stashed changes
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -553,7 +549,7 @@ struct StatusInstance {
         if (UNLIKELY(!st__.ok())) {                           \
             LOG(WARNING) << (warning_prefix) << ": " << st__; \
         }                                                     \
-    } while (0);
+    } while (0)
 
 #define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)              \
     do {                                                             \
@@ -562,7 +558,7 @@ struct StatusInstance {
             LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
             return std::move(st__);                                  \
         }                                                            \
-    } while (0);
+    } while (0)
 
 #define DCHECK_IF_ERROR(stmt)      \
     do {                           \

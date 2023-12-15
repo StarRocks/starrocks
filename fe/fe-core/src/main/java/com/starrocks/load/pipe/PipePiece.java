@@ -14,25 +14,7 @@
 
 package com.starrocks.load.pipe;
 
-<<<<<<<< Updated upstream:fe/fe-core/src/main/java/com/starrocks/load/pipe/PipePiece.java
 public abstract class PipePiece {
 
     abstract PipeTaskDesc convertToTask();
 }
-========
-#include <string_view>
-
-#include "common/status.h"
-
-namespace starrocks::lake {
-
-class TabletManager;
-
-Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
-
-Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
-
-Status delete_garbage_files(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
-
-} // namespace starrocks::lake
->>>>>>>> Stashed changes:be/src/storage/lake/gc.h

@@ -67,7 +67,8 @@ private:
 
     Status _clone_incremental_data(Tablet* tablet, const TabletMeta& cloned_tablet_meta, int64_t committed_version);
 
-    Status _clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta);
+    Status _clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta,
+                            std::vector<RowsetMetaSharedPtr>& rs_to_clone);
 
     Status _clone_copy(DataDir& data_dir, const string& local_data_path, vector<string>* error_msgs,
                        const vector<Version>* missing_versions,

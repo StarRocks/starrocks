@@ -29,11 +29,8 @@ const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
 const int STATISTIC_TABLE_VERSION = 3;
 const int STATISTIC_BATCH_VERSION = 4;
-<<<<<<< Updated upstream
 const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
-=======
->>>>>>> Stashed changes
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -153,15 +150,12 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_BATCH_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_v4(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
-<<<<<<< Updated upstream
     } else if (version == STATISTIC_EXTERNAL_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_data_external(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
-=======
->>>>>>> Stashed changes
     }
     return result;
 }
@@ -354,7 +348,6 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 /*
 FE SQL:
     SELECT cast(5 as INT),
@@ -449,8 +442,6 @@ Status StatisticResultWriter::_fill_full_statistic_query_external(int version, c
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 Status StatisticResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();

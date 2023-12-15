@@ -17,11 +17,8 @@
 #include <iostream>
 
 #include "column/binary_column.h"
-<<<<<<< Updated upstream
 #include "common/config.h"
 #include "exprs/base64.h"
-=======
->>>>>>> Stashed changes
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -68,7 +65,6 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
         return true;
     }
 
-<<<<<<< Updated upstream
     auto buf = new char[s.size + 3];
     DeferOp defer([&]() { delete[] buf; });
 
@@ -94,11 +90,6 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
         }
     }
     if (!length_check_status) {
-=======
-    // hex's length should not greater than MAX_VARCHAR_LENGTH.
-    int hex_len = len / 2;
-    if (UNLIKELY((hex_len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && hex_len > max_size))) {
->>>>>>> Stashed changes
         LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varbinary length.";
         return false;
     }

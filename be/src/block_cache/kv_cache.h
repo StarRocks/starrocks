@@ -16,6 +16,7 @@
 
 #include "block_cache/cache_handle.h"
 #include "block_cache/cache_options.h"
+#include "block_cache/io_buffer.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -28,7 +29,6 @@ public:
     virtual Status init(const CacheOptions& options) = 0;
 
     // Write data to cache
-<<<<<<< Updated upstream
     virtual Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
 
     virtual Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
@@ -40,14 +40,6 @@ public:
                                ReadCacheOptions* options) = 0;
 
     virtual Status read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) = 0;
-=======
-    virtual Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
-                               bool overwrite) = 0;
-
-    // Read data from cache, it returns the data size if successful; otherwise the error status
-    // will be returned.
-    virtual StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) = 0;
->>>>>>> Stashed changes
 
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;

@@ -1,0 +1,37 @@
+-- name: test_mv_basic
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2020-01-14', 2);
+-- result:
+-- !result
+insert into ss values('2020-01-14', 3);
+-- result:
+-- !result
+insert into ss values('2020-01-15', 2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1;
+SELECT * FROM mv1;
+-- result:
+-- !result
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
+-- result:
+true	
+-- !result
+DROP TABLE ss;
+-- result:
+-- !result
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
+-- result:
+false	base-table dropped: ss
+-- !result

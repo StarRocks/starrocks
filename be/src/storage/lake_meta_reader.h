@@ -23,7 +23,6 @@
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 
-<<<<<<< Updated upstream
 #ifdef BE_TEST
 #define DECL_FINAL
 #define UT_VIRTUAL virtual
@@ -32,8 +31,6 @@
 #define UT_VIRTUAL
 #endif
 
-=======
->>>>>>> Stashed changes
 namespace starrocks {
 class TabletSchema;
 
@@ -49,18 +46,12 @@ class VersionedTablet;
 // MetaReader will implements
 // 1. read meta info from segment footer
 // 2. read dict info from dict page if column is dict encoding type
-class LakeMetaReader final : public MetaReader {
+class LakeMetaReader DECL_FINAL : public MetaReader {
 public:
     LakeMetaReader();
     ~LakeMetaReader() override;
 
-<<<<<<< Updated upstream
     UT_VIRTUAL Status init(const LakeMetaReaderParams& read_params);
-=======
-    Status init(const LakeMetaReaderParams& read_params);
-
-    lake::Tablet tablet() { return _tablet.value(); }
->>>>>>> Stashed changes
 
     Status do_get_next(ChunkPtr* chunk) override;
 
@@ -73,3 +64,5 @@ private:
 };
 
 } // namespace starrocks
+
+#undef DECL_FINAL

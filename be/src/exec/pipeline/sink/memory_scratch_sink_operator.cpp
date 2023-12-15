@@ -47,9 +47,7 @@ bool MemoryScratchSinkOperator::is_finished() const {
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                                        : state->exec_env()->driver_executor();
-        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     }
     return Status::OK();
 }
@@ -112,7 +110,7 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
 MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
                                                                    std::vector<TExpr> t_output_expr,
                                                                    FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_memory_scratch_sink),
+        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _row_desc(row_desc),
           _t_output_expr(std::move(t_output_expr)) {}
 

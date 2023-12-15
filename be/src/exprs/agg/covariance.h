@@ -17,7 +17,6 @@
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
-#include "exprs/function_context.h"
 #include "types/logical_type.h"
 namespace starrocks {
 

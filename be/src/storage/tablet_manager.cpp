@@ -883,7 +883,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     // its shard is different from local shard
     tablet_meta->set_shard_id(shard);
     std::string meta_binary;
-    tablet_meta->serialize(&meta_binary);
+    RETURN_IF_ERROR(tablet_meta->serialize(&meta_binary));
     auto st = load_tablet_from_meta(store, tablet_id, schema_hash, meta_binary, true, force, restore, true);
     LOG_IF(WARNING, !st.ok()) << "fail to load tablet. meta_path=" << meta_path;
     return st;
@@ -1143,6 +1143,12 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
     TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
     shard.tablets_under_clone.erase(tablet_id);
+}
+
+bool TabletManager::check_clone_tablet(int64_t tablet_id) {
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
+    std::unique_lock wlock(shard.lock);
+    return shard.tablets_under_clone.count(tablet_id) > 0;
 }
 
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
@@ -1609,6 +1615,9 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     for (const auto& [segid, dv] : snapshot_meta->delete_vectors()) {
         RETURN_IF_ERROR(TabletMetaManager::put_del_vector(store, &wb, tablet_id, segid, dv));
     }
+    for (const auto& [segid, dcg] : snapshot_meta->delta_column_groups()) {
+        RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(store, &wb, tablet_id, segid, dcg));
+    }
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(store, &wb, snapshot_meta->tablet_meta()));
 
     auto tablet_meta = std::make_shared<TabletMeta>();
@@ -1641,6 +1650,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
         wb.Clear();
         RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
+        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
@@ -1674,7 +1684,7 @@ Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& t
         RETURN_IF_ERROR(SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet));
     } else {
         auto meta_file_path = fmt::format("{}/{}.hdr", tablet->schema_hash_path(), tablet->tablet_id());
-        tablet->tablet_meta()->save(meta_file_path);
+        RETURN_IF_ERROR(tablet->tablet_meta()->save(meta_file_path));
     }
     // move tablet directories to ${storage_root_path}/trash
     return move_to_trash(tablet->tablet_id_path());

@@ -21,7 +21,6 @@
 
 namespace starrocks {
 
-<<<<<<< Updated upstream
 void RowidRangeOption::add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
                            bool is_first_split_of_segment) {
     auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
@@ -49,17 +48,6 @@ RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const R
         return {nullptr, false};
     }
     return segment_it->second;
-=======
-RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange rowid_range)
-        : rowset_id(rowset_id), segment_id(segment_id), rowid_range(std::move(rowid_range)) {}
-
-bool RowidRangeOption::match_rowset(const Rowset* rowset) const {
-    return rowset->rowset_id() == rowset_id;
-}
-
-bool RowidRangeOption::match_segment(const Segment* segment) const {
-    return segment->id() == segment_id;
->>>>>>> Stashed changes
 }
 
 } // namespace starrocks

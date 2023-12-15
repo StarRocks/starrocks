@@ -66,7 +66,7 @@ struct EngineOptions {
     UniqueId backend_uid{0, 0};
     MemTracker* compaction_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;
-    // config path to store cluster_id, used by DummyStorageEngine
-    std::string conf_path;
+    // if start as cn, no need to write cluster id
+    bool need_write_cluster_id = true;
 };
 } // namespace starrocks

@@ -19,6 +19,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction_manager.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -191,7 +193,6 @@ void CompactionTask::_failure_callback(const Status& st) {
     LOG(WARNING) << "compaction task:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id << " failed.";
 }
 
-<<<<<<< Updated upstream
 Status CompactionTask::_shortcut_compact(Statistics* statistics) {
     // if there is only one rowset has data, we can shortcut compact
     // shortcut compact means hard link old rowset to new rowset directly
@@ -251,6 +252,4 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 } // namespace starrocks

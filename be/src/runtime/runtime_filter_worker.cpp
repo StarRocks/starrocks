@@ -47,7 +47,6 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
     }
 }
 
-<<<<<<< Updated upstream
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
     PInternalService_Stub* stub = nullptr;
@@ -64,16 +63,9 @@ static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRp
         return;
     }
 
-=======
-static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
-                                    int timeout_ms, const PTransmitRuntimeFilterParams& request) {
->>>>>>> Stashed changes
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
     rpc_closure->cntl.set_timeout_ms(timeout_ms);
-    // as the attachment is empty, the http rpc also can do like the following interface.
-    // create a http rpc stub: http_stub
-    // http_stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
 }
 
@@ -114,6 +106,11 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
+    }
+
+    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
+    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
+        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
     }
 
     for (auto* rf_desc : rf_descs) {
@@ -170,11 +167,11 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
                                      [](const auto& a, const auto& b) { return a.lo < b.lo; });
             if (passthrough_delivery || *sender_id == state->fragment_instance_id()) {
                 state->exec_env()->runtime_filter_worker()->send_broadcast_runtime_filter(
-                        std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms);
+                        std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms, rpc_http_min_size);
             }
         } else {
-            state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params),
-                                                                                 rf_desc->merge_nodes(), timeout_ms);
+            state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(
+                    std::move(params), rf_desc->merge_nodes(), timeout_ms, rpc_http_min_size);
         }
     }
 }
@@ -384,6 +381,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = _query_options.runtime_filter_send_timeout_ms;
     }
+    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
+    if (_query_options.__isset.runtime_filter_rpc_http_min_size) {
+        rpc_http_min_size = _query_options.runtime_filter_rpc_http_min_size;
+    }
 
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
@@ -436,7 +437,6 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     while (index < size) {
         auto& t = targets[index];
         bool is_local = (local == t.first);
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
         for (const auto& inst : t.second) {
@@ -476,7 +476,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         rpc_closures.push_back(new RuntimeFilterRpcClosure);
         auto* closure = rpc_closures.back();
         closure->ref();
-        send_rpc_runtime_filter(stub, closure, timeout_ms, request);
+        send_rpc_runtime_filter(t.first, closure, timeout_ms, rpc_http_min_size, request);
     }
 
     // we don't need to hold rf any more.
@@ -509,6 +509,7 @@ public:
     std::vector<TNetworkAddress> transmit_addrs;
     std::vector<TRuntimeFilterDestination> destinations;
     int transmit_timeout_ms;
+    int64_t transmit_via_http_min_size = 64L * 1024 * 1024;
 
     /// For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
     PTransmitRuntimeFilterParams transmit_rf_request;
@@ -546,11 +547,13 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
 }
 
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
-                                                   const std::vector<TNetworkAddress>& addrs, int timeout_ms) {
+                                                   const std::vector<TNetworkAddress>& addrs, int timeout_ms,
+                                                   int64_t rpc_http_min_size) {
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
     ev.transmit_timeout_ms = timeout_ms;
+    ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.transmit_addrs = addrs;
     ev.transmit_rf_request = std::move(params);
     _queue.put(std::move(ev));
@@ -558,11 +561,12 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
-                                                        int timeout_ms) {
+                                                        int timeout_ms, int64_t rpc_http_min_size) {
     _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
     ev.transmit_timeout_ms = timeout_ms;
+    ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.destinations = destinations;
     ev.transmit_rf_request = std::move(params);
     _queue.put(std::move(ev));
@@ -686,7 +690,6 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         TNetworkAddress addr;
         addr.hostname = t.host();
         addr.port = t.port();
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
 
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
@@ -712,12 +715,14 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
         closure->ref();
-        send_rpc_runtime_filter(stub, closure, config::send_rpc_runtime_filter_timeout_ms, request);
+        send_rpc_runtime_filter(addr, closure, config::send_rpc_runtime_filter_timeout_ms,
+                                config::send_runtime_filter_via_http_rpc_min_size, request);
     }
 }
 
 void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
-        PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
+        PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
+        int64_t rpc_http_min_size) {
     auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
@@ -750,15 +755,17 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
 
     auto passthrough_delivery = params.data().size() <= config::deliver_broadcast_rf_passthrough_bytes_limit;
     if (passthrough_delivery) {
-        _deliver_broadcast_runtime_filter_passthrough(std::move(params), std::move(destinations), timeout_ms);
+        _deliver_broadcast_runtime_filter_passthrough(std::move(params), std::move(destinations), timeout_ms,
+                                                      rpc_http_min_size);
     } else {
-        _deliver_broadcast_runtime_filter_relay(std::move(params), std::move(destinations), timeout_ms);
+        _deliver_broadcast_runtime_filter_relay(std::move(params), std::move(destinations), timeout_ms,
+                                                rpc_http_min_size);
     }
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRuntimeFilterParams&& request,
                                                                   std::vector<TRuntimeFilterDestination>&& destinations,
-                                                                  int timeout_ms) {
+                                                                  int timeout_ms, int64_t rpc_http_min_size) {
     DCHECK(!destinations.empty());
     request.clear_probe_finst_ids();
     request.clear_forward_targets();
@@ -782,15 +789,15 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
 
     auto* rpc_closure = new RuntimeFilterRpcClosure();
     SingleClosureJoinAndClean join_and_join(rpc_closure);
-    doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
     _exec_env->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
     rpc_closure->ref();
-    send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
+    send_rpc_runtime_filter(first_dest.address, rpc_closure, timeout_ms, rpc_http_min_size, request);
 }
 
 void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
-        PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
+        PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
+        int64_t rpc_http_min_size) {
     DCHECK(!destinations.empty());
 
     size_t k = 0;
@@ -805,7 +812,6 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
         for (auto i = 0; i < num_inflight; ++i) {
             auto request = params;
             auto& dest = destinations[start_idx + i];
-            doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
             request.clear_probe_finst_ids();
             request.clear_forward_targets();
             for (const auto& id : dest.finstance_ids) {
@@ -819,7 +825,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
             rpc_closures.push_back(new RuntimeFilterRpcClosure());
             auto* closure = rpc_closures.back();
             closure->ref();
-            send_rpc_runtime_filter(stub, closure, timeout_ms, request);
+            send_rpc_runtime_filter(dest.address, closure, timeout_ms, rpc_http_min_size, request);
         }
     }
 }
@@ -838,17 +844,17 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 }
 
 void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
-                                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms) {
+                                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
+                                                       int64_t rpc_http_min_size) {
     RuntimeFilterRpcClosures rpc_closures;
     rpc_closures.reserve(transmit_addrs.size());
     BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     for (const auto& addr : transmit_addrs) {
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, "SEND_PART_RF_RPC"});
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
         closure->ref();
-        send_rpc_runtime_filter(stub, closure, transmit_timeout_ms, params);
+        send_rpc_runtime_filter(addr, closure, transmit_timeout_ms, rpc_http_min_size, params);
     }
 }
 
@@ -904,12 +910,12 @@ void RuntimeFilterWorker::execute() {
 
         case SEND_PART_RF: {
             _deliver_part_runtime_filter(std::move(ev.transmit_addrs), std::move(ev.transmit_rf_request),
-                                         ev.transmit_timeout_ms);
+                                         ev.transmit_timeout_ms, ev.transmit_via_http_min_size);
             break;
         }
         case SEND_BROADCAST_GRF: {
             _process_send_broadcast_runtime_filter_event(std::move(ev.transmit_rf_request), std::move(ev.destinations),
-                                                         ev.transmit_timeout_ms);
+                                                         ev.transmit_timeout_ms, ev.transmit_via_http_min_size);
             break;
         }
 

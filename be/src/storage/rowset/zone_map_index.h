@@ -97,12 +97,12 @@ public:
 
     bool loaded() const { return invoked(_load_once); }
 
+    size_t mem_usage() const;
+
 private:
     void _reset() { std::vector<ZoneMapPB>{}.swap(_page_zone_maps); }
 
     Status _do_load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta);
-
-    size_t _mem_usage() const;
 
     OnceFlag _load_once;
     std::vector<ZoneMapPB> _page_zone_maps;

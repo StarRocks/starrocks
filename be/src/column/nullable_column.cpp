@@ -145,7 +145,7 @@ bool NullableColumn::append_nulls(size_t count) {
     if (count == 0) {
         return true;
     }
-    _data_column->append_default(count);
+    _data_column->resize_uninitialized(_data_column->size() + count);
     null_column_data().insert(null_column_data().end(), count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
     _has_null = true;
@@ -255,6 +255,24 @@ int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int
         return _data_column->compare_at(left, right, rhs_data, nan_direction_hint);
     } else {
         return _data_column->compare_at(left, right, rhs, nan_direction_hint);
+    }
+}
+
+int NullableColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    if (immutable_null_column_data()[left]) {
+        return safe_eq ? rhs.is_null(right) : EQUALS_NULL;
+    }
+
+    // left not null
+    if (rhs.is_nullable()) {
+        const auto& nullable_rhs = down_cast<const NullableColumn&>(rhs);
+        if (nullable_rhs.immutable_null_column_data()[right]) {
+            return safe_eq ? EQUALS_FALSE : EQUALS_NULL;
+        }
+        const auto& rhs_data = *(nullable_rhs._data_column);
+        return _data_column->equals(left, rhs_data, right, safe_eq);
+    } else {
+        return _data_column->equals(left, rhs, right, safe_eq);
     }
 }
 

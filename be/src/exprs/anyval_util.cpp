@@ -105,10 +105,8 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         out.type = TYPE_NULL;
         break;
     case TYPE_ARRAY:
-    case TYPE_MAP:
-    case TYPE_STRUCT:
+    case TYPE_MAP: {
         out.type = type.type;
-<<<<<<< Updated upstream
         for (const auto& child : type.children) {
             if (child.is_unknown_type()) {
                 // TODO(SmithCruise)
@@ -134,9 +132,6 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         }
         break;
     }
-=======
-        break;
->>>>>>> Stashed changes
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;
         out.precision = type.precision;
@@ -157,6 +152,7 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_FUNCTION:
         out.type = TYPE_FUNCTION;
+        break;
     case TYPE_VARBINARY:
         out.type = TYPE_VARBINARY;
         out.len = type.len;

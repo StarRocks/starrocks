@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <sstream>
 #include <string>
 
@@ -63,7 +64,6 @@ public:
     virtual void abort() = 0;
 
     virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
-<<<<<<< Updated upstream
 
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
@@ -73,8 +73,6 @@ protected:
     std::atomic<int> _num_remaining_senders = 0;
 
     std::unordered_map<int64_t, std::atomic<int>> _tablet_id_to_num_remaining_senders;
-=======
->>>>>>> Stashed changes
 };
 
 struct TabletsChannelKey {

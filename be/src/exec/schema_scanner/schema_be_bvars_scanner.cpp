@@ -46,7 +46,7 @@ private:
 SchemaScanner::ColumnDesc SchemaBeBvarsScanner::_s_columns[] = {
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DESC", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaBeBvarsScanner::SchemaBeBvarsScanner()

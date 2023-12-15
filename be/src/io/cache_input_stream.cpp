@@ -25,21 +25,21 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
-                                   size_t size, int64_t modification_time)
+// We use the `SharedBufferedInputStream` in `CacheInputStream` directly, because the we depend some functions of
+// `SharedBufferedInputStream`.
+// In fact, although the parameter is `SeekableInputStream` before, we only use `CacheInputStream` when using
+// `SharedBufferedInputStream`. Also, if we don't set the io range for `SharedBufferedInputStream`, it will
+// act as the old `DefaultInputStream`.
+CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream,
+                                   const std::string& filename, size_t size, int64_t modification_time)
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
-          _stream(stream),
+          _sb_stream(stream),
           _offset(0),
           _size(size) {
-<<<<<<< Updated upstream
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();
 
-=======
-    // _cache_key = _filename;
-    // use hash(filename) as cache key.
->>>>>>> Stashed changes
     _cache_key.resize(12);
 
     char* data = _cache_key.data();
@@ -57,7 +57,6 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, 
         uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-<<<<<<< Updated upstream
     _buffer.reserve(_block_size);
 }
 
@@ -209,9 +208,6 @@ void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::Sha
     sb->offset = std::max(start_block_id * _block_size, sb->offset);
     int64_t end = std::min((end_block_id + 1) * _block_size, end_offset);
     sb->size = end - sb->offset;
-=======
-    _buffer.reserve(BlockCache::instance()->block_size());
->>>>>>> Stashed changes
 }
 
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
@@ -220,81 +216,22 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     if (count < 0) {
         return Status::EndOfFile("");
     }
-    const int64_t BLOCK_SIZE = cache->block_size();
+    const int64_t _block_size = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
-    auto read_one_block = [&](size_t offset, size_t size) {
-        StatusOr<size_t> res;
-
-        DCHECK(size <= BLOCK_SIZE);
-        {
-            SCOPED_RAW_TIMER(&_stats.read_cache_ns);
-            res = cache->read_cache(_cache_key, offset, size, p);
-            if (res.ok()) {
-                _stats.read_cache_count += 1;
-                _stats.read_cache_bytes += size;
-                p += size;
-                return Status::OK();
-            }
-        }
-        if (!res.status().is_not_found()) return res.status();
-        DCHECK(res.status().is_not_found());
-
-        int64_t block_id = offset / BLOCK_SIZE;
-        int64_t block_offset = block_id * BLOCK_SIZE;
-        int64_t shift = offset - block_offset;
-
-        char* src = nullptr;
-        bool can_zero_copy = false;
-        if ((p + BLOCK_SIZE <= pe) && (shift == 0)) {
-            can_zero_copy = true;
-            src = p;
-        } else {
-            src = _buffer.data();
-        }
-
-        // if not found, read from stream and write back to cache.
-        int64_t load_size = std::min(BLOCK_SIZE, _size - block_offset);
-        RETURN_IF_ERROR(_stream->read_at_fully(block_offset, src, load_size));
-
-        if (_enable_populate_cache) {
-            SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-            Status r = cache->write_cache(_cache_key, block_offset, load_size, src);
-            if (r.ok()) {
-                _stats.write_cache_count += 1;
-                _stats.write_cache_bytes += load_size;
-            } else {
-                _stats.write_cache_fail_count += 1;
-                _stats.write_cache_fail_bytes += load_size;
-                LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-                // Failed to write cache, but we can keep processing query.
-            }
-        }
-
-        if (!can_zero_copy) {
-            // memcpy(p, src + shift, size);
-            strings::memcpy_inlined(p, src + shift, size);
-        }
-        p += size;
-        return Status::OK();
-    };
-
     int64_t end_offset = offset + count;
-    int64_t start_block_id = offset / BLOCK_SIZE;
-    int64_t end_block_id = (end_offset - 1) / BLOCK_SIZE;
+    int64_t start_block_id = offset / _block_size;
+    int64_t end_block_id = (end_offset - 1) / _block_size;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
-        size_t off = std::max(offset, i * BLOCK_SIZE);
-        size_t end = std::min((i + 1) * BLOCK_SIZE, end_offset);
+        size_t off = std::max(offset, i * _block_size);
+        size_t end = std::min((i + 1) * _block_size, end_offset);
         size_t size = end - off;
-<<<<<<< Updated upstream
         bool can_zero_copy = p + _block_size < pe;
         Status st = _read_block(off, size, p, can_zero_copy);
-=======
-        Status st = read_one_block(off, size);
->>>>>>> Stashed changes
         if (!st.ok()) return st;
         offset += size;
+        p += size;
     }
     DCHECK(p == pe);
     return Status::OK();
@@ -310,12 +247,7 @@ StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
 Status CacheInputStream::seek(int64_t offset) {
     if (offset < 0 || offset >= _size) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
     _offset = offset;
-<<<<<<< Updated upstream
     return _sb_stream->seek(offset);
-=======
-    _stream->seek(offset);
-    return Status::OK();
->>>>>>> Stashed changes
 }
 
 StatusOr<int64_t> CacheInputStream::position() {
@@ -327,14 +259,13 @@ StatusOr<int64_t> CacheInputStream::get_size() {
 }
 
 int64_t CacheInputStream::get_align_size() const {
-    BlockCache* cache = BlockCache::instance();
-    return cache->block_size();
+    return _block_size;
 }
 
 StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
     // if app level uses zero copy read, it does bypass the cache layer.
     // so here we have to fill cache manually.
-    ASSIGN_OR_RETURN(auto s, _stream->peek(count));
+    ASSIGN_OR_RETURN(auto s, _sb_stream->peek(count));
     if (_enable_populate_cache) {
         _populate_cache_from_zero_copy_buffer(s.data(), _offset, count);
     }
@@ -343,9 +274,8 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
 
 void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count) {
     BlockCache* cache = BlockCache::instance();
-    const int64_t BLOCK_SIZE = cache->block_size();
-    int64_t begin = offset / BLOCK_SIZE * BLOCK_SIZE;
-    int64_t end = std::min((offset + count + BLOCK_SIZE - 1) / BLOCK_SIZE * BLOCK_SIZE, _size);
+    int64_t begin = offset / _block_size * _block_size;
+    int64_t end = std::min((offset + count + _block_size - 1) / _block_size * _block_size, _size);
     p -= (offset - begin);
     auto f = [&](const char* buf, size_t offset, size_t size) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
@@ -368,7 +298,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
     };
 
     while (begin < end) {
-        size_t size = std::min(BLOCK_SIZE, end - begin);
+        size_t size = std::min(_block_size, end - begin);
         f(p, begin, size);
         begin += size;
         p += size;

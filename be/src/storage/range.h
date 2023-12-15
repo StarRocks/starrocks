@@ -223,10 +223,7 @@ private:
     std::vector<Range<T>> _ranges;
     bool _is_sorted = true;
 };
-<<<<<<< Updated upstream
 using SparseRangePtr = std::shared_ptr<SparseRange<>>;
-=======
->>>>>>> Stashed changes
 
 template <typename T>
 inline void SparseRange<T>::_add_uncheck(const Range<T>& r) {

@@ -15,6 +15,7 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 
 #include "column/vectorized_fwd.h"
+#include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "gen_cpp/Types_types.h"
@@ -34,7 +35,6 @@ static const IcebergColumnMeta k_delete_file_path{
 static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
-<<<<<<< Updated upstream
 Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                            int64_t file_length, std::set<int64_t>* need_skip_rowids) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
@@ -68,8 +68,6 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                        int64_t file_length, std::set<int64_t>* need_skip_rowids) {
     std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),

@@ -75,7 +75,7 @@ class LoadChannel {
     using LakeTabletManager = lake::TabletManager;
 
 public:
-    LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
+    LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id, int64_t txn_id,
                 const std::string& txn_trace_parent, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker);
 
     ~LoadChannel();
@@ -104,6 +104,8 @@ public:
 
     const UniqueId& load_id() const { return _load_id; }
 
+    int64_t txn_id() const { return _txn_id; }
+
     int64_t timeout() const { return _timeout_s; }
 
     std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
@@ -122,6 +124,7 @@ private:
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
     UniqueId _load_id;
+    int64_t _txn_id;
     int64_t _timeout_s;
     std::atomic<bool> _has_chunk_meta;
     mutable bthread::Mutex _chunk_meta_lock;

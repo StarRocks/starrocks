@@ -76,33 +76,12 @@ struct SorterComparator<TimestampValue> {
     }
 };
 
-<<<<<<< Updated upstream
 template <typename T>
 concept FloatingPoint = std::is_floating_point_v<T>;
 
 template <FloatingPoint T>
 struct SorterComparator<T> {
     static int compare(T lhs, T rhs) {
-=======
-template <>
-struct SorterComparator<float> {
-    static int compare(float lhs, float rhs) {
-        lhs = std::isnan(lhs) ? 0 : lhs;
-        rhs = std::isnan(rhs) ? 0 : rhs;
-        if (lhs == rhs) {
-            return 0;
-        } else if (lhs < rhs) {
-            return -1;
-        } else {
-            return 1;
-        }
-    }
-};
-
-template <>
-struct SorterComparator<double> {
-    static int compare(double lhs, double rhs) {
->>>>>>> Stashed changes
         lhs = std::isnan(lhs) ? 0 : lhs;
         rhs = std::isnan(rhs) ? 0 : rhs;
         if (lhs == rhs) {

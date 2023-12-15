@@ -44,6 +44,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -53,6 +54,7 @@
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class TabletSchema;
 class ShortKeyIndexDecoder;
 
@@ -78,38 +80,29 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 // is changed, this segment can not be used any more. For example, after a schema
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
-    struct private_type {
-        explicit private_type(int) {}
-    };
-
 public:
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
-                                                   bool skip_fill_local_cache = true);
+                                                   bool skip_fill_local_cache = true,
+                                                   lake::TabletManager* tablet_manager = nullptr);
 
-    static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       const FooterPointerPB* partial_rowset_footer);
+    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                     size_t* footer_length_hint,
+                                                     const FooterPointerPB* partial_rowset_footer);
 
-<<<<<<< Updated upstream
     Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
             lake::TabletManager* tablet_manager);
-=======
-    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-            const TabletSchema* tablet_schema);
-
-    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-            std::shared_ptr<const TabletSchema> tablet_schema);
->>>>>>> Stashed changes
 
     ~Segment();
+
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-<<<<<<< Updated upstream
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema);
 
@@ -143,14 +136,6 @@ public:
                                                                              ColumnAccessPath* path);
 
     Status new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** iter);
-=======
-    uint64_t id() const { return _segment_id; }
-
-    // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
-
-    Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter);
->>>>>>> Stashed changes
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -191,13 +176,9 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
-<<<<<<< Updated upstream
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
-=======
-    bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
->>>>>>> Stashed changes
 
     const std::string& file_name() const { return _fname; }
 
@@ -205,12 +186,12 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index(bool skip_fill_local_cache = true);
+    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
+    size_t mem_usage() const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
@@ -221,7 +202,12 @@ public:
     }
 
     // read short_key_index, for data check, just used in unit test now
-    Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+
+    // for cloud native tablet metadata cache.
+    // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
+    // so the segment size in the cache needs to be updated when indexes are loading.
+    void update_cache_size();
 
     DISALLOW_COPY_AND_MOVE(Segment);
 
@@ -257,15 +243,17 @@ private:
 
     void _reset();
 
-    int64_t _basic_info_mem_usage() { return static_cast<int64_t>(sizeof(Segment) + _fname.size()); }
+    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _fname.size(); }
 
-    int64_t _short_key_index_mem_usage() {
-        int64_t size = _sk_index_handle.mem_usage();
+    size_t _short_key_index_mem_usage() const {
+        size_t size = _sk_index_handle.mem_usage();
         if (_sk_index_decoder != nullptr) {
             size += _sk_index_decoder->mem_usage();
         }
         return size;
     }
+
+    size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
@@ -273,11 +261,7 @@ private:
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-<<<<<<< Updated upstream
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
-=======
-    void _prepare_adapter_info();
->>>>>>> Stashed changes
 
     friend class SegmentIterator;
 
@@ -300,17 +284,10 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
-<<<<<<< Updated upstream
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
-=======
-    // Actual storage type for each column, used to rewrite the input readoptions
-    std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
-    // When reading old type format data this will be set to true.
-    bool _needs_chunk_adapter = false;
->>>>>>> Stashed changes
 };
 
 } // namespace starrocks

@@ -64,7 +64,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
                                                                  const TabletColumn* column, WritableFile* wfile) {
     DCHECK(column->subcolumn_count() == 2);
 
-    // crete key columns writer
+    // create key columns writer
     std::unique_ptr<ColumnWriter> keys_writer;
     {
         const TabletColumn& key_column = column->subcolumn(0);
@@ -84,7 +84,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         ASSIGN_OR_RETURN(keys_writer, ColumnWriter::create(key_options, &key_column, wfile));
     }
 
-    // crete key columns writer
+    // create value columns writer
     std::unique_ptr<ColumnWriter> values_writer;
     {
         const TabletColumn& value_column = column->subcolumn(1);
@@ -109,14 +109,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         null_options.meta = opts.meta->add_children_columns();
         null_options.meta->set_column_id(opts.meta->column_id());
         null_options.meta->set_unique_id(opts.meta->unique_id());
-        null_options.meta->set_type(TYPE_BOOLEAN);
+        null_options.meta->set_type(TYPE_TINYINT);
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
         null_options.meta->set_is_nullable(false);
 
-        TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
+        TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
+        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(tinyint_type_info), wfile);
     }
 
     std::unique_ptr<ScalarColumnWriter> offsets_writer;

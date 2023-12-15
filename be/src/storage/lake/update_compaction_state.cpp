@@ -18,18 +18,19 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
-CompactionState::CompactionState(Rowset* rowset) {
-    if (rowset->num_segments() > 0) {
-        pk_cols.resize(rowset->num_segments());
+CompactionState::~CompactionState() {
+    if (_update_manager != nullptr) {
+        _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
     }
 }
 
-<<<<<<< Updated upstream
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
@@ -40,11 +41,6 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     }
     _update_manager = update_manager;
     _tablet_id = rowset->tablet_id();
-=======
-CompactionState::~CompactionState() {}
-
-Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
->>>>>>> Stashed changes
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
         std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
         LOG(WARNING) << msg;
@@ -68,27 +64,22 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
     OlapReaderStatistics stats;
-    auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
-    if (!res.ok()) {
-        return res.status();
+    if (_segment_iters.empty()) {
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats));
     }
-
-    auto& itrs = res.value();
-    CHECK_EQ(itrs.size(), rowset->num_segments());
+    CHECK_EQ(_segment_iters.size(), rowset->num_segments());
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
-    auto itr = itrs[segment_id].get();
+    auto itr = _segment_iters[segment_id].get();
     if (itr == nullptr) {
         return Status::OK();
     }
     auto& dest = pk_cols[segment_id];
     auto col = pk_column->clone();
     if (itr != nullptr) {
-        const auto num_rows = rowset->num_rows();
-        col->reserve(num_rows);
         while (true) {
             chunk->reset();
             auto st = itr->get_next(chunk);
@@ -103,7 +94,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
         itr->close();
     }
     dest = std::move(col);
-
+    _memory_usage += dest->memory_usage();
+    _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();
 }
 
@@ -111,7 +103,14 @@ void CompactionState::release_segments(uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
-    pk_cols[segment_id]->reset_column();
+    _memory_usage -= pk_cols[segment_id]->memory_usage();
+    _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
+    // reset ptr to release memory immediately
+    pk_cols[segment_id].reset();
+}
+
+std::string CompactionState::to_string() const {
+    return strings::Substitute("CompactionState tablet:$0", _tablet_id);
 }
 
 } // namespace starrocks::lake

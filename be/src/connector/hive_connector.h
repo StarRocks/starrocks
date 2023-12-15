@@ -52,17 +52,15 @@ public:
     ~HiveDataSource() override = default;
 
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
-<<<<<<< Updated upstream
     const std::string get_custom_coredump_msg() const override;
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
         return _provider->_scan_node->get_lazy_column_coalesce_counter();
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
-=======
->>>>>>> Stashed changes
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -77,6 +75,7 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
+    void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
@@ -84,14 +83,10 @@ private:
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
-<<<<<<< Updated upstream
     HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
     // for hiveTable/fileTable with avro/rcfile/sequence format
     HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
-=======
-    HdfsScanner* _create_hudi_jni_scanner();
->>>>>>> Stashed changes
     Status _check_all_slots_nullable();
 
     // =====================================
@@ -112,7 +107,12 @@ private:
     // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
     // 2. conjuncts that column is materialized, are evaled in group reader.
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _conjunct_slots;
+    std::unordered_set<SlotId> _slots_in_conjunct;
+
+    // used for reader to decide decode or not
+    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
+    // there is no need to decode.
+    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
@@ -139,14 +139,13 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
+    bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
-<<<<<<< Updated upstream
     bool _has_scan_range_indicate_const_column = false;
     bool _use_partition_column_value_only = false;
 
-=======
->>>>>>> Stashed changes
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;

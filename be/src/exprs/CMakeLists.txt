@@ -40,6 +40,7 @@ set(EXPR_FILES
   function_context.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
+  table_function/list_rowsets.cpp
   arithmetic_expr.cpp
   array_element_expr.cpp
   array_expr.cpp
@@ -82,6 +83,7 @@ set(EXPR_FILES
   runtime_filter.cpp
   split.cpp
   split_part.cpp
+  str_to_map.cpp
   string_functions.cpp
   time_functions.cpp
   utility_functions.cpp

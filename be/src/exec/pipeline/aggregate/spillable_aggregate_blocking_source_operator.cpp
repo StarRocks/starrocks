@@ -116,14 +116,12 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         return accumulated;
     }
 
+    auto& spiller = _aggregator->spiller();
+
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
         ASSIGN_OR_RETURN(auto chunk,
-<<<<<<< Updated upstream
                          spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
-=======
-                         _aggregator->spiller()->restore(state, *executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
->>>>>>> Stashed changes
         if (chunk->is_empty()) {
             return chunk;
         }

@@ -32,7 +32,6 @@ StreamScanOperator::StreamScanOperator(OperatorFactory* factory, int32_t id, int
         : ConnectorScanOperator(factory, id, driver_sequence, dop, scan_node),
           _is_stream_pipeline(is_stream_pipeline) {}
 
-<<<<<<< Updated upstream
 StreamScanOperator::~StreamScanOperator() {
     auto* state = runtime_state();
     if (state == nullptr) {
@@ -116,8 +115,6 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
     return Status::OK();
 }
 
-=======
->>>>>>> Stashed changes
 ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
@@ -127,14 +124,16 @@ ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t
 
 bool StreamScanOperator::is_finished() const {
     if (_is_stream_pipeline) {
-        return false;
+        return _stream_epoch_manager && _stream_epoch_manager->is_finished();
     }
     return ConnectorScanOperator::is_finished();
 }
 
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of has_output in ScanOperator,
+// maybe can abstract a method contains the same code later
 bool StreamScanOperator::has_output() const {
     if (_is_stream_pipeline) {
-<<<<<<< Updated upstream
         if (_is_epoch_finished) {
             return false;
         }
@@ -190,9 +189,6 @@ bool StreamScanOperator::has_output() const {
             }
         }
         return num_buffered_chunks() > 0;
-=======
-        return !_is_epoch_finished;
->>>>>>> Stashed changes
     }
     return ConnectorScanOperator::has_output();
 }
@@ -203,7 +199,6 @@ Status StreamScanOperator::reset_epoch(RuntimeState* state) {
     _is_finished = false;
     _run_time = 0;
     _chunk_num = 0;
-<<<<<<< Updated upstream
 
     _is_epoch_start = true;
     _current_epoch_info = _stream_epoch_manager->epoch_info();
@@ -270,8 +265,6 @@ Status StreamScanOperator::set_epoch_finished(RuntimeState* state) {
         RETURN_IF_ERROR(
                 _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset));
     }
-=======
->>>>>>> Stashed changes
     return Status::OK();
 }
 
@@ -285,6 +278,7 @@ StatusOr<ChunkPtr> StreamScanOperator::_mark_mock_data_finished() {
 }
 
 StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
+    _is_epoch_start = false;
     auto status_or = ConnectorScanOperator::pull_chunk(state);
 
     if (status_or.ok()) {
@@ -306,10 +300,42 @@ StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
     return status_or;
 }
 
+// In order to not modify the code of ScanOperator,
+// there is lots of repetition with the method of _finish_chunk_source_task in scanOperator,
+// maybe can abstract a method contains the same code later
+void StreamScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
+                                                   int64_t scan_rows, int64_t scan_bytes) {
+    _last_growth_cpu_time_ns += cpu_time_ns;
+    _last_scan_rows_num += scan_rows;
+    _last_scan_bytes += scan_bytes;
+    _num_running_io_tasks--;
+
+    DCHECK(_chunk_sources[chunk_source_index] != nullptr);
+    {
+        // - close() closes the chunk source which is not running.
+        // - _finish_chunk_source_task() closes the chunk source conditionally and then make it as not running.
+        // Therefore, closing chunk source and storing/loading `_is_finished` and `_is_io_task_running`
+        // must be protected by lock
+        std::lock_guard guard(_task_mutex);
+        if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished ||
+            (_is_epoch_finished && _is_stream_pipeline)) {
+            _close_chunk_source_unlocked(state, chunk_source_index);
+        }
+        _is_io_task_running[chunk_source_index] = false;
+    }
+}
+
+void StreamScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
+    if (_chunk_sources[chunk_source_index] != nullptr) {
+        _closed_chunk_sources.push(_chunk_sources[chunk_source_index]);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
+}
+
 StreamChunkSource::StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
         : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer) {}
-<<<<<<< Updated upstream
 
 Status StreamChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ConnectorChunkSource::prepare(state));
@@ -339,6 +365,4 @@ bool StreamChunkSource::_reach_eof() const {
            (_epoch_time_limit != -1 && data_source->cpu_time_spent_in_epoch() >= _epoch_time_limit);
 }
 
-=======
->>>>>>> Stashed changes
 } // namespace starrocks::pipeline

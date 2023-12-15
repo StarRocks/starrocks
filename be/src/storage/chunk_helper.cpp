@@ -119,6 +119,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_length(c.length());
+    f.set_uid(c.unique_id());
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
@@ -314,8 +315,7 @@ Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size, bo
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
-        auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
-                                                              : column_from_pool<false>(*f, chunk_size);
+        auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }

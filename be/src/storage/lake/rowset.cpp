@@ -51,11 +51,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
-<<<<<<< Updated upstream
     seg_options.tablet_schema = options.tablet_schema;
     seg_options.fill_data_cache = options.fill_data_cache;
-=======
->>>>>>> Stashed changes
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet.update_mgr(), nullptr);
@@ -93,19 +90,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, /*fill_cache=*/seg_options.reader_type == READER_QUERY));
+    RETURN_IF_ERROR(load_segments(&segments, options.fill_data_cache));
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
 
-<<<<<<< Updated upstream
-=======
-        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-            continue;
-        }
-
->>>>>>> Stashed changes
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -199,23 +189,31 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
+    return segments(fill_cache, fill_cache);
+}
+
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_data_cache, bool fill_metadata_cache) {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, fill_cache));
+    RETURN_IF_ERROR(load_segments(&segments, fill_data_cache, fill_metadata_cache));
     return segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
+    return load_segments(segments, fill_cache, fill_cache);
+}
+
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache, bool fill_metadata_cache) {
+#ifndef BE_TEST
+    RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
+#endif
+
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-<<<<<<< Updated upstream
         auto segment_or =
                 _tablet.load_segment(seg_name, seg_id++, &footer_size_hint, fill_data_cache, fill_metadata_cache);
-=======
-        auto segment_or = _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache);
->>>>>>> Stashed changes
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {

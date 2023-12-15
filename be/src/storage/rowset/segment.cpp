@@ -40,17 +40,20 @@
 
 #include <memory>
 
+#include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -69,27 +72,12 @@ namespace starrocks {
 using strings::Substitute;
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
-<<<<<<< Updated upstream
-=======
-                                                 uint32_t segment_id, const TabletSchema* tablet_schema,
-                                                 size_t* footer_length_hint,
-                                                 const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, tablet_schema);
-
-    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, true));
-    return std::move(segment);
-}
-
-StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
->>>>>>> Stashed changes
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
-                                                 bool skip_fill_local_cache) {
-    auto segment =
-            std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema));
-
-    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
+                                                 bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
+    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, std::move(tablet_schema), tablet_manager);
+    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
 
@@ -183,7 +171,6 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                  lake::TabletManager* tablet_manager)
         : _fs(std::move(fs)),
@@ -192,26 +179,28 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segm
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-=======
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-                 const TabletSchema* tablet_schema)
-        : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-}
-
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-                 std::shared_ptr<const TabletSchema> tablet_schema)
-        : _fs(std::move(fs)),
-          _fname(std::move(path)),
-          _tablet_schema(std::move(tablet_schema)),
-          _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
->>>>>>> Stashed changes
 }
 
 Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
+}
+
+Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                     bool skip_fill_local_cache) {
+    if (invoked(_open_once)) {
+        return Status::OK();
+    }
+
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache); });
+
+    // move the cache size update out of the `success_once`,
+    // so that the onceflag `_open_once` can be set before the cache_size is updated.
+    if (res.ok() && *res) {
+        update_cache_size();
+    }
+    return res.status();
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
@@ -220,11 +209,32 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     return Status::OK();
+}
+
+bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
+    if (read_options.dcg_loader == nullptr) {
+        return true;
+    }
+    SCOPED_RAW_TIMER(&read_options.stats->get_delta_column_group_ns);
+    Status st;
+    DeltaColumnGroupList dcgs;
+    if (read_options.is_primary_keys) {
+        TabletSegmentId tsid;
+        tsid.tablet_id = read_options.tablet_id;
+        tsid.segment_id = read_options.rowset_id + _segment_id;
+        st = read_options.dcg_loader->load(tsid, read_options.version, &dcgs);
+    } else {
+        int64_t tablet_id = read_options.tablet_id;
+        RowsetId rowsetid = read_options.rowsetid;
+        uint32_t segment_id = _segment_id;
+        st = read_options.dcg_loader->load(tablet_id, rowsetid, segment_id, INT64_MAX, &dcgs);
+    }
+
+    return st.ok() && dcgs.size() == 0;
 }
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
@@ -238,7 +248,6 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
             continue;
         }
-<<<<<<< Updated upstream
         if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
             // skip segment zonemap filter when this segment has column files link to it.
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
@@ -249,11 +258,6 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
             } else {
                 break;
             }
-=======
-        if (!_column_readers[column_id]->segment_zone_map_filter(pair.second)) {
-            read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
-            return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
->>>>>>> Stashed changes
         }
     }
     return new_segment_iterator(shared_from_this(), schema, read_options);
@@ -274,6 +278,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
+            update_cache_size();
         } else {
             _reset();
         }
@@ -338,7 +343,6 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_default(const TabletColumn& column,
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
@@ -352,50 +356,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
                 num_rows());
-=======
-void Segment::_prepare_adapter_info() {
-    ColumnId num_columns = _tablet_schema->num_columns();
-    _needs_chunk_adapter = false;
-    std::vector<LogicalType> types(num_columns);
-    for (ColumnId cid = 0; cid < num_columns; ++cid) {
-        LogicalType type;
-        if (_column_readers[cid] != nullptr) {
-            type = _column_readers[cid]->column_type();
-        } else {
-            // when the default column is used, column reader will be null.
-            // And the type will be same with the tablet schema.
-            type = _tablet_schema->column(cid).type();
-        }
-        types[cid] = type;
-        if (TypeUtils::specific_type_of_format_v1(type)) {
-            _needs_chunk_adapter = true;
-        }
-    }
-    if (_needs_chunk_adapter) {
-        _column_storage_types = std::make_unique<std::vector<LogicalType>>(std::move(types));
-    }
-}
-
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid) {
-    if (_column_readers[cid] == nullptr) {
-        const TabletColumn& tablet_column = _tablet_schema->column(cid);
-        if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
-            return Status::InternalError(
-                    fmt::format("invalid nonexistent column({}) without default value.", tablet_column.name()));
-        }
-        const TypeInfoPtr& type_info = get_type_info(tablet_column);
-        std::unique_ptr<DefaultValueColumnIterator> default_value_iter(new DefaultValueColumnIterator(
-                tablet_column.has_default_value(), tablet_column.default_value(), tablet_column.is_nullable(),
-                type_info, tablet_column.length(), num_rows()));
->>>>>>> Stashed changes
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
-<<<<<<< Updated upstream
-=======
-    return _column_readers[cid]->new_iterator();
->>>>>>> Stashed changes
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
@@ -415,7 +379,6 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                             const TabletSchemaCSPtr& read_tablet_schema) {
     if (read_tablet_schema != nullptr) {
@@ -427,8 +390,6 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     }
 }
 
-=======
->>>>>>> Stashed changes
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     RETURN_IF_ERROR(load_index(false));
     for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
@@ -437,7 +398,6 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     return Status::OK();
 }
 
-<<<<<<< Updated upstream
 size_t Segment::_column_index_mem_usage() const {
     size_t size = 0;
     for (auto& r : _column_readers) {
@@ -460,6 +420,4 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
-=======
->>>>>>> Stashed changes
 } // namespace starrocks

@@ -47,8 +47,7 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
-    build_buckets_counter =
-            ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
+    build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
     hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
@@ -141,6 +140,18 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->output_slots = _output_slots;
+    std::set<SlotId> predicate_slots;
+    for (ExprContext* expr_context : _conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    param->predicate_slots = std::move(predicate_slots);
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();
@@ -168,7 +179,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
     return Status::OK();
 }
 
@@ -177,8 +188,8 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     while (!spiller()->is_full()) {
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
-            RETURN_IF_ERROR(
-                    spiller()->spill(state, chunk_st.value(), io_executor(), RESOURCE_TLS_MEMTRACER_GUARD(state)));
+            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(), io_executor(),
+                                             TRACKER_WITH_SPILLER_GUARD(state, spiller())));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {

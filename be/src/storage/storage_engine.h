@@ -81,7 +81,6 @@ class DictionaryCacheManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
-<<<<<<< Updated upstream
 struct DeltaColumnGroupKey {
     int64_t tablet_id;
     RowsetId rowsetid;
@@ -110,8 +109,6 @@ struct DeltaColumnGroupKey {
     }
 };
 
-=======
->>>>>>> Stashed changes
 struct AutoIncrementMeta {
     int64_t min;
     int64_t max;
@@ -160,6 +157,8 @@ public:
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
+
+    DataDir* get_persistent_index_store(int64_t tablet_id);
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
@@ -269,10 +268,26 @@ public:
 
     void remove_increment_map_by_table_id(int64_t table_id);
 
+    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
+    size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
+
+    void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                               DeltaColumnGroupList* dcgs);
+
+    Status get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                  int64_t version, DeltaColumnGroupList* dcgs);
+
+    void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
+
+    void clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
     void wake_finish_publish_vesion_thread() {
         std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
         _finish_publish_version_cv.notify_one();
     }
+
+    bool is_as_cn() { return !_options.need_write_cluster_id; }
 
 protected:
     static StorageEngine* _s_instance;
@@ -284,7 +299,7 @@ protected:
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
-    Status _open();
+    Status _open(const EngineOptions& options);
 
     Status _init_store_map();
 
@@ -328,14 +343,11 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
-<<<<<<< Updated upstream
 #ifdef USE_STAROS
     // local pk index of SHARED_DATA gc/evict function
     void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
 #endif
 
-=======
->>>>>>> Stashed changes
     bool _check_and_run_manual_compaction_task();
 
     // garbage sweep thread process function. clear snapshot and trash folder
@@ -373,7 +385,6 @@ private:
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
     uint32_t _available_storage_medium_type_count;
-
     bool _is_all_cluster_id_exist;
 
     std::mutex _gc_mutex;
@@ -405,12 +416,9 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
-<<<<<<< Updated upstream
     // thread to gc/evict local pk index in sharded_data
     std::thread _local_pk_index_shared_data_gc_evict_thread;
 
-=======
->>>>>>> Stashed changes
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -461,7 +469,6 @@ private:
 
     std::mutex _auto_increment_mutex;
 
-<<<<<<< Updated upstream
     bool _need_write_cluster_id = true;
 
     // Delta Column Group cache, dcg is short for `Delta Column Group`
@@ -469,22 +476,6 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
-=======
-    StorageEngine(const StorageEngine&) = delete;
-    const StorageEngine& operator=(const StorageEngine&) = delete;
->>>>>>> Stashed changes
-};
-
-// DummyStorageEngine is used for ComputeNode, it only stores cluster id.
-class DummyStorageEngine : public StorageEngine {
-    std::string _conf_path;
-    std::unique_ptr<ClusterIdMgr> cluster_id_mgr;
-
-public:
-    DummyStorageEngine(const EngineOptions& options);
-    static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
-    Status set_cluster_id(int32_t cluster_id) override;
-    Status start_bg_threads() override { return Status::OK(); };
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

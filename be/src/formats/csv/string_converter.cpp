@@ -15,6 +15,7 @@
 #include "formats/csv/string_converter.h"
 
 #include "column/binary_column.h"
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -59,7 +60,6 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
         max_size = options.type_desc->len;
     }
 
-<<<<<<< Updated upstream
     bool length_check_status = true;
     // Hive table, not limit string length <= 1mb anymore
     if (options.is_hive) {
@@ -73,9 +73,6 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
         }
     }
     if (!length_check_status) {
-=======
-    if (UNLIKELY((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
->>>>>>> Stashed changes
         VLOG(3) << strings::Substitute("Column [$0]'s length exceed max varchar length. str_size($1), max_size($2)",
                                        column->get_name(), s.size, max_size);
         return false;
@@ -122,7 +119,6 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
         max_size = options.type_desc->len;
     }
     size_t ext_size = new_size - old_size;
-<<<<<<< Updated upstream
 
     bool length_check_status = true;
     // Hive table, not limit string length <= 1mb anymore
@@ -137,9 +133,6 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
         }
     }
     if (!length_check_status) {
-=======
-    if (UNLIKELY((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
->>>>>>> Stashed changes
         bytes.resize(old_size);
         VLOG(3) << strings::Substitute(
                 "Column [$0]'s length exceed max varchar length. old_size($1), new_size($2), ext_size($3), "

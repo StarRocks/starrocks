@@ -28,9 +28,9 @@
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {
-    return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}",
-                                       static_cast<int>(error.GetResponseCode()),
-                                       static_cast<int>(error.GetErrorType()), error.GetMessage()));
+    return Status::IOError(fmt::format(
+            "BE access S3 file failed, SdkResponseCode={}, SdkErrorType={}, SdkErrorMessage={}",
+            static_cast<int>(error.GetResponseCode()), static_cast<int>(error.GetErrorType()), error.GetMessage()));
 }
 
 StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
@@ -85,6 +85,19 @@ StatusOr<int64_t> S3InputStream::get_size() {
 
 void S3InputStream::set_size(int64_t value) {
     _size = value;
+}
+
+StatusOr<std::string> S3InputStream::read_all() {
+    Aws::S3::Model::GetObjectRequest request;
+    request.SetBucket(_bucket);
+    request.SetKey(_object);
+    Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
+    if (outcome.IsSuccess()) {
+        Aws::IOStream& body = outcome.GetResult().GetBody();
+        return std::string(std::istreambuf_iterator<char>(body), {});
+    } else {
+        return make_error_status(outcome.GetError());
+    }
 }
 
 } // namespace starrocks::io
