@@ -17,12 +17,15 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -40,6 +43,7 @@ import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
@@ -53,6 +57,11 @@ public class MVRefreshTestBase {
     protected static StarRocksAssert starRocksAssert;
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
+
+    protected static long startSuiteTime = 0;
+    protected long startCaseTime = 0;
+
+    protected static final String TEST_DB_NAME = "test";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -103,5 +112,26 @@ public class MVRefreshTestBase {
 
     @AfterClass
     public static void tearDown() throws Exception {
+    }
+
+    public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        new StmtExecutor(connectContext, sql).execute();
+    }
+
+    protected MaterializedView getMv(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    protected Table getTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(tableName);
+        Assert.assertNotNull(table);
+        return table;
     }
 }

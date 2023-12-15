@@ -29,6 +29,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -40,7 +41,9 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -50,6 +53,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteTest extends MvRewriteTestBase {
 
     @BeforeClass
@@ -1160,114 +1164,110 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPkFk() throws SQLException {
-        cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n," +
-                "\"unique_constraints\" = \"k1,k2\"\n" +
-                ");");
+        starRocksAssert.withTables(List.of(
+                        new MTable("parent_table1", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'unique_constraints' = 'k1,k2'"
+                        ),
+                        new MTable("parent_table2", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'unique_constraints' = 'k1,k2'"
+                        ),
+                        new MTable(
+                                "base_table1", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)",
+                                        "k5 INT",
+                                        "k6 VARCHAR(20)",
+                                        "k7 INT",
+                                        "k8 VARCHAR(20)",
+                                        "k9 INT",
+                                        "k10 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'foreign_key_constraints' = '(k3,k4) REFERENCES parent_table1(k1, k2)'"
+                        )
+                ),
+                () -> {
+                    OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
+                    Assert.assertNotNull(olapTable.getUniqueConstraints());
+                    Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
+                    UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
+                    Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
+                    Assert.assertEquals("k1", uniqueConstraint.getUniqueColumns().get(0));
+                    Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
 
-        cluster.runSql("test", "CREATE TABLE test.parent_table2(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n," +
-                "\"unique_constraints\" = \"k1,k2\"\n" +
-                ");");
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
+                    Assert.assertNotNull(olapTable.getUniqueConstraints());
+                    Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
+                    UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
+                    Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
+                    Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumns().get(0));
+                    Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumns().get(1));
 
-        OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
-        Assert.assertNotNull(olapTable.getUniqueConstraints());
-        Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
-        UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
-        Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint.getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
+                    UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
+                    Assert.assertEquals(1, uniqueConstraint3.getUniqueColumns().size());
+                    Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumns().get(0));
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
-        Assert.assertNotNull(olapTable.getUniqueConstraints());
-        Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
-        UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
-        Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumns().get(1));
+                    UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
+                    Assert.assertEquals(1, uniqueConstraint4.getUniqueColumns().size());
+                    Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
 
-        UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
-        Assert.assertEquals(1, uniqueConstraint3.getUniqueColumns().size());
-        Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumns().get(0));
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
+                    Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
 
-        UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
-        Assert.assertEquals(1, uniqueConstraint4.getUniqueColumns().size());
-        Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
-        Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
+                    ;
+                    OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
+                    Assert.assertNotNull(baseTable.getForeignKeyConstraints());
+                    List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
+                    Assert.assertEquals(1, foreignKeyConstraints.size());
+                    BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
+                    Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
+                    Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
+                    Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
+                    cluster.runSql("test", "alter table base_table1 set(" +
+                            "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
+                            "(k5,k6) REFERENCES parent_table2(k1, k2)\")");
 
-        cluster.runSql("test", "CREATE TABLE test.base_table1(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20),\n" +
-                "k5 INT,\n" +
-                "k6 VARCHAR(20),\n" +
-                "k7 INT,\n" +
-                "k8 VARCHAR(20),\n" +
-                "k9 INT,\n" +
-                "k10 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k1, k2)\"\n" +
-                ");");
-        OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
-        Assert.assertNotNull(baseTable.getForeignKeyConstraints());
-        List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
-        Assert.assertEquals(1, foreignKeyConstraints.size());
-        BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
-        Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
-        Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
+                    List<ForeignKeyConstraint> foreignKeyConstraints2 = baseTable.getForeignKeyConstraints();
+                    Assert.assertEquals(2, foreignKeyConstraints2.size());
+                    BaseTableInfo parentTableInfo2 = foreignKeyConstraints2.get(1).getParentTableInfo();
+                    OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
+                    Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
+                    Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
+                    Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
 
-        cluster.runSql("test", "alter table base_table1 set(" +
-                "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
-                "(k5,k6) REFERENCES parent_table2(k1, k2)\")");
-
-        List<ForeignKeyConstraint> foreignKeyConstraints2 = baseTable.getForeignKeyConstraints();
-        Assert.assertEquals(2, foreignKeyConstraints2.size());
-        BaseTableInfo parentTableInfo2 = foreignKeyConstraints2.get(1).getParentTableInfo();
-        OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
-        Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
-        Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
-        Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
-
-        cluster.runSql("test", "show create table base_table1");
-        cluster.runSql("test", "alter table base_table1 set(" +
-                "\"foreign_key_constraints\"=\"\")");
-        List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
-        Assert.assertNull(foreignKeyConstraints3);
+                    cluster.runSql("test", "show create table base_table1");
+                    cluster.runSql("test", "alter table base_table1 set(" +
+                            "\"foreign_key_constraints\"=\"\")");
+                    List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
+                    Assert.assertNull(foreignKeyConstraints3);
+                }
+        );
     }
 
     @Test
