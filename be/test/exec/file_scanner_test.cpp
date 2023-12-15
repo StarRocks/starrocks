@@ -55,15 +55,15 @@ private:
 TEST_F(FileScannerTest, sample_schema) {
     {
         // sample 1 file.
-        // file1: col1,int
-        // result: col1,int
+        // file1: col1,int64
+        // result: col1,BIGINT
         const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
                 {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/merged_schema1.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema2.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema3.parquet"});
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema2.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema3.parquet"});
 
         scan_range.params.__set_schema_sample_file_count(1);
 
@@ -82,17 +82,19 @@ TEST_F(FileScannerTest, sample_schema) {
 
     {
         // sample 2 file.
-        // file1: col1,int
-        // file3: col2,varchar
-        // result: col1,int; col2,varchar
+        // file1: col1,int64
+        // file3: col2,int32; col3,int32; col4,float
+        // result: col1,BIGINT; col2,INT; col3,INT; col4,FLOAT
         const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
                 {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)}};
+                {"col2", TypeDescriptor::from_logical_type(TYPE_INT)},
+                {"col3", TypeDescriptor::from_logical_type(TYPE_INT)},
+                {"col4", TypeDescriptor::from_logical_type(TYPE_FLOAT)}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/merged_schema1.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema2.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema3.parquet"});
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema2.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema3.parquet"});
 
         scan_range.params.__set_schema_sample_file_count(2);
 
@@ -111,18 +113,20 @@ TEST_F(FileScannerTest, sample_schema) {
 
     {
         // sample 3 file.
-        // file1: col1,int
-        // file2: col1,varchar; col2,int
-        // file3: col2,varchar
-        // result: col1,varchar; col2,varchar
+        // file1: col1,int64
+        // file2: col2,byte_array; col3,int64; col4,double
+        // file3: col2,int32; col3,int32; col4,float
+        // result: col1,BIGINT; col2,VARCHAR; col3,BIGINT; col4,DOUBLE
         const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
-                {"col1", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
-                {"col2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)}};
+                {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+                {"col2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col3", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+                {"col4", TypeDescriptor::from_logical_type(TYPE_DOUBLE)}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/merged_schema1.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema2.parquet",
-                                             test_exec_dir + "/test_data/parquet_data/merged_schema3.parquet"});
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema2.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema3.parquet"});
 
         scan_range.params.__set_schema_sample_file_count(3);
 

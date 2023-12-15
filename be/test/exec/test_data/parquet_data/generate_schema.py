@@ -16,37 +16,42 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 # file 1
+columns = [
+    "col1",
+]
 data = [
     pa.array([1, 2, 3], type=pa.int64()),
 ]
 
-columns = [
-    "col1",
-]
 table = pa.Table.from_arrays(data, columns)
-pq.write_table(table, "./merged_schema1.parquet")
+pq.write_table(table, "./schema1.parquet")
 
 # file 2
-data = [
-    pa.array(["7", "8", "9"], type=pa.string()),
-    pa.array([10, 11, 12], type=pa.int64()),
-]
-
 columns = [
-    "col1",
     "col2",
+    "col3",
+    "col4",
 ]
-table = pa.Table.from_arrays(data, columns)
-pq.write_table(table, "./merged_schema2.parquet")
-
-# file 3
 data = [
     pa.array(["4", "5", "6"], type=pa.string()),
+    pa.array([7, 8, 9], type=pa.int64()),
+    pa.array([10.1, 11.2, 12.3], type=pa.float64()),
 ]
 
+table = pa.Table.from_arrays(data, columns)
+pq.write_table(table, "./schema2.parquet")
+
+# file 3
 columns = [
     "col2",
+    "col3",
+    "col4",
 ]
-table = pa.Table.from_arrays(data, columns)
-pq.write_table(table, "./merged_schema3.parquet")
+data = [
+    pa.array([13, 14, 15], type=pa.int32()),
+    pa.array([16, 17, 18], type=pa.int32()),
+    pa.array([19.1, 20.2, 21.3], type=pa.float32()),
+]
 
+table = pa.Table.from_arrays(data, columns)
+pq.write_table(table, "./schema3.parquet")
