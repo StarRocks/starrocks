@@ -2549,6 +2549,32 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testUseSubQueryWithStar1() {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1) tbl";
+
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
+    public void testUseSubQueryWithStar2() {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by random " +
+                "refresh deferred manual " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1 where k1 > '19930101') tbl";
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
     public void testUseSubQueryWithPartition() throws Exception {
         String sql1 = "create materialized view mv1 " +
                 "partition by k1 " +
@@ -3965,7 +3991,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMvWithCTE() throws Exception {
+    public void testCreateMvWithCTE1() throws Exception {
         starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;");
         {
             String sql = "create materialized view mv1\n" +
@@ -4057,5 +4083,21 @@ public class CreateMaterializedViewTest {
                     AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
         starRocksAssert.dropView("view_1");
+    }
+
+    @Test
+    public void testCreateMvWithCTE2() throws Exception {
+        starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;",
+                () -> {
+                    String sql = "create materialized view mv1\n" +
+                            "partition by date_trunc('month',k1)\n" +
+                            "distributed by hash(k2) buckets 10\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "as with cte1 as (select * from (select * from tbl1 tb1) t where t.k1 > 10) " +
+                            " select * from cte1;";
+                    starRocksAssert.withMaterializedView(sql, () -> {});
+                });
     }
 }
