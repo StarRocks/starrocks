@@ -197,7 +197,7 @@ Syntax:
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
-  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...),
   [TO rollup_index_name]
   [PROPERTIES ("key"="value", ...)]
   ```
@@ -206,8 +206,9 @@ Syntax:
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
-  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
-  ADD COLUMN (column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  ADD COLUMN column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name),
+  ADD COLUMN column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name)
+  [, ...]
   [TO rollup_index_name]
   [PROPERTIES ("key"="value", ...)]
   ```
