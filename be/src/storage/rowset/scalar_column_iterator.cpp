@@ -64,7 +64,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         return Status::OK();
     }
     LogicalType column_type = delegate_type(_reader->column_type());
-    DCHECK(is_default_dict_encoding(column_type))
+    DCHECK(supports_dict_encoding(column_type))
             << strings::Substitute("dict encoding with unsupported $0 field type", column_type);
     switch (column_type) {
     case TYPE_CHAR:

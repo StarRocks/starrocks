@@ -381,8 +381,7 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
-// TODO: For official releases, this value should be set to 0
-CONF_Double(dictionary_encoding_ratio_for_non_string_column, "1");
+CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
 
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");

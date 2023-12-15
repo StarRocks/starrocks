@@ -34,8 +34,10 @@
 
 #pragma once
 
+#include <cmath>
 #include <functional>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
@@ -49,24 +51,37 @@ class PageBuilder;
 class PageDecoder;
 class PageBuilderOptions;
 
-inline bool is_default_dict_encoding(LogicalType type) {
-    switch (type) {
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-    case TYPE_LARGEINT:
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-    case TYPE_DECIMALV2:
-        return true;
-    default:
+inline bool enable_non_string_column_dict_encoding() {
+    double epsilon = 0.0001;
+    if (std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) < epsilon) {
         return false;
     }
+    return true;
+}
+
+inline bool number_types_supports_dict_encoding(LogicalType type) {
+    switch (type) {
+        case TYPE_TINYINT:
+        case TYPE_SMALLINT:
+        case TYPE_INT:
+        case TYPE_BIGINT:
+        case TYPE_LARGEINT:
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE:
+        case TYPE_DATE:
+        case TYPE_DATETIME:
+        case TYPE_DECIMALV2:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool supports_dict_encoding(LogicalType type) {
+    if (type == TYPE_VARCHAR || type == TYPE_CHAR) {
+        return true;
+    }
+    return number_types_supports_dict_encoding(type);
 }
 
 class EncodingInfo {

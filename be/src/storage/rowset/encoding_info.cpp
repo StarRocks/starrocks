@@ -179,7 +179,18 @@ public:
     EncodingInfoResolver();
     ~EncodingInfoResolver();
 
+    // We aim to minimize the impact of the newly introduced encoding strategy on existing behaviors. 
+    // This function is used to obtain the default encoding based on the field type, considering the following scenarios:
+    // 1. If the user has enabled dictionary encoding for number types, the field supports dictionary encoding, 
+    //    and it is not for optimizing value seek, return DICT_ENCODING.
+    // 2. If optimization for value seek is required, retrieve the encoding method from _value_seek_encoding_map.
+    // 3. In the last scenario, directly retrieve it from _default_encoding_type_map.
     EncodingTypePB get_default_encoding(LogicalType type, bool optimize_value_seek) const {
+        if (enable_non_string_column_dict_encoding() &&
+                number_types_supports_dict_encoding(type) &&
+                    !optimize_value_seek) {
+            return DICT_ENCODING;
+        }
         auto& encoding_map = optimize_value_seek ? _value_seek_encoding_map : _default_encoding_type_map;
         auto it = encoding_map.find(delegate_type(type));
         if (it != encoding_map.end()) {
@@ -219,36 +230,29 @@ private:
 // We have adjusted the default encoding for some scalar types to dictionary encoding.
 // As TYPE_DATE_V1/TYPE_DATETIME_V1/TYPE_DECIMAL are legacy types, no changes are made here.
 EncodingInfoResolver::EncodingInfoResolver() {
-    _add_map<TYPE_TINYINT, DICT_ENCODING>();
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
     _add_map<TYPE_TINYINT, FOR_ENCODING, true>();
     _add_map<TYPE_TINYINT, PLAIN_ENCODING>();
 
-    _add_map<TYPE_SMALLINT, DICT_ENCODING>();
     _add_map<TYPE_SMALLINT, BIT_SHUFFLE>();
     _add_map<TYPE_SMALLINT, FOR_ENCODING, true>();
     _add_map<TYPE_SMALLINT, PLAIN_ENCODING>();
 
-    _add_map<TYPE_INT, DICT_ENCODING>();
     _add_map<TYPE_INT, BIT_SHUFFLE>();
     _add_map<TYPE_INT, FOR_ENCODING, true>();
     _add_map<TYPE_INT, PLAIN_ENCODING>();
 
-    _add_map<TYPE_BIGINT, DICT_ENCODING>();
     _add_map<TYPE_BIGINT, BIT_SHUFFLE>();
     _add_map<TYPE_BIGINT, FOR_ENCODING, true>();
     _add_map<TYPE_BIGINT, PLAIN_ENCODING>();
 
-    _add_map<TYPE_LARGEINT, DICT_ENCODING>();
     _add_map<TYPE_LARGEINT, BIT_SHUFFLE>();
     _add_map<TYPE_LARGEINT, PLAIN_ENCODING>();
     _add_map<TYPE_LARGEINT, FOR_ENCODING, true>();
 
-    _add_map<TYPE_FLOAT, DICT_ENCODING>();
     _add_map<TYPE_FLOAT, BIT_SHUFFLE>();
     _add_map<TYPE_FLOAT, PLAIN_ENCODING>();
 
-    _add_map<TYPE_DOUBLE, DICT_ENCODING>();
     _add_map<TYPE_DOUBLE, BIT_SHUFFLE>();
     _add_map<TYPE_DOUBLE, PLAIN_ENCODING>();
 
@@ -268,7 +272,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DATE_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATE_V1, FOR_ENCODING, true>();
 
-    _add_map<TYPE_DATE, DICT_ENCODING>();
     _add_map<TYPE_DATE, BIT_SHUFFLE>();
     _add_map<TYPE_DATE, PLAIN_ENCODING>();
     _add_map<TYPE_DATE, FOR_ENCODING, true>();
@@ -277,7 +280,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DATETIME_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME_V1, FOR_ENCODING, true>();
 
-    _add_map<TYPE_DATETIME, DICT_ENCODING>();
     _add_map<TYPE_DATETIME, BIT_SHUFFLE>();
     _add_map<TYPE_DATETIME, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME, FOR_ENCODING, true>();
@@ -285,10 +287,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DECIMAL, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMAL, PLAIN_ENCODING>();
 
-    // For TYPE_DECIMALV2, BIT_SHUFFLE is used to optimize value seek.
-    // Therefore, we have only adjusted the default encoding to DICT_ENCODING,
-    // while BIT_SHUFFLE continues to serve as the encoding for optimizing value seek.
-    _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
     _add_map<TYPE_DECIMALV2, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMALV2, PLAIN_ENCODING>();
 
@@ -300,6 +298,19 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_JSON, PLAIN_ENCODING>();
 
     _add_map<TYPE_VARBINARY, PLAIN_ENCODING>();
+
+    // These number typs are support dict encoding, if you need to change this, please 
+    // change supports_dict_encoding function as same time.
+    _add_map<TYPE_TINYINT, DICT_ENCODING>();
+    _add_map<TYPE_SMALLINT, DICT_ENCODING>();
+    _add_map<TYPE_INT, DICT_ENCODING>();
+    _add_map<TYPE_BIGINT, DICT_ENCODING>();
+    _add_map<TYPE_LARGEINT, DICT_ENCODING>();
+    _add_map<TYPE_FLOAT, DICT_ENCODING>();
+    _add_map<TYPE_DOUBLE, DICT_ENCODING>();
+    _add_map<TYPE_DATE, DICT_ENCODING>();
+    _add_map<TYPE_DATETIME, DICT_ENCODING>();
+    _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
 }
 
 EncodingInfoResolver::~EncodingInfoResolver() {

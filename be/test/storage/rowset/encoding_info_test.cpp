@@ -46,8 +46,21 @@ namespace starrocks {
 
 class EncodingInfoTest : public testing::Test {
 public:
-    EncodingInfoTest() = default;
+    EncodingInfoTest() {
+        _number_types_supports_dict_encoding.emplace(TYPE_TINYINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_SMALLINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_INT);
+        _number_types_supports_dict_encoding.emplace(TYPE_BIGINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_LARGEINT);
+        _number_types_supports_dict_encoding.emplace(TYPE_FLOAT);
+        _number_types_supports_dict_encoding.emplace(TYPE_DOUBLE);
+        _number_types_supports_dict_encoding.emplace(TYPE_DATE);
+        _number_types_supports_dict_encoding.emplace(TYPE_DATETIME);
+        _number_types_supports_dict_encoding.emplace(TYPE_DECIMALV2);
+    }
+
     ~EncodingInfoTest() override = default;
+    std::set<LogicalType> _number_types_supports_dict_encoding;
 };
 
 TEST_F(EncodingInfoTest, normal) {
@@ -61,8 +74,56 @@ TEST_F(EncodingInfoTest, normal) {
 TEST_F(EncodingInfoTest, no_encoding) {
     auto type_info = get_type_info(TYPE_BIGINT);
     const EncodingInfo* encoding_info = nullptr;
-    auto status = EncodingInfo::get(TYPE_BIGINT, DICT_ENCODING, &encoding_info);
+    auto status = EncodingInfo::get(TYPE_BIGINT, RLE, &encoding_info);
     ASSERT_FALSE(status.ok());
+}
+
+TEST_F(EncodingInfoTest, number_types_supports_dict_encoding) {
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(true, number_types_supports_dict_encoding(logicType));
+        EXPECT_EQ(true, supports_dict_encoding(logicType));
+    }
+    EXPECT_EQ(false, number_types_supports_dict_encoding(TYPE_CHAR));
+    EXPECT_EQ(false, number_types_supports_dict_encoding(TYPE_VARCHAR));
+    EXPECT_EQ(true, supports_dict_encoding(TYPE_CHAR));
+    EXPECT_EQ(true, supports_dict_encoding(TYPE_VARCHAR));
+}
+
+TEST_F(EncodingInfoTest, enable_non_string_column_dict_encoding) {
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 1;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+}
+
+TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(BIT_SHUFFLE, EncodingInfo::get_default_encoding(logicType, false));
+        const EncodingInfo* encoding_info;
+        auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(BIT_SHUFFLE, encoding_info->encoding());
+
+        status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+    }
+
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(DICT_ENCODING, EncodingInfo::get_default_encoding(logicType, false));
+        const EncodingInfo* encoding_info;
+        auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+
+        status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
+        ASSERT_FALSE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+    }
 }
 
 TEST_F(EncodingInfoTest, default_encoding) {

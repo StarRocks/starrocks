@@ -97,7 +97,7 @@ public:
 
         for (int i = 0; i < size; i++) {
             CppType index_value;
-            page_decoder.at_index(src[i], &index_value);
+            page_decoder.at_index(i, &index_value);
             ASSERT_EQ(src[i], index_value);
         }
 
