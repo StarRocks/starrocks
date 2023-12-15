@@ -37,7 +37,7 @@ netstat -tunlp | grep 9010
 - `9060`：BE Thrift Server 端口（`be_port`）
 - `8040`：BE HTTP Server 端口（`be_http_port`）
 - `9050`：BE 心跳服务端口（`heartbeat_service_port`）
-- `8060`：BE BRPC 端口（`brpc_port`）
+- `8060`：BE bRPC 端口（`brpc_port`）
 
 在 BE 实例上执行如下命令查看这些端口是否被占用：
 
@@ -57,7 +57,8 @@ netstat -tunlp | grep 8060
 - `9060`：CN Thrift Server 端口（`be_port`）
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
-- `8060`：CN BRPC 端口（`brpc_port`）
+- `8060`：CN bRPC 端口（`brpc_port`）
+- `9070`：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。（`starlet_port`）
 
 在 CN 实例上执行如下命令查看这些端口是否被占用：
 

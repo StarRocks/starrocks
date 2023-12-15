@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 Defines data files in remote storage.
 
-From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/data-manipulation/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/data-manipulation/insert.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md).
+From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function FILES(). It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [SELECT](../../sql-statements/data-manipulation/SELECT.md), load the data rows into an existing table using [INSERT](../../sql-statements/data-manipulation/INSERT.md), or create a new table and load the data rows into it using [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md).
 
-From v3.2.0 onwards, FILES() supports defining writable data files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can [use INSERT INTO FILES() to unload data from StarRocks to remote storage](../../../unloading/unload_using_insert_into_files.md).
 
 Currently, the FILES() function supports the following data sources and file formats:
 
@@ -26,32 +26,17 @@ Currently, the FILES() function supports the following data sources and file for
 
 ## Syntax
 
-```SQL
-FILES( data_location , data_format [, StorageCredentialParams ] 
-    [, columns_from_path ] [, unload_data ] )
+- **Data loading**:
 
-data_location ::=
-    "path" = { "hdfs://<hdfs_host>:<hdfs_port>/<hdfs_path>"
-             | "s3://<s3_path>" 
-             | "s3a://<gcs_path>" 
-             | "wasb://<container>@<storage_account>.blob.core.windows.net/<blob_path>"
-             | "wasbs://<container>@<storage_account>.blob.core.windows.net/<blob_path>"
-             }
+  ```SQL
+  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  ```
 
-data_format ::=
-    "format" = { "parquet" | "orc" }
+- **Data unloading**:
 
--- Supported from v3.2 onwards.
-columns_from_path ::=
-    "columns_from_path" = "<column_name> [, ...]"
-
--- Supported from v3.2 onwards.
-unload_data::=
-    "compression" = "<compression_method>"
-    [, "max_file_size" = "<file_size>" ]
-    [, "partition_by" = "<column_name> [, ...]" ]
-    [, "single" = { "true" | "false" } ]
-```
+  ```SQL
+  FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
+  ```
 
 ## Parameters
 
@@ -87,7 +72,7 @@ The URI used to access the files. You can specify a path or a file.
 - To access Google Cloud Storage, you need to specify this parameter as:
 
   ```SQL
-  "path" = "s3q://<gcs_path>"
+  "path" = "s3a://<gcs_path>"
   -- Example: "path" = "s3a://path/file.parquet"
   ```
 
@@ -205,21 +190,26 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 
 -->
 
-### unload_data
+### unload_data_param
 
 From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading. For detailed instructions, see [Unload data using INSERT INTO FILES](../../../unloading/unload_using_insert_into_files.md).
 
-- `compression` (Required): The compression method to use when unloading data. Valid values:
-  - `uncompressed`: No compression algorithm is used.
-  - `gzip`: Use the gzip compression algorithm.
-  - `brotli`: Use the Brotli compression algorithm.
-  - `zstd`: Use the Zstd compression algorithm.
-  - `lz4`: Use the LZ4 compression algorithm.
-- `max_file_size`: The maximum size of each data file when data is unloaded into multiple files. Default value: `1GB`. Unit: B, KB, MB, GB, TB, and PB.
-- `partition_by`: The list of columns that are used to partition data files into different storage paths. FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5.
-- `single`: Whether to unload the data into a single file.  Valid values:
-  - `true`: The data is stored in a single data file.
-  - `false`: The data is stored in multiple files if `max_file_size` is reached.
+```sql
+-- Supported from v3.2 onwards.
+unload_data_param::=
+    "compression" = "<compression_method>",
+    "max_file_size" = "<file_size>",
+    "partition_by" = "<column_name> [, ...]" 
+    "single" = { "true" | "false" } 
+```
+
+
+| **Key**          | **Required** | **Description**                                              |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`brotli`: Use the Brotli compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
+| max_file_size    | No           | The maximum size of each data file when data is unloaded into multiple files. Default value: `1GB`. Unit: B, KB, MB, GB, TB, and PB. |
+| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
+| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if `max_file_size` is reached.</li></ul>                  |
 
 > **CAUTION**
 >

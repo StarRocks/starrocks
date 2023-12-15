@@ -346,6 +346,15 @@ public abstract class ConnectorPartitionTraits {
             }
             return result;
         }
+
+        public List<Column> getPartitionColumns() {
+            // TODO: check partition type
+            try {
+                return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
+            } catch (com.starrocks.common.NotImplementedException e) {
+                return null;
+            }
+        }
     }
 
     static class HivePartitionTraits extends DefaultTraits {
@@ -418,7 +427,7 @@ public abstract class ConnectorPartitionTraits {
         @Override
         public Optional<Long> maxPartitionRefreshTs() {
             IcebergTable icebergTable = (IcebergTable) table;
-            return Optional.of(icebergTable.getRefreshSnapshotTime());
+            return icebergTable.getSnapshot().map(Snapshot::timestampMillis);
         }
 
         @Override
@@ -440,7 +449,6 @@ public abstract class ConnectorPartitionTraits {
                 MaterializedView.BasePartitionInfo basePartitionInfo =
                         baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
                 if (basePartitionInfo == null) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
                     return new HashSet<>(partitionNames);
                 }
                 // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
@@ -450,15 +458,10 @@ public abstract class ConnectorPartitionTraits {
                     }
                 }
 
-                if (!result.isEmpty()) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
-                }
-
                 long basePartitionVersion = basePartitionInfo.getVersion();
-                if (basePartitionVersion < currentVersion) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
+                if (basePartitionVersion != currentVersion) {
                     result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
-                            basePartitionVersion));
+                            basePartitionVersion, snapshot));
                 }
             }
             return result;

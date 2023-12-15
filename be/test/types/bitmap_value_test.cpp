@@ -785,6 +785,45 @@ TEST_F(BitmapValueTest, sub_bitmap_internal) {
     ASSERT_EQ(ret, 0);
 }
 
+TEST_F(BitmapValueTest, split_bitmap) {
+    // empty
+    auto result = _empty_bitmap.split_bitmap(1);
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result[0].type(), BitmapDataType::EMPTY);
+
+    // single
+    result = _single_bitmap.split_bitmap(1);
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result[0].to_string(), "0");
+
+    // set
+    result = _medium_bitmap.split_bitmap(3);
+    ASSERT_EQ(result.size(), 5);
+    ASSERT_EQ(result[0].to_string(), "0,1,2");
+    ASSERT_EQ(result[1].to_string(), "3,4,5");
+    ASSERT_EQ(result[2].to_string(), "6,7,8");
+    ASSERT_EQ(result[3].to_string(), "9,10,11");
+    ASSERT_EQ(result[4].to_string(), "12,13");
+
+    // bitmap
+    result = _large_bitmap.split_bitmap(13);
+    ASSERT_EQ(result.size(), 5);
+    ASSERT_EQ(result[0].to_string(), "0,1,2,3,4,5,6,7,8,9,10,11,12");
+    ASSERT_EQ(result[1].to_string(), "13,14,15,16,17,18,19,20,21,22,23,24,25");
+    ASSERT_EQ(result[2].to_string(), "26,27,28,29,30,31,32,33,34,35,36,37,38");
+    ASSERT_EQ(result[3].to_string(), "39,40,41,42,43,44,45,46,47,48,49,50,51");
+    ASSERT_EQ(result[4].to_string(), "52,53,54,55,56,57,58,59,60,61,62,63");
+
+    // size=0
+    result = _large_bitmap.split_bitmap(0);
+    ASSERT_EQ(result.size(), 0);
+
+    // no need to split
+    result = _medium_bitmap.split_bitmap(100);
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result[0].to_string(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13");
+}
+
 TEST_F(BitmapValueTest, subset_limit) {
     // empty
     BitmapValue bitmap_1;

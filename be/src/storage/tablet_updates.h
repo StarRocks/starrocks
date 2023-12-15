@@ -335,6 +335,7 @@ private:
     friend class Tablet;
     friend class PrimaryIndex;
     friend class PersistentIndex;
+    friend class UpdateManager;
     friend class RowsetUpdateState;
 
     template <typename K, typename V>
@@ -444,6 +445,8 @@ private:
     void check_for_apply() { _check_for_apply(); }
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
+
+    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size);
 
 private:
     Tablet& _tablet;

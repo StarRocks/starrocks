@@ -7,8 +7,8 @@ displayed_sidebar: "Chinese"
 Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：
 
 - 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -24,8 +24,9 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 
 - StarRocks 查询 Hive 数据时，支持 Parquet、ORC 、CSV 、Avro、RCFile、SequenceFile 文件格式，其中：
 
-  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
+  - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。自 v3.1.5 起，Parquet 文件还支持 LZO 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
+  - CSV 文件从 v3.1.5 起支持 LZO 压缩格式。
 
 - StarRocks 查询 Hive 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
 - Hive Catalog 仅支持查询 Hive 数据，不支持针对 Hive 的写/删操作。
@@ -292,8 +293,8 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -301,8 +302,8 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
 
 ###### Azure Data Lake Storage Gen1
@@ -641,8 +642,8 @@ PROPERTIES
       "type" = "hive",
       "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -1052,7 +1053,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
 
 > **说明**
 >
@@ -1252,13 +1253,13 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 ## 周期性刷新元数据缓存
 
-自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/Configuration.md#fe-配置项)配置 Hive 元数据缓存周期性刷新：
+自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/FE_configuration.md)配置 Hive 元数据缓存周期性刷新：
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 

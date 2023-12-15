@@ -45,7 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
@@ -148,11 +148,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, RollupJobV2Params rollupJobV2Params) {
+            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
-                Collections.emptyList(), rollupJobV2Params);
+                baseSchemaColumns, rollupJobV2Params);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
@@ -307,7 +307,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (tbl == null) {
                 throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
             }
-            Partition partition = tbl.getPartition(getPartitionId());
+            PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
                 throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
             }

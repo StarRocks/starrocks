@@ -49,6 +49,12 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
 
+UpdateManager::~UpdateManager() {
+    _index_cache.clear();
+    _update_state_cache.clear();
+    _compaction_cache.clear();
+}
+
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
     return strings::Substitute("$0_$1", tablet_id, txn_id);
 }
@@ -165,6 +171,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     size_t idx = 0;
     size_t new_del = 0;
     size_t total_del = 0;
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
         if (rssid >= rowset_id && rssid < rowset_id + op_write.rowset().segments_size()) {
@@ -175,6 +182,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             new_del_vecs[idx].second->init(metadata.version(), del_ids.data(), del_ids.size());
             new_del += del_ids.size();
             total_del += del_ids.size();
+            segment_id_to_add_dels[rssid] += del_ids.size();
         } else {
             TabletSegmentId tsid;
             tsid.tablet_id = tablet->id();
@@ -188,13 +196,16 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             size_t cur_new = new_del_vecs[idx].second->cardinality();
             if (cur_old + cur_add != cur_new) {
                 // should not happen, data inconsistent
-                LOG(FATAL) << strings::Substitute(
-                        "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
-                        "v:$6",
-                        tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
+                if (!config::experimental_lake_ignore_pk_consistency_check) {
+                    LOG(FATAL) << strings::Substitute(
+                            "delvec inconsistent tablet:$0 rssid:$1 #old:$2 #add:$3 #new:$4 old_v:$5 "
+                            "v:$6",
+                            tablet->id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), metadata.version());
+                }
             }
             new_del += cur_add;
             total_del += cur_new;
+            segment_id_to_add_dels[rssid] += cur_add;
         }
 
         idx++;
@@ -206,6 +217,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opwrite(op_write, replace_segments, orphan_files);
+    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("upserts", upserts.size());
@@ -529,6 +541,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     auto input_rowset = std::find_if(metadata.rowsets().begin(), metadata.rowsets().end(),
                                      [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
+    std::map<uint32_t, size_t> segment_id_to_add_dels;
 
     // 2. update primary index, and generate delete info.
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset->num_segments());
@@ -551,6 +564,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
             dv->init(metadata.version(), tmp_deletes.data(), tmp_deletes.size());
             total_deletes += tmp_deletes.size();
         }
+        segment_id_to_add_dels[rssid] += tmp_deletes.size();
         delvecs.emplace_back(rssid, dv);
         compaction_state.release_segments(i);
     }
@@ -560,6 +574,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opcompaction(op_compaction);
+    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);

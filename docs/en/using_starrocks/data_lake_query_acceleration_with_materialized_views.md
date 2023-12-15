@@ -94,9 +94,9 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 ### Choose a suitable refresh strategy
 
-Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs, Iceberg catalogs, and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
+Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. Please note that the partitioning keys of the materialized view must be included in that of the base table. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data. As a result, StarRocks can:
+For Hive Catalog and Iceberg Catalog (starting from v3.1.4), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
@@ -106,6 +106,10 @@ For Hive catalogs, you can enable the Hive metadata cache refresh feature to all
   >
   > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
+Please note that if you need to refresh by partition, the partitioning keys of the materialized view must be included in that of the base table.
+
+For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
+
 To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
 
 | **Configuration item**                                       | **Default**                | **Description**                                              |
@@ -113,6 +117,8 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 | enable_background_refresh_connector_metadata                 | true in v3.0 false in v2.5 | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. true indicates to enable the Hive metadata cache refresh, and false indicates to disable it. |
 | background_refresh_metadata_interval_millis                  | 600000 (10 minutes)        | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400 (24 hours)           | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
+
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently only Iceberg V1 tables are supported.
 
 ### Enable query rewrite for external catalog-based materialized views
 

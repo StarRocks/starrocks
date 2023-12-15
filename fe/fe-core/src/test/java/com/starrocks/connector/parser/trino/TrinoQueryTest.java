@@ -391,34 +391,34 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 4> : 2: c1.a");
+                "  |  <slot 4> : 2: c1.a[false]");
 
         sql = "select c0, test_struct.c1.a from test_struct";
-        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
 
         sql = "select c0, test.test_struct.c1.a from test_struct";
-        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
 
         sql = "select c0, default_catalog.test.test_struct.c1.a from test_struct";
-        assertPlanContains(sql, "<slot 4> : 2: c1.a");
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
 
         sql = "select c1.a[10].b from test_struct";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 4> : 2: c1.a[10].b");
+                "  |  <slot 4> : 2: c1.a[true][10].b[true]");
 
         sql = "select c2.a, c2.b from test_struct";
         assertPlanContains(sql, "  1:Project\n" +
-                "  |  <slot 4> : 3: c2.a\n" +
-                "  |  <slot 5> : 3: c2.b");
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
 
         sql = "select c2.a + c2.b from test_struct";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 4> : CAST(3: c2.a AS DOUBLE) + 3: c2.b");
+                "  |  <slot 4> : CAST(3: c2.a[true] AS DOUBLE) + 3: c2.b[true]");
 
         sql = "select sum(c2.b) from test_struct group by c2.a";
         assertPlanContains(sql, "1:Project\n" +
-                "  |  <slot 4> : 3: c2.a\n" +
-                "  |  <slot 5> : 3: c2.b");
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
     }
 
     public void testSelectRow() throws Exception {

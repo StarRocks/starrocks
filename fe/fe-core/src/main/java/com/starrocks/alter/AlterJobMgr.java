@@ -650,10 +650,6 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
 
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isCloudNativeTable()) {
-                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
-                }
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                     schemaChangeHandler.updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
@@ -694,7 +690,7 @@ public class AlterJobMgr {
         }
 
         if (isSynchronous) {
-            olapTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 

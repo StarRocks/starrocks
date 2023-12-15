@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows certain indicators of the StarRocks cluster.
 
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```SQL
@@ -84,7 +90,7 @@ ClusterDecommissioned: false
 | HeartbeatPort         | Heartbeat service port of the BE node.                       |
 | BePort                | Thrift Server port of the BE node.                           |
 | HttpPort              | HTTP Server port of the BE node.                             |
-| BrpcPort              | BRPC port of the BE node.                                    |
+| BrpcPort              | bRPC port of the BE node.                                    |
 | LastStartTime         | The last time when the BE node was started.                  |
 | LastHeartbeat         | The last time when the BE node received a heartbeat.         |
 | Alive                 | If the BE node is alive.                                     |

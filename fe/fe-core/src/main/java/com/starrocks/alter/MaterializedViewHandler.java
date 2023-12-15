@@ -344,6 +344,8 @@ public class MaterializedViewHandler extends AlterHandler {
         long dbId = db.getId();
         long tableId = olapTable.getId();
         int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        // mvSchemaVersion will keep same with the src MaterializedIndex
+        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         long mvIndexId = globalStateMgr.getNextId();
@@ -360,7 +362,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                baseIndexId, mvIndexId, baseIndexName, mvName,
+                baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion, 
                 mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
@@ -722,7 +724,7 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Base index[" + baseIndexName + "] does not exist");
         }
         // check state
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex baseIndex = partition.getIndex(baseIndexId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
@@ -810,7 +812,7 @@ public class MaterializedViewHandler extends AlterHandler {
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex materializedIndex = partition.getIndex(mvIndexId);
             Preconditions.checkNotNull(materializedIndex);
         }
@@ -826,7 +828,7 @@ public class MaterializedViewHandler extends AlterHandler {
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
             // delete rollup index
             partition.deleteRollupIndex(mvIndexId);
@@ -849,7 +851,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexId);
 
                 if (!GlobalStateMgr.isCheckpointThread()) {

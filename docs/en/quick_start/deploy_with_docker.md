@@ -25,7 +25,7 @@ Before deploying StarRocks in Docker, make sure the following requirements are s
 
   You must have the following software installed on your machine:
 
-  - [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 or later)
+  - [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 or later) AND you must have at least 5GB of free space in the disk partitions of the meta directory.  See https://github.com/StarRocks/starrocks/issues/35608 for details. 
   - MySQL client (5.5 or later)
 
 ## Step 1: Download the StarRocks Docker image

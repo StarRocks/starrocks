@@ -149,6 +149,7 @@ Status HdfsScanner::_build_scanner_context() {
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
+    RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
@@ -160,7 +161,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     } else {
         LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
-    _app_stats.num_rows_read += (*chunk)->num_rows();
+    _app_stats.rows_read += (*chunk)->num_rows();
     return status;
 }
 
@@ -309,8 +310,9 @@ void HdfsScanner::update_counter() {
     update_hdfs_counter(profile);
 
     COUNTER_UPDATE(profile->reader_init_timer, _app_stats.reader_init_ns);
-    COUNTER_UPDATE(profile->rows_read_counter, _app_stats.raw_rows_read);
-    COUNTER_UPDATE(profile->rows_skip_counter, _app_stats.skip_read_rows);
+    COUNTER_UPDATE(profile->raw_rows_read_counter, _app_stats.raw_rows_read);
+    COUNTER_UPDATE(profile->rows_read_counter, _app_stats.rows_read);
+    COUNTER_UPDATE(profile->late_materialize_skip_rows_counter, _app_stats.late_materialize_skip_rows);
     COUNTER_UPDATE(profile->expr_filter_timer, _app_stats.expr_filter_ns);
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);

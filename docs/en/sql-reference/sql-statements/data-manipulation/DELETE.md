@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 Deletes data rows from a table based on the specified conditions. The table can be a partitioned or non-partitioned table.
 
-For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delete data from specified partitions. However, Primary Key tables do not allow you to do so. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. From v3.0, StarRocks enriches the `DELETE...WHERE` semantics with multi-table joins and common table expressions (CTEs). If you need to join Primary Key tables with other tables in the database, you can reference these other tables in the USING clause or CTE.
+For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can delete data from specified partitions. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. From v3.0, StarRocks enriches the `DELETE...WHERE` semantics with multi-table joins and common table expressions (CTEs). If you need to join Primary Key tables with other tables in the database, you can reference these other tables in the USING clause or CTE.
 
 ## Usage notes
 
@@ -37,7 +37,7 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 | `column_name`    | Yes      | The column you want to use as the DELETE condition. You can specify one or more columns.   |
 | `op`             | Yes      | The operator used in the DELETE condition. The supported operators are `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, and `NOT IN`. |
 
-### Limits
+### Limits and usage notes
 
 - For Duplicate Key tables, you can use **any column** as the DELETE condition. For Aggregate tables and Unique Key tables, only **key columns** can be used as the DELETE condition.
 
@@ -171,12 +171,11 @@ DELETE FROM <table_name>
 |    `from_item`    | No           | One or more other tables in the database. These tables can be joined with the table being operated based on the condition specified in the WHERE clause. Based on the result set of the join query, StarRocks deletes the matched rows from the table being operated. For example, if the USING clause is `USING t1 WHERE t0.pk = t1.pk;`, StarRocks converts the table expression in the USING clause to `t0 JOIN t1 ON t0.pk=t1.pk;` when executing the DELETE statement. |
 | `where_condition` | Yes          | The condition based on which you want to delete rows. Only rows that meet the WHERE condition can be deleted. This parameter is required, because it helps prevent you from accidentally deleting the entire table. If you want to delete the entire table, you can use 'WHERE true'. |
 
-### Limits
+### Limits and usage notes
 
+- Primary Key tables do not support deleting data from a specified partition, for example, `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>`.
 - The following comparison operators are supported: `=`, `>`, `<`, `>=`, `<=`, `!=`, `IN`, `NOT IN`.
-
 - The following logical operators are supported: `AND` and `OR`.
-
 - You cannot use the DELETE statement to run concurrent DELETE operations or to delete data at data loading. If you perform such operations, the atomicity, consistency, isolation, and durability (ACID) of transactions may not be ensured.
 
 ### Examples

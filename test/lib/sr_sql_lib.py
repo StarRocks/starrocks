@@ -919,6 +919,26 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
+        """
+        wait async materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        count = 0
+        success_num = 0
+        while count < check_count and success_num < min_success_num:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][12]
+            if status != "SUCCESS":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                success_num += 1
+            count += 1
+        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
+
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
         wait pipe load finish
@@ -965,9 +985,9 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is found" % (mv_name))
 
-    def wait_alter_table_finish(self, alter_type="COLUMN"):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
         wait alter table job finish and return status
         """
@@ -981,7 +1001,7 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][9]
+            status = res["result"][0][off]
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 if sleep_time <= 1:
                     time.sleep(1)
@@ -1354,3 +1374,30 @@ class StarrocksSQLApiLib(object):
             res_json = json.loads(res)
             tools.assert_dict_contains_subset({"status": "OK"}, res_json,
                                               f"failed to update be config [response={res}] [url={exec_url}]")
+
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
+
+    def wait_refresh_dictionary_finish(self, name, check_status):
+        """
+        wait dictionary refresh job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW DICTIONARY %s" % name,
+                True,
+            )
+
+            status = res["result"][0][6]
+            if status != ("REFRESHING") and status != ("COMMITTING"):
+                break
+            time.sleep(0.5)
+        tools.assert_equal(check_status, status, "wait refresh dictionary finish error")

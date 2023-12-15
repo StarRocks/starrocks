@@ -1118,8 +1118,8 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("DictExpr(28: P_MFGR,[<place-holder> IN ('MFGR#1', 'MFGR#2')])"));
-        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
+        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL, " +
+                "is_binary_row:false)), partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                 "query_global_dicts:[TGlobalDict(columnId:28"));
     }
 

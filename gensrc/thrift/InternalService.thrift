@@ -243,6 +243,8 @@ struct TQueryOptions {
   110: optional TQueryQueueOptions query_queue_options;
 
   111: optional bool enable_file_metacache;
+
+  112: optional bool enable_pipeline_level_shuffle;
 }
 
 
@@ -316,6 +318,8 @@ struct TQueryGlobals {
   // Added by StarRocks
   // Required by function 'last_query_id'.
   30: optional string last_query_id
+
+  31: optional i64 timestamp_us
 }
 
 

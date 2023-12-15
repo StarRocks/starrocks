@@ -11,6 +11,7 @@ Manually refresh a specific asynchronous materialized view or partitions within.
 > **CAUTION**
 >
 > You can only manually refresh materialized views that adopt ASYNC or MANUAL refresh strategy. You can check the refresh strategy of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW_MATERIALIZED_VIEW.md).
+> This operation requires the REFRESH privilege on the target materialized view.
 
 ## Syntax
 
@@ -30,7 +31,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 | partition_start_date      | no           | The start date of the partitions to refresh manually.  |
 | partition_end_date        | no           | The end date of the partitions to refresh manually.    |
 | FORCE                     | no           | If you specify this parameter, StarRocks forcibly refreshes the corresponding materialized view or partitions. If you do not specify this parameter, StarRocks automatically judges if the data is updated and refreshes the partition only when needed.  |
-| WITH ... MODE             | no           | Make a synchronous or asynchronous call of the refresh task. `SYNC` indicates making a synchronous call of the refresh task, and StarRocks returns the task result only when the task succeeds or fails. `ASYNC` indicates making an asynchronous call of the refresh task, and StarRocks returns success right after the task is submitted, leaving the task to be executed asynchronously in the background. You can check the refresh task status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' Information Schema. For more information, see [Check the execution status of asynchronous materialized view](../../../using_starrocks/Materialized_view.md#check-the-execution-status-of-asynchronous-materialized-view). Default: `ASYNC`. Supported from v3.1.0 onwards. |
+| WITH ... MODE             | no           | Make a synchronous or asynchronous call of the refresh task. `SYNC` indicates making a synchronous call of the refresh task, and StarRocks returns the task result only when the task succeeds or fails. `ASYNC` indicates making an asynchronous call of the refresh task, and StarRocks returns success right after the task is submitted, leaving the task to be executed asynchronously in the background. You can check the refresh task status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata views in StarRocks' Information Schema. For more information, see [Check the execution status of asynchronous materialized view](../../../using_starrocks/Materialized_view.md#check-the-execution-status-of-asynchronous-materialized-view). Default: `ASYNC`. Supported from v3.1.0 onwards. |
 
 > **CAUTION**
 >

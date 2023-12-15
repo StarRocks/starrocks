@@ -299,9 +299,10 @@ public class StatisticExecutor {
             }
         } else {
             if (table.isNativeTableOrMaterializedView()) {
+                long existUpdateRows = GlobalStateMgr.getCurrentAnalyzeMgr().getExistUpdateRows(table.getId());
                 BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                         statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties());
+                        statsJob.getProperties(), existUpdateRows);
                 GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
                 GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
                         basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),

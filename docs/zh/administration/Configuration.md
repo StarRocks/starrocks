@@ -123,6 +123,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 引入版本：2.5.5
 
+##### enable_statistics_collect_profile
+
+- 含义：统计信息查询时是否生成 Profile。您可以将此项设置为 `true`，以允许 StarRocks 为系统统计查询生成 Profile。
+- 默认值：false
+- 引入版本：3.1.5
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
@@ -155,6 +161,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。
 - 默认值：TRUE
+
+##### http_slow_request_threshold_ms
+
+- 含义：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
+- 单位：毫秒
+- 默认值：5000
+- 引入版本：2.5.15，3.1.5
 
 ##### max_partitions_in_one_batch
 
@@ -271,6 +284,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。
 - 默认值：3
 
+##### statistic_auto_collect_small_table_rows
+
+- 含义：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
+- 默认值：10000000
+- 引入版本：v3.2
+
 ##### enable_local_replica_selection
 
 - 含义：是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。
@@ -374,6 +393,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：集群内每个 Routine Load 导入任务超时时间，- 单位：秒。<br />自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
 - 单位：秒
 - 默认值：60
+
+#### routine_load_unstable_threshold_second
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 单位：秒
+- 默认值：3600
 
 ##### max_tolerable_backend_down_num
 
@@ -509,6 +533,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
+##### fast_schema_evolution
+
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+  > **NOTE**
+  >
+  > - StarRocks 存算分离集群不支持该参数。
+  > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
+- 默认值：TRUE
+- 引入版本：3.2.0
+
 ##### recover_with_empty_tablet
 
 - 含义：在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。
@@ -591,6 +625,105 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 默认值：15 \* 60 \* 100
 
+#### 存算分离相关动态参数
+
+##### lake_compaction_score_selector_min_score
+
+- 含义：触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
+- 默认值： 10.0
+- 引入版本：v3.1.0
+
+Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
+
+##### lake_compaction_max_tasks
+
+- 含义：允许同时执行的 Compaction 任务数。
+- 默认值：-1
+- 引入版本：v3.1.0
+
+系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaciton 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
+
+##### lake_compaction_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_publish_version_max_threads
+
+- 含义：发送生效版本（Publish Version）任务的最大线程数。
+- 默认值：512
+- 引入版本：v3.2.0
+
+##### lake_autovacuum_parallel_partitions
+
+- 含义：最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
+- 默认值：8
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- 含义：对同一个表分区进行垃圾数据清理的最小间隔时间。
+- 单位：秒
+- 默认值：180
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- 含义：保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 单位：分钟
+- 默认值：5
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- 含义：如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
+- 单位：小时
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_enable_ingest_slowdown
+
+- 含义：是否开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。
+- 默认值：false
+- 引入版本：v3.2.0
+
+##### lake_ingest_slowdown_threshold
+
+- 含义：触发导入限速的 Compaction Score 阈值。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。
+- 默认值：100
+- 引入版本：v3.2.0
+
+> **说明**
+>
+> 当 `lake_ingest_slowdown_threshold` 比配置项 `lake_compaction_score_selector_min_score` 小时，实际生效的阈值会是 `lake_compaction_score_selector_min_score`。
+
+##### lake_ingest_slowdown_ratio
+
+- 含义：导入限速比例。
+- 默认值：0.1
+- 引入版本：v3.2.0
+
+数据导入任务可以分为数据写入和数据提交（COMMIT）两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，延迟比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。例如，数据写入阶段耗时为 5 分钟，`lake_ingest_slowdown_ratio` 为 0.1，Compaction Score 比 `lake_ingest_slowdown_threshold` 多 10，那么延迟提交的时间为 `5 * 10 * 0.1 = 5` 分钟，相当于写入阶段的耗时由 5 分钟增加到了 10 分钟，平均导入速度下降了一倍。
+
+> **说明**
+>
+> - 如果一个导入任务同时向多个分区写入，那么会取所有分区的 Compaction Score 的最大值来计算延迟提交时间。
+> - 延迟提交的时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要 Compaction Score 不超过 `lake_compaction_score_upper_bound`，系统都会执行数据提交（COMMIT）操作。
+> - 如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
+
+##### lake_compaction_score_upper_bound
+
+- 含义：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
+- 默认值：0
+- 引入版本：v3.2.0
+
 #### 其他动态参数
 
 ##### plugin_enable
@@ -665,6 +798,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v3.1.0 起新增。
 - 默认值：0
+
+##### allow_system_reserved_names
+
+- 含义：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
+- 默认值: FALSE
+
+##### enable_backup_materialized_view
+
+- 含义：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+##### enable_colocate_mv_index
+
+- 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
 
 ### 配置 FE 静态参数
 
@@ -823,7 +971,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### brpc_idle_wait_max_time
 
-- 含义：BRPC 的空闲等待时间。单位：毫秒。
+- 含义：bRPC 的空闲等待时间。单位：毫秒。
 - 默认值：10000
 
 ##### query_port
@@ -1470,12 +1618,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：5000
 
-#### txn_commit_rpc_timeout_ms
-
-- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
-- 单位：毫秒
-- 默认值：20000
-
 #### max_consumer_num_per_group
 
 - 含义：Routine load 中，每个consumer group 内最大的 consumer 数量。
@@ -1605,6 +1747,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### update_compaction_ratio_threshold
+
+- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 默认值：0.5
+
 #### max_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
@@ -1617,7 +1764,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
-#### 配置 BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
@@ -1647,12 +1794,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_port
 
-- 含义：BRPC 的端口，可以查看 BRPC 的一些网络统计信息。
+- 含义：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
 - 默认值：8060
 
 #### brpc_num_threads
 
-- 含义：BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
+- 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
 - 默认值：-1
 
 #### priority_networks
@@ -1662,7 +1809,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_port
 
-- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 含义：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
 - 默认值：9070
 
 #### heartbeat_service_port
@@ -1906,7 +2053,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_max_body_size
 
-- 含义：BRPC 最大的包容量。
+- 含义：bRPC 最大的包容量。
 - 单位：字节
 - 默认值：2147483648
 
@@ -1930,36 +2077,36 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 Store 用以 Flush MemTable 的线程数。
 - 默认值：2
 
-#### block_cache_enable
+#### datacache_enable
 
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### datacache_disk_path  
 
-- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
+- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### datacache_meta_path  
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
 
-#### block_cache_block_size
+#### datacache_block_size
 
 - 含义：单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。
 - 默认值：1048576
 
-#### block_cache_mem_size
+#### datacache_mem_size
 
-- 含义：内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。
-- 单位：字节
-- 默认值：2147483648
+- 含义：内存缓存数据量的上限，可设为比例上限（如 `10%`）或物理上限（如 `10G`, `21474836480` 等）。默认值为 `10%`。推荐将该参数值最低设置成 10 GB。
+- 单位：N/A
+- 默认值：10%
 
-#### block_cache_disk_size
+#### datacache_disk_size
 
-- 含义：单个磁盘缓存数据量的上限。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
-- 单位：字节
+- 含义：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 单位：N/A
 - 默认值：0
 
 #### jdbc_connection_pool_size
@@ -1988,3 +2135,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
+
+#### lake_service_max_concurrency
+
+- 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
+- 单位：N/A
+- 默认值：0

@@ -383,15 +383,16 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit) {
-        Statistics statistics = null;
-        if (!FeConstants.runningUnitTest) {
-            statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        }
+        // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
+        Statistics statistics = FeConstants.runningUnitTest ? null :
+                getTableStatisticsFromInternalStatistics(table, columns);
         if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(
                     session, table, columns, partitionKeys, predicate, limit)).orElse(null);
         } else {
+            session.setObtainedFromInternalStatistics(true);
             return statistics;
         }
     }

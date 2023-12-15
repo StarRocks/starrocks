@@ -34,7 +34,7 @@ public class OptimizeClause extends AlterTableClause {
     @SerializedName(value = "sourcePartitionIds")
     List<Long> sourcePartitionIds = Lists.newArrayList();
 
-    private List<String> sortKeys = Lists.newArrayList();
+    private List<String> sortKeys = null;
 
     public OptimizeClause(KeysDesc keysDesc,
                            PartitionDesc partitionDesc,

@@ -118,7 +118,7 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    PInternalService_Stub* _brpc_stub = nullptr;
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline

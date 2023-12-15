@@ -52,5 +52,19 @@ public class DDLTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE testTable2\n" +
+                        "(\n" +
+                        "    v1 date,\n" +
+                        "    v2 int,\n" +
+                        "    v3 int\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(`v1`)\n" +
+                        "PARTITION BY RANGE(v1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(v1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
     }
 }

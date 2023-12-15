@@ -49,6 +49,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -112,7 +113,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -225,6 +225,13 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxColUniqueId")
     protected int maxColUniqueId = -1;
 
+    // We can utilize a monotonically increasing IndexId,
+    // which is based on the OlapTable, to uniquely identify an index. When adding a multi-column index,
+    // we can assign the 'indexId' as the index's name. Furthermore, if we need to replace an old index
+    // with a new one that has the same 'indexName', the unique 'indexId' allows us to distinguish between them.
+    @SerializedName(value = "maxIndexId")
+    protected long maxIndexId = -1;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -299,6 +306,7 @@ public class OlapTable extends Table {
         this.colocateGroup = null;
 
         this.indexes = indexes;
+        tryToAssignIndexId();
 
         this.tableProperty = null;
     }
@@ -310,7 +318,6 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -346,6 +353,11 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+
+        // Shallow copy shared data to check whether the copied table has changed or not.
+        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
+        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -401,6 +413,18 @@ public class OlapTable extends Table {
         this.maxColUniqueId = maxColUniqueId;
     }
 
+    public synchronized long incAndGetMaxIndexId() {
+        this.maxIndexId++;
+        return this.maxIndexId;
+    }
+
+    public long getMaxIndexId() {
+        return this.maxIndexId;
+    }
+
+    public void setMaxIndexId(long maxIndexId) {
+        this.maxIndexId = maxIndexId;
+    }
 
     public boolean dynamicPartitionExists() {
         return tableProperty != null
@@ -947,7 +971,7 @@ public class OlapTable extends Table {
 
 
     /**
-     * @return  : table's partition name to range partition key mapping.
+     * @return : table's partition name to range partition key mapping.
      */
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
         Preconditions.checkState(partitionInfo instanceof RangePartitionInfo);
@@ -1473,6 +1497,10 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public boolean isTempPartition(long partitionId) {
+        return tempPartitions.getPartition(partitionId) != null;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TOlapTable tOlapTable = new TOlapTable(getName());
@@ -1653,6 +1681,13 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
+    // Whether it's a partitioned table partition by columns, range or list.
+    public boolean isPartitionedTable() {
+        return partitionInfo != null && partitionInfo.isPartitioned();
+    }
+
+    // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
+    // partitions.
     @Override
     public boolean isPartitioned() {
         int numSegs = 0;
@@ -2722,6 +2757,7 @@ public class OlapTable extends Table {
     @Override
     public void onReload() {
         analyzePartitionInfo();
+        tryToAssignIndexId();
     }
 
     @Override
@@ -2829,6 +2865,7 @@ public class OlapTable extends Table {
     }
 
     private static class DeleteOlapTableTask implements Runnable {
+
         private final OlapTable table;
 
         public DeleteOlapTableTask(OlapTable table) {
@@ -2957,11 +2994,11 @@ public class OlapTable extends Table {
 
     /**
      * Check if data cache is allowed for the specified partition's data:
-     *  - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
-     *  - If the partition is partitioned by DATE or DATETIME:
-     *    - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
-     *      duration, allow data cache for the partition.
-     *    - otherwise, disallow the data cache for the partition
+     * - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
+     * - If the partition is partitioned by DATE or DATETIME:
+     * - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
+     * duration, allow data cache for the partition.
+     * - otherwise, disallow the data cache for the partition
      *
      * @param partition the partition to check. the partition must belong to this table.
      * @return true if the partition is enabled for the data cache, false otherwise
@@ -2971,6 +3008,21 @@ public class OlapTable extends Table {
             return isEnableFillDataCacheImpl(Objects.requireNonNull(partition, "partition is null"));
         } catch (AnalysisException ignored) {
             return true;
+        }
+    }
+
+    // Read indexes and assign indexId for some compatible reasons when upgrade from old version
+    private void tryToAssignIndexId() {
+        if (this.indexes != null && !this.indexes.getIndexes().isEmpty()) {
+            this.maxIndexId = Math.max(
+                    this.indexes.getIndexes().stream()
+                            .filter(index -> index.getIndexType() == IndexType.GIN)
+                            .mapToLong(Index::getIndexId).max().orElse(-1),
+                    this.maxIndexId);
+            this.indexes.getIndexes().stream()
+                    .filter(index -> index.getIndexType() == IndexType.GIN && index.getIndexId() < 0)
+                    .forEach(index -> index.setIndexId(this.incAndGetMaxIndexId()));
+
         }
     }
 
@@ -2984,16 +3036,18 @@ public class OlapTable extends Table {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
-            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
-                LocalDateTime upper = LocalDateTime.now();
-                LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
-                LocalDate upper = LocalDate.now();
-                LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
-                return partitionRange.isConnected(dataCacheRange);
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME) ||
+                    rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                try {
+                    LocalDateTime upper = LocalDateTime.now();
+                    LocalDateTime lower = upper.minus(cacheDuration);
+                    dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                    return partitionRange.isConnected(dataCacheRange);
+                } catch (Exception e) {
+                    LOG.warn("Table name: {}, datacache.partiton_duration: {}, Failed to compare with partition range. " +
+                            "Error: {}.", super.name, cacheDuration.toString(), e.getMessage());
+                    return false;
+                }
             } else {
                 // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
                 // enable data cache by default.

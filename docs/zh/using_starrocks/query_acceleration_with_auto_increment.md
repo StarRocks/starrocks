@@ -95,7 +95,7 @@ displayed_sidebar: "Chinese"
         order_uuid STRING,
         order_id_int BIGINT AUTO_INCREMENT -- 系统自动为每个 order_uuid 值分配一个对应的唯一 ID
     )
-    PRIMARY KEY (order_uuid);
+    PRIMARY KEY (order_uuid)
     DISTRIBUTED BY HASH (order_uuid)
     PROPERTIES("replicated_storage" = "true");
     ```
@@ -245,7 +245,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
           order_uuid STRING,
           order_id_int BIGINT AUTO_INCREMENT  -- 自动为每个 order_uuid 值分配一个唯一 ID 
       )
-      PRIMARY KEY (order_uuid);
+      PRIMARY KEY (order_uuid)
       DISTRIBUTED BY HASH (order_uuid)
       PROPERTIES("replicated_storage" = "true");
       ```

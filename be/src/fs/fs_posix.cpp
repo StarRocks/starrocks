@@ -29,6 +29,8 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
+#include "io/io_profiler.h"
+#include "testutil/sync_point.h"
 #include "util/errno.h"
 #include "util/slice.h"
 
@@ -210,6 +212,7 @@ public:
 #ifdef USE_STAROS
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
+        IOProfiler::add_write(bytes_written);
         return Status::OK();
     }
 
@@ -443,6 +446,7 @@ public:
     }
 
     Status delete_file(const std::string& fname) override {
+        TEST_ERROR_POINT("PosixFileSystem::delete_file");
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Instance()->erase(fname);
         }

@@ -10,7 +10,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 > **NOTE**
 >
-> Only the `cluster_admin` role has the privilege to execute this SQL statement.
+> Only the `cluster_admin` role has the privilege to perform this operation.
 
 ## Syntax and parameters
 
@@ -97,6 +97,10 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ```SQL
   ALTER SYSTEM DROP COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
   ```
+
+> **NOTE**
+>
+> You cannot decommission a CN node using the `ALTER SYSTEM DECOMMISSION` command.
 
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |

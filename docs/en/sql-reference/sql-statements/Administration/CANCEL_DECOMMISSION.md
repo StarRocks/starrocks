@@ -6,7 +6,13 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement is used to undo a node decommission. (Administrator only!)
+This statement is used to undo a node decommission.
+
+:::tip
+
+Only the `cluster_admin` role has the privilege to perform this operation. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
 
 Syntax:
 

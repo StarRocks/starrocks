@@ -20,7 +20,6 @@
 #include "common/status.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/lake/tablet.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -30,17 +29,22 @@ class TabletSchema;
 
 namespace lake {
 
+class TabletManager;
+
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
-    explicit TabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
-            : _tablet(tablet), _schema(std::move(schema)), _txn_id(txn_id) {}
+    explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
+                          int64_t txn_id)
+            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _schema(std::move(schema)), _txn_id(txn_id) {}
 
     virtual ~TabletWriter() = default;
 
-    int64_t tablet_id() const { return _tablet.id(); }
+    TabletManager* tablet_manager() const { return _tablet_mgr; }
+
+    int64_t tablet_id() const { return _tablet_id; }
 
     int64_t txn_id() const { return _txn_id; }
 
@@ -105,7 +109,8 @@ public:
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
 protected:
-    Tablet _tablet;
+    TabletManager* _tablet_mgr;
+    int64_t _tablet_id;
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     std::vector<std::string> _files;

@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics.get());
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     return Status::OK();
 }
 
@@ -86,6 +86,9 @@ void ExchangeSourceOperatorFactory::close_stream_recvr() {
 
 bool ExchangeSourceOperatorFactory::could_local_shuffle() const {
     DCHECK(_texchange_node.__isset.partition_type);
+    if (!_enable_pipeline_level_shuffle) {
+        return true;
+    }
     // There are two ways of shuffle
     // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
     // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so

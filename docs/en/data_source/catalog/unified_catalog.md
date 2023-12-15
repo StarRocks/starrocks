@@ -7,7 +7,7 @@ displayed_sidebar: "English"
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from various data sources, including Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake, as a unified data source without ingestion. With unified catalogs, you can:
 
 - Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
-- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
+- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
 To ensure successful SQL workloads on your unified data source, your StarRocks cluster needs to integrate with two important components:
@@ -254,8 +254,8 @@ If you choose Blob Storage as storage, take one of the following actions:
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -263,8 +263,8 @@ If you choose Blob Storage as storage, take one of the following actions:
 
   | **Parameter**             | **Required** | **Description**                                              |
   | ------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
-  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
 
 ###### Azure Data Lake Storage Gen1
@@ -600,8 +600,8 @@ PROPERTIES
       "type" = "unified",
       "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -823,7 +823,7 @@ To query data from a unified catalog, follow these steps:
 
 ## Load data from Hive, Iceberg, Hudi, or Delta Lake
 
-You can use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
+You can use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
 
 The following example loads the data of the Hive table `hive_table` into the StarRocks table `test_tbl` created in the database `test_database` that belongs to the unified catalog `unified_catalog`:
 
@@ -918,7 +918,7 @@ PARTITION BY (id,dt);
 
 ## Sink data to a table in a unified catalog
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
 
 > **NOTE**
 >
@@ -926,7 +926,7 @@ Similar to the internal tables of StarRocks, if you have the [INSERT](../../admi
 
 StarRocks supports sinking data only to Hive and Iceberg tables in unified catalogs.
 
-[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) to insert data into a Hive or Iceberg table in that database:
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to insert data into a Hive or Iceberg table in that database:
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>

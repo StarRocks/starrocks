@@ -8,11 +8,12 @@ displayed_sidebar: "Chinese"
 
 为远程存储系统创建存储卷。该功能自 v3.1 起支持。
 
-存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md)中创建数据库和云原生表时引用存储卷。
+存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)中创建数据库和云原生表时引用存储卷。
 
 > **注意**
 >
-> 仅拥有 SYSTEM 级 CREATE STORAGE VOLUME 权限的用户可以执行该操作。
+> - 仅拥有 SYSTEM 级 CREATE STORAGE VOLUME 权限的用户可以执行该操作。
+> - 如果您需要基于 HDFS 创建存储卷，建议您不要随意修改 **HADOOP_CONF** 和 **core-site.xml/hdfs-site.xml**。如果以上文件中的参数与创建 Storage Volume 的参数存在差异，可能导致系统发生未知行为。
 
 ## 语法
 
@@ -31,7 +32,7 @@ PROPERTIES
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。 |
 | TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`HDFS` 代表 HDFS 集群。 |
-| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>HDFS：`hdfs://<ip>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li></ul> |
+| LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | 存储卷的注释。                                               |
 | PROPERTIES          | `"key" = "value"` 形式的参数对，用以指定访问远程存储系统的属性和认证信息。有关详细信息，请参阅 [PROPERTIES](#properties)。 |
 
@@ -252,64 +253,85 @@ PROPERTIES
   | azure.blob.shared_key | 访问 Azure Blob Storage 的共享密钥（Shared Key）。           |
   | azure.blob.sas_token  | 访问 Azure Blob Storage 的共享访问签名（SAS）。              |
 
-- 如果您使用 HDFS 存储，请设置以下属性：
+- 如果您使用 HDFS 存储：
 
-  ```SQL
-  "enabled" = "{ true | false }"
-  ```
-
-  > **注意**
-  >
-  > Storage Volume 当前不支持通过认证接入 HDFS。
-
-<!--
-
-  - 如果您使用简单认证接入 HDFS，请设置以下属性：
+  - 如果您不使用认证接入 HDFS，请设置以下属性：
 
     ```SQL
-      "enabled" = "{ true | false }",
-      "hadoop.security.authentication" = "simple",
-      "username" = "<hdfs_username>",
-      "password" = "<hdfs_password>"
-      ```
+    "enabled" = "{ true | false }"
+    ```
 
-  - 如果您使用 Kerberos 认证接入 HDFS，请设置以下属性：
+  - 如果您使用简单认证 (Username) 接入 HDFS（自 v3.2 起支持），请设置以下属性：
+
+    ```SQL
+    "enabled" = "{ true | false }",
+    "hadoop.security.authentication" = "simple",
+    "username" = "<hdfs_username>"
+    ```
+
+  - 如果您使用 Kerberos Ticket Cache 认证接入 HDFS（自 v3.2 起支持），请设置以下属性：
 
     ```SQL
     "enabled" = "{ true | false }",
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab" = "/keytab/hive.keytab",
-    "kerberos_keytab_content" = "YWFhYWFh"
+    "hadoop.security.kerberos.ticket.cache.path" = "<ticket_cache_path>"
     ```
 
     > **注意**
     >
-    > 每个 StarRocks 集群仅支持创建一个使用 Kerberos 认证的 HDFS 存储卷。
+    > - 该设置仅为强制系统使用 KeyTab 通过 Kerberos 访问 HDFS。请确保每个 BE 或 CN 节点都能够访问 KeyTab 文件。同时，还需要确保正确设置 **/etc/krb5.conf** 文件。
+    > - Ticket cache 由外部的 kinit 工具生成，请确保有 crontab 或类似的定期任务来刷新 Ticket。
 
-  - 如果您的 HDFS 集群启用了 NameNode HA 配置，请额外设置以下属性：
+  - 如果您的 HDFS 集群启用了 NameNode HA 配置（自 v3.2 起支持），请额外设置以下属性：
 
     ```SQL
     "dfs.nameservices" = "<ha_cluster_name>",
-    "dfs.ha.namenodes.<ha_cluster_name>" = "ha_n1,ha_n2",
+    "dfs.ha.namenodes.<ha_cluster_name>" = "<NameNode1>,<NameNode2> [, ...]",
     "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode1>" = "<hdfs_host>:<hdfs_port>",
     "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode2>" = "<hdfs_host>:<hdfs_port>",
-    "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+    [...]
+    "dfs.client.failover.proxy.provider.<ha_cluster_name>" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
     ```
+
+    更多信息，请参考 [HDFS HA 文档](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html)。
+
+    - 如果您使用 WebHDFS（自 v3.2 起支持），请设置以下属性：
+
+    ```SQL
+    "enabled" = "{ true | false }"
+    ```
+
+    更多信息，请参考 [WebHDFS 文档](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/WebHDFS.html)。
+
+
+  - 如果您使用 Hadoop ViewFS（自 v3.2 起支持），请设置以下属性：
+
+    ```SQL
+    -- 请将 <ViewFS_cluster> 替换为 ViewFS 集群名。
+    "fs.viewfs.mounttable.<ViewFS_cluster>.link./<viewfs_path_1>" = "hdfs://<hdfs_host_1>:<hdfs_port_1>/<hdfs_path_1>",
+    "fs.viewfs.mounttable.<ViewFS_cluster>.link./<viewfs_path_2>" = "hdfs://<hdfs_host_2>:<hdfs_port_2>/<hdfs_path_2>",
+    [, ...]
+    ```
+
+    更多信息，请参考 [ViewFS 文档](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/ViewFs.html)。
 
     | **属性**                                              | **描述**                                                     |
     | ----------------------------------------------------- | ------------------------------------------------------------ |
-    | enabled                                               | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
-    | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。 |
-    | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
+    | enabled                                               | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。       |
+    | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即 Username。`kerberos` 表示 Kerberos 认证。 |
+    | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
+    | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
+    | dfs.nameservices                                      | 自定义 HDFS 集群的名称。                                        |
+    | dfs.ha.namenodes.`<ha_cluster_name\>`                   | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的 HDFS 服务的名称。 |
+    | dfs.namenode.rpc-address.`<ha_cluster_name\>`.`<NameNode\>` | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
+    | dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
+    | fs.viewfs.mounttable.`<ViewFS_cluster\>`.link./`<viewfs_path\>` | 需要挂载的 ViewFS 集群路径，多个路径以逗号 (,) 分隔。其中 `<ViewFS_cluster>` 为 `LOCATIONS` 中自定义的 ViewFS 集群名。 |
+
+<!--
+
+    | kerberos_keytab_content                               | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
     | password                                              | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
     | kerberos_principal                                    | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>示例：`nn/zelda1@ZELDA.COM`。 |
-    | kerberos_keytab                                       | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
-    | kerberos_keytab_content                               | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
-    | dfs.nameservices                                      | 自定义 HDFS 集群的名称。                                     |
-    | dfs.ha.namenodes.<ha_cluster_name\>                    | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。 其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-    | dfs.namenode.rpc-address.<ha_cluster_name\>.<NameNode\> | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
-    | dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
 -->
 
@@ -341,6 +363,69 @@ LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
 PROPERTIES
 (
     "enabled" = "true"
+);
+```
+
+示例三：使用简单验证为 HDFS 创建存储卷 `hdfsvolumehadoop`。
+
+```sql
+CREATE STORAGE VOLUME hdfsvolumehadoop
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES(
+    "hadoop.security.authentication" = "simple",
+    "username" = "starrocks"
+);
+```
+
+示例四：使用 Kerberos Ticket Cache 认证接入 HDFS 并创建存储卷 `hdfsvolkerberos`。
+
+```sql
+CREATE STORAGE VOLUME hdfsvolkerberos
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES(
+    "hadoop.security.authentication" = "kerberos",
+    "hadoop.security.kerberos.ticket.cache.path" = "/path/to/ticket/cache/path"
+);
+```
+
+示例五：为启用了 NameNode HA 配置的 HDFS 集群创建存储卷 `hdfsvolha`。
+
+```sql
+CREATE STORAGE VOLUME hdfsvolha
+TYPE = HDFS
+LOCATIONS = ("hdfs://myhacluster/data/sr")
+PROPERTIES(
+    "dfs.nameservices" = "myhacluster",
+    "dfs.ha.namenodes.myhacluster" = "nn1,nn2,nn3",
+    "dfs.namenode.rpc-address.myhacluster.nn1" = "machine1.example.com:8020",
+    "dfs.namenode.rpc-address.myhacluster.nn2" = "machine2.example.com:8020",
+    "dfs.namenode.rpc-address.myhacluster.nn3" = "machine3.example.com:8020",
+    "dfs.namenode.http-address.myhacluster.nn1" = "machine1.example.com:9870",
+    "dfs.namenode.http-address.myhacluster.nn2" = "machine2.example.com:9870",
+    "dfs.namenode.http-address.myhacluster.nn3" = "machine3.example.com:9870",
+    "dfs.client.failover.proxy.provider.myhacluster" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+);
+```
+
+示例六：为 WebHDFS 创建存储卷 `webhdfsvol`。
+
+```sql
+CREATE STORAGE VOLUME webhdfsvol
+TYPE = HDFS
+LOCATIONS = ("webhdfs://namenode:9870/data/sr");
+```
+
+示例七：使用 Hadoop ViewFS 创建存储卷 `viewfsvol`。
+
+```sql
+CREATE STORAGE VOLUME viewfsvol
+TYPE = HDFS
+LOCATIONS = ("viewfs://clusterX/data/sr")
+PROPERTIES(
+    "fs.viewfs.mounttable.clusterX.link./data" = "hdfs://nn1-clusterx.example.com:8020/data",
+    "fs.viewfs.mounttable.clusterX.link./project" = "hdfs://nn2-clusterx.example.com:8020/project"
 );
 ```
 

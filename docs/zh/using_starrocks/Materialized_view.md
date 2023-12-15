@@ -272,7 +272,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
 
 ### 查看异步物化视图
 
-您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据表来查看数据库中的异步物化视图。
+您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 或查询 Information Schema 中的系统元数据视图来查看数据库中的异步物化视图。
 
 - 查看当前数据仓库内所有异步物化视图。
 
@@ -292,7 +292,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-- 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../administration/information_schema.md#materialized_views)。
+- 通过 Information Schema 中的系统元数据视图 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../reference/information_schema/materialized_views.md)。
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;
@@ -308,7 +308,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 查看异步物化视图的执行状态
 
-您可以通过查询 StarRocks 的 [Information Schema](../administration/information_schema.md) 中的 `tasks` 和 `task_runs` 元数据表来查看异步物化视图的执行（构建或刷新）状态。
+您可以通过查询 StarRocks 的 [Information Schema](../reference/overview-pages/information_schema.md) 中的 [`tasks`](../reference/information_schema/tasks.md) 和 [`task_runs`](../reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
 
 以下示例查看最新创建的异步物化视图的执行状态：
 

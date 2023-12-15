@@ -34,10 +34,10 @@ hash(filename) + fileModificationTime + blockId
 开启 Data Cache 后，StarRocks 会缓存从外部存储系统读取的数据文件。如不希望缓存某些数据，可进行如下设置。
 
 ```SQL
-SET enable_populate_block_cache = false;
+SET enable_populate_datacache = false;
 ```
 
-关于 `enable_populate_block_cache` 的更多信息，参见 [系统变量](../reference/System_variable.md#支持的变量)。
+关于 `enable_populate_datacache` 的更多信息，参见 [系统变量](../reference/System_variable.md#支持的变量)。
 
 ## 缓存介质
 
@@ -62,13 +62,13 @@ Data Cache 默认关闭。如要启用，则需要在 FE 和 BE 中同时进行�
 - 按需在单个会话中开启 Data Cache。
 
   ```SQL
-  SET enable_scan_block_cache = true;
+  SET enable_scan_datacache = true;
   ```
 
 - 为当前所有会话开启全局 Data Cache。
 
   ```SQL
-  SET GLOBAL enable_scan_block_cache = true;
+  SET GLOBAL enable_scan_datacache = true;
   ```
 
 ### BE 配置
@@ -77,56 +77,56 @@ Data Cache 默认关闭。如要启用，则需要在 FE 和 BE 中同时进行�
 
 | **参数**               | **说明**                                                     |**默认值** |
 | ---------------------- | ------------------------------------------------------------ |----------|
-| block_cache_enable     | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用。</li></ul>| false |
-| block_cache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。BE 进程启动时会自动创建配置的磁盘缓存目录（当父目录不存在时创建失败）。 | `${STARROCKS_HOME}/block_cache` |
-| block_cache_meta_path  | Block 的元数据存储目录，一般无需配置。 | `${STARROCKS_HOME}/block_cache` |
-| block_cache_mem_size   | 内存缓存数据量的上限，单位：字节。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 | 2147483648，即 2 GB |
-| block_cache_disk_size  | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。| 0 表示仅使用内存作为缓存介质，不使用磁盘。 |
+| datacache_enable     | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用。</li></ul>| false |
+| datacache_disk_path  | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。BE 进程启动时会自动创建配置的磁盘缓存目录（当父目录不存在时创建失败）。 | `${STARROCKS_HOME}/datacache` |
+| datacache_meta_path  | Block 的元数据存储目录，一般无需配置。 | `${STARROCKS_HOME}/datacache` |
+| datacache_mem_size   | 内存缓存数据量的上限，可设为比例上限（如 "10%"）或物理上限（如 "10G", "21474836480"等）。推荐将该参数值设置不低于 10 GB。 | 10% |
+| datacache_disk_size  | 单个磁盘缓存数据量的上限，可设为比例上限（如 "80%"）或物理上限（如 "2T, "500G"等）。举例：在 `datacache_disk_path` 中配置了 2 个磁盘，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。| 0 表示仅使用内存作为缓存介质，不使用磁盘。 |
 
 示例如下：
 
 ```Plain
 # 开启 Data Cache。
-block_cache_enable = true  
+datacache_enable = true  
 
 # 设置磁盘路径，假设 BE 机器有两块磁盘。
-block_cache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/ 
+datacache_disk_path = /home/disk1/sr/dla_cache_data/;/home/disk2/sr/dla_cache_data/ 
 
 # 设置内存缓存数据量的上限为 2 GB。
-block_cache_mem_size = 2147483648
+datacache_mem_size = 2147483648
 
 # 设置单个磁盘缓存数据量的上限为 1.2 TB。
-block_cache_disk_size = 1288490188800
+datacache_disk_size = 1288490188800
 ```
 
 ## 查看 Data Cache 命中情况
 
 您可以在 query profile 里观测当前 query 的 cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
 
-- `BlockCacheReadBytes`：从内存和磁盘中读取的数据量。
-- `BlockCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
+- `DataCacheReadBytes`：从内存和磁盘中读取的数据量。
+- `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
 - `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
 
 示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Data Cache 命中较少。
 
 ```Plain
  - Table: lineorder
- - BlockCacheReadBytes: 518.73 MB
-   - __MAX_OF_BlockCacheReadBytes: 4.73 MB
-   - __MIN_OF_BlockCacheReadBytes: 16.00 KB
- - BlockCacheReadCounter: 684
-   - __MAX_OF_BlockCacheReadCounter: 4
-   - __MIN_OF_BlockCacheReadCounter: 0
- - BlockCacheReadTimer: 737.357us
- - BlockCacheWriteBytes: 7.65 GB
-   - __MAX_OF_BlockCacheWriteBytes: 64.39 MB
-   - __MIN_OF_BlockCacheWriteBytes: 0.00 
- - BlockCacheWriteCounter: 7.887K (7887)
-   - __MAX_OF_BlockCacheWriteCounter: 65
-   - __MIN_OF_BlockCacheWriteCounter: 0
- - BlockCacheWriteTimer: 23.467ms
-   - __MAX_OF_BlockCacheWriteTimer: 62.280ms
-   - __MIN_OF_BlockCacheWriteTimer: 0ns
+ - DataCacheReadBytes: 518.73 MB
+   - __MAX_OF_DataCacheReadBytes: 4.73 MB
+   - __MIN_OF_DataCacheReadBytes: 16.00 KB
+ - DataCacheReadCounter: 684
+   - __MAX_OF_DataCacheReadCounter: 4
+   - __MIN_OF_DataCacheReadCounter: 0
+ - DataCacheReadTimer: 737.357us
+ - DataCacheWriteBytes: 7.65 GB
+   - __MAX_OF_DataCacheWriteBytes: 64.39 MB
+   - __MIN_OF_DataCacheWriteBytes: 0.00 
+ - DataCacheWriteCounter: 7.887K (7887)
+   - __MAX_OF_DataCacheWriteCounter: 65
+   - __MIN_OF_DataCacheWriteCounter: 0
+ - DataCacheWriteTimer: 23.467ms
+   - __MAX_OF_DataCacheWriteTimer: 62.280ms
+   - __MIN_OF_DataCacheWriteTimer: 0ns
  - BufferUnplugCount: 15
    - __MAX_OF_BufferUnplugCount: 2
    - __MIN_OF_BufferUnplugCount: 0
@@ -139,18 +139,18 @@ block_cache_disk_size = 1288490188800
 
 ```Plain
  Table: lineitem
-- BlockCacheReadBytes: 46.08 GB
- - __MAX_OF_BlockCacheReadBytes: 194.99 MB
- - __MIN_OF_BlockCacheReadBytes: 81.25 MB
-- BlockCacheReadCounter: 72.237K (72237)
- - __MAX_OF_BlockCacheReadCounter: 299
- - __MIN_OF_BlockCacheReadCounter: 118
-- BlockCacheReadTimer: 856.481ms
- - __MAX_OF_BlockCacheReadTimer: 1s547ms
- - __MIN_OF_BlockCacheReadTimer: 261.824ms
-- BlockCacheWriteBytes: 0.00 
-- BlockCacheWriteCounter: 0
-- BlockCacheWriteTimer: 0ns
+- DataCacheReadBytes: 46.08 GB
+ - __MAX_OF_DataCacheReadBytes: 194.99 MB
+ - __MIN_OF_DataCacheReadBytes: 81.25 MB
+- DataCacheReadCounter: 72.237K (72237)
+ - __MAX_OF_DataCacheReadCounter: 299
+ - __MIN_OF_DataCacheReadCounter: 118
+- DataCacheReadTimer: 856.481ms
+ - __MAX_OF_DataCacheReadTimer: 1s547ms
+ - __MIN_OF_DataCacheReadTimer: 261.824ms
+- DataCacheWriteBytes: 0.00 
+- DataCacheWriteCounter: 0
+- DataCacheWriteTimer: 0ns
 - BufferUnplugCount: 1.231K (1231)
  - __MAX_OF_BufferUnplugCount: 81
  - __MIN_OF_BufferUnplugCount: 35

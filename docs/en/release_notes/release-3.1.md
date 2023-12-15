@@ -4,6 +4,65 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.5
+
+Release date: November 28, 2023
+
+### New features
+
+- The CN nodes of a StarRocks shared-data cluster now support data export. [#34018](https://github.com/StarRocks/starrocks/pull/34018)
+
+### Improvements
+
+- The [`COLUMNS`](../reference/information_schema/columns.md) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive](../data_source/catalog/hive_catalog.md). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
+- Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- Supports automatic refresh of materialized views when Swap, Drop, or Schema Change operations are performed on the tables and views (including the other tables and materialized views associated with these views) on which these materialized views are created. [#32829](https://github.com/StarRocks/starrocks/pull/32829)
+- Optimized the performance of some Bitmap-related operations, including:
+  - Optimized nested loop joins. [#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- An unknown error is reported when SHOW GRANTS is executed. [#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- When data is loaded into a table that uses expression-based automatic partitioning, the error "Error: The row create partition failed since Runtime error: failed to analyse partition value" may be thrown. [#33513](https://github.com/StarRocks/starrocks/pull/33513)
+- The error "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction" is returned for queries. [#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- In a StarRocks shared-nothing cluster, queries against Iceberg or Hive tables may cause BEs to crash. [#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- In a StarRocks shared-nothing cluster, if multiple partitions are automatically created during data loading, the data loaded may occasionally be written to unmatched partitions. [#34731](https://github.com/StarRocks/starrocks/pull/34731)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The error "Exception: java.lang.IllegalStateException: null" is returned for queries. [#33535](https://github.com/StarRocks/starrocks/pull/33535)
+- When `show proc '/current_queries';` is being executed and meanwhile a query begins to be executed, BEs may crash. [#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- FEs crash due to the abnormal data loaded and cannot restart. [#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- Setting the session variable `enable_load_profile` to `true` makes Stream Load jobs prone to fail. [#34544](https://github.com/StarRocks/starrocks/pull/34544)
+- Performing partial updates in column mode onto a Primary Key table causes some tablets of the table to show data inconsistencies between their replicas. [#34555](https://github.com/StarRocks/starrocks/pull/34555)
+- The `partition_live_number` property added by using the ALTER TABLE statement does not take effect. [#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- FEs fail to start and report the error "failed to load journal type 118". [#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+
+### Compatibility Changes
+
+#### Parameters
+
+- Added an FE configuration item [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- The FE configuration item [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- Added a BE/CN configuration item [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
+
+#### System Variables
+
+- Added a session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `cbo_eq_base_type`, which specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and `DECIMAL` is also a valid value. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added a session variable `big_query_profile_second_threshold`. When the session variable [`enable_profile`](../reference/System_variable.md#enable_profile) is set to `false` and the amount of time taken by a query exceeds the threshold specified by the `big_query_profile_second_threshold` variable, a profile is generated for that query. [#33825](https://github.com/StarRocks/starrocks/pull/33825)
+
 ## 3.1.4
 
 Release date: November 2, 2023
@@ -52,10 +111,6 @@ Fixed the following issues:
 
 Release date: September 25, 2023
 
-### Behavior Change
-
-- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, you must use the SEPARATOR keyword to declare the separator.
-
 ### New Features
 
 - Primary Key tables created in shared-data StarRocks clusters support index persistence onto local disks in the same way as they do in shared-nothing StarRocks clusters.
@@ -86,6 +141,11 @@ Fixed the following issues:
 - After users upgrade their StarRocks cluster to v3.1.2, the storage volume properties of the tables created before the upgrade are reset to `null`. [#30647](https://github.com/StarRocks/starrocks/pull/30647)
 - If checkpointing and restoration are concurrently performed on tablet metadata, some tablet replicas will be lost and cannot be retrieved. [#30603](https://github.com/StarRocks/starrocks/pull/30603)
 - If users use CloudCanal to load data into table columns that are set to `NOT NULL` but have no default value specified, an error "Unsupported dataFormat value is : \N" is thrown. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+
+### Behavior Change
+
+- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, users must use the SEPARATOR keyword to declare the separator.
+- The default value of the session variable [`group_concat_max_len`](../reference/System_variable.md#group_concat_max_len) which controls the default maximum length of the string returned by the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function is changed from unlimited to `1024`.
 
 ## 3.1.2
 
@@ -157,7 +217,7 @@ Release date: August 7, 2023
 
 - Upgraded automatic partitioning to [expression partitioning](../table_design/expression_partitioning.md). Users only need to use a simple partition expression (either a time function expression or a column expression) to specify a partitioning method at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
 - Supports [list partitioning](../table_design/list_partitioning.md). Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
-- Added a new table named `loads` to the `Information_schema` database. Users can query the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from the `loads` table.
+- Added a new table named `loads` to the `Information_schema` database. Users can query the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/INSERT.md) jobs from the `loads` table.
 - Supports logging the unqualified data rows that are filtered out by [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), and [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) jobs. Users can use the `log_rejected_record_num` parameter in their load job to specify the maximum number of data rows that can be logged.
 - Supports [random bucketing](../table_design/Data_distribution.md#how-to-choose-the-bucketing-columns). With this feature, users do not need to configure bucketing columns at table creation, and StarRocks will randomly distribute the data loaded into it to buckets. Using this feature together with the capability of automatically setting the number of buckets (`BUCKETS`) that StarRocks has provided since v2.5.7, users no longer need to consider bucket configurations, and table creation statements are greatly simplified. In big data and high performance-demanding scenarios, however, we recommend that users continue using hash bucketing, because this way they can use bucket pruning to accelerate queries.
 - Supports using the table function FILES() in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3. The FILES() function can automatically infer the table schema, which relieves the need to create external catalogs or file external tables before data loading and therefore greatly simplifies the data loading process.
@@ -275,7 +335,7 @@ Fixed the following issues:
 - The default value of the FE configuration item `max_routine_load_task_num_per_be` is changed from `5` to `16`, and error information will be returned if a large number of Routine Load tasks are created.
 - The FE configuration item `quorom_publish_wait_time_ms` is renamed as `quorum_publish_wait_time_ms`, and the FE configuration item `async_load_task_pool_size` is renamed as `max_broker_load_job_concurrency`.
 - The BE configuration item `routine_load_thread_pool_size` is deprecated. Now the routine load thread pool size per BE node is controlled only by the FE configuration item `max_routine_load_task_num_per_be`.
-- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated. Now the `time_out` parameter is used to specify the transaction timeout duration.
+- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated.
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - The CN configuration item `thrift_port` is renamed as `be_port`.

@@ -30,8 +30,8 @@ StarRocks supports using one of the following authentication methods to access B
 >
 > When you load data or directly query files from Blob Storage, you must use the wasb or wasbs protocol to access your data:
 >
-> - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
-> - If your storage account allows access over HTTPS, use the wasbs protocol and write the file path as `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
+> - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>`.
+> - If your storage account allows access over HTTPS, use the wasbs protocol and write the file path as `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>`.
 
 ### Shared Key
 
@@ -77,7 +77,7 @@ Configure `azure.blob.storage_account`, `azure.blob.shared_key`, and the file pa
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*")
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>")
     INTO TABLE test_ingestion_2
     FORMAT AS "parquet"
 )
@@ -92,7 +92,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -100,15 +100,15 @@ PROPERTIES
 (
     "type" = "hive", 
     "hive.metastore.uris" = "thrift://10.1.0.18:9083",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### File external table
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -121,27 +121,27 @@ PROPERTIES
 (
     "path" = "wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### Broker load
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*")
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
 WITH BROKER
 (
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
@@ -279,8 +279,8 @@ StarRocks supports using one of the following authentication methods to access D
 >
 > When you load data or query files from Data Lake Storage Gen2, you must use the abfs or abfss protocol to access your data:
 >
-> - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
-> - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+> - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`.
+> - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`.
 
 ### Managed Identity
 
@@ -319,7 +319,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.oauth2_use_managed_identity" = "true",
     "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -334,7 +334,7 @@ Configure `azure.adls2.oauth2_use_managed_identity`, `azure.adls2.oauth2_tenant_
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
@@ -376,7 +376,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.storage_account" = "<storage_account_name>",
     "azure.adls2.shared_key" = "<shared_key>"
@@ -390,7 +390,7 @@ Configure `azure.adls2.storage_account`, `azure.adls2.shared_key`, and the file 
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
@@ -434,7 +434,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.oauth2_client_id" = "<service_client_id>",
     "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -449,7 +449,7 @@ Configure `azure.adls2.oauth2_client_id`, `azure.adls2.oauth2_client_secret`, `a
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )

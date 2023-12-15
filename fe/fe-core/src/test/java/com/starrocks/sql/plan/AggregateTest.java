@@ -2037,6 +2037,11 @@ public class AggregateTest extends PlanTestBase {
                 "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
                 "  |  hasNullableGenerateChild: true");
 
+        sql = "select sum(cast(t1b as int) + cast('1.1' as int)) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[(cast([2: t1b, SMALLINT, true] as BIGINT) + cast(cast('1.1' as INT) as BIGINT)); " +
+                "args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]");
     }
 
     @Test
@@ -2534,5 +2539,26 @@ public class AggregateTest extends PlanTestBase {
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
+    }
+
+    @Test
+    public void testTableAliasCountDistinctHaving() throws Exception {
+        String sql = "select " +
+                "   count(distinct xx.v2) as j1, " +
+                "   xx.v2 as v2 " +
+                "from test.t0 as xx " +
+                "group by xx.v2 " +
+                "having count(distinct xx.v2) > 0";
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  having: 4: count > 0");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
     }
 }

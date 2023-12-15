@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# STDDEV_SAMP
+# stddev_samp
 
 ## 功能
 

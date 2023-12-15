@@ -7,8 +7,8 @@ displayed_sidebar: "Chinese"
 Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
 
 - 无需手动建表，通过 Iceberg Catalog 直接查询 Iceberg 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Iceberg 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Iceberg 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Iceberg 表中（3.1 版本及以上）。
 
 为保证正常访问 Iceberg 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -316,8 +316,8 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -325,8 +325,8 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
 
 ###### Azure Data Lake Storage Gen1
@@ -648,8 +648,8 @@ PROPERTIES
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -1016,7 +1016,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Iceberg 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Iceberg 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Iceberg 表中（当前仅支持写入到 Parquet 格式的 Iceberg 表）。本功能自 3.1 版本起开始支持。
 
 > **说明**
 >

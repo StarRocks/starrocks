@@ -114,7 +114,7 @@ INSERT INTO site_access TEMPORARY PARTITION (tp2) SELECT * FROM site_access_copy
 INSERT INTO site_access TEMPORARY PARTITION (tp3, tp4,...) SELECT * FROM site_access_copy PARTITION (p3, p4,...);
 ```
 
-For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-reference/sql-statements/data-manipulation/insert.md).
+For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 ### Load data by using STREAM LOAD
 

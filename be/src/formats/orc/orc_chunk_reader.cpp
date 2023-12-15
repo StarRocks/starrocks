@@ -612,6 +612,13 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+
+        // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
+        if (slot->is_nullable()) {
+            // wrap nullable column if necessary
+            col = NullableColumn::wrap_if_necessary(col);
+        }
+
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
     }

@@ -179,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    PInternalService_Stub* _brpc_stub = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
