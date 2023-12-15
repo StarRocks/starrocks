@@ -144,14 +144,14 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         String metaUrl;
                         String compactionUrl;
                         if (backend != null) {
-                            metaUrl = String.format("http://%s:%s/api/meta/header/%d",
+                            metaUrl = String.format("http://%s:%d/api/meta/header/%d",
                                     hideIpPort ? "*" : backend.getHost(),
-                                    hideIpPort ? "*" : backend.getHttpPort(),
+                                    hideIpPort ? 0 : backend.getHttpPort(),
                                     tabletId);
                             compactionUrl = String.format(
-                                    "http://%s:%s/api/compaction/show?tablet_id=%d",
+                                    "http://%s:%d/api/compaction/show?tablet_id=%d",
                                     hideIpPort ? "*" : backend.getHost(),
-                                    hideIpPort ? "*" : backend.getHttpPort(),
+                                    hideIpPort ? 0 : backend.getHttpPort(),
                                     tabletId);
                         } else {
                             metaUrl = "N/A";
