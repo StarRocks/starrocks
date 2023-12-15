@@ -105,7 +105,6 @@ You can find a function based on the following categories:
 
 ## Bitmap functions
 
-<<<<<<< HEAD
 - [base64_to_bitmap](../sql-functions/bitmap-functions/base64_to_bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
 - [bitmap_and](../sql-functions/bitmap-functions/bitmap_and.md)
