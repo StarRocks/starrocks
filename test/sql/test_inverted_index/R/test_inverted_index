@@ -1,0 +1,99 @@
+-- name: test_basic_create_index
+CREATE TABLE `t_test_basic_create_index_pk` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT "",
+  `id3` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE INDEX index_1 ON t_test_basic_create_index_pk (id2) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_2 ON t_test_basic_create_index_pk (id3) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE TABLE `t_test_basic_create_index_dup` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT "",
+  `id3` bigint(20) NOT NULL COMMENT "",
+  `id4` string NOT NULL COMMENT "",
+  `id5` string NOT NULL COMMENT "",
+  `id6` bigint(20) NOT NULL COMMENT "",
+  `id7` string NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE INDEX index_1 ON t_test_basic_create_index_dup (id2) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_2 ON t_test_basic_create_index_dup (id3) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_3 ON t_test_basic_create_index_dup (id4) USING GIN;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_4 ON t_test_basic_create_index_dup (id5) USING GIN;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_5 ON t_test_basic_create_index_dup (id6) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+CREATE INDEX index_6 ON t_test_basic_create_index_dup (id7) USING GIN;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DROP TABLE t_test_basic_create_index_pk;
+-- result:
+-- !result
+DROP TABLE t_test_basic_create_index_dup;
+-- result:
+-- !result
