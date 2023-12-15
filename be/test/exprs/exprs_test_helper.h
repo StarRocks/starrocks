@@ -151,6 +151,53 @@ public:
         }
         return expr;
     }
+
+    static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable,
+                                          size_t min_length = 0) {
+        using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
+        using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
+        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        UniformInt uniform_int;
+        if (low_card) {
+            uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, num_rows)));
+        } else {
+            uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, num_rows)));
+        }
+        PoissonInt poisson_int(100'000);
+        static std::string alphanum =
+                "0123456789"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "abcdefghijklmnopqrstuvwxyz";
+
+        auto gen_rand_str = [&]() {
+            int str_len = uniform_int(rng) % 20 + min_length;
+            int str_start = std::min(poisson_int(rng) % alphanum.size(), alphanum.size() - str_len);
+            Slice rand_str(alphanum.c_str() + str_start, str_len);
+            return rand_str;
+        };
+
+        for (int i = 0; i < num_rows; i++) {
+            if (nullable) {
+                int32_t x = uniform_int(rng);
+                if (x % 1000 == 0) {
+                    column->append_nulls(1);
+                    continue;
+                }
+            }
+            if (type_desc.type == TYPE_INT) {
+                int32_t x = uniform_int(rng);
+                column->append_datum(Datum(x));
+            } else if (type_desc.type == TYPE_VARCHAR) {
+                column->append_datum(Datum(gen_rand_str()));
+            } else {
+                std::cerr << "not supported" << std::endl;
+            }
+        }
+        return column;
+    }
 };
 
 } // namespace starrocks
