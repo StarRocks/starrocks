@@ -72,7 +72,6 @@ DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, T
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
-          _is_used(false),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
           _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
@@ -99,7 +98,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
     RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
-    _is_used = true;
+    _state = DiskState::ONLINE;
     return Status::OK();
 }
 
@@ -150,14 +149,25 @@ Status DataDir::set_cluster_id(int32_t cluster_id) {
 }
 
 void DataDir::health_check() {
+    const int retry_times = 10;
     // check disk
-    if (_is_used) {
-        Status res = _read_and_write_test_file();
-        if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
-            if (is_io_error(res)) {
-                _is_used = false;
+    if (_state != DiskState::DECOMMISSIONED && _state != DiskState::DISABLED) {
+        bool all_failed = true;
+        for (int i = 0; i < retry_times; i++) {
+            Status res = _read_and_write_test_file();
+            if (res.ok() || !is_io_error(res)) {
+                all_failed = false;
+                break;
+            } else {
+                LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path
+                             << ", res=" << res.to_string();
             }
+        }
+        if (all_failed) {
+            LOG(WARNING) << "store test failed " << retry_times << " times, set _state to OFFLINE. path=" << _path;
+            _state = DiskState::OFFLINE;
+        } else {
+            _state = DiskState::ONLINE;
         }
     }
 }
