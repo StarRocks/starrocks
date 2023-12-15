@@ -2503,6 +2503,26 @@ public class Config extends ConfigBase {
     public static boolean enable_mv_automatic_active_check = true;
 
     /**
+<<<<<<< HEAD
+=======
+     * The refresh partition number when refreshing materialized view at once by default.
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
+    /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
+
+    /**
+>>>>>>> 2bd50b99c1 ([Enhancement] add a switch to control default refresh immediate (#37093))
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
