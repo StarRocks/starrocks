@@ -17,8 +17,9 @@ do
 	cp -r zh docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
 	sed -i "s/: 'ignore'/: 'warn'/g" docusaurus/docusaurus.config.js
 	cd docusaurus
-	yarn install --frozen-lockfile
+	yarn install --frozen-lockfile --silent
 	yarn clear
 	yarn build > ${branch}.log 2>&1
+	git restore docusaurus.config.js
 	cd ../
 done

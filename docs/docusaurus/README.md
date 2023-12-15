@@ -74,12 +74,25 @@ docker build --network=host \
   --file Dockerfile.test_all_versions \
   -t  docs-tester .
 ```
-
-### Run the test
+## Start the container
 
 ```bash
-docker exec -ti docs-tester bash
-starrocks/docs/scripts/test-all-versions.sh
+docker run  -ti \
+  --network host \
+  docs-tester bash
+```
+
+You should now have a shell in the container. It should look 
+something like:
+
+```bash
+root@linuxkit-d64b556a51b7:/app/work/
+```
+
+### Run the tests
+
+```bash
+starrocks/docs/docusaurus/scripts/test-all-versions.sh
 ```
 
 ### View the results
@@ -88,6 +101,7 @@ starrocks/docs/scripts/test-all-versions.sh
 cat build-3.2.log
 ```
 
+The rest of the versions will be `build-3.1.log`, etc.
 
 ## Release notes
 
