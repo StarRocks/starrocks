@@ -1055,6 +1055,7 @@ add_subdirectory(${SRC_DIR}/block_cache)
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
+add_subdirectory(${SRC_DIR}/consistency_test)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")

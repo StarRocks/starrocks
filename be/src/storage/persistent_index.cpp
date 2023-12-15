@@ -373,8 +373,13 @@ static void copy_kv_to_page(size_t key_size, size_t num_kv, const KVPairPtr* kv_
     }
 }
 
+static bool keep_pindex_bf() {
+    if (StorageEngine::instance() == nullptr) return true;
+    return StorageEngine::instance()->update_manager()->keep_pindex_bf();
+}
+
 static bool load_bf_or_not() {
-    return config::enable_pindex_filter && StorageEngine::instance()->update_manager()->keep_pindex_bf();
+    return config::enable_pindex_filter && keep_pindex_bf();
 }
 
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t key_size, size_t npage_hint,
@@ -581,7 +586,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         }
         _shard_bf_size.emplace_back(bf->size());
         // update memory usage is too high, flush bloom filter advance to avoid use too much memory
-        if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+        if (!keep_pindex_bf()) {
             for (auto& bf : _bf_vec) {
                 RETURN_IF_ERROR(_bf_wb->append(Slice(bf->data(), bf->size())));
             }
@@ -1037,6 +1042,10 @@ public:
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
+                if (659248 == value.get_value()) {
+                    LOG(INFO) << "upsert 659248 new "
+                              << " " << this;
+                }
             } else {
                 const auto& old_compose_key = *it;
                 auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
@@ -1044,6 +1053,10 @@ public:
                 nfound += old_value != NullIndexValue;
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);
+                if (659248 == value.get_value()) {
+                    LOG(INFO) << "upsert 659248 old "
+                              << " " << this;
+                }
             }
         }
         *num_found = nfound;
@@ -1064,6 +1077,10 @@ public:
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
+                if (659248 == value.get_value()) {
+                    LOG(INFO) << "upsert 659248 new "
+                              << " " << this;
+                }
             } else {
                 const auto& old_compose_key = *it;
                 const auto old_value =
@@ -1072,6 +1089,10 @@ public:
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);
+                if (659248 == value.get_value()) {
+                    LOG(INFO) << "upsert 659248 old "
+                              << " " << this;
+                }
             }
         }
         *num_found = nfound;
@@ -1114,11 +1135,18 @@ public:
                 old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
+                if (659248 == old_values[idx].get_value()) {
+                    LOG(INFO) << "erase 659248: not found. " << this;
+                }
             } else {
                 auto& old_compose_key = *it;
                 auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
                 old_values[idx] = old_value;
                 nfound += old_value != NullIndexValue;
+                if (659248 == old_value) {
+                    LOG(INFO) << "erase 659248: found: "
+                              << " " << this;
+                }
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);
@@ -2598,7 +2626,7 @@ bool ImmutableIndex::_need_bloom_filter(size_t idx_begin, size_t idx_end,
         return false;
     }
 
-    if (!config::enable_pindex_filter || !StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+    if (!config::enable_pindex_filter || !keep_pindex_bf()) {
         return false;
     }
 
@@ -2711,7 +2739,7 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         watch.start();
         KeysInfo infos;
         infos.key_infos.assign(keys_info.key_infos.begin(), keys_info.key_infos.end());
-        if (config::enable_pindex_filter && StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+        if (config::enable_pindex_filter && keep_pindex_bf()) {
             RETURN_IF_ERROR(_prepare_bloom_filter(shard_off, shard_off + nshard));
         }
         RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, infos.key_infos, values, found_keys_info, stat));
@@ -4020,15 +4048,18 @@ bool PersistentIndex::_can_dump_directly() {
 
 bool PersistentIndex::_l0_is_full(int64_t l1_l2_size) {
     const auto l0_mem_size = _l0->memory_usage();
-    auto manager = StorageEngine::instance()->update_manager();
     // There are three condition that we regard l0 as full:
     // 1. l0's memory exceed config::l0_max_mem_usage
     // 2. l0's memory exceed l1 and l2 files size
     // 3. memory usage of update module is exceed and l0's memory exceed config::l0_min_mem_usage
     bool exceed_max_mem = l0_mem_size >= config::l0_max_mem_usage;
     bool exceed_index_size = (l1_l2_size > 0) ? l0_mem_size >= l1_l2_size : false;
-    bool exceed_mem_limit = manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
-                            l0_mem_size >= config::l0_min_mem_usage;
+    bool exceed_mem_limit = false;
+    if (StorageEngine::instance() != nullptr) {
+        exceed_mem_limit = StorageEngine::instance()->update_manager()->mem_tracker()->limit_exceeded_by_ratio(
+                                   config::memory_urgent_level) &&
+                           l0_mem_size >= config::l0_min_mem_usage;
+    }
     return exceed_max_mem || exceed_index_size || exceed_mem_limit;
 }
 
@@ -4896,8 +4927,10 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     modify_l2_versions(l2_versions, new_l2_version, index_meta);
     // delete useless files
     RETURN_IF_ERROR(_reload(index_meta));
+    const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+    EditVersion l0_version = l0_meta.snapshot().version();
     RETURN_IF_ERROR(_delete_expired_index_file(
-            _version, _l1_version,
+            l0_version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
