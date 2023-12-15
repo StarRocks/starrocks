@@ -293,6 +293,9 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // when candidate num reach this value, the condidate with lowest score will be dropped.
 CONF_mInt64(max_compaction_candidate_num, "40960");
 
+// If true, SR will try no to merge delta column back to main segment
+CONF_mBool(enable_lazy_delta_column_compaction, "true");
+
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
