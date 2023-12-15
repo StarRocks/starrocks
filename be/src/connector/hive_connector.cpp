@@ -359,6 +359,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
     }
 
+<<<<<<< HEAD
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
@@ -380,6 +381,36 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_block_buffer_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
+=======
+    if (_use_datacache) {
+        static const char* prefix = "DataCache";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
+        _profile.datacache_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_mem_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadMemBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_read_disk_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadDiskBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_skip_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
+        _profile.datacache_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
+        _profile.datacache_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.datacache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheWriteTimer", prefix);
+        _profile.datacache_write_fail_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.datacache_write_fail_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
+>>>>>>> 358ef3249e ([Enhancement] Support hive textfile compressed stream to use datacache (#37126))
     }
 
     {
