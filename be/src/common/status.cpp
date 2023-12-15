@@ -9,7 +9,6 @@
 #include "common/config.h"
 #include "gen_cpp/Status_types.h" // for TStatus
 #include "gen_cpp/status.pb.h"    // for StatusPB
-#include "gutil/dynamic_annotations.h"
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
 
 namespace starrocks {
