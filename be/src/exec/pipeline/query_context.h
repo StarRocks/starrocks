@@ -126,10 +126,7 @@ public:
         DCHECK(_desc_tbl != nullptr);
         return _desc_tbl;
     }
-    // If option_query_mem_limit > 0, use it directly.
-    // Otherwise, use per_instance_mem_limit * num_fragments * pipeline_dop.
-    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop,
-                                    int64_t option_query_mem_limit);
+
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
