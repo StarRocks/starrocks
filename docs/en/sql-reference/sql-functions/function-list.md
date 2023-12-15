@@ -105,6 +105,7 @@ You can find a function based on the following categories:
 
 ## Bitmap functions
 
+<<<<<<< HEAD
 - [base64_to_bitmap](../sql-functions/bitmap-functions/base64_to_bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
 - [bitmap_and](../sql-functions/bitmap-functions/bitmap_and.md)
@@ -130,6 +131,36 @@ You can find a function based on the following categories:
 - [intersect_count](../sql-functions/bitmap-functions/intersect_count.md)
 - [sub_bitmap](../sql-functions/bitmap-functions/sub_bitmap.md)
 - [to_bitmap](../sql-functions/bitmap-functions/to_bitmap.md)
+=======
+- [base64_to_bitmap](./bitmap-functions/base64_to_bitmap.md)
+- [bitmap_agg](./bitmap-functions/bitmap_agg.md)
+- [bitmap_and](./bitmap-functions/bitmap_and.md)
+- [bitmap_andnot](./bitmap-functions/bitmap_andnot.md)
+- [bitmap_contains](./bitmap-functions/bitmap_contains.md)
+- [bitmap_count](./bitmap-functions/bitmap_count.md)
+- [bitmap_from_binary](./bitmap-functions/bitmap_from_binary.md)
+- [bitmap_from_string](./bitmap-functions/bitmap_from_string.md)
+- [bitmap_empty](./bitmap-functions/bitmap_empty.md)
+- [bitmap_has_any](./bitmap-functions/bitmap_has_any.md)
+- [bitmap_hash](./bitmap-functions/bitmap_hash.md)
+- [bitmap_intersect](./bitmap-functions/bitmap_intersect.md)
+- [bitmap_max](./bitmap-functions/bitmap_max.md)
+- [bitmap_min](./bitmap-functions/bitmap_min.md)
+- [bitmap_or](./bitmap-functions/bitmap_or.md)
+- [bitmap_remove](./bitmap-functions/bitmap_remove.md)
+- [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)
+- [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)
+- [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)
+- [bitmap_to_string](./bitmap-functions/bitmap_to_string.md)
+- [bitmap_union](./bitmap-functions/bitmap_union.md)
+- [bitmap_union_count](./bitmap-functions/bitmap_union_count.md)
+- [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)
+- [bitmap_xor](./bitmap-functions/bitmap_xor.md)
+- [intersect_count](./bitmap-functions/intersect_count.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [sub_bitmap](./bitmap-functions/sub_bitmap.md)
+- [to_bitmap](./bitmap-functions/to_bitmap.md)
+>>>>>>> 928367f89a ([Doc] Add doc for function subdivide_bitmap (#37127))
 
 ## Conditional functions
 
@@ -361,7 +392,24 @@ You can find a function based on the following categories:
 
 ## Scalar functions
 
+<<<<<<< HEAD
 - [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
+=======
+- [hll_cardinality](./scalar-functions/hll_cardinality.md)
+
+## Struct functions
+
+- [named_struct](./struct-functions/named_struct.md)
+- [row](./struct-functions/row.md)
+
+## Table functions
+
+- [files](./table-functions/files.md)
+- [generate_series](./table-functions/generate_series.md)
+- [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [unnest](./array-functions/unnest.md)
+>>>>>>> 928367f89a ([Doc] Add doc for function subdivide_bitmap (#37127))
 
 ## Utility functions
 
