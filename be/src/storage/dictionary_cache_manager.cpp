@@ -213,7 +213,8 @@ Status DictionaryCacheManager::commit(DictionaryId dict_id, DictionaryCacheTxnId
             _dict_cancel.erase(dict_id);
             return Status::InternalError(fmt::format("cancel refreshing dictionary: {}", dict_id));
         }
-        return Status::InternalError("commit failed the dictionary cache task: current txn id: {}", txn_id);
+        return Status::InternalError(
+                fmt::format("commit failed the dictionary cache task: current txn id: {}", txn_id));
     } // This may happen if the current BE node crash just before commit
 
     auto ordered_mutable_cache = _mutable_dict_caches[dict_id];

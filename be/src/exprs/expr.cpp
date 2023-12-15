@@ -203,7 +203,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     if (!status.ok()) {
         LOG(ERROR) << "Could not construct expr tree.\n"
-                   << status.get_error_msg() << "\n"
+                   << status.message() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
     }
     return status;

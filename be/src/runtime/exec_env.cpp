@@ -476,7 +476,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
     if (!status.ok()) {
-        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        LOG(ERROR) << "load path mgr init failed." << status.message();
         exit(-1);
     }
 

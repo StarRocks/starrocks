@@ -514,7 +514,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
             if (!st.ok()) {
                 LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
-                             << ", errmsg=" << st.get_error_msg();
+                             << ", errmsg=" << st.message();
                 err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
                 channel->mark_as_failed(ch);
             }
@@ -802,7 +802,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     }
     Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
     if (!status.ok()) {
-        _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());
+        _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
     return status;
 }

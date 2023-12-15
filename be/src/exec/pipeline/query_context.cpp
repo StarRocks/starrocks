@@ -85,8 +85,7 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        auto st = query_trace->dump();
-        st.permit_unchecked_error();
+        (void)query_trace->dump();
     }
 }
 
@@ -610,7 +609,7 @@ void QueryContextManager::report_fragments(
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
                         LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
-                                     << rpc_status.get_error_msg();
+                                     << rpc_status.message();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);

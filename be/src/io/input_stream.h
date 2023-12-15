@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <string_view>
 
 #include "common/ownership.h"

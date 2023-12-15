@@ -223,7 +223,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         open_closure->cntl.http_request().set_content_type("application/proto");
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
         if (!res.ok()) {
-            LOG(ERROR) << res.status().get_error_msg();
+            LOG(ERROR) << res.status().message();
             return;
         }
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
