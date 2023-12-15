@@ -137,6 +137,7 @@ set(EXEC_FILES
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
+    schema_scanner/sys_object_dependencies.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp

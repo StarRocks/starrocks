@@ -102,4 +102,6 @@ public class SystemId {
     public static final long ROLE_EDGES_ID = 101L;
     public static final long GRANTS_TO_ROLES_ID = 102L;
     public static final long GRANTS_TO_USERS_ID = 103L;
+    public static final long OBJECT_DEPENDENCIES = 104L;
+
 }
