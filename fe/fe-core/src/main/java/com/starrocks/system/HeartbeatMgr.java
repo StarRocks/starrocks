@@ -262,7 +262,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
-                client = ClientPool.heartbeatPool.borrowObject(beAddr);
+                client = ClientPool.heartbeatPool.borrowObject(beAddr, Config.heartbeat_timeout_second * 1000);
 
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
@@ -399,7 +399,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             TNetworkAddress addr = new TNetworkAddress(broker.ip, broker.port);
             boolean ok = false;
             try {
-                client = ClientPool.brokerPool.borrowObject(addr);
+                client = ClientPool.brokerPool.borrowObject(addr, Config.heartbeat_timeout_second * 1000);
                 TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
                         clientId);
                 TBrokerOperationStatus status = client.ping(request);
