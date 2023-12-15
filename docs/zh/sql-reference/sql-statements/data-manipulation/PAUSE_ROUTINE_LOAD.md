@@ -13,7 +13,7 @@ Routine Load 导入作业暂停后，您可以执行 [SHOW ROUTINE LOAD](./SHOW_
 ## 语法
 
 ```SQL
-PAUSE ROUTINE LOAD FOR [db_name].<job_name>
+PAUSE ROUTINE LOAD FOR [db_name.]<job_name>
 ```
 
 ## 参数说明
