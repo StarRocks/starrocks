@@ -15,14 +15,16 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {

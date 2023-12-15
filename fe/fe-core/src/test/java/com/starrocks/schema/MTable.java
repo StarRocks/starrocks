@@ -101,8 +101,12 @@ public class MTable {
     }
 
     public MTable withProperties(String value) {
+<<<<<<< HEAD
         String[] arr = value.split(",");
         return withProperties(Lists.newArrayList(arr));
+=======
+        return withProperties(List.of(value));
+>>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
     }
 
     public MTable withProperties(List<String> values) {

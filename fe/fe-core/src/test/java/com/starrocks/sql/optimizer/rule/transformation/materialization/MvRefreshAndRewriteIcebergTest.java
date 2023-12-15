@@ -21,12 +21,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+<<<<<<< HEAD
+=======
+import org.junit.runners.MethodSorters;
+>>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+>>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
 public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {

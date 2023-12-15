@@ -30,6 +30,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -266,5 +271,10 @@ public class MvRewriteTestBase {
         Set<String> toRefreshPartitions = Sets.newHashSet();
         mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
         return toRefreshPartitions;
+    }
+
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        new StmtExecutor(connectContext, sql).execute();
     }
 }
