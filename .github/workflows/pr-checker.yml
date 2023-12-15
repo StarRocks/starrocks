@@ -36,10 +36,13 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: SYNC CHECKER
+    outputs:
+      BACKPORT_SOURCE_PR: ${{ steps.backport_assign.outputs.ORI_PR }}
     steps:
       - run: echo "Normal PR."
 
       - name: backport assign
+        id: backport_assign
         if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,6 +53,7 @@ jobs:
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author}
+            echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 
   title-check:
@@ -59,6 +63,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
+      BACKPORT_SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
@@ -73,6 +78,14 @@ jobs:
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
+          
+          if [[ "${{ github.head_ref }}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
+            gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
+            sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
+            cat body.txt source_body.txt > tmp_body.txt
+            mv tmp_body.txt body.txt
+          fi
+          
           sed -i "s#\[ \] This is a backport pr#\[x\] This is a backport pr#g" body.txt
           if [[ "${ori_body}" != $(cat body.txt) ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} -F body.txt
@@ -157,6 +170,63 @@ jobs:
           echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
           exit 1
 
+<<<<<<< HEAD
+=======
+  behavior-check:
+    runs-on: ubuntu-latest
+    if: >
+      !startsWith(github.event.pull_request.title, '[Doc]') &&
+      (!startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
+    steps:
+      - name: Format Check
+        id: check
+        if: >
+          (!contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior')) ||
+          (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+          !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
+          (contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior'))
+        run: |
+          echo "::error::Please check the format of your pr body about the behavior change checkbox!"
+          exit 1
+
+      - name: Behavior Unchanged Label
+        id: unchanged
+        if: >
+          steps.check.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 'behavior_changed'
+
+      - name: Behavior Changed Check
+        id: changed_check
+        if: >
+          always() && steps.check.outcome == 'skipped' && steps.unchanged.outcome == 'skipped' &&
+          contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Interface/UI changes: syntax, type conversion, expression evaluation, display information') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Parameter changes: default values, similar parameters but with different default values') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Policy changes: use new policy to replace old one, functionality automatically enabled') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Feature removed') &&
+          contains(toJson(github.event.pull_request.body), '[ ] Miscellaneous: upgrade & downgrade compatibility, etc')
+        run: |
+          echo "::error::You must specify the type of change!"
+          exit 1
+
+      - name: Behavior Changed Label
+        if: >
+          always() &&
+          steps.check.outcome == 'skipped' &&
+          steps.unchanged.outcome == 'skipped' &&
+          steps.changed_check.outcome != 'failure'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 'behavior_changed'
+
+>>>>>>> 310515b67f ([Tool] Set body for backport pr and enable behavior checker in branch (#37139))
   automerge-check:
     runs-on: ubuntu-latest
     needs: backport-check
