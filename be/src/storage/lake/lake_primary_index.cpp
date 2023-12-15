@@ -21,6 +21,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
+#include "testutil/sync_point.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -35,6 +36,7 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
         return _status;
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
+    TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
     if (_status.ok()) {
         // update data version when memory index or persistent index load finish.
         _data_version = base_version;

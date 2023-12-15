@@ -920,6 +920,7 @@ CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
+CONF_mBool(enable_primary_key_recover, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
