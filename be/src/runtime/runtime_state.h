@@ -50,6 +50,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dict/parser.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -390,11 +391,15 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    DictOptimizeParser* mutable_dict_optimize_parser();
+
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
     [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+
+    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -543,6 +548,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    DictOptimizeParser _dict_optimize_parser;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

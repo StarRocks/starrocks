@@ -627,6 +627,10 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
         RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
     }
 
+    if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+    }
+
     if (fragment.__isset.load_global_dicts) {
         RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
     }

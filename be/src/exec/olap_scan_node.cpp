@@ -134,13 +134,13 @@ Status OlapScanNode::prepare(RuntimeState* state) {
 Status OlapScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
+    DictOptimizeParser::disable_open_rewrite(&_conjunct_ctxs);
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
@@ -249,8 +249,6 @@ void OlapScanNode::close(RuntimeState* state) {
     while (_result_chunks.blocking_get(&chunk)) {
         chunk.reset();
     }
-
-    _dict_optimize_parser.close(state);
 
     if (runtime_state() != nullptr) {
         // Reduce the memory usage if the the average string size is greater than 512.
@@ -657,7 +655,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&conjunct_ctxs));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {
