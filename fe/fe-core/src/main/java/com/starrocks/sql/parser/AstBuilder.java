@@ -58,6 +58,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
@@ -4578,6 +4579,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitNamedArguments(StarRocksParser.NamedArgumentsContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        if (name == null || name.isEmpty() || name.equals(" ")) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
+        }
+        Expr node = (Expr) visit(context.expression());
+        if (node == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
+        }
+        return new NamedArgument(name, node);
+    }
+
+    @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
@@ -4596,9 +4610,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
-        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        List<Expr> parameters = null;
+        if (context.argumentList().expressionList() != null) {
+            parameters = visit(context.argumentList().expressionList().expression(), Expr.class);
+        } else {
+            parameters = visit(context.argumentList().namedArgumentList().namedArgument(), Expr.class);
+        }
+        int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).collect(toList()).size();
+        if (namedArgNum > 0 && namedArgNum < parameters.size()) {
+            throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
+        }
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters, createPos(context));
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
