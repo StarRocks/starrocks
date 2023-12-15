@@ -45,13 +45,18 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Backend;
 
 import java.util.ArrayList;
@@ -197,7 +202,15 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> fetchComparableResult() {
-        return fetchComparableResult(-1, -1, null, false);
+        Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
+                ConnectContext.get(), db.getFullName(), table);
+        if (!privResult.first) {
+            throw new RuntimeException(
+                    ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "ANY ON TABLE/MV OBJECT"));
+        }
+        Boolean hideIpPort = privResult.second;
+        return fetchComparableResult(-1, -1, null, hideIpPort);
     }
 
     @Override
@@ -232,7 +245,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
 
-        long tabletId = -1L;
+        long tabletId;
         try {
             tabletId = Long.valueOf(tabletIdStr);
         } catch (NumberFormatException e) {
