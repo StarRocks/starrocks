@@ -39,6 +39,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -268,6 +269,19 @@ public class VariableMgrTest {
         SystemVariable setVar = new SystemVariable(SetType.SESSION, "version_comment", null);
         VariableMgr.setSystemVariable(null, setVar, false);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testIgnoreInvalidSystemVar() throws AnalysisException, DdlException {
+        // Set global variable
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "test_ignore_invalid_var", null);
+        try {
+            Config.ignore_invalid_system_variable = true;
+            VariableMgr.setSystemVariable(null, setVar, false);
+            Config.ignore_invalid_system_variable = false;
+        } catch (DdlException e) {
+            Assert.fail("DDL exception throws.");
+        }
     }
 
     @Test

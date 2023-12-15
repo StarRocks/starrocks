@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -312,7 +313,16 @@ public class VariableMgr {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
-        checkSystemVariableExist(setVar);
+        try {
+            checkSystemVariableExist(setVar);
+        } catch (DdlException e) {
+            if (Config.ignore_invalid_system_variable) {
+                LOG.warn("skip set system variable because of invalid variable: {}", setVar.getVariable());
+                return;
+            } else {
+                throw e;
+            }
+        }
 
         if (setVar.getType() == SetType.VERBOSE) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, setVar.getVariable());
