@@ -142,6 +142,11 @@ public class PlanTestNoneDBBase {
                 connectContext, sql).second.getPhysicalPlan());
     }
 
+    public String getLogicalPlan(String sql) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        return pair.second.getExplainString(StatementBase.ExplainLevel.LOGICAL);
+    }
+
     public String getVerboseExplain(String sql) throws Exception {
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.VERBOSE);
