@@ -428,6 +428,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 60
 - **Description**: The timeout duration for each Routine Load task, in seconds.
 
+#### routine_load_unstable_threshold_second
+- **Unit**: s
+- **Default**: 3600
+- **Description**: Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed the current time exceeds this threshold. Also, unconsumed messages exist in the data source.
+
 ##### max_tolerable_backend_down_num
 
 - **Unit**: -
