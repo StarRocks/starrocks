@@ -113,6 +113,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -279,7 +280,7 @@ public class Coordinator {
         this.queryOptions.setQuery_type(queryType);
         long startTime = context.getStartTime();
         String timezone = context.getSessionVariable().getTimeZone();
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -323,7 +324,7 @@ public class Coordinator {
             this.queryOptions.setLog_rejected_record_num(
                     Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
@@ -358,7 +359,7 @@ public class Coordinator {
             this.queryOptions.setLog_rejected_record_num(
                     Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
@@ -405,7 +406,7 @@ public class Coordinator {
             }
         }
 
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(loadPlanner.getStartTime(),
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(loadPlanner.getStartTime()),
                 loadPlanner.getTimeZone());
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
