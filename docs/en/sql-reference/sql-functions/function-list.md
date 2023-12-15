@@ -418,18 +418,11 @@ You can find a function based on the following categories:
 
 ## Table functions
 
-<<<<<<< HEAD
-- [files](../sql-functions/table-functions/files.md)
-- [generate_series](../sql-functions/table-functions/generate_series.md)
-- [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-- [unnest](../sql-functions/array-functions/unnest.md)
-=======
 - [files](./table-functions/files.md)
 - [generate_series](./table-functions/generate_series.md)
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
 - [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [unnest](./array-functions/unnest.md)
->>>>>>> 928367f89a ([Doc] Add doc for function subdivide_bitmap (#37127))
 
 ## Utility functions
 
