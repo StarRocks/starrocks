@@ -25,9 +25,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Instant;
 
+@TestMethodOrder(MethodOrderer.MethodName.class)
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
 
@@ -521,6 +524,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartialPartition5() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
@@ -528,8 +532,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"" +
                         ")\n" +
                         "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`");
 
@@ -569,6 +572,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "partitions=1/36");
 
         dropMv("test", "hive_parttbl_mv_5");
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
