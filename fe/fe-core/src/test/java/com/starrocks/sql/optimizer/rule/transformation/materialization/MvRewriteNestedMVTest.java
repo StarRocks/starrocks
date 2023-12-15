@@ -17,11 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.runners.MethodSorters;
 
-@TestMethodOrder(MethodOrderer.MethodName.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteNestedMVTest extends MvRewriteTestBase {
 
     @BeforeClass
