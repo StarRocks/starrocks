@@ -256,9 +256,13 @@ CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 CONF_Int32(max_garbage_sweep_interval, "3600");
 CONF_Int32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
+<<<<<<< HEAD
 CONF_mInt32(trash_file_expire_time_sec, "259200");
 // check row nums for BE/CE and schema change. true is open, false is closed.
 CONF_mBool(row_nums_check, "true");
+=======
+CONF_mInt32(trash_file_expire_time_sec, "86400");
+>>>>>>> 0a071307d0 ([Enhancement] Adjust the expiration time of trash file to 1 day (#37113))
 //file descriptors cache, by default, cache 16384 descriptors
 CONF_Int32(file_descriptor_cache_capacity, "16384");
 // minimum file descriptor number
