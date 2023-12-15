@@ -30,6 +30,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -335,9 +336,16 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterTable(stmt);
-            });
+            String catalogName = stmt.getCatalogName();
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                ErrorReport.wrapWithRuntimeException(() -> {
+                    context.getGlobalStateMgr().alterTable(stmt);
+                });
+            } else {
+                ErrorReport.wrapWithRuntimeException(() -> {
+                    context.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
+                });
+            }
             return null;
         }
 
