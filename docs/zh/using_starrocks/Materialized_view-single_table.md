@@ -12,6 +12,10 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
 自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
 
+:::note
+目前， StarRocks 存算分离集群暂不支持同步物化视图。
+:::
+
 下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
