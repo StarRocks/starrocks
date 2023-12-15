@@ -130,6 +130,9 @@ You can find a function based on the following categories:
 - [intersect_count](../sql-functions/bitmap-functions/intersect_count.md)
 - [sub_bitmap](../sql-functions/bitmap-functions/sub_bitmap.md)
 - [to_bitmap](../sql-functions/bitmap-functions/to_bitmap.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [sub_bitmap](./bitmap-functions/sub_bitmap.md)
+- [to_bitmap](./bitmap-functions/to_bitmap.md)
 
 ## Conditional functions
 
@@ -361,7 +364,13 @@ You can find a function based on the following categories:
 
 ## Scalar functions
 
-- [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
+- [hll_cardinality](./scalar-functions/hll_cardinality.md)
+
+## Table functions
+
+- [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
+- [unnest](./array-functions/unnest.md)
 
 ## Utility functions
 
