@@ -269,11 +269,11 @@ public class MetadataMgr {
             String dbName = stmt.getDbName();
             String tableName = stmt.getTableName();
             if (getDb(catalogName, dbName) == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
             }
 
             if (!listTableNames(catalogName, dbName).contains(tableName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
             connectorMetadata.get().alterTable(stmt);
