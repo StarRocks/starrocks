@@ -170,8 +170,6 @@ jobs:
           echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
           exit 1
 
-<<<<<<< HEAD
-=======
   behavior-check:
     runs-on: ubuntu-latest
     if: >
@@ -226,7 +224,6 @@ jobs:
         with:
           labels: 'behavior_changed'
 
->>>>>>> 310515b67f ([Tool] Set body for backport pr and enable behavior checker in branch (#37139))
   automerge-check:
     runs-on: ubuntu-latest
     needs: backport-check
