@@ -119,6 +119,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_routine_load_batch_size|4294967296|每个 Routine Load task 导入的最大数据量，单位为 Byte。|
 |routine_load_task_consume_second|15|每个 Routine Load task 消费数据的最大时间，单位为秒。|
 |routine_load_task_timeout_second|60|每个 Routine Load task 超时时间，单位为秒。|
+|routine_load_unstable_threshold_second|3600|outine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。单位为秒。|
 |max_tolerable_backend_down_num|0|允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
 |period_of_auto_resume_min|5|自动恢复 Routine Load 的时间间隔，单位为分钟。|
 |spark_load_default_timeout_second|86400|Spark 导入的超时时间，单位为秒。|
