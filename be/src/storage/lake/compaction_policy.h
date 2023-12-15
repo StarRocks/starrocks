@@ -44,6 +44,10 @@ protected:
     TabletPtr _tablet;
 };
 
+<<<<<<< HEAD
 double compaction_score(const TabletMetadataPB& metadata);
+=======
+double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata);
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
 
 } // namespace starrocks::lake

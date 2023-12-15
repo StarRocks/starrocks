@@ -185,9 +185,15 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
     return input_rowsets;
 }
 
+<<<<<<< HEAD
 StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& metadata) {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(metadata.id()));
     auto policy = std::make_shared<PrimaryCompactionPolicy>(std::make_shared<Tablet>(tablet));
+=======
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
+                                                      const std::shared_ptr<const TabletMetadataPB>& metadata) {
+    PrimaryCompactionPolicy policy(tablet_mgr, metadata);
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowsets, policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), &has_dels));
 
@@ -205,9 +211,13 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& me
     return segment_num_score;
 }
 
+<<<<<<< HEAD
 double primary_compaction_score(const TabletMetadataPB& metadata) {
+=======
+double primary_compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
     // calc compaction score by picked rowsets
-    auto score_st = primary_compaction_score_by_policy(metadata);
+    auto score_st = primary_compaction_score_by_policy(tablet_mgr, metadata);
     if (!score_st.ok()) {
         // should not happen, return score zero if error
         LOG(ERROR) << "primary_compaction_score by policy fail, tablet_id: " << metadata.id()
@@ -578,9 +588,15 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletP
     return std::make_shared<BaseAndCumulativeCompactionPolicy>(std::move(tablet));
 }
 
+<<<<<<< HEAD
 double compaction_score(const TabletMetadataPB& metadata) {
     if (is_primary_key(metadata)) {
         return primary_compaction_score(metadata);
+=======
+double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {
+    if (is_primary_key(*metadata)) {
+        return primary_compaction_score(tablet_mgr, metadata);
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
     }
     if (config::enable_size_tiered_compaction_strategy) {
         return size_tiered_compaction_score(metadata);

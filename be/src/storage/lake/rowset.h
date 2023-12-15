@@ -61,6 +61,8 @@ public:
 
     [[nodiscard]] int64_t num_rows() const { return metadata().num_rows(); }
 
+    [[nodiscard]] int64_t num_dels() const { return metadata().num_dels(); }
+
     [[nodiscard]] int64_t data_size() const { return metadata().data_size(); }
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }

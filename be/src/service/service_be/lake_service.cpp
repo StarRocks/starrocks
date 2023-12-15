@@ -227,7 +227,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             }
             if (res.ok()) {
                 auto metadata = std::move(res).value();
+<<<<<<< HEAD
                 auto score = compaction_score(*metadata);
+=======
+                auto score = compaction_score(_tablet_mgr, metadata);
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {

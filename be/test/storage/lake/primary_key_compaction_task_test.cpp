@@ -575,17 +575,29 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     config::max_update_compaction_num_singleton_deltas = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(3, input_rowsets.size());
+<<<<<<< HEAD
     EXPECT_EQ(3, compaction_score(*tablet_meta));
+=======
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
 
     config::max_update_compaction_num_singleton_deltas = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(2, input_rowsets2.size());
+<<<<<<< HEAD
     EXPECT_EQ(2, compaction_score(*tablet_meta));
+=======
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
 
     config::max_update_compaction_num_singleton_deltas = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(1, input_rowsets3.size());
+<<<<<<< HEAD
     EXPECT_EQ(1, compaction_score(*tablet_meta));
+=======
+    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), tablet_meta));
+>>>>>>> f914aee518 ([Feature] support recover for cloud native pk table (#35609))
     config::max_update_compaction_num_singleton_deltas = 1000;
 }
 
