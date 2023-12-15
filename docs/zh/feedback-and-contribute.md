@@ -60,4 +60,3 @@ displayed_sidebar: "Chinese"
 ## 文档模板
 
 [函数文档模板](./sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)<br />
-[SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
