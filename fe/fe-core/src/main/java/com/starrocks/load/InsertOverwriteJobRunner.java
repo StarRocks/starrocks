@@ -418,7 +418,7 @@ public class InsertOverwriteJobRunner {
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
 
-                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+                targetTable.lastSchemaUpdateTime.set(System.nanoTime());
 
                 try {
                     GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable,
