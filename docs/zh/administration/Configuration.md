@@ -101,6 +101,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### 导入和导出
 
+<<<<<<< HEAD
 |配置项|默认值|描述|
 |---|---|---|
 |max_broker_load_job_concurrency|5|StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。本参数仅适用于 Broker Load。取值必须小于 `max_running_txn_num_per_db`。从 2.5 版本开始，该参数默认值从 `10` 变为 `5`。参数别名 `async_load_task_pool_size`。 |
@@ -135,6 +136,192 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |export_task_default_timeout_second|7200|导出作业的超时时长，单位为秒。|
 |empty_load_as_error|TRUE|导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br /> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br /> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。|
 | external_table_commit_timeout_ms|10000|发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。 |
+=======
+##### max_broker_load_job_concurrency
+
+- 含义：StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。本参数仅适用于 Broker Load。取值必须小于 `max_running_txn_num_per_db`。从 2.5 版本开始，该参数默认值从 `10` 变为 `5`。参数别名 `async_load_task_pool_size`。
+- 默认值：5
+
+##### load_straggler_wait_second
+
+- 含义：控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆。
+- 单位：秒
+- 默认值：300
+
+##### desired_max_waiting_jobs
+
+- 含义：最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br />如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。从 2.5 版本开始，该参数默认值从 100 变为 1024。
+- 默认值：1024
+
+##### max_load_timeout_second
+
+- 含义：导入作业的最大超时时间，适用于所有导入。
+- 单位：秒
+- 默认值：259200
+
+##### min_load_timeout_second
+
+- 含义：导入作业的最小超时时间，适用于所有导入。
+- 单位：秒
+- 默认值：1
+
+##### max_running_txn_num_per_db
+
+- 含义：StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。自 3.1 版本起，默认值由 100 变为 1000。<br />当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。
+- 默认值：1000
+
+##### load_parallel_instance_num
+
+- 含义：单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。
+- 默认值：1
+
+##### disable_load_job
+
+- 含义：是否禁用任何导入任务，集群出问题时的止损措施。
+- 默认值：FALSE
+
+##### history_job_keep_max_second
+
+- 含义：历史任务最大的保留时长，例如 schema change 任务。
+- 单位：秒
+- 默认值：604800
+
+##### label_keep_max_num
+
+- 含义：一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。
+- 默认值：1000
+
+##### label_keep_max_second
+
+- 含义：已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br />该参数配置适用于所有模式的导入作业。- 单位：秒。设定过大将会消耗大量内存。
+- 默认值：259200
+
+##### max_routine_load_task_concurrent_num
+
+- 含义：每个 Routine Load 作业最大并发执行的 task 数。
+- 默认值：5
+
+##### max_routine_load_task_num_per_be
+
+- 含义：每个 BE 并发执行的 Routine Load 导入任务数量上限。从 3.1.0 版本开始，参数默认值从 5 变为 16，并且不再需要小于等于 BE 的配置项 `routine_load_thread_pool_size`（已废弃）。
+- 默认值：16
+
+##### max_routine_load_batch_size
+
+- 含义：每个 Routine Load task 导入的最大数据量。
+- 单位：字节
+- 默认值：4294967296
+
+##### routine_load_task_consume_second
+
+- 含义：集群内每个 Routine Load 导入任务消费数据的最大时间。<br />自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。
+- 单位：秒
+- 默认值：15
+
+##### routine_load_task_timeout_second
+
+- 含义：集群内每个 Routine Load 导入任务超时时间，- 单位：秒。<br />自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
+- 单位：秒
+- 默认值：60
+
+#### routine_load_unstable_threshold_second
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 单位：秒
+- 默认值：3600
+
+##### max_tolerable_backend_down_num
+
+- 含义：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
+- 默认值：0
+
+##### period_of_auto_resume_min
+
+- 含义：自动恢复 Routine Load 的时间间隔。
+- 单位：分钟
+- 默认值：5
+
+##### spark_load_default_timeout_second
+
+- 含义：Spark 导入的超时时间。
+- 单位：秒
+- 默认值：86400
+
+##### spark_home_default_dir
+
+- 含义：Spark 客户端根目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"`
+
+##### stream_load_default_timeout_second
+
+- 含义：Stream Load 的默认超时时间。
+- 单位：秒
+- 默认值：600
+
+##### max_stream_load_timeout_second
+
+- 含义：Stream Load 的最大超时时间。
+- 单位：秒
+- 默认值：259200
+
+##### insert_load_default_timeout_second
+
+- 含义：Insert Into 语句的超时时间。
+- 单位：秒
+- 默认值：3600
+
+##### broker_load_default_timeout_second
+
+- 含义：Broker Load 的超时时间。
+- 单位：秒
+- 默认值：14400
+
+##### min_bytes_per_broker_scanner
+
+- 含义：单个 Broker Load 任务最大并发实例数。
+- 单位：字节
+- 默认值：67108864
+
+##### max_broker_concurrency
+
+- 含义：单个 Broker Load 任务最大并发实例数。从 3.1 版本起，StarRocks 不再支持该参数。
+- 默认值：100
+
+##### export_max_bytes_per_be_per_task
+
+- 含义：单个导出任务在单个 BE 上导出的最大数据量。
+- 单位：字节
+- 默认值：268435456
+
+##### export_running_job_num_limit
+
+- 含义：导出作业最大的运行数目。
+- 默认值：5
+
+##### export_task_default_timeout_second
+
+- 含义：导出作业的超时时长。
+- 单位：秒。
+- 默认值：7200
+
+##### empty_load_as_error
+
+- 含义：导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br /> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br /> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。
+- 默认值：TRUE
+
+##### enable_sync_publish
+
+- 含义：是否在导入事务 publish 阶段同步执行 apply 任务，仅适用于主键模型表。取值：
+  - `TRUE`（默认）：导入事务 publish 阶段同步执行 apply 任务，即 apply 任务完成后才会返回导入事务 publish 成功，此时所导入数据真正可查。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，开启该参数可以提升查询性能和稳定性，但是会增加导入耗时。
+  - `FALSE`：在导入事务 publish 阶段异步执行 apply 任务，即在导入事务 publish 阶段 apply 任务提交之后立即返回导入事务 publish 成功，然而此时导入数据并不真正可查。这时并发的查询需要等到 apply 任务完成或者超时，才能继续执行。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，关闭该参数会影响查询性能和稳定性。
+- 默认值：TRUE
+- 引入版本：v3.2.0
+
+##### external_table_commit_timeout_ms
+
+- 含义：发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。
+- 单位：毫秒
+- 默认值：10000
+>>>>>>> c32f2a55d6 ([Doc] Add routine_load_unstable_threshold_second (#36967))
 
 #### 存储
 
