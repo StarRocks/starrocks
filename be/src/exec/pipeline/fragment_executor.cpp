@@ -220,7 +220,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& query_globals = request.common().query_globals;
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
-    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
     auto& wg = _wg;
 
     _fragment_ctx->set_runtime_state(
@@ -230,17 +229,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
+    // Only consider the `query_mem_limit` variable
+    // If query_mem_limit is <= 0, it would set to -1, which means no limit
     auto* parent_mem_tracker = wg->mem_tracker();
-    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
-                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    if (option_query_mem_limit <= 0) option_query_mem_limit = -1;
     int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
     int64_t spill_mem_limit_bytes = -1;
-    if (query_options.__isset.enable_spill && query_options.enable_spill == true) {
-        spill_mem_limit_bytes = query_mem_limit * query_options.spill_mem_limit_threshold;
+    if (query_options.__isset.enable_spill && query_options.enable_spill && option_query_mem_limit > 0) {
+        spill_mem_limit_bytes = option_query_mem_limit * query_options.spill_mem_limit_threshold;
     }
-    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
+    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
                                  wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
