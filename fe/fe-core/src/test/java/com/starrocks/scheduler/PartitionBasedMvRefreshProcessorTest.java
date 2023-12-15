@@ -1434,7 +1434,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv1", "20230731", "20230805");
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p20230801_20230802", "p20230802_20230803", "p20230803_20230804", "p20230803_99991231"),
+        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
+                        "p20230802_20230803", "p20230803_99991231"),
                 partitions);
     }
 
@@ -1577,7 +1578,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MaterializedView materializedView = refreshMaterializedView("jdbc_parttbl_mv5", "20230731", "20230805");
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802", "p20230802_20230803", "p20230803_20230804"),
+        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
+                        "p20230802_20230803", "p20230803_20230804"),
                 partitions);
     }
 
