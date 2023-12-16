@@ -55,7 +55,7 @@ public class JDBCConfigSetTest {
     @Test
     public void testJDBCCacheGetWithOutEnable() {
         try {
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(false);
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
             Assert.assertNotEquals(step1, step2);
@@ -69,7 +69,7 @@ public class JDBCConfigSetTest {
         try {
             enableJDBCMetaCache();
             Assert.assertTrue(Config.jdbc_meta_cache_enable);
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(false);
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
             Assert.assertEquals(step1, step2);
@@ -83,7 +83,7 @@ public class JDBCConfigSetTest {
     public void testSetJDBCCacheExpireSec() {
         try {
             enableJDBCMetaCache();
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(false);
             int changeBefore = cache.get("testKey", k -> 20231111);
             Assert.assertEquals(changeBefore, 20231111);
             changeJDBCCacheExpireSec();

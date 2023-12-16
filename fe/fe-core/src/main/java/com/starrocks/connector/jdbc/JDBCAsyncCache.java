@@ -28,11 +28,15 @@ public class JDBCAsyncCache<K, V> {
     private AsyncCache<K, V> asyncCache;
     private long currentExpireSec;
 
-    public JDBCAsyncCache() {
-        currentExpireSec = Config.jdbc_meta_cache_expire_sec;
-        this.asyncCache = Caffeine.newBuilder()
-                .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS)
-                .buildAsync();
+    public JDBCAsyncCache(Boolean permanent) {
+        if (permanent) {
+            this.asyncCache = Caffeine.newBuilder().buildAsync();
+        } else {
+            currentExpireSec = Config.jdbc_meta_cache_expire_sec;
+            this.asyncCache = Caffeine.newBuilder()
+                    .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS)
+                    .buildAsync();
+        }
     }
 
     public @NonNull V get(@NonNull K key, @NonNull Function<K, V> function) {
@@ -42,6 +46,10 @@ public class JDBCAsyncCache<K, V> {
         } else {
             return function.apply(key);
         }
+    }
+
+    public @NonNull V getPersistentCache(@NonNull K key, @NonNull Function<K, V> function) {
+        return this.asyncCache.get(key, function).join();
     }
 
     private void checkExpirationTimeChange() {

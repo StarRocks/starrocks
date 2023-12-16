@@ -15,7 +15,6 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
@@ -40,12 +39,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private JDBCMetaResolver metaResolver;
 
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, List<String>> catalogCache
-            = new JDBCAsyncCache<>();
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, Table> tableCache
-            = new JDBCAsyncCache<>();
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, Object>, List<PartitionInfo>> partitionCache
-            = new JDBCAsyncCache<>();
+    private final @NonNull JDBCAsyncCache<JDBCTableCacheKey, List<String>> commonCache
+            = new JDBCAsyncCache<>(false);
+    private final @NonNull JDBCAsyncCache<JDBCTableCacheKey, Table> tableInstanceCache
+            = new JDBCAsyncCache<>(false);
+    private final @NonNull JDBCAsyncCache<Table, List<Partition>> partitionInfoCache
+            = new JDBCAsyncCache<>(false);
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -74,9 +73,8 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        ImmutableMap<String, String> metaInfo =
-                ImmutableMap.of("func", "listDbNames");
-        return catalogCache.get(metaInfo, k -> metaResolver.refreshCacheForListDbNames());
+        return commonCache.get(new JDBCTableCacheKey("listDbNames", null, null, null),
+                k -> metaResolver.refreshCacheForListDbNames());
     }
 
     @Override
@@ -94,23 +92,20 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        ImmutableMap<String, String> metaInfo =
-                ImmutableMap.of("func", "listTableNames", "dbName", dbName);
-        return catalogCache.get(metaInfo, k -> metaResolver.refreshCacheForListTableNames(k));
+        return commonCache.get(new JDBCTableCacheKey("listTableNames", null, dbName, null),
+                k -> metaResolver.refreshCacheForListTableNames(k));
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        ImmutableMap<String, String> metaInfo =
-                ImmutableMap.of("func", "getTable", "dbName", dbName, "tblName", tblName);
-        return tableCache.get(metaInfo, k -> metaResolver.refreshCacheForGetTable(k));
+        return tableInstanceCache.get(new JDBCTableCacheKey("getTable", null, dbName, tblName),
+                k -> metaResolver.refreshCacheForGetTable(k));
     }
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
-        ImmutableMap<String, String> metaInfo =
-                ImmutableMap.of("func", "listPartitionNames", "databaseName", databaseName, "tableName", tableName);
-        return catalogCache.get(metaInfo, k -> metaResolver.refreshCacheForListPartitionNames(k));
+        return commonCache.get(new JDBCTableCacheKey("listPartitionNames", null, databaseName, tableName),
+                k -> metaResolver.refreshCacheForListPartitionNames(k));
     }
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
@@ -119,8 +114,7 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        ImmutableMap<String, Object> metaInfo =
-                ImmutableMap.of("func", "getPartitions", "table", table, "partitionNames", partitionNames);
-        return partitionCache.get(metaInfo, k -> metaResolver.refreshCacheForGetPartitions(k));
+        List<Partition> partitions = partitionInfoCache.get(table, k -> metaResolver.refreshCacheForGetPartitions(k));
+        return metaResolver.getPartitions(partitionNames, partitions);
     }
 }
