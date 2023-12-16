@@ -1079,10 +1079,10 @@ public class Config extends ConfigBase {
     /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
      * to determine which strategy you choose:
-     *  N <0      : always use non lock optimization and no copy related materialized views which
-     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     *  N = 0    : always not use non lock optimization
-     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * N <0      : always use non lock optimization and no copy related materialized views which
+     * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     * N = 0    : always not use non lock optimization
+     * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2074,9 +2074,9 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
-     *  StarRocks-manager pull queries every 1 second
-     *  metrics calculate query latency every 15 second
-     *  do not set cacheTime lower than these time
+     * StarRocks-manager pull queries every 1 second
+     * metrics calculate query latency every 15 second
+     * do not set cacheTime lower than these time
      */
     @ConfField(mutable = true)
     public static long query_detail_cache_time_nanosecond = 30000000000L;
@@ -2131,7 +2131,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int cloud_native_meta_port = 6090;
     /**
-     *  Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+     * Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
      */
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
@@ -2301,14 +2301,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
-    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
-            "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
-            "versions still being accessed.\n" +
-            "NOTE: Increasing this value may increase the space usage of the remote storage system.")
+    @ConfField(mutable = true, comment =
+            "History versions within this time range will not be deleted by auto vacuum.\n" +
+                    "REMINDER: Set this to a value longer than the maximum possible execution time of queries, " +
+                    "to avoid deletion of versions still being accessed.\n" +
+                    "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
-    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
-            "threshold, auto vacuum operations will no longer be triggered for that partition")
+    @ConfField(mutable = true, comment =
+            "time threshold in hours, if a partition has not been updated for longer than this " +
+                    "threshold, auto vacuum operations will no longer be triggered for that partition")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField

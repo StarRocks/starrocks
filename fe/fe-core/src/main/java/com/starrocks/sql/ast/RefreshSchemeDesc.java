@@ -25,7 +25,6 @@ public class RefreshSchemeDesc implements ParseNode {
     protected MaterializedView.RefreshMoment moment;
     protected final NodePosition pos;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/RefreshSchemeDesc.java
     public RefreshSchemeDesc(MaterializedView.RefreshType type) {
         this(type, NodePosition.ZERO);
     }
@@ -35,10 +34,6 @@ public class RefreshSchemeDesc implements ParseNode {
     }
 
     public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
-=======
-    public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
-        super(AlterOpType.REFRESH_SCHEMA, pos);
->>>>>>> 2bd50b99c1 ([Enhancement] add a switch to control default refresh immediate (#37093)):fe/fe-core/src/main/java/com/starrocks/sql/ast/RefreshSchemeClause.java
         this.type = type;
         this.moment = moment;
         this.pos = pos;
