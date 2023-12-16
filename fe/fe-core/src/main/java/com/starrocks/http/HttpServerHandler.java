@@ -53,6 +53,9 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Iterator;
+import java.util.Map;
+
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
     // keep connectContext when channel is open
@@ -84,6 +87,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 validateRequest(ctx, request);
             } catch (Exception e) {
                 LOG.warn("accept bad request: {}, error: {}", request.uri(), e.getMessage(), e);
+                Iterator headers = request.headers().iteratorAsString();
+                while (headers.hasNext()) {
+                    Map.Entry<String, String> header = (Map.Entry<String, String>) headers.next();
+                    LOG.warn("Header {}, value {}", header.getKey(), header.getValue());
+                }
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
