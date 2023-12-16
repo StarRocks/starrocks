@@ -437,6 +437,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 60
 - **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
+#### routine_load_unstable_threshold_second
+- **Unit**: s
+- **Default**: 3600
+- **Description**: Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specificboth:
+  - The difference between the timestamp of the message being consumed and the current time exceeds this threshold.
+  - Unconsumed messages exist in the data source.
+
 #### max_tolerable_backend_down_num
 
 - **Unit**: -
