@@ -615,6 +615,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         mv.active = this.active;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        mv.viewDefineSql = this.viewDefineSql;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
