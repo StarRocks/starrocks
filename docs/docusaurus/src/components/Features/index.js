@@ -43,7 +43,7 @@ const ChineseFeatureList = [
   },
   {
     title: '查询数据湖',
-    url: '../../data_source/overview/',
+    url: '../../data_source/data_lakes/',
     description: (
       <>
         Iceberg, Hive, Delta Lake, …
@@ -145,7 +145,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Data Lakes',
-    url: '../../data_source/overview/',
+    url: '../../data_source/data_lakes/',
     description: (
       <>
         Iceberg, Hive, Delta Lake, …
