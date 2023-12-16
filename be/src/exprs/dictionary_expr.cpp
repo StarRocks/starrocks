@@ -14,6 +14,8 @@
 
 #include "exprs/dictionary_expr.h"
 
+#include <fmt/format.h>
+
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "storage/chunk_helper.h"
@@ -86,7 +88,7 @@ Status DictionaryExpr::open(RuntimeState* state, ExprContext* context, FunctionC
     auto res = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_by_version(
             _dictionary_expr.dict_id, _dictionary_expr.txn_id);
     if (!res.ok()) {
-        return Status::InternalError("open dictionary expression failed " + res.status().get_error_msg());
+        return Status::InternalError(fmt::format("open dictionary expression failed {}", res.status().message()));
     }
     _dictionary = std::move(res.value());
     DCHECK(_dictionary != nullptr);

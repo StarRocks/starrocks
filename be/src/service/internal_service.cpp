@@ -232,7 +232,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
-            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -306,7 +306,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
 
     auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
-        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -516,7 +516,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
-            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -803,8 +803,8 @@ void PInternalServiceImplBase<T>::refresh_dictionary_cache_begin(google::protobu
     int64_t txn_id = request->txn_id();
     auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
     if (!st.ok()) {
-        LOG(WARNING) << st.get_error_msg();
-        Status::InternalError(st.get_error_msg()).to_protobuf(response->mutable_status());
+        LOG(WARNING) << st.message();
+        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
     }
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -828,8 +828,8 @@ void PInternalServiceImplBase<T>::refresh_dictionary_cache_commit(google::protob
     int64_t txn_id = request->txn_id();
     auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
     if (!st.ok()) {
-        LOG(WARNING) << st.get_error_msg();
-        Status::InternalError(st.get_error_msg()).to_protobuf(response->mutable_status());
+        LOG(WARNING) << st.message();
+        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
     }
     Status::OK().to_protobuf(response->mutable_status());
 }
@@ -935,7 +935,7 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
-        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;

@@ -18,6 +18,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "storage/row_store_encoder.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

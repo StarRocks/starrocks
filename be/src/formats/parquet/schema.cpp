@@ -18,6 +18,7 @@
 
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "util/slice.h"
 
 namespace starrocks::parquet {
 

@@ -233,8 +233,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
                     // failed to append this msg, we must stop
-                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id
-                                 << ", errmsg=" << st.get_error_msg();
+                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
                     eos = true;
                     {
                         std::unique_lock<std::mutex> lock(_mutex);
@@ -418,7 +417,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 VLOG(3) << "consume partition" << partition << " - " << msg_id;
             } else {
                 // failed to append this msg, we must stop
-                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.get_error_msg();
+                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
                 eos = true;
                 {
                     std::unique_lock<std::mutex> lock(_mutex);
@@ -452,7 +451,7 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         int64_t backlog_num;
         Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog_num);
         if (!st.ok()) {
-            LOG(WARNING) << st.get_error_msg();
+            LOG(WARNING) << st.message();
         } else {
             ctx->pulsar_info
                     ->partition_backlog[std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition()] =
