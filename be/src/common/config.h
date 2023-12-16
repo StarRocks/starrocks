@@ -269,7 +269,7 @@ CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 CONF_mInt32(max_garbage_sweep_interval, "3600");
 CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
-CONF_mInt32(trash_file_expire_time_sec, "259200");
+CONF_mInt32(trash_file_expire_time_sec, "86400");
 //file descriptors cache, by default, cache 16384 descriptors
 CONF_Int32(file_descriptor_cache_capacity, "16384");
 // minimum file descriptor number
@@ -309,6 +309,9 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // too many candidates lead to OOM or cpu overload.
 // when candidate num reach this value, the condidate with lowest score will be dropped.
 CONF_mInt64(max_compaction_candidate_num, "40960");
+
+// If true, SR will try no to merge delta column back to main segment
+CONF_mBool(enable_lazy_delta_column_compaction, "true");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");

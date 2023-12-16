@@ -309,6 +309,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
+        for (String tableName : tableNames) {
+            dropTable(tableName);
+        }
+        return this;
+    }
+
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
@@ -357,6 +364,7 @@ public class StarRocksAssert {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            String mvName = createMaterializedViewStatement.getTableName().getTbl();
         }
         return this;
     }
