@@ -188,6 +188,7 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
+    lake/primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp

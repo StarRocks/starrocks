@@ -749,7 +749,7 @@ public:
                 std::string msg = strings::Substitute("FixedMutableIndex<$0> insert found duplicate key $1", KeySize,
                                                       hexdump((const char*)key.data, KeySize));
                 LOG(WARNING) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
         }
         return Status::OK();
@@ -1056,7 +1056,7 @@ public:
                 std::string msg = strings::Substitute("SliceMutableIndex key_size=$0 insert found duplicate key $1",
                                                       skey.size, hexdump((const char*)skey.data, skey.size));
                 LOG(WARNING) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
         }
         return Status::OK();

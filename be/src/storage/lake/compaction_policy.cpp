@@ -185,7 +185,7 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
     return input_rowsets;
 }
 
-StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& metadata) {
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(metadata.id()));
     auto policy = std::make_shared<PrimaryCompactionPolicy>(std::make_shared<Tablet>(tablet));
     std::vector<bool> has_dels;
@@ -205,9 +205,9 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& me
     return segment_num_score;
 }
 
-double primary_compaction_score(const TabletMetadataPB& metadata) {
+double primary_compaction_score(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     // calc compaction score by picked rowsets
-    auto score_st = primary_compaction_score_by_policy(metadata);
+    auto score_st = primary_compaction_score_by_policy(tablet_mgr, metadata);
     if (!score_st.ok()) {
         // should not happen, return score zero if error
         LOG(ERROR) << "primary_compaction_score by policy fail, tablet_id: " << metadata.id()
@@ -578,9 +578,9 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletP
     return std::make_shared<BaseAndCumulativeCompactionPolicy>(std::move(tablet));
 }
 
-double compaction_score(const TabletMetadataPB& metadata) {
+double compaction_score(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     if (is_primary_key(metadata)) {
-        return primary_compaction_score(metadata);
+        return primary_compaction_score(tablet_mgr, metadata);
     }
     if (config::enable_size_tiered_compaction_strategy) {
         return size_tiered_compaction_score(metadata);
