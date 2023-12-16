@@ -1240,7 +1240,7 @@ TEST_F(FileReaderTest, TestReadWithUpperPred) {
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    LOG(ERROR) << "status: " << status.get_error_msg();
+    LOG(ERROR) << "status: " << status.message();
     ASSERT_EQ(3, chunk->num_rows());
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
@@ -1322,7 +1322,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     //init
     auto* ctx = _create_file_map_char_key_context();
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
@@ -1349,7 +1349,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     chunk->append_column(c_map1, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
     EXPECT_EQ(chunk->num_rows(), 1);
     EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
@@ -1668,7 +1668,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -1723,7 +1723,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
     Status status = file_reader->init(ctx);
     EXPECT_TRUE(!status.ok());
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
 }
 
@@ -1765,7 +1765,7 @@ TEST_F(FileReaderTest, TestReadStructNull) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -1809,7 +1809,7 @@ TEST_F(FileReaderTest, TestReadBinary) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -2091,7 +2091,7 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // Illegal parquet files, not support it anymore
     ASSERT_FALSE(status.ok());
 
-    //  ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    //  ASSERT_TRUE(status.ok()) << status.message();
     //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     //
     //  auto chunk = std::make_shared<Chunk>();
@@ -2395,8 +2395,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     Status status = file_reader->init(ctx);
 
     // Illegal parquet files, not support it anymore
-    ASSERT_FALSE(status.ok()) << status.get_error_msg();
-    // ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_FALSE(status.ok()) << status.message();
+    // ASSERT_TRUE(status.ok()) << status.message();
 
     //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     //
@@ -2496,7 +2496,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
         chunk->reset();
         status = file_reader->get_next(&chunk);
         if (!status.ok() && !status.is_end_of_file()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
             break;
         }
         chunk->check_or_die();
@@ -2711,7 +2711,7 @@ TEST_F(FileReaderTest, CheckLargeParquetHeader) {
         chunk->reset();
         status = file_reader->get_next(&chunk);
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
             break;
         }
         chunk->check_or_die();
@@ -2914,7 +2914,7 @@ TEST_F(FileReaderTest, TestRandomReadWith2PageSize) {
                     chunk->check_or_die();
                     total_row_nums += chunk->num_rows();
                     if (!status.ok() && !status.is_end_of_file()) {
-                        std::cout << status.get_error_msg() << std::endl;
+                        std::cout << status.message() << std::endl;
                         DCHECK(false) << "file path: " << file_path << ", " << _print_in_predicate();
                     }
                     // check row value

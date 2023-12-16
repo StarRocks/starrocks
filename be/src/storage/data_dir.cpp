@@ -299,7 +299,7 @@ Status DataDir::load() {
         for (auto tablet_id : tablet_ids) {
             Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
             if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.get_error_msg();
+                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
                 return s;
             }
         }
@@ -320,7 +320,7 @@ Status DataDir::load() {
     if (!load_tablet_status.ok()) {
         LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
-                   << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+                   << ", path: " << _path << " error: " << load_tablet_status.message()
                    << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
@@ -343,7 +343,7 @@ Status DataDir::load() {
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             Status s = TabletMetaManager::save(this, tablet_meta_pb);
             if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.get_error_msg();
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
                 return s;
             }
         }
@@ -445,7 +445,7 @@ Status DataDir::load() {
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
-                     << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.message()
                      << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count

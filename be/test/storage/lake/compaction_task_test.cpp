@@ -23,7 +23,6 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"

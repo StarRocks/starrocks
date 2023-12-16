@@ -307,7 +307,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     DeferOp op([&res, &fragment_ctx]() {
         if (!res.ok()) {
             LOG(WARNING) << fmt::format("fragment id {} close channel error: {}",
-                                        print_id(fragment_ctx->fragment_instance_id()), res.get_error_msg());
+                                        print_id(fragment_ctx->fragment_instance_id()), res.message());
         }
     });
 
@@ -325,7 +325,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
 
 Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
     auto status = _close_internal(state, fragment_ctx);
-    state->log_error(status.get_error_msg());
+    state->log_error(status.message());
     return status;
 }
 

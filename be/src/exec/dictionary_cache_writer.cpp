@@ -95,7 +95,7 @@ Status DictionaryCacheWriter::_submit() {
     if (!st.ok()) {
         _num_pending_tasks.fetch_sub(1, std::memory_order_release);
         DCHECK(_num_pending_tasks.load(std::memory_order_acquire) >= 0);
-        LOG(WARNING) << "refresh dictionary cache task submit failed, " << st.get_error_msg();
+        LOG(WARNING) << "refresh dictionary cache task submit failed, " << st.message();
     }
     return st;
 }
@@ -145,7 +145,7 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
 
     if (!st.ok()) {
         std::stringstream ss;
-        ss << "RPC failed when refreshing dictionary cache, " << st.get_error_msg();
+        ss << "RPC failed when refreshing dictionary cache, " << st.message();
         LOG(WARNING) << ss.str();
         // manually cancel fragment context, because sync_dictionary_cache is not
         // in pipeline driver executor thread
@@ -174,7 +174,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
 
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
         if (!res.ok()) {
-            LOG(WARNING) << "create brpc stub failed, " << res.status().get_error_msg();
+            LOG(WARNING) << "create brpc stub failed, " << res.status().message();
             return res.status();
         }
         res.value()->refresh_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
@@ -232,7 +232,7 @@ Status DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(const Chun
         StatusOr<ChunkPB> res = Status::OK();
         TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
-            LOG(WARNING) << "serialize chunk failed when refreshing dictionary cache, " << res.status().get_error_msg();
+            LOG(WARNING) << "serialize chunk failed when refreshing dictionary cache, " << res.status().message();
             return res.status();
         }
         res->Swap(dst);
@@ -262,7 +262,7 @@ Status DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(const Chun
         auto st = compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                            &compression_scratch);
         if (!st.ok()) {
-            LOG(WARNING) << "compress chunk failed when refreshing dictionary cache, " << st.get_error_msg();
+            LOG(WARNING) << "compress chunk failed when refreshing dictionary cache, " << st.message();
             return st;
         }
 

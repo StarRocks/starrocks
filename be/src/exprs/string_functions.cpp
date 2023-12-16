@@ -2580,7 +2580,7 @@ std::string StringFunctions::url_decode_func(const std::string& value) {
     if (status.ok()) {
         return ret;
     } else {
-        throw std::runtime_error(status.get_error_msg());
+        throw std::runtime_error(std::string(status.message()));
     }
 }
 

@@ -194,11 +194,11 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
         if (st.is_end_of_file()) {
             break;
         }
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader->create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader->fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader->cast_chunk(&ckptr);
         DCHECK(result != nullptr);
         records += result->num_rows();
@@ -373,7 +373,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
     Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     return ctx;
 }
 
@@ -550,7 +550,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     b3.build(&builder);
 
     Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    DCHECK(status.ok()) << status.get_error_msg();
+    DCHECK(status.ok()) << status.message();
     slots.push_back(tbl->get_slot_descriptor(0));
 
     OrcChunkReader reader(state->chunk_size(), slots);
@@ -886,7 +886,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     b3.build(&builder);
 
     Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    DCHECK(status.ok()) << status.get_error_msg();
+    DCHECK(status.ok()) << status.message();
     slots.push_back(tbl->get_slot_descriptor(0));
 
     OrcChunkReader reader(state->chunk_size(), slots);
@@ -1005,14 +1005,14 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1034,14 +1034,14 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
         reader.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1112,14 +1112,14 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1165,14 +1165,14 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(false);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1201,14 +1201,14 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1236,14 +1236,14 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         reader.set_broker_load_mode(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1299,14 +1299,14 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1347,14 +1347,14 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1415,14 +1415,14 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1492,14 +1492,14 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1549,17 +1549,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1591,17 +1591,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1648,17 +1648,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1695,17 +1695,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_hive_column_names(&hive_column_names);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1737,17 +1737,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, false};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1792,17 +1792,17 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -1924,18 +1924,18 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true, true, true,
                                                true, true, true, true, true, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2003,18 +2003,18 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         std::vector<bool> selectd_column_id = {true, true, true, true, true,  true, true,
                                                true, true, true, true, false, true};
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2069,7 +2069,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         Status st = reader.init(std::move(input_stream));
         EXPECT_TRUE(st.ok());
         if (!st.ok()) {
-            std::cout << st.get_error_msg() << std::endl;
+            std::cout << st.message() << std::endl;
         }
 
         std::vector<bool> selectd_column_id = {true, false, false, false, false, false, false,
@@ -2077,11 +2077,11 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr ckptr = reader.create_chunk();
         DCHECK(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
@@ -2111,14 +2111,14 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
     reader.set_use_orc_column_names(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
 
     st = reader.read_next();
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr ckptr = reader.create_chunk();
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 
@@ -2155,14 +2155,14 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     reader.set_case_sensitive(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
 
     st = reader.read_next();
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr ckptr = reader.create_chunk();
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 
@@ -2208,14 +2208,14 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
     reader.set_case_sensitive(true);
     auto input_stream = orc::readLocalFile(input_orc_file);
     Status st = reader.init(std::move(input_stream));
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
 
     st = reader.read_next();
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr ckptr = reader.create_chunk();
     DCHECK(ckptr != nullptr);
     st = reader.fill_chunk(&ckptr);
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     ChunkPtr result = reader.cast_chunk(&ckptr);
     DCHECK(result != nullptr);
 

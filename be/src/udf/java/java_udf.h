@@ -21,6 +21,7 @@
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c

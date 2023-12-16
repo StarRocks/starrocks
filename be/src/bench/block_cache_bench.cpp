@@ -126,7 +126,7 @@ public:
             DCHECK(false) << "Unsupported cache engine: " << params.cache_engine;
         }
         Status st = _cache->init(options);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
         _ctx = new BenchContext();
     }
 
@@ -207,7 +207,7 @@ public:
                 std::string v = gen_obj_value(index, obj_value_size, _ctx);
                 start_us = MonotonicMicros();
                 Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), obj_value_size, 0);
-                ASSERT_TRUE(st.ok()) << "write cache failed: " << st.get_error_msg();
+                ASSERT_TRUE(st.ok()) << "write cache failed: " << st.message();
                 *(_ctx->write_latency) << MonotonicMicros() - start_us;
                 *(_ctx->write_bytes) << v.size();
                 *(_ctx->write_op_count) << 1;
@@ -216,7 +216,7 @@ public:
                 auto res = _cache->read_cache(_ctx->obj_keys[index], read_value, 0, _params->read_size);
                 delete[] read_value;
             } else {
-                ASSERT_TRUE(false) << "read cache failed: " << res.status().get_error_msg();
+                ASSERT_TRUE(false) << "read cache failed: " << res.status().message();
             }
             delete[] value;
         }

@@ -64,7 +64,7 @@ TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
     update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
     auto status = handler.process_update_tablet_meta(update_tablet_meta_req);
     ASSERT_ERROR(status);
-    ASSERT_EQ("txn_id not set in request", status.get_error_msg());
+    ASSERT_EQ("txn_id not set in request", status.message());
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {

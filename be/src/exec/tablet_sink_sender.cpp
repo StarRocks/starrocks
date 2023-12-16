@@ -119,7 +119,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
                          << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
-                         << ", errmsg=" << st.get_error_msg();
+                         << ", errmsg=" << st.message();
             channel->mark_as_failed(node);
             err_st = st;
             // we only send to primary replica, if it fail whole load fail
@@ -167,7 +167,7 @@ Status TabletSinkSender::open_wait() {
             if (!st.ok()) {
                 LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
-                             << ", errmsg=" << st.get_error_msg();
+                             << ", errmsg=" << st.message();
                 err_st = st.clone_and_append(std::string(" be:") + ch->node_info()->host);
                 index_channel->mark_as_failed(ch);
             }
@@ -195,7 +195,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                     auto st = ch->try_close(true);
                     if (!st.ok()) {
                         LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
@@ -227,7 +227,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
                         LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
@@ -243,7 +243,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
@@ -290,7 +290,7 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
-                                     << ", error_msg=" << channel_status.get_error_msg();
+                                     << ", error_msg=" << channel_status.message();
                         err_st = channel_status;
                         index_channel->mark_as_failed(ch);
                     }

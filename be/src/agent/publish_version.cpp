@@ -120,7 +120,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                                  << " rowset:" << task.rowset->rowset_id();
-                    tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
+                    std::string_view msg = task.st.message();
+                    tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                 } else {
                     LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
                               << " tablet_max_version:" << tablet->max_continuous_version()

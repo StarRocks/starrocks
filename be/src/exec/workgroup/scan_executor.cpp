@@ -34,8 +34,7 @@ ScanExecutor::~ScanExecutor() {
 void ScanExecutor::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
@@ -45,8 +44,7 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 

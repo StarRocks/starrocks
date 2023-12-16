@@ -118,7 +118,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
-    response->mutable_status()->add_error_msgs(st.get_error_msg());
+    response->mutable_status()->add_error_msgs(std::string(st.message()));
 
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);

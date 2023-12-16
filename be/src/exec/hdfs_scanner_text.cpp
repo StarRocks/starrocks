@@ -332,8 +332,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             RETURN_IF_ERROR(_create_or_reinit_reader());
             continue;
         } else if (!status.ok()) {
-            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(),
-                                                status.get_error_msg());
+            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(), status.message());
             return status;
         }
 

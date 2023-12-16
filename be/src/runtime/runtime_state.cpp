@@ -142,7 +142,6 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
-    _process_status.permit_unchecked_error();
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -240,11 +239,11 @@ std::string RuntimeState::error_log() {
     return boost::algorithm::join(_error_log, "\n");
 }
 
-bool RuntimeState::log_error(const std::string& error) {
+bool RuntimeState::log_error(std::string_view error) {
     std::lock_guard<std::mutex> l(_error_log_lock);
 
     if (_error_log.size() < _query_options.max_errors) {
-        _error_log.push_back(error);
+        _error_log.emplace_back(error);
         return true;
     }
 
@@ -256,7 +255,7 @@ void RuntimeState::log_error(const Status& status) {
         return;
     }
 
-    log_error(status.get_error_msg());
+    log_error(status.message());
 }
 
 void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
@@ -289,14 +288,13 @@ bool RuntimeState::use_column_pool() const {
     return true;
 }
 
-Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
-                                            const std::string* msg) {
+Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
     DCHECK_GE(failed_allocation_size, 0);
     {
         std::lock_guard<std::mutex> l(_process_status_lock);
         if (_process_status.ok()) {
-            if (msg != nullptr) {
-                _process_status = Status::MemoryLimitExceeded(*msg);
+            if (!msg.empty()) {
+                _process_status = Status::MemoryLimitExceeded(msg);
             } else {
                 _process_status = Status::MemoryLimitExceeded("Memory limit exceeded");
             }
@@ -385,7 +383,7 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_error_log_file == nullptr) {
         Status status = create_error_log_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
             if (_error_log_file != nullptr) {
                 _error_log_file->close();
                 delete _error_log_file;
@@ -427,7 +425,7 @@ void RuntimeState::append_rejected_record_to_file(const std::string& record, con
     if (_rejected_record_file == nullptr) {
         Status status = create_rejected_record_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
             if (_rejected_record_file != nullptr) {
                 _rejected_record_file->close();
                 _rejected_record_file.reset();

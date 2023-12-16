@@ -84,7 +84,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     Status st = _reader->prepare();
     if (!st.ok()) {
-        std::string msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+        std::string msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.message(),
                                               BackendOptions::get_localhost());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
@@ -100,7 +100,7 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
         _is_open = true;
         Status st = _reader->open(_params);
         if (!st.ok()) {
-            auto msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+            auto msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.message(),
                                            BackendOptions::get_localhost());
             st = Status::InternalError(msg);
             LOG(WARNING) << st;

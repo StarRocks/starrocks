@@ -167,11 +167,11 @@ protected:
             std::cout << res.to_string();
         }
         auto st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         auto chunk_read = reader.create_chunk();
         st = reader.fill_chunk(&chunk_read);
-        DCHECK(st.ok()) << st.get_error_msg();
+        DCHECK(st.ok()) << st.message();
 
         chunk = reader.cast_chunk(&chunk_read);
         return Status::OK();

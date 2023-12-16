@@ -700,12 +700,6 @@ if (ENABLE_FAULT_INJECTION)
     message(STATUS "enable fault injection")
 endif()
 
-option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
-if (ASSERT_STATUS_CHECKED)
-    message(STATUS "Build with assert status checked")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
-endif()
-
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible

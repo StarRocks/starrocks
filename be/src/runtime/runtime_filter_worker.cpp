@@ -888,7 +888,7 @@ void RuntimeFilterWorker::execute() {
             RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options, ev.is_opened_by_pipeline);
             Status st = merger.init(ev.create_rf_merger_request);
             if (!st.ok()) {
-                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();
+                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.message();
                 break;
             }
             _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));

@@ -79,7 +79,7 @@ protected:
     void read_compressed_file(CompressionTypePB type, const char* path, std::string& out, size_t buffer_size = 1024) {
         auto fs = new_fs_posix();
         auto st = fs->new_random_access_file(path);
-        ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+        ASSERT_TRUE(st.ok()) << st.status().message();
         auto file = std::move(st.value());
 
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
@@ -94,7 +94,7 @@ protected:
 
         for (;;) {
             auto st = compressed_input_stream->read(buf, buffer_size);
-            ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+            ASSERT_TRUE(st.ok()) << st.status().message();
             uint64_t sz = st.value();
             if (sz == 0) break;
             buf[sz] = 0;

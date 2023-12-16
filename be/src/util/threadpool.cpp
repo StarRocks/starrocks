@@ -257,7 +257,6 @@ ThreadPool::~ThreadPool() noexcept {
     CHECK_EQ(1, _tokens.size()) << strings::Substitute("Threadpool $0 destroyed with $1 allocated tokens", _name,
                                                        _tokens.size());
     shutdown();
-    _pool_status.permit_unchecked_error();
 }
 
 Status ThreadPool::init() {

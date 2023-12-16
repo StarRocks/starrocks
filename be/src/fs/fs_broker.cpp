@@ -214,10 +214,7 @@ public:
         FileSystem::on_file_write_open(this);
     }
 
-    ~BrokerWritableFile() override {
-        auto st = BrokerWritableFile::close();
-        st.permit_unchecked_error();
-    }
+    ~BrokerWritableFile() override { (void)BrokerWritableFile::close(); }
 
     Status append(const Slice& data) override {
         TBrokerPWriteRequest request;

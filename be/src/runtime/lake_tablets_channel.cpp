@@ -103,7 +103,7 @@ private:
             if (status.ok()) {
                 return;
             }
-            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.get_error_msg());
+            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());

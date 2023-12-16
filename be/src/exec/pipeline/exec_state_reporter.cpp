@@ -300,8 +300,7 @@ ExecStateReporter::ExecStateReporter() {
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    auto st = _thread_pool->submit_func(std::move(report_task));
-    st.permit_unchecked_error();
+    (void)_thread_pool->submit_func(std::move(report_task));
 }
 
 } // namespace starrocks::pipeline

@@ -571,8 +571,7 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
         exit(0);
     }
 
-    auto st = _tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
-    st.permit_unchecked_error();
+    (void)_tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
     // If tablet_info_vec is not empty, means we have dropped some tablets.
     return !tablet_info_vec.empty();
 }
@@ -684,8 +683,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
-            auto st = StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
-            st.permit_unchecked_error();
+            (void)StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -801,13 +799,13 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
-        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
         return;
     }
     st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
-        LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+        LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
         return;
     }
 }
@@ -957,10 +955,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     // when executing migration.
     std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
     if (!rlock.owns_lock()) {
-        return Status::InternalError("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id());
+        return Status::InternalError(
+                fmt::format("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id()));
     }
     if (Tablet::check_migrate(best_tablet)) {
-        return Status::InternalError("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id());
+        return Status::InternalError(
+                fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
     }
 
     Status res;
