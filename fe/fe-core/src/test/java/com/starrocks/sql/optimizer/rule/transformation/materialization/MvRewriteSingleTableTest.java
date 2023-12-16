@@ -29,13 +29,13 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+        starRocksAssert.withTable(cluster, "depts");
+        starRocksAssert.withTable(cluster, "emps");
     }
 
     @Test
     public void testSingleTableEqualPredicateRewrite() throws Exception {
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid = 5");
         String query = "select empid, deptno, name, salary from emps where empid = 5";
         String plan = getFragmentPlan(query);
@@ -78,8 +78,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveSingleTableEqualPredicateRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_mv_1",
-                "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5";
         String plan = getFragmentPlan(query);
@@ -109,8 +108,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5");
         String query = "select empid, deptno, name, salary from emps where empid < 5";
         String plan = getFragmentPlan(query);
@@ -138,11 +136,10 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
         String query7 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 100";
         String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "mv_1", "salary > 100.0");
+        PlanTestBase.assertContains(plan7, "mv_1", "salary > 100");
         dropMv("test", "mv_1");
 
-        createAndRefreshMv("test", "mv_2",
-                "create materialized view mv_2 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_2 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5 and salary > 100");
         String query8 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5";
         String plan8 = getFragmentPlan(query8);
@@ -153,8 +150,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan9, "mv_2");
         dropMv("test", "mv_2");
 
-        createAndRefreshMv("test", "mv_3",
-                "create materialized view mv_3 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_3 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5 or salary > 100");
         String query10 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5";
         String plan10 = getFragmentPlan(query10);
@@ -174,8 +170,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Test
     public void testHiveSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-        createAndRefreshMv("test", "hive_mv_1",
-                "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5";
         String plan = getFragmentPlan(query);
@@ -214,8 +209,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Ignore
     @Test
     public void testSingleTableResidualPredicateRewrite() throws Exception {
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where name like \"%abc%\" and salary * deptno > 100");
         String query =
                 "select empid, deptno, name, salary from emps where salary * deptno > 100 and name like \"%abc%\"";
@@ -226,8 +220,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveSingleTableResidualPredicateRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_mv_1",
-                "create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_mv_1 distributed by hash(s_suppkey) " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +
                         "s_suppkey * s_acctbal > 100 and s_name like \"%abc%\"");
         String query = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where " +
@@ -240,11 +233,9 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Ignore
     @Test
     public void testMultiMvsForSingleTable() throws Exception {
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5");
-        createAndRefreshMv("test", "mv_2",
-                "create materialized view mv_2 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_2 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 6 and salary > 100");
         String query = "select empid, length(name), (salary + 1) * 2 from emps where empid < 3 and salary > 110";
         String plan = getFragmentPlan(query);
@@ -252,11 +243,9 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
 
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5");
-        createAndRefreshMv("test", "mv_2",
-                "create materialized view mv_2 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_2 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5 and salary > 100");
         String query1 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan2 = getFragmentPlan(query1);
@@ -264,12 +253,10 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
 
-        createAndRefreshMv("test", "agg_mv_1",
-                "create materialized view agg_mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view agg_mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, sum(salary) as total_salary from emps" +
                         " where empid < 5 group by empid, deptno");
-        createAndRefreshMv("test", "agg_mv_2",
-                "create materialized view agg_mv_2 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view agg_mv_2 distributed by hash(empid)" +
                         " as select empid, deptno, sum(salary) as total_salary from emps" +
                         " where empid < 10 group by empid, deptno");
         String query2 = "select empid, sum(salary) from emps where empid < 5 group by empid";
@@ -282,11 +269,9 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     @Ignore
     @Test
     public void testNestedMvOnSingleTable() throws Exception {
-        createAndRefreshMv("test", "mv_1",
-                "create materialized view mv_1 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5");
-        createAndRefreshMv("test", "mv_2",
-                "create materialized view mv_2 distributed by hash(empid)" +
+        createAndRefreshMv("create materialized view mv_2 distributed by hash(empid)" +
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
