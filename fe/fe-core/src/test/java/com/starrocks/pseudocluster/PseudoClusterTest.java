@@ -76,14 +76,15 @@ public class PseudoClusterTest {
             stmt.execute("create table test ( pk bigint NOT NULL, v1 int not null ) " +
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
-            stmt.execute("prepare stmt1 from insert overwrite test values (?,?)");
+            stmt.execute("prepare stmt1 from select * from test where pk = ?");
             stmt.execute("set @i = 1");
-            stmt.executeUpdate("execute stmt1 using @i,@i");
+            stmt.executeUpdate("execute stmt1 using @i");
             try {
-                stmt.executeUpdate("execute stmt1 using @i,@i");
+                stmt.execute("execute stmt1 using @i");
+                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("maybe table partition changed after prepared statement creation"));
+                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
             }
         } finally {
             stmt.close();

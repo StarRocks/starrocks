@@ -479,6 +479,7 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
+                        redirectStatus = parsedStmt.getRedirectStatus();
                         try {
                             execPlan = StatementPlanner.plan(parsedStmt, context);
                         } catch (SemanticException e) {
@@ -876,6 +877,9 @@ public class StmtExecutor {
     }
 
     private void forwardToLeader() throws Exception {
+        if (parsedStmt instanceof ExecuteStmt) {
+            throw new AnalysisException("ExecuteStmt Statement don't support statement need to be forward to leader");
+        }
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
