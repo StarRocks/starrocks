@@ -9,4 +9,8 @@
 #   https://hub.docker.com/r/starrocks/starlet-artifacts-centos7/tags
 #
 # Update the following tag when STARLET releases a new version.
+<<<<<<< HEAD
 export STARLET_ARTIFACTS_TAG=v3.1.1
+=======
+export STARLET_ARTIFACTS_TAG=v3.1.4
+>>>>>>> 772b534189 ([Enhancement] upgrade staros to v3.1.4 (#36852))

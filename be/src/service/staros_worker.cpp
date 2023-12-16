@@ -334,7 +334,6 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
         conf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
         // use persistent uri as identifier to maximize sharing of cache data
         conf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
-        conf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
         if (cache_info.async_write_back()) {
             conf[fslib::kCacheFsAsyncWriteBack] = "true";
         }
