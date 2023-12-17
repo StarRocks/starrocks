@@ -522,7 +522,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
     if (!status.ok()) {
-        LOG(WARNING) << "Failed to init JIT engine: " << status.get_error_msg();
+        LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
 
     return Status::OK();

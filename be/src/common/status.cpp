@@ -252,6 +252,8 @@ std::string Status::code_as_string() const {
         return "Transaction not exist";
     case TStatusCode::TXN_IN_PROCESSING:
         return "Transaction in processing";
+    case TStatusCode::JIT_COMPILE_ERROR:
+        return "JIT compile error";
     }
     return {};
 }
