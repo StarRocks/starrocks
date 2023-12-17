@@ -82,6 +82,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                 .add("CustomProperties")
                 .add("Statistic")
                 .add("Progress")
+                .add("TimestampProgress")
                 .add("ReasonOfStateChanged")
                 .add("ErrorLogUrls")
                 .add("TrackingSQL")
@@ -92,7 +93,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         builder.add("LatestSourcePosition");
         TITLE_NAMES = builder.build();
     }
-
     private final LabelName labelName;
     private boolean includeHistory = false;
     private RoutineLoadFunctionalExprProvider functionalExprProvider;

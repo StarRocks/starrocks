@@ -175,6 +175,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+    public enum JobSubstate {
+        STABLE,
+        UNSTABLE
+    }
+
     @SerializedName("i")
     protected long id;
     @SerializedName("n")
@@ -195,6 +200,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected int desireTaskConcurrentNum; // optional
     @SerializedName("s")
     protected JobState state = JobState.NEED_SCHEDULE;
+    protected JobSubstate substate = JobSubstate.STABLE;
     @SerializedName("da")
     protected LoadDataSourceType dataSourceType;
     protected double maxFilterRatio = 1;
@@ -249,6 +255,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("p")
     protected RoutineLoadProgress progress;
 
+    @SerializedName("tp")
+    protected RoutineLoadProgress timestampProgress;
+
     protected long firstResumeTimestamp; // the first resume time
     protected long autoResumeCount;
     protected boolean autoResumeLock = false; //it can't auto resume iff true
@@ -256,6 +265,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected String otherMsg = "";
     protected ErrorReason pauseReason;
     protected ErrorReason cancelReason;
+
+    protected ErrorReason stateChangedReason;
 
     @SerializedName("c")
     protected long createTimestamp = System.currentTimeMillis();
@@ -639,6 +650,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public RoutineLoadProgress getProgress() {
         return progress;
+    }
+
+    public RoutineLoadProgress getTimestampProgress() {
+        return timestampProgress;
     }
 
     protected abstract String getSourceProgressString();
@@ -1503,7 +1518,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(TimeUtils.longToTimeString(endTimestamp));
             row.add(db == null ? String.valueOf(dbId) : db.getFullName());
             row.add(tbl == null ? String.valueOf(tableId) : tbl.getName());
-            row.add(getState().name());
+            if (state == JobState.RUNNING) {
+                row.add(substate == JobSubstate.STABLE ? state.name() : substate.name());
+            } else {
+                row.add(state.name());
+            }
             row.add(dataSourceType.name());
             row.add(String.valueOf(getSizeOfRoutineLoadTaskInfoList()));
             row.add(jobPropertiesToJsonString());
@@ -1511,12 +1530,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
             row.add(getProgress().toJsonString());
+            row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     row.add(pauseReason == null ? "" : pauseReason.toString());
                     break;
                 case CANCELLED:
                     row.add(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                case RUNNING:
+                    if (substate == JobSubstate.UNSTABLE) {
+                        row.add(stateChangedReason == null ? "" : stateChangedReason.toString());
+                    } else {
+                        row.add("");
+                    }
                     break;
                 default:
                     row.add("");
@@ -1796,6 +1823,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                timestampProgress = new KafkaProgress();
                 progress.readFields(in);
                 break;
             }
@@ -2020,5 +2048,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } finally {
             readUnlock();
         }
+    }
+
+    protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
+        writeLock();
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_substate", this.substate)
+                .add("desire_job_substate", substate)
+                .add("msg", reason)
+                .build());
+        try {
+            this.substate = substate;
+            this.stateChangedReason = reason;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void updateSubstateStable() throws UserException {
+        updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    public void updateSubstate() throws UserException {
     }
 }
