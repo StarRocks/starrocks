@@ -349,7 +349,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testExtraUnionRewrite1() {
+    public void testUnionAllRewriteWithExtraPredicates() {
         starRocksAssert.withTable(new MTable("mt1", "k1",
                         List.of(
                                 "k1 INT",
@@ -361,14 +361,11 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         List.of(
                                 "PARTITION `p1` VALUES LESS THAN ('3')",
                                 "PARTITION `p2` VALUES LESS THAN ('6')",
-                                "PARTITION `p3` VALUES LESS THAN ('9')",
-                                "PARTITION `p4` VALUES LESS THAN ('12')",
-                                "PARTITION `p5` VALUES LESS THAN ('15')",
-                                "PARTITION `p6` VALUES LESS THAN ('18')"
+                                "PARTITION `p3` VALUES LESS THAN ('9')"
                         )
                 ),
                 () -> {
-                    cluster.runSql("test", "insert into mt1 values (1,1, 1,1), (4,2, 1,1),(8,3,1,1),(11,4,1,1);");
+                    cluster.runSql("test", "insert into mt1 values (1,1,1,1), (4,2,1,1);");
                     starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW union_mv0 " +
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
