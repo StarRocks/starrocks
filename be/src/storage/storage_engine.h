@@ -50,6 +50,7 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "column/chunk.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -76,6 +77,7 @@ class Tablet;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
+class DictionaryCacheManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -220,6 +222,8 @@ public:
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
     PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
+    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
@@ -458,6 +462,8 @@ private:
     std::unique_ptr<CompactionManager> _compaction_manager;
 
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
+
+    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 

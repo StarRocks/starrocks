@@ -153,6 +153,22 @@ starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr
     return starrocks::Schema(schema->schema(), cids);
 }
 
+starrocks::SchemaPtr ChunkHelper::convert_schema(const std::vector<TabletColumn*>& columns,
+                                                 const std::vector<std::string_view>& col_names) {
+    SchemaPtr schema = std::make_shared<Schema>();
+    // ordered by col_names
+    int new_column_idx = 0;
+    for (auto s : col_names) {
+        for (int32_t idx = 0; idx < columns.size(); ++idx) {
+            if (!s.compare(columns[idx]->name())) {
+                auto f = std::make_shared<Field>(ChunkHelper::convert_field(new_column_idx++, *columns[idx]));
+                schema->append(f);
+            }
+        }
+    }
+    return schema->fields().size() != 0 ? schema : nullptr;
+}
+
 starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
     std::vector<ColumnId> short_key_cids;
     const auto& sort_key_idxes = schema->sort_key_idxes();
@@ -175,6 +191,32 @@ starrocks::Schema ChunkHelper::get_sort_key_schema_by_primary_key(const starrock
     std::vector<ColumnId> all_keys_iota_idxes(tablet_schema->num_columns());
     std::iota(all_keys_iota_idxes.begin(), all_keys_iota_idxes.end(), 0);
     return starrocks::Schema(tablet_schema->schema(), all_keys_iota_idxes, primary_key_iota_idxes);
+}
+
+starrocks::SchemaPtr ChunkHelper::get_non_nullable_schema(const starrocks::SchemaPtr& schema,
+                                                          const std::vector<int>* keys) {
+    const auto& old_fields = schema->fields();
+    Fields new_fields;
+    new_fields.resize(old_fields.size());
+    DCHECK(keys == nullptr || old_fields.size() == keys->size());
+
+    int idx = 0;
+    for (const auto& old_field : old_fields) {
+        ColumnId id = old_field->id();
+        std::string_view name = old_field->name();
+        TypeInfoPtr type = old_field->type();
+        starrocks::StorageAggregateType agg = old_field->aggregate_method();
+        uint8_t short_key_length = old_field->short_key_length();
+        bool is_key = old_field->is_key();
+        bool nullable = false;
+
+        auto new_field = std::make_shared<Field>(id, name, type, agg, short_key_length,
+                                                 keys != nullptr ? static_cast<bool>((*keys)[idx]) : is_key, nullable);
+        new_fields[idx] = new_field;
+        ++idx;
+    }
+
+    return std::make_shared<starrocks::Schema>(new_fields, schema->keys_type(), schema->sort_key_idxes());
 }
 
 ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {

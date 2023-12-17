@@ -43,6 +43,7 @@ import com.starrocks.backup.Repository;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
@@ -100,9 +101,11 @@ import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
+import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
@@ -1160,6 +1163,18 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_PIPE:
                 data = PipeOpEntry.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_CREATE_DICTIONARY:
+                data = Dictionary.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_DICTIONARY:
+                data = DropDictionaryInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MODIFY_DICTIONARY_MGR:
+                data = DictionaryMgrInfo.read(in);
                 isRead = true;
                 break;
             case OperationTypeEPack.OP_CREATE_WAREHOUSE:

@@ -202,6 +202,7 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
@@ -460,6 +461,8 @@ public class ShowExecutor {
             handleDescribeFailoverGroup();
         } else if (stmt instanceof ShowFailPointStatement) {
             handleShowFailPoint();
+        } else if (stmt instanceof ShowDictionaryStmt) {
+            handleShowDictionary();
         } else {
             handleEmpty();
         }
@@ -3125,5 +3128,16 @@ public class ShowExecutor {
             }
         }
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowDictionary() throws AnalysisException {
+        ShowDictionaryStmt showStmt = (ShowDictionaryStmt) stmt;
+        List<List<String>> allInfo = null;
+        try {
+            allInfo = GlobalStateMgr.getCurrentState().getDictionaryMgr().getAllInfo(showStmt.getDictionaryName());
+        } catch (Exception e) {
+            throw new AnalysisException(e.getMessage());
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), allInfo);
     }
 }

@@ -75,6 +75,10 @@ public abstract class Coordinator {
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit,
                                                 long warehouseId) throws UserException;
+
+        Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                DescriptorTable descTable, List<PlanFragment> fragments,
+                                                List<ScanNode> scanNodes) throws UserException;
     }
 
     // ------------------------------------------------------------------------------------

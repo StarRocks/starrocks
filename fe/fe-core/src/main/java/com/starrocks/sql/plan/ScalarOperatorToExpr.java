@@ -57,6 +57,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.DictionaryExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -613,6 +615,19 @@ public class ScalarOperatorToExpr {
                     .map(expr -> buildExpr.build(expr, context))
                     .collect(Collectors.toList());
             return new DictQueryExpr(arg, operator.getDictQueryExpr(), operator.getFn());
+        }
+
+        @Override
+        public Expr visitDictionaryExprOperator(DictionaryExprOperator operator, FormatterContext context) {
+            List<Expr> arg = operator.getChildren().stream()
+                    .map(expr -> buildExpr.build(expr, context))
+                    .collect(Collectors.toList());
+            DictionaryExpr dictionaryExpr = new DictionaryExpr(arg);
+            dictionaryExpr.setType(operator.getType());
+            dictionaryExpr.setDictionaryId(operator.getDictionaryId());
+            dictionaryExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
+            dictionaryExpr.setKeySize(operator.getKeySize());
+            return dictionaryExpr;
         }
     }
 

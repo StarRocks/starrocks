@@ -2671,4 +2671,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
+    /**
+     * dictionary cache refresh task thread pool size
+     */
+    @ConfField(mutable = true)
+    public static int refresh_dictionary_cache_thread_num = 2;
 }

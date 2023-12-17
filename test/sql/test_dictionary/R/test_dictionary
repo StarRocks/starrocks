@@ -1,0 +1,1137 @@
+-- name: test_dictionary_empty
+CREATE TABLE `t_empty` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_empty;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_empty does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_empty USING t_empty (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_empty", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_empty;
+-- result:
+-- !result
+DROP TABLE t_empty;
+-- result:
+-- !result
+-- name: test_dictionary_basic_operation
+CREATE TABLE `t_basic_operation` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_basic_operation VALUES (1, 2, 3);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_basic_operation;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_basic_operation does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_basic_operation USING t_basic_operation (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_basic_operation", "FINISHED")
+-- result:
+None
+-- !result
+REFRESH DICTIONARY test_dictionary_basic_operation;
+-- result:
+-- !result
+CANCEL REFRESH DICTIONARY test_dictionary_basic_operation;
+-- result:
+-- !result
+REFRESH DICTIONARY test_dictionary_basic_operation;
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_basic_operation", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_basic_operation", id1) FROM t_basic_operation;
+-- result:
+{"id2":2}
+-- !result
+SELECT dictionary_get("test_dictionary_basic_operation", 1);
+-- result:
+{"id2":2}
+-- !result
+SELECT dictionary_get("test_dictionary_basic_operation", 2);
+-- result:
+E: (1064, 'key not found in dictionary cache')
+-- !result
+DROP DICTIONARY test_dictionary_basic_operation CACHE;
+-- result:
+-- !result
+SELECT dictionary_get("test_dictionary_basic_operation", id1) FROM t_basic_operation;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_basic_operation is in UNINITIALIZED state.')
+-- !result
+SELECT dictionary_get("test_dictionary_basic_operation", 1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_basic_operation is in UNINITIALIZED state.')
+-- !result
+DROP DICTIONARY test_dictionary_basic_operation;
+-- result:
+-- !result
+DROP TABLE test_dictionary_basic_operation;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_dictionary_basic_operation'.")
+-- !result
+-- name: test_dictionary_type_combination
+CREATE TABLE `t_type_combination` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` TINYINT NOT NULL COMMENT "",
+  `id3` INT NOT NULL COMMENT "",
+  `id4` BOOLEAN NOT NULL COMMENT "",
+  `id5` LARGEINT NOT NULL COMMENT "",
+  `id6` VARCHAR(2000) NOT NULL COMMENT "",
+  `id7` DATE NOT NULL COMMENT "",
+  `id8` DATETIME NOT NULL COMMENT "",
+  `id9` SMALLINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_type_combination VALUES (1, 2, 3, "true", 5, "a", "2020-01-01", "2020-01-01 00:00:00", 6);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_1 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_2;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_2 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_3 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_4;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_4 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_5;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_5 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_6;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_6 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_7;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_7 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_8;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_8 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_9;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_9 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_1 USING t_type_combination (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_2 USING t_type_combination (id2 KEY, id3 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_3 USING t_type_combination (id3 KEY, id4 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_4 USING t_type_combination (id4 KEY, id5 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_5 USING t_type_combination (id5 KEY, id6 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_6 USING t_type_combination (id6 KEY, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_7 USING t_type_combination (id7 KEY, id8 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_8 USING t_type_combination (id8 KEY, id9 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_9 USING t_type_combination (id9 KEY, id1 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_1", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_2", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_3", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_4", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_5", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_6", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_7", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_8", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_9", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_1", id1) FROM t_type_combination;
+-- result:
+{"id2":2}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_2", id2) FROM t_type_combination;
+-- result:
+{"id3":3}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_3", id3) FROM t_type_combination;
+-- result:
+{"id4":1}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_4", id4) FROM t_type_combination;
+-- result:
+{"id5":5}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_5", id5) FROM t_type_combination;
+-- result:
+{"id6":"a"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_6", id6) FROM t_type_combination;
+-- result:
+{"id7":"2020-01-01"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_7", id7) FROM t_type_combination;
+-- result:
+{"id8":"2020-01-01 00:00:00"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_8", id8) FROM t_type_combination;
+-- result:
+{"id9":6}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_9", id9) FROM t_type_combination;
+-- result:
+{"id1":1}
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_1;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_2;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_3;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_4;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_5;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_6;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_7;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_8;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_9;
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_10;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_10 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_11;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_11 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_12;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_12 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_13;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_13 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_14;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_14 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_15;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_15 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_16;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_16 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_17;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_17 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_type_combination_18;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_type_combination_18 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_10 USING t_type_combination (id1 KEY, id2 KEY, id3 VALUE, id4 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_11 USING t_type_combination (id2 KEY, id3 KEY, id4 VALUE, id5 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_12 USING t_type_combination (id3 KEY, id4 KEY, id5 VALUE, id6 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_13 USING t_type_combination (id4 KEY, id5 KEY, id6 VALUE, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_14 USING t_type_combination (id5 KEY, id6 KEY, id7 VALUE, id8 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_15 USING t_type_combination (id6 KEY, id7 KEY, id8 VALUE, id9 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_16 USING t_type_combination (id7 KEY, id8 KEY, id9 VALUE, id1 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_17 USING t_type_combination (id8 KEY, id9 KEY, id1 VALUE, id2 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_type_combination_18 USING t_type_combination (id9 KEY, id1 KEY, id2 VALUE, id3 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_10", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_11", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_12", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_13", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_14", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_15", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_16", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_17", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_type_combination_18", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_10", id1, id2) FROM t_type_combination;
+-- result:
+{"id3":3,"id4":1}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_11", id2, id3) FROM t_type_combination;
+-- result:
+{"id4":1,"id5":5}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_12", id3, id4) FROM t_type_combination;
+-- result:
+{"id5":5,"id6":"a"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_13", id4, id5) FROM t_type_combination;
+-- result:
+{"id6":"a","id7":"2020-01-01"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_14", id5, id6) FROM t_type_combination;
+-- result:
+{"id7":"2020-01-01","id8":"2020-01-01 00:00:00"}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_15", id6, id7) FROM t_type_combination;
+-- result:
+{"id8":"2020-01-01 00:00:00","id9":6}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_16", id7, id8) FROM t_type_combination;
+-- result:
+{"id9":6,"id1":1}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_17", id8, id9) FROM t_type_combination;
+-- result:
+{"id1":1,"id2":2}
+-- !result
+SELECT dictionary_get("test_dictionary_type_combination_18", id9, id1) FROM t_type_combination;
+-- result:
+{"id2":2,"id3":3}
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_10;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_11;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_12;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_13;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_14;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_15;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_16;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_17;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_type_combination_18;
+-- result:
+-- !result
+DROP TABLE t_type_combination;
+-- result:
+-- !result
+-- name: test_dictionary_definition
+CREATE TABLE `t_dictionary_definition` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` STRING NOT NULL COMMENT "",
+  `id3` DATE  NULL COMMENT "",
+  `id4` DATETIME NOT NULL COMMENT "",
+  `id5` STRING  NULL COMMENT "",
+  `id6` DATE NULL COMMENT "",
+  `id7` DATETIME NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_definition VALUES (1, "a", "2020-01-01", "2020-01-01 00:00:00", "a", "2020-01-01", "2020-01-01 00:00:00");
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_1 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_2;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_2 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_3 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_definition_1 USING t_dictionary_definition (id1 KEY, id2 KEY, id3 KEY, id4 KEY, id5 VALUE, id6 VALUE, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_definition_2 USING t_dictionary_definition (id1 KEY, id6 KEY, id3 KEY, id4 KEY, id5 VALUE, id2 VALUE, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_definition_3 USING t_dictionary_definition (id7 KEY, id6 KEY, id3 KEY, id4 KEY, id5 VALUE, id2 VALUE, id1 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_1", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_2", "FINISHED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_3", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_definition_1", id1, id2, id3, id4) FROM t_dictionary_definition;
+-- result:
+{"id5":"a","id6":"2020-01-01","id7":"2020-01-01 00:00:00"}
+-- !result
+SELECT dictionary_get("test_dictionary_definition_2", id1, id6, id3, id4) FROM t_dictionary_definition;
+-- result:
+{"id5":"a","id2":"a","id7":"2020-01-01 00:00:00"}
+-- !result
+SELECT dictionary_get("test_dictionary_definition_3", id7, id6, id3, id4) FROM t_dictionary_definition;
+-- result:
+{"id5":"a","id2":"a","id1":1}
+-- !result
+DROP DICTIONARY test_dictionary_definition_1;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_definition_2;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_definition_3;
+-- result:
+-- !result
+INSERT INTO t_dictionary_definition VALUES (1, "a", NULL, "2020-01-01 00:00:00", NULL, NULL, "2020-01-01 00:00:00");
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_4;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_4 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_5;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_5 does not exist.')
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_6;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_6 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_definition_4 USING t_dictionary_definition (id1 KEY, id2 KEY, id3 KEY, id4 KEY, id5 VALUE, id6 VALUE, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_definition_5 USING t_dictionary_definition (id1 KEY, id6 KEY, id3 KEY, id4 KEY, id5 VALUE, id2 VALUE, id7 VALUE);
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_definition_6 USING t_dictionary_definition (id7 KEY, id6 KEY, id3 KEY, id4 KEY, id5 VALUE, id2 VALUE, id1 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_4", "CANCELLED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_5", "CANCELLED")
+-- result:
+None
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_6", "CANCELLED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_definition_4", id1, id2, id3, id4) FROM t_dictionary_definition;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_4 is in CANCELLED state.')
+-- !result
+SELECT dictionary_get("test_dictionary_definition_5", id1, id6, id3, id4) FROM t_dictionary_definition;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_5 is in CANCELLED state.')
+-- !result
+SELECT dictionary_get("test_dictionary_definition_6", id7, id6, id3, id4) FROM t_dictionary_definition;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_6 is in CANCELLED state.')
+-- !result
+DROP DICTIONARY test_dictionary_definition_4;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_definition_5;
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_definition_6;
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_definition_7;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_definition_7 does not exist.')
+-- !result
+TRUNCATE TABLE t_dictionary_definition;
+-- result:
+-- !result
+INSERT INTO t_dictionary_definition VALUES (1, "a", "2020-01-01", "2020-01-01 00:00:00", "a", "2020-01-01", "2020-01-01 00:00:00");
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_definition_7 USING t_dictionary_definition (id1 KEY, id4 KEY, id5 VALUE, id2 KEY, id3 KEY, id6 VALUE, id7 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_definition_7", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_definition_7", id1, id4, id2, id3) FROM t_dictionary_definition;
+-- result:
+{"id5":"a","id6":"2020-01-01","id7":"2020-01-01 00:00:00"}
+-- !result
+DROP DICTIONARY test_dictionary_definition_7;
+-- result:
+-- !result
+DROP TABLE t_dictionary_definition;
+-- result:
+-- !result
+-- name: test_dictionary_error
+CREATE TABLE `t_dictionary_error` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_error VALUES (1, 2, 3);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_error_1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_error_1 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_1 USING t_dictionary_error (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_1", "FINISHED")
+-- result:
+None
+-- !result
+CREATE DICTIONARY test_dictionary_error_1 USING t_dictionary_error (id1 KEY, id2 VALUE);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_error_1 is exist.')
+-- !result
+DROP DICTIONARY test_dictionary_error_1;
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_error_2;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_error_2 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id1 VALUE);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: column: id1 is both in keys and values.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 KEY);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: empty value list for dictionary: test_dictionary_error_2.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 VALUE, id2 VALUE);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: empty key list for dictionary: test_dictionary_error_2.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionary_warm_up" = "abc", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "3600");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_warm_up failed, given parameter: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionary_warm_up" = "TRUE", "dictionary_memory_limit" = "abc", "dictionary_refresh_interval" = "3600");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionary_warm_up" = "TRUE", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "abc");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_refresh_interval failed, given parameter: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("abc" = "bcd", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "abc");
+-- result:
+E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionary_warm_up" = "abc", "abc" = "bcd", "dictionary_refresh_interval" = "3600");
+-- result:
+E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionary_warm_up" = "abc", "dictionary_memory_limit" = "1024", "abc" = "bcd");
+-- result:
+E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+-- !result
+CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dicTionary_warM_up" = "tRue", "dictionaRy_memory_liMit" = "1024", "dictiOnary_reFResh_inTerval" = "3600");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_2", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_2;
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_error_3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_error_3 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024Mb");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024mB");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024Gb");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024GB");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024b");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024B");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024kB");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024KB");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024G");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024M");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "1024g");
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_error_3", "FINISHED")
+-- result:
+None
+-- !result
+DROP DICTIONARY test_dictionary_error_3;
+-- result:
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "KB");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: KB')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "MB");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: MB')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "GB");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: GB')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "B");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: B')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "G");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: G')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "m");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: m')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "K");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: K')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "asdK");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: asdK')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "GBKB");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: GBKB')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "123GBKB");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: 123GBKB')
+-- !result
+CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
+PROPERTIES("dictionaRy_memory_liMit" = "");
+-- result:
+E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: ')
+-- !result
+DROP TABLE t_dictionary_error;
+-- result:
+-- !result
+-- name: test_dictionary_source
+CREATE TABLE `t_dictionary_source_1` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_dictionary_source_2` (
+  `id4` BIGINT NOT NULL COMMENT "",
+  `id5` BIGINT NOT NULL COMMENT "",
+  `id6` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id4`)
+DISTRIBUTED BY HASH(`id4`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_source_1 VALUES (1, 2, 3);
+-- result:
+-- !result
+INSERT INTO t_dictionary_source_2 VALUES (4, 5, 6);
+-- result:
+-- !result
+DROP VIEW IF EXISTS test_dictionary_source_view;
+-- result:
+-- !result
+CREATE VIEW test_dictionary_source_view AS
+SELECT t_dictionary_source_1.id1, t_dictionary_source_1.id2, t_dictionary_source_1.id3,
+t_dictionary_source_2.id4, t_dictionary_source_2.id5, t_dictionary_source_2.id6 FROM t_dictionary_source_1, t_dictionary_source_2;
+-- result:
+-- !result
+SELECT * FROM test_dictionary_source_view;
+-- result:
+1	2	3	4	5	6
+-- !result
+[UC]DROP DICTIONARY test_dictionary_source_1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_source_1 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_source_1 USING test_dictionary_source_view (id1 KEY, id2 KEY, id3 KEY, id4 VALUE, id5 VALUE, id6 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_source_1", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_source_1", id1, id2, id3) FROM t_dictionary_source_1;
+-- result:
+{"id4":4,"id5":5,"id6":6}
+-- !result
+DROP DICTIONARY test_dictionary_source_1;
+-- result:
+-- !result
+DROP VIEW test_dictionary_source_view;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW IF EXISTS test_dictionary_source_mv;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_dictionary_source_mv
+DISTRIBUTED BY HASH(`id1`)
+REFRESH ASYNC
+AS SELECT
+    t_dictionary_source_1.id1, t_dictionary_source_1.id2, t_dictionary_source_1.id3,
+    t_dictionary_source_2.id4, t_dictionary_source_2.id5, t_dictionary_source_2.id6
+FROM t_dictionary_source_1, t_dictionary_source_2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_dictionary_source_mv WITH SYNC MODE;
+SELECT * FROM test_dictionary_source_mv;
+-- result:
+1	2	3	4	5	6
+-- !result
+[UC]DROP DICTIONARY test_dictionary_source_2;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_source_2 does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_source_2 USING test_dictionary_source_mv (id1 KEY, id2 KEY, id3 KEY, id4 VALUE, id5 VALUE, id6 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_source_2", "FINISHED")
+-- result:
+None
+-- !result
+SELECT dictionary_get("test_dictionary_source_2", id1, id2, id3) FROM t_dictionary_source_1;
+-- result:
+{"id4":4,"id5":5,"id6":6}
+-- !result
+DROP DICTIONARY test_dictionary_source_2;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW test_dictionary_source_mv;
+-- result:
+-- !result
+DROP TABLE t_dictionary_source_1;
+-- result:
+-- !result
+DROP TABLE t_dictionary_source_2;
+-- result:
+-- !result
+-- name: test_dictionary_insert
+CREATE TABLE `t_dictionary_insert_1` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_dictionary_insert_2` (
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id3`)
+DISTRIBUTED BY HASH(`id3`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictionary_insert_1 VALUES (1, 2);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_insert;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_insert does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_insert USING t_dictionary_insert_1 (id1 KEY, id2 VALUE);
+-- result:
+-- !result
+function: wait_refresh_dictionary_finish("test_dictionary_insert", "FINISHED")
+-- result:
+None
+-- !result
+INSERT INTO t_dictionary_insert_2 VALUES (1, dictionary_get("test_dictionary_insert", 1)[1]);
+-- result:
+-- !result
+SELECT * FROM t_dictionary_insert_2;
+-- result:
+1	2
+-- !result
+DROP DICTIONARY test_dictionary_insert;
+-- result:
+-- !result
+DROP TABLE t_dictionary_insert_1;
+-- result:
+-- !result
+DROP TABLE t_dictionary_insert_2;
+-- result:
+-- !result
+-- name: test_dictionary_generated_column_create_table
+CREATE TABLE `t_dictionary_generated_column_create_table_1` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+[UC]DROP DICTIONARY test_dictionary_generated_column_create_table;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_generated_column_create_table does not exist.')
+-- !result
+CREATE DICTIONARY test_dictionary_generated_column_create_table USING t_dictionary_generated_column_create_table_1 (id1 KEY, id2 VALUE) PROPERTIES("dictionary_warm_up" = "False");
+-- result:
+-- !result
+CREATE TABLE `t_dictionary_generated_column_create_table_2` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT AS dictionary_get("test_dictionary_generated_column_create_table", id1)[1]
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+DROP DICTIONARY test_dictionary_generated_column_create_table;
+-- result:
+-- !result
+DROP TABLE t_dictionary_generated_column_create_table_1;
+-- result:
+-- !result
+DROP TABLE t_dictionary_generated_column_create_table_2;
+-- result:
+-- !result
