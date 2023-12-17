@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -75,6 +76,7 @@ public class RefreshMaterializedViewTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
+        FeConstants.runningUnitTest = true;
 
         Config.enable_experimental_mv = true;
         starRocksAssert.useDatabase("test")
