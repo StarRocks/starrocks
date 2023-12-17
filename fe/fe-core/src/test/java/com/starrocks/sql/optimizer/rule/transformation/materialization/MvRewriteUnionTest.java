@@ -378,6 +378,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                             "PARTITION START ('%s') END ('%s')", "1", "3"));
                     MaterializedView mv1 = getMv("test", "union_mv0");
                     Set<String> mvNames = mv1.getPartitionNames();
+                    System.out.println(mvNames.stream().sorted());
 
                     {
                         String[] sqls = {
@@ -386,14 +387,14 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 "SELECT k1,k2, v1,v2 from mt1 where k1<2",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertNotContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "union_mv0");
                         }
                     }
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1<6";
-                        String plan = getFragmentPlan(query, "MV");
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "union_mv0");
                     }
@@ -409,14 +410,14 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
-                            PlanTestBase.assertContains(plan, "union_mv0", p.second);
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
                         }
                     }
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
-                        String plan = getFragmentPlan(query, "MV");
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
                     }
                     {
@@ -433,9 +434,9 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
-                            PlanTestBase.assertContains(plan, "union_mv0", p.second);
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
                         }
                     }
                     starRocksAssert.dropMaterializedView("union_mv0");

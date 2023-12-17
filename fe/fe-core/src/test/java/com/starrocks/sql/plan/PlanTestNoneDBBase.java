@@ -108,6 +108,32 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    private static String ignoreColRefs(String s) {
+        // ignore colRef id
+        // eg:
+        //  |  predicates: 2: k2 LIKE 'a%'
+        // to
+        //  |  predicates: $: k2 LIKE 'a%'
+        String str = s.replaceAll("\\d+:", "\\$");
+        // ignore predicate order
+        // |  predicates: 2: k2 LIKE 'a%' or 1: k1 > 1
+        // TODO: only reorder predicates rather than the whole line.
+        return Arrays.stream(str.split(" ")).sorted().collect(Collectors.joining());
+    }
+
+    public static void assertContainsIgnoreColRefs(String text, String... pattern) {
+        String normT = Stream.of(text.split("\n"))
+                .map(str -> ignoreColRefs(str))
+                .collect(Collectors.joining("\n"));
+        for (String s : pattern) {
+            // If pattern contains multi lines, only check line by line.
+            for (String line : s.split("\n")) {
+                String normS = ignoreColRefs(line);
+                Assert.assertTrue(text, normT.contains(normS));
+            }
+        }
+    }
+
     public static void assertContainsCTEReuse(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(100000);
         String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.

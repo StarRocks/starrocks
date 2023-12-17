@@ -109,7 +109,7 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-    public static final int OP_UNION_ALL_BIT = 1;
+    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1586,6 +1586,16 @@ public class MaterializedViewRewriter {
                 });
     }
 
+    private void setAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
+        op.setOpRuleMask(opRuleMask);
+    }
+
+    private boolean isAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    }
+
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
                                                             ColumnRewriter columnRewriter) {
         final PredicateSplit mvCompensationToQuery = getCompensationPredicates(columnRewriter,
@@ -1598,7 +1608,7 @@ public class MaterializedViewRewriter {
             return mvCompensationToQuery;
         }
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (rewriteContext.getQueryExpression().getOp().isOpBitApplied(OP_UNION_ALL_BIT)) {
+        if (isAppliedUnionAllRewrite(rewriteContext.getQueryExpression().getOp())) {
             return null;
         }
 
@@ -1762,7 +1772,7 @@ public class MaterializedViewRewriter {
         //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
-        queryInput.getOp().setOpBit(OP_UNION_ALL_BIT);
+        setAppliedUnionAllRewrite(queryInput.getOp());
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union

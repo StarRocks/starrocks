@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.BitSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -61,7 +60,8 @@ public abstract class Operator {
     //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
     //                                       /      \
     //                                  EXTRA-OP    MV-SCAN
-    protected BitSet opBitSet = new BitSet();
+    protected int opRuleMask = 0;
+
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -143,12 +143,12 @@ public abstract class Operator {
     }
 
 
-    public boolean isOpBitApplied(int b) {
-        return opBitSet.get(b);
+    public int getOpRuleMask() {
+        return opRuleMask;
     }
 
-    public void setOpBit(int b) {
-        this.opBitSet.set(b);
+    public void setOpRuleMask(int b) {
+        this.opRuleMask = b;
     }
 
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
@@ -219,7 +219,7 @@ public abstract class Operator {
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
             builder.salt = operator.salt;
-            builder.opBitSet = operator.opBitSet;
+            builder.opRuleMask = operator.opRuleMask;
             return (B) this;
         }
 
@@ -265,8 +265,8 @@ public abstract class Operator {
             return (B) this;
         }
 
-        public B setOpBitSet(BitSet bitSet) {
-            builder.opBitSet = bitSet;
+        public B setOpBitSet(int opRuleMask) {
+            builder.opRuleMask = opRuleMask;
             return (B) this;
         }
     }
