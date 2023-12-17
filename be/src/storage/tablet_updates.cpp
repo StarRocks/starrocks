@@ -40,6 +40,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
 #include "storage/empty_iterator.h"
+#include "storage/local_primary_key_recover.h"
 #include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -4972,6 +4973,56 @@ int64_t TabletUpdates::max_rowset_creation_time() {
         max_rowset_creation_time = std::max(max_rowset_creation_time, itr->second->creation_time());
     }
     return max_rowset_creation_time;
+}
+
+Status TabletUpdates::recover() {
+    if (!_error) {
+        // no need to recover
+        return Status::OK();
+    }
+    LOG(INFO) << "Tablet " << _tablet.tablet_id() << " begin do recover: " << _error_msg;
+    // Stop apply thread.
+    _stop_and_wait_apply_done();
+
+    DeferOp defer([&]() {
+        if (!_error.load()) {
+            // Start apply thread again.
+            _apply_stopped.store(false);
+            _check_for_apply();
+        }
+    });
+    if (_edit_version_infos.empty()) {
+        string msg = strings::Substitute(
+                "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. "
+                "get_latest_applied_version tablet:$0",
+                _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+    LocalPrimaryKeyRecover recover(&_tablet, StorageEngine::instance()->update_manager());
+    RETURN_IF_ERROR(recover.recover());
+    LOG(INFO) << "Primary tablet recover finish. tablet_id: " << _tablet.tablet_id();
+
+    // rebuild rowset stats
+    std::unique_lock l2(_rowsets_lock);
+    for (auto& [rsid, rowset] : _rowsets) {
+        auto stats = std::make_unique<RowsetStats>();
+        stats->num_segments = rowset->num_segments();
+        stats->num_rows = rowset->num_rows();
+        stats->byte_size = rowset->data_disk_size();
+        stats->num_dels = _get_rowset_num_deletes(*rowset);
+        stats->partial_update_by_column = rowset->is_column_mode_partial_update();
+        DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
+        _calc_compaction_score(stats.get());
+        _rowset_stats[rsid] = std::move(stats);
+    }
+    LOG(INFO) << "Primary tablet rebuild rowset stats finish. tablet_id: " << _tablet.tablet_id();
+
+    // reset error state
+    _error_msg = "";
+    _error = false;
+
+    return Status::OK();
 }
 
 } // namespace starrocks

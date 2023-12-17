@@ -303,6 +303,18 @@ public:
         return CompactionAction::do_compaction(tablet_id, type, "");
     }
 
+    static std::string set_error_state(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "non-pk tablet no support set error";
+        }
+        tablet->updates()->set_error("error by script");
+        return "set error state success";
+    }
+
     static std::string get_tablet_meta_json(int64_t tablet_id) {
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
@@ -523,6 +535,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
             REG_STATIC_METHOD(StorageEngineRef, print_primary_key_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+            REG_STATIC_METHOD(StorageEngineRef, set_error_state);
         }
     }
 };

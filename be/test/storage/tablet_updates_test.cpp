@@ -2911,4 +2911,59 @@ TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
     }
 }
 
+void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    int64_t version = 2;
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        version++;
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_OK(_tablet->updates()->recover());
+    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    int64_t old_version = version - 1;
+    // upsert again
+    std::vector<RowsetSharedPtr> rowsets2;
+    rowsets2.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets2.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < rowsets2.size(); i++) {
+        auto st = _tablet->rowset_commit(version, rowsets2[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        version++;
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    ASSERT_EQ(N, read_tablet(_tablet, old_version));
+}
+
+TEST_F(TabletUpdatesTest, test_update_and_recover) {
+    update_and_recover(true);
+    update_and_recover(false);
+}
+
 } // namespace starrocks

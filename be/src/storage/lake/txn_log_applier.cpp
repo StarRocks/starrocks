@@ -18,8 +18,8 @@
 
 #include "gutil/strings/join.h"
 #include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/primary_key_recover.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -119,8 +119,7 @@ private:
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
-                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.pre_cleanup());
+                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata.get());
                 RETURN_IF_ERROR(recover.recover());
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;
