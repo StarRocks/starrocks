@@ -149,7 +149,6 @@ public:
 
     static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
 
-
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
 
     bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
