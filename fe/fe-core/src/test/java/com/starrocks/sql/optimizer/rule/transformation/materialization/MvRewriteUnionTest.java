@@ -378,7 +378,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                             "PARTITION START ('%s') END ('%s')", "1", "3"));
                     MaterializedView mv1 = getMv("test", "union_mv0");
                     Set<String> mvNames = mv1.getPartitionNames();
-                    System.out.println(mvNames.stream().sorted());
+                    Assert.assertEquals("[p1]", mvNames.toString());
 
                     {
                         String[] sqls = {
@@ -425,6 +425,9 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
                                         "7:SELECT\n" +
                                                 "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "7:SELECT\n" +
+                                                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
                                         "7:SELECT\n" +
                                                 "  |  predicates: 1: k1 > 0, 2: k2 LIKE 'a%'")
@@ -442,5 +445,14 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     starRocksAssert.dropMaterializedView("union_mv0");
                 }
         );
+    }
+    @Test
+    public void testAssertContainsIgnoreColRefs() {
+        String p1 = "7:SELECT\n" +
+                "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'";
+        String p =
+                "7:SELECT\n" +
+                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
+        PlanTestBase.assertContainsIgnoreColRefs(p1, p);
     }
 }

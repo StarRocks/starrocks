@@ -114,11 +114,11 @@ public class PlanTestNoneDBBase {
         //  |  predicates: 2: k2 LIKE 'a%'
         // to
         //  |  predicates: $: k2 LIKE 'a%'
-        String str = s.replaceAll("\\d+:", "\\$");
+        String str = s.replaceAll("\\d+: ", "\\$ ");
         // ignore predicate order
         // |  predicates: 2: k2 LIKE 'a%' or 1: k1 > 1
         // TODO: only reorder predicates rather than the whole line.
-        return Arrays.stream(str.split(" ")).sorted().collect(Collectors.joining());
+        return Arrays.stream(StringUtils.split(str, " ,;")).sorted().collect(Collectors.joining(" "));
     }
 
     public static void assertContainsIgnoreColRefs(String text, String... pattern) {
@@ -128,7 +128,7 @@ public class PlanTestNoneDBBase {
         for (String s : pattern) {
             // If pattern contains multi lines, only check line by line.
             for (String line : s.split("\n")) {
-                String normS = ignoreColRefs(line);
+                String normS = ignoreColRefs(line).trim();
                 Assert.assertTrue(text, normT.contains(normS));
             }
         }
