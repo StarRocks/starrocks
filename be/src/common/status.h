@@ -206,6 +206,11 @@ public:
     void to_thrift(TStatus* status) const;
     void to_protobuf(StatusPB* status) const;
 
+    std::string get_error_msg() const {
+        auto msg = message();
+        return std::string(msg.data(), msg.size());
+    }
+
     /// @return A string representation of this status suitable for printing.
     ///   Returns the string "OK" for success.
     std::string to_string(bool with_context_info = true) const;
