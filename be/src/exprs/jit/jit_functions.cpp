@@ -30,6 +30,7 @@
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/jit/jit_compilable_expr.h"
 #include "exprs/jit/jit_engine.h"
 #include "llvm/IR/Type.h"
 #include "types/logical_type.h"
@@ -230,6 +231,8 @@ StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const l
             // Input column.
             intermediate[i] = datums[input_index++];
         } else {
+            auto* jit_compilable_expr = dynamic_cast<JITCompilableExpr*>(expr);
+
             // Regular expr and literal.
             std::vector<LLVMDatum> args;
             args.reserve(expr->get_num_children());
@@ -244,7 +247,7 @@ StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const l
                 args.emplace_back(intermediate[offset - 1]);
             }
 
-            ASSIGN_OR_RETURN(intermediate[i], expr->generate_ir(context, module, b, args));
+            ASSIGN_OR_RETURN(intermediate[i], jit_compilable_expr->generate_ir(context, module, b, args));
         }
     }
 

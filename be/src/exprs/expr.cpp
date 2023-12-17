@@ -693,23 +693,6 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
-StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                      const std::vector<LLVMDatum>& datums) const {
-    if (!is_compilable()) {
-        return Status::NotSupported("JIT expr not supported");
-    }
-
-    ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
-    // Unoin null.
-    if (this->is_nullable()) {
-        // TODO(Yueyang): Check this.
-        for (auto& input : datums) {
-            datum.null_flag = b.CreateOr(datum.null_flag, input.null_flag);
-        }
-    }
-    return datum;
-}
-
 void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     if (!this->is_compilable()) {
         exprs.emplace_back(this);

@@ -16,10 +16,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "exprs/jit/jit_compilable_expr.h"
 
 namespace starrocks {
 
-class VectorizedLiteral final : public Expr {
+class VectorizedLiteral final : public JITCompilableExpr {
 public:
     VectorizedLiteral(const TExprNode& node);
     VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& type);

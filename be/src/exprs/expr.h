@@ -43,10 +43,7 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
-#include "exprs/jit/ir_helper.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
@@ -220,24 +217,6 @@ public:
 
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
-
-    /**
-     * @brief For JIT compile, generate IR code for this expr.
-     * This function primarily generates generic union null code and calls the 'generate_ir_impl' method.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module,
-                                                          llvm::IRBuilder<>& b,
-                                                          const std::vector<LLVMDatum>& datums) const final;
-
-    /**
-     * @brief For JIT compile, generate specific evaluation IR code for this expr.
-     * Its internal logic is similar to the 'evaluate_checked' function.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                               llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
-    }
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }

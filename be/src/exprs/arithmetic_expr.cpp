@@ -25,6 +25,7 @@
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/jit/jit_compilable_expr.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -35,7 +36,7 @@
 namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
+    CLASS_NAME(const TExprNode& node) : JITCompilableExpr(node) {} \
     virtual ~CLASS_NAME() {}                          \
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
@@ -60,7 +61,7 @@ static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const E
 }
 
 template <LogicalType Type, typename OP>
-class VectorizedArithmeticExpr final : public Expr {
+class VectorizedArithmeticExpr final : public JITCompilableExpr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
 
@@ -156,7 +157,7 @@ public:
 };
 
 template <LogicalType Type, typename Op>
-class VectorizedDivArithmeticExpr final : public Expr {
+class VectorizedDivArithmeticExpr final : public JITCompilableExpr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -221,7 +222,7 @@ private:
 };
 
 template <LogicalType Type>
-class VectorizedModArithmeticExpr final : public Expr {
+class VectorizedModArithmeticExpr final : public JITCompilableExpr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -253,7 +254,7 @@ public:
 };
 
 template <LogicalType Type>
-class VectorizedBitNotArithmeticExpr final : public Expr {
+class VectorizedBitNotArithmeticExpr final : public JITCompilableExpr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -276,7 +277,7 @@ public:
 };
 
 template <LogicalType Type, typename OP>
-class VectorizedBitShiftArithmeticExpr final : public Expr {
+class VectorizedBitShiftArithmeticExpr final : public JITCompilableExpr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {

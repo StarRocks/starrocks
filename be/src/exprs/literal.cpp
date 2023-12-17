@@ -68,7 +68,7 @@ static ColumnPtr const_column_from_literal(const TExprNode& node, int precision,
     }
 }
 
-VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
+VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : JITCompilableExpr(node) {
     if (node.node_type == TExprNodeType::NULL_LITERAL) {
         _value = ColumnHelper::create_const_null_column(1);
         return;
@@ -150,7 +150,7 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
 }
 
 VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& type)
-        : Expr(type, false), _value(std::move(value)) {
+        : JITCompilableExpr(type, false), _value(std::move(value)) {
     DCHECK(_value->is_constant());
 }
 
