@@ -4,13 +4,13 @@ displayed_sidebar: "English"
 
 # STOP ROUTINE LOAD
 
-import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.md'
+import RoutineLoadPrivNote from '../assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## Description
 
 Stops a Routine Load job.
 
-<RoutinelLoadPrivNote />
+<RoutineLoadPrivNote />
 
 ::: warning
 

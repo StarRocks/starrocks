@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # PAUSE ROUTINE LOAD
 
-import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.md'
+import RoutineLoadPrivNote from '../assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## 功能
 
@@ -12,7 +12,7 @@ import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.
 
 Routine Load 导入作业暂停后，您可以执行 [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) 、[ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md) 语句查看和修改已暂停的导入作业的信息。
 
-<RoutinelLoadPrivNote />
+<RoutineLoadPrivNote />
 
 ## 语法
 

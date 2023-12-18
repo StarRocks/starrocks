@@ -4,13 +4,13 @@ displayed_sidebar: "Chinese"
 
 # STOP ROUTINE LOAD
 
-import RoutinelLoadPrivNote from '../assets/commonMarkdown/RoutinelLoadPrivNote.md'
+import RoutineLoadPrivNote from '../assets/commonMarkdown/RoutineLoadPrivNote.md'
 
 ## 功能
 
 停止 Routine Load 导入作业。
 
-<RoutinelLoadPrivNote />
+<RoutineLoadPrivNote />
 
 ::: warning
 
