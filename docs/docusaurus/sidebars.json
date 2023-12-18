@@ -1130,9 +1130,14 @@
           "description": "Stream with Kafka, Flink, and StarRocks tools",
           "link": {"type": "doc", "id": "integrations/streaming"},
           "items": [
-            "integrations/streaming/apache_kafka",
-            "loading/automq-routine-load",
             "integrations/streaming/flink",
+            {
+              "type":"category",
+              "label": "Kafka",
+              "description": "Streaming from Kafka",
+              "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
+              "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
+            },
             {
               "type":"category",
               "label": "StarRocks Pipe",
