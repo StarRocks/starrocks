@@ -328,7 +328,7 @@ public:
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
     bool enable_query_statistic() const;
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     int64_t get_rpc_http_min_size() {
