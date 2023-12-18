@@ -1123,8 +1123,7 @@
             "integrations/IDE_integrations/DBeaver",
             "integrations/IDE_integrations/jupysql"
           ]
-        },
-        "integrations/other_integrations/intro"
+        }
       ]
     },
     {
