@@ -39,10 +39,13 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: SYNC CHECKER
+    outputs:
+      BACKPORT_SOURCE_PR: ${{ steps.backport_assign.outputs.ORI_PR }}
     steps:
       - run: echo "Normal PR."
 
       - name: backport assign
+        id: backport_assign
         if: startsWith(github.head_ref, 'mergify/bp/') && github.event.action == 'opened'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,6 +56,7 @@ jobs:
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author}
+            echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 
   title-check:
@@ -62,6 +66,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
+      BACKPORT_SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
@@ -76,6 +81,14 @@ jobs:
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
+          
+          if [[ "${{ github.head_ref }}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
+            gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
+            sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
+            cat body.txt source_body.txt > tmp_body.txt
+            mv tmp_body.txt body.txt
+          fi
+          
           sed -i "s#\[ \] This is a backport pr#\[x\] This is a backport pr#g" body.txt
           if [[ "${ori_body}" != $(cat body.txt) ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} -F body.txt
@@ -163,9 +176,8 @@ jobs:
   behavior-check:
     runs-on: ubuntu-latest
     if: >
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport') &&
-      !startsWith(github.event.pull_request.title, '[Doc]')
+      !startsWith(github.event.pull_request.title, '[Doc]') &&
+      (!startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
     steps:
       - name: Format Check
         id: check
