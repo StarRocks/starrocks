@@ -1103,7 +1103,7 @@
       "items": [
         {
           "type": "category",
-          "label": "Cloud Authentication",
+          "label": "CSP 身份验证",
           "description": "Use AWS, Azure, or GCP authentication",
           "link": {"type": "doc", "id": "cover_pages/csp_auth"},
           "items": [
@@ -1114,7 +1114,7 @@
         },
         {
           "type": "category",
-          "label": "Data Warehouse",
+          "label": "查询数据湖",
           "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
           "link": {"type": "doc", "id": "integrations/data_lakes"},
           "items": [
