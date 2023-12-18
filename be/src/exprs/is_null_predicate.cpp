@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exprs/is_null_predicate.h"
+#include "exprs/predicate.h"
 
 #include "column/column_helper.h"
 #include "exprs/unary_function.h"

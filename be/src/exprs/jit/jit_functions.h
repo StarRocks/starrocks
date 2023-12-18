@@ -14,24 +14,26 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-
-#include "common/global_types.h"
-#include "common/object_pool.h"
+//#include "common/global_types.h"
+//#include "common/object_pool.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "common/statusor.h"
-#include "exprs/binary_function.h"
-#include "exprs/builtin_functions.h"
-#include "exprs/expr.h"
-#include "exprs/function_helper.h"
-#include "exprs/jit/ir_helper.h"
-#include "gen_cpp/Exprs_types.h"
+//#include "common/statusor.h"
+//#include "exprs/binary_function.h"
+//#include "exprs/builtin_functions.h"
+//#include "exprs/function_helper.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Type.h"
+
+namespace llvm {
+class Module;
+}
 
 namespace starrocks {
 
+class Expr;
+class ExprContext;
+class LLVMDatum;
+class TExprNode;
 /**
  * JITColumn is a struct used to store the data and null data of a column.
  */

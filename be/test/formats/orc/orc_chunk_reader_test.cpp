@@ -22,8 +22,10 @@
 #include <map>
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"

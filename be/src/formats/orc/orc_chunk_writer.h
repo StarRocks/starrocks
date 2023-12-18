@@ -18,13 +18,10 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "formats/orc/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {

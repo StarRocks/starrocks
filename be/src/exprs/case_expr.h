@@ -14,9 +14,12 @@
 
 #pragma once
 
-#include "exprs/expr.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+
+class Expr;
+class TExprNode;
 
 class VectorizedCaseExprFactory {
 public:

@@ -22,7 +22,6 @@
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {

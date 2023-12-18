@@ -14,6 +14,7 @@
 
 #include "exec/iceberg/iceberg_delete_builder.h"
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"

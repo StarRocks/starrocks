@@ -17,9 +17,6 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/function_helper.h"
 #include "exprs/table_function/table_function.h"
 #include "runtime/runtime_state.h"
 

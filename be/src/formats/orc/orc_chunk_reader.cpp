@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
+#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"

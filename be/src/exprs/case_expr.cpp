@@ -23,6 +23,8 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/expr.h"
+// #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "simd/mulselector.h"
 #include "types/logical_type_infra.h"

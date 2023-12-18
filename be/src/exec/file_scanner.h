@@ -15,12 +15,18 @@
 #pragma once
 
 #include "common/statusor.h"
-#include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/types.pb.h"
 #include "util/runtime_profile.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
+class ExprContext;
 class SequentialFile;
+struct SlotDescriptor;
 class RandomAccessFile;
+class RowDescriptor;
+class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {

@@ -19,7 +19,6 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"

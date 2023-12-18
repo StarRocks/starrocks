@@ -20,6 +20,7 @@
 #include "butil/time.h"
 #include "column/column_hash.h"
 #include "column/fixed_length_column.h"
+#include "exprs/expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"

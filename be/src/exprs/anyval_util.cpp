@@ -36,6 +36,7 @@
 
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 

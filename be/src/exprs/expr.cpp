@@ -65,6 +65,7 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
 #include "exprs/jit/jit_functions.h"
@@ -76,6 +77,8 @@
 #include "exprs/placeholder_ref.h"
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Module.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
@@ -708,6 +711,11 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
         }
     }
     return datum;
+}
+
+StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                           const std::vector<LLVMDatum>& datums) const {
+    return Status::NotSupported("JIT expr not supported");
 }
 
 void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {

@@ -15,8 +15,8 @@
 #pragma once
 
 #include "column/type_traits.h"
-#include "exprs/jit/ir_helper.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"

@@ -21,8 +21,6 @@
 #include "exec/olap_utils.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"

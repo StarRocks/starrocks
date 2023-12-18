@@ -43,12 +43,19 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
-#include "exprs/jit/ir_helper.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+
+namespace llvm {
+class Module;
+//class ConstantFolder;
+//class IRBuilderDefaultInserter;
+//template <typename FolderTy = ConstantFolder, typename InserterTy = IRBuilderDefaultInserter>
+//class IRBuilder;
+
+} // namespace llvm
 
 namespace starrocks {
 
@@ -65,8 +72,9 @@ class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
 class JITExpr;
+struct LLVMDatum;
 
-// This is the superclass of all expr evaluation nodes.
+        // This is the superclass of all expr evaluation nodes.
 class Expr {
 public:
     // Empty virtual destructor
@@ -235,9 +243,7 @@ public:
      */
     [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
                                                                llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
-    }
+                                                               const std::vector<LLVMDatum>& datums) const;
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }

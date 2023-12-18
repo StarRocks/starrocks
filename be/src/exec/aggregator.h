@@ -35,7 +35,6 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
-#include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"

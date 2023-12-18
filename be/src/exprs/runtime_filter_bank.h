@@ -22,8 +22,6 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/InternalService_types.h"

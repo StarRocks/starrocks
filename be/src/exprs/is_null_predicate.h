@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exprs/predicate.h"
-
 namespace starrocks {
+class TExprNode;
+class Expr;
 
 class VectorizedIsNullPredicateFactory {
 public:

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"

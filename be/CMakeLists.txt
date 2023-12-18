@@ -86,7 +86,7 @@ option(WITH_STARCACHE "Build binary with starcache library" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
-option(USE_STAROS "Use StarOS to manager tablet info" OFF)
+option(USE_STAROS "Use StarOS to manager tablet info" ON)
 
 option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
 

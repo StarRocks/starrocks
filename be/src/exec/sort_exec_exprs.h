@@ -34,8 +34,8 @@
 
 #pragma once
 
-#include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 

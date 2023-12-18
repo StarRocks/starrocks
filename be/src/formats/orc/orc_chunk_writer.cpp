@@ -18,6 +18,7 @@
 #include "column/chunk.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

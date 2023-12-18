@@ -20,6 +20,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr.h"
 
 namespace starrocks {
 

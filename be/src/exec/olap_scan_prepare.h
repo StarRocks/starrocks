@@ -16,7 +16,6 @@
 
 #include "common/status.h"
 #include "exec/olap_common.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "storage/olap_runtime_range_pruner.h"
 

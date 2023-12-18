@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exprs/expr.h"
-
 namespace starrocks {
+class Expr;
+class TExprNode;
 
 class SubfieldExprFactory {
 public:

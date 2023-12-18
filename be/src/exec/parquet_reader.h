@@ -31,7 +31,6 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exprs/expr.h"
 #include "fs/fs.h"
 #include "runtime/types.h"
 

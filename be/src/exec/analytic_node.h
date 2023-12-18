@@ -17,7 +17,6 @@
 #include "analytor.h"
 #include "exec/exec_node.h"
 #include "exprs/agg/aggregate_factory.h"
-#include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {

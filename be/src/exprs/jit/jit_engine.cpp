@@ -25,6 +25,8 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/jit/jit_functions.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -40,9 +42,21 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+
+#include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/Target/TargetMachine.h"
+
 #include "util/defer_op.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
+
+JITEngine::~JITEngine() {
+    delete _target_machine;
+    delete _jit;
+}
 
 Status JITEngine::init() {
     if (_initialized) {
@@ -52,7 +66,7 @@ Status JITEngine::init() {
     // Initialize LLVM targets and data layout.
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
-    _target_machine = std::unique_ptr<llvm::TargetMachine>(llvm::EngineBuilder().selectTarget());
+    _target_machine = llvm::EngineBuilder().selectTarget();
     if (_target_machine == nullptr) {
         LOG(ERROR) << "JIT: Failed to select target machine";
         return Status::JitCompileError("Failed to select target machine");
@@ -68,7 +82,7 @@ Status JITEngine::init() {
         LOG(ERROR) << error_message;
         return Status::JitCompileError(error_message);
     }
-    _jit = std::move(jit.get());
+    _jit = jit.get().release();
 
     // Initialize pass manager for IR optimization.
     // TODO(Yueyang): check optimization level.
@@ -78,6 +92,7 @@ Status JITEngine::init() {
     _pass_manager_builder.LoopVectorize = true;
     _pass_manager_builder.VerifyInput = true;
     _pass_manager_builder.VerifyOutput = true;
+    llvm::legacy::PassManager _pass_manager;
     _pass_manager_builder.populateModulePassManager(_pass_manager);
 
     _initialized = true;

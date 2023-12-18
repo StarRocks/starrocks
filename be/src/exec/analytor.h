@@ -20,7 +20,6 @@
 #include "column/chunk.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
-#include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"

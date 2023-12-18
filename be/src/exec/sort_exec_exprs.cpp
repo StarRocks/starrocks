@@ -36,6 +36,9 @@
 
 #include <fmt/format.h>
 
+#include "exprs/expr.h"
+#include "runtime/types.h"
+
 namespace starrocks {
 
 Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool, RuntimeState* state) {

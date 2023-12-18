@@ -35,9 +35,9 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 
 #include "common/status.h"
-#include "exprs/expr.h"
 
 // This file will convert StarRocks RowBatch to/from Arrow's RecordBatch
 // RowBatch is used by StarRocks query engine to exchange data between
@@ -53,6 +53,8 @@ class Schema;
 namespace starrocks {
 
 class RowDescriptor;
+class ExprContext;
+class TypeDescriptor;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
 

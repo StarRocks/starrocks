@@ -17,7 +17,6 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
-#include "exprs/expr.h"
 #include "exprs/table_function/table_function_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"

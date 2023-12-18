@@ -22,8 +22,6 @@
 #include "column/column_access_path.h"
 #include "common/status.h"
 #include "exec/olap_utils.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/conjunctive_predicates.h"

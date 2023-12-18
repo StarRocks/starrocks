@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

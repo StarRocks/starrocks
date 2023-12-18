@@ -22,18 +22,24 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exprs/jit/jit_functions.h"
-#include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "util/lru_cache.h"
+
+namespace llvm {
+class DataLayout;
+class LLVMContext;
+class TargetMachine;
+namespace orc {
+class LLJIT;
+} // namespace orc
+} // namespace llvm
 
 namespace starrocks {
 
+class Expr;
+class ExprContext;
+class JITColumn;
+using JITScalarFunction = void (*)(int64_t, JITColumn*);
 /**
  * JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
  */
@@ -41,7 +47,7 @@ class JITEngine {
 public:
     JITEngine() = default;
 
-    ~JITEngine() = default;
+    ~JITEngine();
 
     JITEngine(const JITEngine&) = delete;
 
@@ -115,13 +121,12 @@ private:
     bool _initialized = false;
     bool _support_jit = false;
 
-    std::unique_ptr<llvm::TargetMachine> _target_machine;
+    llvm::TargetMachine* _target_machine = nullptr;
     std::unique_ptr<const llvm::DataLayout> _data_layout;
 
     llvm::PassManagerBuilder _pass_manager_builder;
-    llvm::legacy::PassManager _pass_manager;
 
-    std::unique_ptr<llvm::orc::LLJIT> _jit;
+    llvm::orc::LLJIT* _jit;
 
     // TODO(Yueyang): Check whether we need to use a better data structure to store the resource tracker.
     // because in OLAP scenarios, this might not be the performance bottleneck.

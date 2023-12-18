@@ -20,9 +20,6 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
@@ -33,7 +30,9 @@ class ColumnStatistics;
 } // namespace orc::proto
 
 namespace starrocks {
+class JoinRuntimeFilter;
 class RandomAccessFile;
+class RuntimeFilterProbeCollector;
 class RuntimeState;
 } // namespace starrocks
 namespace starrocks {

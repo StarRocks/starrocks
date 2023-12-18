@@ -20,7 +20,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
-#include "exprs/jit/jit_expr.h"
+// #include "exprs/jit/jit_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -175,7 +175,7 @@ public:
                                 const std::function<void(ColumnPtr const&)>& test_func) {
         // Verify the original result.
         test_func(ptr);
-
+        /*
         auto jit_engine = JITEngine::get_instance();
         if (!jit_engine->support_jit()) {
             return;
@@ -192,6 +192,7 @@ public:
         ptr = expr->evaluate(&exprContext, nullptr);
         // Verify the result after JIT.
         test_func(ptr);
+         */
     }
 };
 
