@@ -89,6 +89,19 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         _request_enqueued++;
     }
     {
+        // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
+        // _sent_audit_stats_frequency grows exponentially to reduce the costs of collecting stats but
+        // let the first (limited) chunks' stats approach truth。
+        auto request_sequence = _request_sequence++;
+        if (!request.params->eos() && (request_sequence & (_sent_audit_stats_frequency - 1)) == 0) {
+            if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
+                _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
+            }
+            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                part_stats->to_pb(request.params->mutable_query_statistics());
+            }
+        }
+
         auto& instance_id = request.fragment_instance_id;
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
@@ -321,20 +334,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         if (!request.attachment.empty()) {
             _bytes_sent += request.attachment.size();
             _request_sent++;
-        }
-        // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
-        // _sent_audit_stats_frequency grows exponentially to reduce the costs of collecting stats but
-        // let the first limited chunks' stats approach truth。
-        auto request_sent_num = _request_sent.load();
-        if (!request.params->eos()) {
-            if ((request_sent_num & (_sent_audit_stats_frequency - 1)) == 0) {
-                if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
-                    _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
-                }
-                if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
-                    part_stats->to_pb(request.params->mutable_query_statistics());
-                }
-            }
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(

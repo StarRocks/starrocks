@@ -190,6 +190,7 @@ private:
     int64_t _last_receive_time = -1;
     int64_t _rpc_http_min_size = 0;
 
+    std::atomic<int64_t> _request_sequence = 0;
     int64_t _sent_audit_stats_frequency = 1;
     int64_t _sent_audit_stats_frequency_upper_limit = 64;
 };
