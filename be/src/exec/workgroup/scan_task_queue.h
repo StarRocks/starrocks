@@ -35,6 +35,8 @@ struct ScanTaskGroup {
     int sub_queue_level = 0;
 };
 
+#define TO_NEXT_STAGE(yield_point) yield_point++;
+
 struct YieldContext {
     YieldContext() = default;
     YieldContext(size_t total_yield_point_cnt) : total_yield_point_cnt(total_yield_point_cnt) {}

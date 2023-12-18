@@ -662,7 +662,9 @@ Status PartitionedSpillerWriter::yieldable_flush_task(workgroup::YieldContext& c
                                                       const std::vector<SpilledPartition*>& splitting_partitions,
                                                       const std::vector<SpilledPartition*>& spilling_partitions,
                                                       int* yield) {
-    ctx.total_yield_point_cnt = 2;
+    enum PartitionWriterStage { SPILL = 0, SPLIT = 1, FINISH = 2 };
+
+    ctx.total_yield_point_cnt = FINISH;
     // init task context
     if (!ctx.task_context_data.has_value()) {
         ctx.task_context_data = std::make_shared<PartitionedFlushContext>();
@@ -673,15 +675,15 @@ Status PartitionedSpillerWriter::yieldable_flush_task(workgroup::YieldContext& c
     SerdeContext spill_ctx;
     int64_t time_spent_ns = 0;
     switch (ctx.yield_point) {
-    case 0:
+    case SPILL:
         RETURN_IF_ERROR(_spill_input_partitions(ctx, spill_ctx, spilling_partitions, &time_spent_ns, yield));
         RETURN_IF_YIELD(yield);
-        ctx.yield_point++;
+        TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
-    case 1:
+    case SPLIT:
         RETURN_IF_ERROR(_split_input_partitions(ctx, spill_ctx, splitting_partitions, &time_spent_ns, yield));
         RETURN_IF_YIELD(yield);
-        ctx.yield_point++;
+        TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
     default: {
         DCHECK_EQ(ctx.yield_point, 2);
