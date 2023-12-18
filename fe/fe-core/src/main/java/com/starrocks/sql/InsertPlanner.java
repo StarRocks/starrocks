@@ -139,25 +139,32 @@ public class InsertPlanner {
     }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        // Pessimistic path
         if (!useOptimisticLock) {
             return planImpl(insertStmt, session);
         }
 
         // Optimistic Lock Optimization
-        long planStartTime = System.currentTimeMillis();
+        boolean isSchemaValid = true;
         Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
-        ExecPlan plan = planImpl(insertStmt, session);
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            long planStartTime = System.nanoTime();
+            if (!isSchemaValid) {
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
+            }
+            ExecPlan plan = planImpl(insertStmt, session);
 
-        boolean isSchemaValid = olapTables.stream().noneMatch(t ->
-                t.lastSchemaUpdateTime.get() > planStartTime);
-        isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
-                t.lastVersionUpdateEndTime.get() < planStartTime &&
-                        t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
-        if (!isSchemaValid) {
-            throw new SemanticException("got concurrent metadata modification during query planning, " +
-                    "please retry this query");
+            isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
+            boolean valid = isSchemaValid &&
+                    olapTables.stream().allMatch(t ->
+                            t.lastVersionUpdateEndTime.get() < planStartTime &&
+                                    t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
+            if (valid) {
+                return plan;
+            }
         }
-        return plan;
+        throw new SemanticException("got concurrent metadata modification during query planning, " +
+                "please retry this query");
     }
 
     private ExecPlan planImpl(InsertStmt insertStmt, ConnectContext session) {

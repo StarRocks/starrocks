@@ -232,7 +232,8 @@ public class StatementPlanner {
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.nanoTime();
             if (!isSchemaValid) {
-                colNames = reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, dbs, session);
+                colNames = query.getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
@@ -313,16 +314,17 @@ public class StatementPlanner {
         }
     }
 
-    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs,
-                                             ConnectContext session) {
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
+                                               ConnectContext session) {
         Locker locker = new Locker();
         try {
             lock(locker, dbs);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
-            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
-            return queryStmt.getQueryRelation().getColumnOutputNames();
+            Set<OlapTable> copiedTables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
+            return copiedTables;
         } finally {
             unLock(locker, dbs);
         }

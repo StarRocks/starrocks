@@ -601,30 +601,49 @@ public class AnalyzerUtils {
         }
 
         @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            super.visitInsertStatement(node, context);
+
+            Table copied = copyTable(node.getTargetTable());
+            if (copied != null) {
+                node.setTargetTable(copied);
+            }
+            return null;
+        }
+
+        @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (node.getTable().isOlapTable()) {
-                OlapTable table = (OlapTable) node.getTable();
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
+            }
+            return null;
+        }
+
+        private Table copyTable(Table originalTable) {
+            if (originalTable.isOlapTable()) {
+                OlapTable table = (OlapTable) originalTable;
                 if (!idMap.containsKey(table.getId())) {
                     olapTables.add(table);
                     idMap.put(table.getId(), table);
                     // Only copy the necessary olap table meta to avoid the lock when plan query
                     OlapTable copied = new OlapTable();
                     table.copyOnlyForQuery(copied);
-                    node.setTable(copied);
+                    return copied;
                 } else {
-                    node.setTable(idMap.get(table.getId()));
+                    return idMap.get(table.getId());
                 }
-            } else if (node.getTable().isOlapMaterializedView()) {
-                MaterializedView table = (MaterializedView) node.getTable();
+            } else if (originalTable.isOlapMaterializedView()) {
+                MaterializedView table = (MaterializedView) originalTable;
                 if (!idMap.containsKey(table.getId())) {
                     olapTables.add(table);
                     idMap.put(table.getId(), table);
                     // Only copy the necessary olap table meta to avoid the lock when plan query
                     MaterializedView copied = new MaterializedView();
                     table.copyOnlyForQuery(copied);
-                    node.setTable(copied);
+                    return copied;
                 } else {
-                    node.setTable(idMap.get(table.getId()));
+                    return idMap.get(table.getId());
                 }
             }
             // TODO: support cloud native table and mv
