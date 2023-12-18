@@ -198,4 +198,21 @@ public class JDBCMetaCacheTest {
         }
     }
 
+    @Test
+    public void testRefreshTable() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table instanceof JDBCTable);
+            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table2 instanceof JDBCTable);
+            jdbcMetadata.refreshTable("", table, null, false);
+            Table table3 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertFalse(table3 instanceof JDBCTable);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
 }

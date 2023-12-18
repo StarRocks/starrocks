@@ -52,6 +52,10 @@ public class JDBCAsyncCache<K, V> {
         return this.asyncCache.get(key, function).join();
     }
 
+    public void invalidate(@NonNull K key) {
+        this.asyncCache.synchronous().invalidate(key);
+    }
+
     private void checkExpirationTimeChange() {
         if (currentExpireSec != Config.jdbc_meta_cache_expire_sec) {
             currentExpireSec = Config.jdbc_meta_cache_expire_sec;

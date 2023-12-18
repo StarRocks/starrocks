@@ -95,6 +95,22 @@ public class JDBCConfigSetTest {
         }
     }
 
+    @Test
+    public void testRefreshJDBCCache() {
+        try {
+            enableJDBCMetaCache();
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(false);
+            int changeBefore = cache.get("testKey", k -> 20231111);
+            Assert.assertEquals(changeBefore, 20231111);
+            cache.invalidate("testKey");
+            int changeAfter = cache.get("testKey", k -> 20231212);
+            Assert.assertEquals(changeAfter, 20231212);
+            disEnableJDBCMetaCache();
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
     private static void enableJDBCMetaCache() throws Exception {
         String stmt = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"true\");";
         AdminSetConfigStmt adminSetConfigStmt =
