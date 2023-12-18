@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 文本可视化 Query Profile
 
 本文介绍了如何通过 MySQL 客户端获取并分析 Query Profile。
