@@ -37,7 +37,7 @@ SHOW PROFILELIST [LIMIT n]
 示例一：列出最新 5 条 Query Profile 记录。
 
 ```SQL
-SHOW PROFILELIST [LIMIT 5];
+SHOW PROFILELIST LIMIT 5;
 ```
 
 ## 相关 SQL
