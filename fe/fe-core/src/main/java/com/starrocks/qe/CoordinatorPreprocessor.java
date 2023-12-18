@@ -480,7 +480,7 @@ public class CoordinatorPreprocessor {
             return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
-        //define Resource Pool
+        //define Resource Pool 
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
         //add CN to Resource Pool
