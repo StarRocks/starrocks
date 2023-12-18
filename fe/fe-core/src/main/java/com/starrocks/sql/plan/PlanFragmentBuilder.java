@@ -131,6 +131,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RandomDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -1971,7 +1972,7 @@ public class PlanFragmentBuilder {
                     .equals(distribution.getDistributionSpec().getType())) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
                 dataPartition = DataPartition.UNPARTITIONED;
-            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
+            } else if (distribution.getDistributionSpec() instanceof HashDistributionSpec) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
                 List<ColumnRefOperator> partitionColumns =
                         getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
@@ -1980,6 +1981,9 @@ public class PlanFragmentBuilder {
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
+            } else if (distribution.getDistributionSpec() instanceof RandomDistributionSpec) {
+                exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
+                dataPartition = DataPartition.RANDOM;
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
                         + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);

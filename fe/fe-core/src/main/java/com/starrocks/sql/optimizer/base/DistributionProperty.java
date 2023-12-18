@@ -90,7 +90,7 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     public DistributionProperty getNullStrictProperty() {
-        if (spec.getType() == SHUFFLE) {
+        if (spec.getType() == SHUFFLE && spec instanceof HashDistributionSpec) {
             HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
             if (!hashDistributionSpec.isAllNullStrict()) {
                 return DistributionProperty.createProperty(hashDistributionSpec.getNullStrictSpec(

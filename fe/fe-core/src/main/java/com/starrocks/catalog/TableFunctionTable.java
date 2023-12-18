@@ -372,6 +372,13 @@ public class TableFunctionTable extends Table {
         return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
     }
 
+    public List<Integer> getPartitionColumnIDs() {
+        if (partitionColumnIDs == null) {
+            return new ArrayList<>();
+        }
+        return Collections.unmodifiableList(partitionColumnIDs);
+    }
+
     public boolean isWriteSingleFile() {
         return writeSingleFile;
     }
