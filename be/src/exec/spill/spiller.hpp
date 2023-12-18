@@ -326,6 +326,5 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
     return Status::OK();
 }
-// test_profile
 
 } // namespace starrocks::spill

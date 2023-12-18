@@ -527,7 +527,6 @@ Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext
 Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
                                                          const std::vector<SpilledPartition*>& splitting_partitions,
                                                          int64_t* time_spent_ns, int* yield) {
-    // TODO: implements yieldable
     SCOPED_TIMER(_spiller->metrics().split_partition_timer);
     auto& flush_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data)->split_stage_ctx;
     for (; flush_ctx.spliting_idx < splitting_partitions.size(); flush_ctx.spliting_idx++) {

@@ -88,7 +88,10 @@ Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chun
     const auto& columns = chunk->columns();
     size_t max_serialized_size = _max_serialized_size(chunk);
     auto& serialize_buffer = ctx.aligned_buffer;
-    serialize_buffer.resize(ALIGN_UP(max_serialized_size + columns.size() * sizeof(uint32_t) + sizeof(size_t), 4096));
+    // DIRECT write require ALIGN TO page size
+    const size_t PAGE_SIZE = 4096;
+    serialize_buffer.resize(
+            ALIGN_UP(max_serialized_size + columns.size() * sizeof(uint32_t) + sizeof(size_t), PAGE_SIZE));
 
     uint8_t* buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
 

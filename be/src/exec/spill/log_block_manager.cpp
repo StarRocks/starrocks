@@ -77,7 +77,7 @@ public:
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
     static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
-                                                 const std::string& plan_node_name, uint64_t id, bool direct_io);
+                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
 
 private:
     Dir* _dir;
