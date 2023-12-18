@@ -182,9 +182,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 72 个小时。
+- 含义：回收站清理的间隔，默认 24 个小时。
 - 单位：秒
-- 默认值：259200
+- 默认值：86,400
 
 #### base_compaction_check_interval_seconds
 
