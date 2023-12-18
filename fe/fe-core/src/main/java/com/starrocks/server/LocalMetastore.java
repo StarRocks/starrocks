@@ -3119,11 +3119,26 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                asyncRefreshContext.setStep(
-                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
-                asyncRefreshContext.setTimeUnit(
-                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+                long intervalStep = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue();
+                String refreshTimeUnit = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+                asyncRefreshContext.setStep(intervalStep);
+                asyncRefreshContext.setTimeUnit(refreshTimeUnit);
+
+                // Check the interval time should not be less than the min allowed config time.
+                if (Config.min_allowed_materialized_view_schedule_time > 0) {
+                    TimeUnit intervalTimeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(refreshTimeUnit);
+                    long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(intervalStep, intervalTimeUnit);
+                    if (periodSeconds < Config.min_allowed_materialized_view_schedule_time) {
+                        throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
+                                        "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
+                                        "please config an interval larger than " +
+                                        "Config.min_allowed_materialized_view_schedule_time(%s).",
+                                periodSeconds,
+                                Config.min_allowed_materialized_view_schedule_time));
+                    }
+                }
             }
+
             // task which type is EVENT_TRIGGERED can not use external table as base table now.
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED

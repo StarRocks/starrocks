@@ -4133,4 +4133,58 @@ public class CreateMaterializedViewTest {
                     starRocksAssert.withMaterializedView(sql, () -> {});
                 });
     }
+
+    @Test
+    public void testCreateMVWithIntervalRefreshTime() {
+        starRocksAssert.withTable(new MTable("tt1", "k1",
+                        List.of(
+                                "k1 datetime",
+                                "k2 string",
+                                "v1 int"
+                        ),
+
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    {
+                        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+                        String sql = "create materialized view mv1 " +
+                                "partition by date_trunc('day', k1) " +
+                                "distributed by random " +
+                                "order by (k3) \n" +
+                                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                                "') EVERY(INTERVAL 30 SECOND)\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ") " +
+                                "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
+                        Assert.assertThrows("Refresh schedule interval 30 is too small which may cost a lot of memory/cpu " +
+                                        "resources to refresh the asynchronous materialized view, " +
+                                        "please config an interval larger than " +
+                                        "Config.min_allowed_materialized_view_schedule_time(60).",
+                                AssertionError.class, () -> starRocksAssert.withMaterializedView(sql, () -> {}));
+                    }
+                    {
+                        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+                        String sql = "create materialized view mv2 " +
+                                "partition by date_trunc('day', k1) " +
+                                "distributed by random " +
+                                "order by (k3) \n" +
+                                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                                "') EVERY(INTERVAL 1 MINUTE)\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ") " +
+                                "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
+                        starRocksAssert.withMaterializedView(sql, () -> {});
+                    }
+                });
+    }
 }
