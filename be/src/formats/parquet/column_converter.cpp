@@ -54,11 +54,6 @@ public:
     ~Int64ToTimeConverter() override = default;
 
     Status convert(const ColumnPtr& src, Column* dst) override;
-private:
-    bool _is_adjusted_to_utc = false;
-    cctz::time_zone _ctz;
-    int64_t _second_mask = 0;
-    int64_t _scale_to_nano_factor = 0;
 };
 
 class Int96ToDateTimeConverter : public ColumnConverter {
