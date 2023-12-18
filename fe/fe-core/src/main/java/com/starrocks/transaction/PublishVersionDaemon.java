@@ -591,43 +591,43 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch, Map<Long, List<Long>> dirtyPartitions) {
-        getDeleteTxnLogExecutor().submit(() -> {
-            txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
-                long partitionId = entry.getKey();
-                List<Long> txnIds = dirtyPartitions.get(partitionId);
-                Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+        try {
+            getDeleteTxnLogExecutor().submit(() -> {
+                txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
+                    long partitionId = entry.getKey();
+                    List<Long> txnIds = dirtyPartitions.get(partitionId);
+                    Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
 
-                SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-                List<Future<DeleteTxnLogResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
-                try {
-                    for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
-                        // check whether the node is still alive
-                        ComputeNode node = entryItem.getKey();
-                        if (!node.isAlive()) {
-                            LOG.warn("Backend or computeNode {} been dropped or not alive while building publish version request",
-                                    entryItem.getKey());
-                            continue;
+                    SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+                    List<Future<DeleteTxnLogResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+                    try {
+                        for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                            // check whether the node is still alive
+                            ComputeNode node = entryItem.getKey();
+                            if (!node.isAlive()) {
+                                LOG.warn("Backend or computeNode {} been dropped or not alive " +
+                                                "while building publish version request",
+                                        entryItem.getKey());
+                                continue;
+                            }
+
+                            DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                            request.tabletIds = new ArrayList<>(entryItem.getValue());
+                            request.txnIds = txnIds;
+
+                            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                            // just ignore the response, for we don't care the result of delete txn log
+                            // and vacuum will clan the txn log finally if it failed.
+                            lakeService.deleteTxnLog(request);
                         }
-
-                        DeleteTxnLogRequest request = new DeleteTxnLogRequest();
-                        request.tabletIds = new ArrayList<>(entryItem.getValue());
-                        request.txnIds = txnIds;
-
-                        LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
-                        Future<DeleteTxnLogResponse> future = lakeService.deleteTxnLog(request);
-                        responseList.add(future);
+                    } catch (Exception e) {
+                        LOG.warn("delete txn log error: " + e.getMessage());
                     }
-
-                    // just wait rpc return and ignore the response,
-                    // for just try the best effort and response always return Status::OK.
-                    for (Future<DeleteTxnLogResponse> deleteTxnLogResponseFuture : responseList) {
-                        deleteTxnLogResponseFuture.get();
-                    }
-                } catch (Exception e) {
-                    LOG.warn("delete txn log error: " + e.getMessage());
-                }
+                });
             });
-        });
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
