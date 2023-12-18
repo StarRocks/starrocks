@@ -53,8 +53,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -64,8 +63,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -169,7 +167,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
-                driver->runtime_profile()->add_info_string("ErrorMsg", status.get_error_msg());
+                driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {

@@ -85,8 +85,8 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     if (st.is_resource_busy()) {
         return true;
     }
-    Slice message = st.message();
-    return MatchPattern(StringPiece(message.data, message.size), config::lake_vacuum_retry_pattern);
+    auto message = st.message();
+    return MatchPattern(message, config::lake_vacuum_retry_pattern);
 }
 
 int64_t calculate_retry_delay(int64_t attempted_retries) {

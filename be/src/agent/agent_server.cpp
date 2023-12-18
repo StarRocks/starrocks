@@ -372,7 +372,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #undef HANDLE_TYPE
 
         if (!ret_st.ok()) {
-            LOG(WARNING) << "fail to submit task. reason: " << ret_st.get_error_msg() << ", task: " << task;
+            LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
             // For now, all tasks in the batch share one status, so if any task
             // was failed to submit, we can only return error to FE(even when some
             // tasks have already been successfully submitted).
@@ -477,7 +477,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
-            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.message();
         }
     }
 
@@ -498,7 +498,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             default:
                 ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
                                                                      TTaskType::PUSH, push_type));
-                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.message();
             }
         }
     }

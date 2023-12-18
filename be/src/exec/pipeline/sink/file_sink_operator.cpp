@@ -110,9 +110,8 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
-        auto st = _state->exec_env()->result_mgr()->cancel_at_time(
+        (void)_state->exec_env()->result_mgr()->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
-        st.permit_unchecked_error();
     }
     SinkIOBuffer::close(state);
 }

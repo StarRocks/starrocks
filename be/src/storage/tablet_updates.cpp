@@ -14,6 +14,8 @@
 
 #include "storage/tablet_updates.h"
 
+#include <fmt/format.h>
+
 #include <cmath>
 #include <ctime>
 #include <filesystem>
@@ -275,18 +277,18 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         // keep the latest version and purge all previous versions, then try to load rowsets again.
         auto st_purge = _purge_versions_to_fix_rowset_missing_inconsistency();
         if (!st_purge.ok()) {
-            st = st.clone_and_append(st_purge.get_error_msg());
+            st = st.clone_and_append(st_purge.message());
             LOG(ERROR) << st;
             return st;
         }
         auto reload_st = _load_rowsets_and_check_consistency(unapplied_rowsets);
         if (!reload_st.ok()) {
-            st = st.clone_and_append(" after purge:" + _debug_version_info(false) +
-                                     " reload failed: " + reload_st.get_error_msg());
+            st = st.clone_and_append(
+                    fmt::format(" after purge:{} reload failed: {}", _debug_version_info(false), reload_st.message()));
             LOG(ERROR) << st;
             return st;
         } else {
-            LOG(WARNING) << st.get_error_msg() << " after purge:" << _debug_version_info(false) << " reload success";
+            LOG(WARNING) << st.message() << " after purge:" << _debug_version_info(false) << " reload success";
         }
     } else if (!st.ok()) {
         return st;
@@ -1756,7 +1758,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
         if (!st.ok()) {
             st = st.clone_and_append(
                     strings::Substitute("compaction tablet:$0 #input:$1", _tablet.tablet_id(), input_rowsets.size()));
-            LOG(WARNING) << st.get_error_msg();
+            LOG(WARNING) << st.message();
             return st;
         }
     }
@@ -2166,7 +2168,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 "max_src_rssid:$5 $6 $7",
                 row_before, row_after, PrettyPrinter::print_unique_int_list_range(info->inputs), rowset_id,
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
-                st.ok() ? "" : st.get_error_msg());
+                st.ok() ? "" : st.message());
         LOG(ERROR) << msg << debug_string();
         _set_error(msg + _debug_version_info(true));
         CHECK(st.ok()) << msg;
@@ -3499,7 +3501,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             if (!status.ok()) {
                 status = status.clone_and_append(strings::Substitute("$0 convert_from base_tablet: $1", err_msg_header,
                                                                      base_tablet->tablet_id()));
-                LOG(WARNING) << status.get_error_msg();
+                LOG(WARNING) << status.message();
                 return status;
             }
         }
@@ -3799,7 +3801,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
             if (!status.ok()) {
                 status = status.clone_and_append(strings::Substitute("$0 reorder_from base_tablet: $1", err_msg_header,
                                                                      base_tablet->tablet_id()));
-                LOG(WARNING) << status.get_error_msg();
+                LOG(WARNING) << status.message();
                 return status;
             }
         }
@@ -3925,7 +3927,7 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
 
         Status st = rowset->remove_delta_column_group(_tablet.data_dir()->get_meta());
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to delete delta column group. err: " << st.get_error_msg()
+            LOG(WARNING) << "Fail to delete delta column group. err: " << st.message()
                          << ", rowset_id: " << rowset->rowset_id() << ", tablet_id: " << _tablet.tablet_id();
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
@@ -4008,7 +4010,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
         // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
         // So just print error log and keep going.
         LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-                   << ", error: " << st.get_error_msg();
+                   << ", error: " << st.message();
     } else {
         info.index_disk_usage = pindex_size;
     }
@@ -4281,8 +4283,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
                 for (const auto& dcg_file : dcg_files) {
                     auto st = FileSystem::Default()->path_exists(dcg_file);
                     if (!st.ok()) {
-                        auto msg = strings::Substitute("delta column file: $0 does not exist: $1", dcg_file,
-                                                       st.get_error_msg());
+                        auto msg =
+                                strings::Substitute("delta column file: $0 does not exist: $1", dcg_file, st.message());
                         LOG(ERROR) << msg;
                         _set_error(msg);
                         return Status::InternalError(msg);
@@ -4685,7 +4687,7 @@ Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& 
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         std::string msg = strings::Substitute("get_rss_rowids_by_pk error: load primary index failed: $0 $1",
-                                              st.get_error_msg(), debug_string());
+                                              st.message(), debug_string());
         LOG(ERROR) << msg;
         _set_error(msg);
         return Status::InternalError(msg);

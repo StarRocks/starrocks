@@ -225,7 +225,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             }
             if (res.ok()) {
                 auto metadata = std::move(res).value();
-                auto score = compaction_score(metadata);
+                auto score = compaction_score(_tablet_mgr, metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
@@ -462,7 +462,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st;
-        cntl->SetFailed(st.get_error_msg());
+        cntl->SetFailed(std::string(st.message()));
         latch.count_down();
     }
 
@@ -633,7 +633,7 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
-        cntl->SetFailed(st.get_error_msg());
+        cntl->SetFailed(std::string(st.message()));
         latch.count_down();
     }
     latch.wait();
@@ -664,7 +664,7 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
-        cntl->SetFailed(st.get_error_msg());
+        cntl->SetFailed(std::string(st.message()));
         latch.count_down();
     }
     latch.wait();

@@ -30,6 +30,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -106,6 +107,9 @@ public class MvRewriteTestBase {
 
         // Use sync analyze
         Config.mv_auto_analyze_async = false;
+
+        // Default REFRESH DEFERRED
+        Config.default_mv_refresh_immediate = false;
 
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -276,5 +280,10 @@ public class MvRewriteTestBase {
         Set<String> toRefreshPartitions = Sets.newHashSet();
         mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
         return toRefreshPartitions;
+    }
+
+    public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        new StmtExecutor(connectContext, sql).execute();
     }
 }

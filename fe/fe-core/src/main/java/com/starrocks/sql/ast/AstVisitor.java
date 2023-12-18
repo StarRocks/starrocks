@@ -38,6 +38,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
@@ -1248,6 +1249,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDictionaryExpr(DictionaryExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitNamedArgument(NamedArgument node, C context) {
         return visitExpression(node, context);
     }
 

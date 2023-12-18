@@ -210,7 +210,7 @@
     {
       "type": "category",
       "label": "Query Data Lakes",
-      "link": {"type": "doc", "id": "data_source/overview"},
+      "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
           "type": "doc",
@@ -964,7 +964,7 @@
     {
       "type": "category",
       "label": "查询数据湖",
-      "link": {"type": "doc", "id": "data_source/overview"},
+      "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
           "type": "category",

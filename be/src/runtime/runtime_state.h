@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -160,7 +161,7 @@ public:
     };
 
     // Appends error to the _error_log if there is space
-    bool log_error(const std::string& error);
+    bool log_error(std::string_view error);
 
     // If !status.ok(), appends the error to the _error_log
     void log_error(const Status& status);
@@ -209,13 +210,13 @@ public:
     // If 'failed_allocation_size' is not 0, then it is the size of the allocation (in
     // bytes) that would have exceeded the limit allocated for 'tracker'.
     // This value and tracker are only used for error reporting.
-    // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
+    // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
     [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                                const std::string* msg = nullptr);
+                                                std::string_view msg = {});
 
-    [[nodiscard]] Status set_mem_limit_exceeded(const std::string& msg) {
-        return set_mem_limit_exceeded(nullptr, 0, &msg);
+    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
+        return set_mem_limit_exceeded(nullptr, 0, msg);
     }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
@@ -350,6 +351,10 @@ public:
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
+    bool enable_hyperscan_vec() const {
+        return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }

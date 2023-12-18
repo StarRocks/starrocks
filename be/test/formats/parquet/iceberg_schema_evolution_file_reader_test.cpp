@@ -155,7 +155,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -223,7 +223,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -291,7 +291,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -373,7 +373,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -424,7 +424,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -468,7 +468,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -512,7 +512,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -572,7 +572,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -627,7 +627,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -685,7 +685,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
