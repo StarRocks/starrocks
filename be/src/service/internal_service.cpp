@@ -846,6 +846,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
         break;
     }
+    }
     return;
 }
 
