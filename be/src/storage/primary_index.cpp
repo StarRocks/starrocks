@@ -1413,6 +1413,7 @@ Status PrimaryIndex::major_compaction(Tablet* tablet) {
 }
 
 Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
+    std::lock_guard<std::mutex> lg(_lock);
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
