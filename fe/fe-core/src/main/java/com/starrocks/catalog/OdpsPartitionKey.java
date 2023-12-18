@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
-import com.google.common.collect.ImmutableList;
-
+import java.util.Collections;
 import java.util.List;
 
 public class OdpsPartitionKey extends PartitionKey implements NullablePartitionKey {
@@ -26,6 +24,6 @@ public class OdpsPartitionKey extends PartitionKey implements NullablePartitionK
 
     @Override
     public List<String> nullPartitionValueList() {
-        return ImmutableList.of(JDBCTable.PARTITION_NULL_VALUE);
+        return Collections.emptyList();
     }
 }

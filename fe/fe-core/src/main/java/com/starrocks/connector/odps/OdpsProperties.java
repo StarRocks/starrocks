@@ -35,9 +35,9 @@ public class OdpsProperties {
     public static final String ENABLE_PARTITION_CACHE = "odps.cache.partition.enable";
     public static final String PARTITION_CACHE_EXPIRE_TIME = "odps.cache.partition.expire";
     public static final String PARTITION_CACHE_SIZE = "odps.cache.partition.size";
-    public static final String ENABLE_PROJECT_CACHE = "odps.cache.project.enable";
-    public static final String PROJECT_CACHE_EXPIRE_TIME = "odps.cache.project.expire";
-    public static final String PROJECT_CACHE_SIZE = "odps.cache.project.size";
+    public static final String ENABLE_TABLE_NAME_CACHE = "odps.cache.table-name.enable";
+    public static final String TABLE_NAME_CACHE_EXPIRE_TIME = "odps.cache.table-name.expire";
+    public static final String PROJECT_CACHE_SIZE = "odps.cache.table-name.size";
 
     private final Map<String, String> properties;
     private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
@@ -57,8 +57,8 @@ public class OdpsProperties {
         newProperty(ENABLE_PARTITION_CACHE).withDefaultValue(true);
         newProperty(PARTITION_CACHE_EXPIRE_TIME).withDefaultValue(86400);
         newProperty(PARTITION_CACHE_SIZE).withDefaultValue(1000);
-        newProperty(ENABLE_PROJECT_CACHE).withDefaultValue(true);
-        newProperty(PROJECT_CACHE_EXPIRE_TIME).withDefaultValue(86400);
+        newProperty(ENABLE_TABLE_NAME_CACHE).withDefaultValue(false);
+        newProperty(TABLE_NAME_CACHE_EXPIRE_TIME).withDefaultValue(86400);
         newProperty(PROJECT_CACHE_SIZE).withDefaultValue(1000);
     }
 

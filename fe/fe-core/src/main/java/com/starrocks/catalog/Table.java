@@ -602,8 +602,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "JDBC";
         } else if (this instanceof FileTable) {
             return "File";
-        } else if (this instanceof OdpsTable) {
-            return "Odps";
         } else {
             return null;
         }

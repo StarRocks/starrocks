@@ -24,7 +24,6 @@ import com.aliyun.odps.type.VarcharTypeInfo;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
@@ -33,10 +32,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class EntityConvertUtils {
-
-    public static final int MAX_DECIMAL32_PRECISION = 9;
-    public static final int MAX_DECIMAL64_PRECISION = 18;
-    public static final int MAX_DECIMAL128_PRECISION = 38;
 
     public static Type convertType(TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
@@ -52,20 +47,7 @@ public class EntityConvertUtils {
                 return Type.FLOAT;
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
-                int precision = decimalTypeInfo.getPrecision();
-                // odps decimal v1 may overflow, use string type
-                if (precision > MAX_DECIMAL128_PRECISION) {
-                    return ScalarType.createDefaultCatalogString();
-                }
-                PrimitiveType type;
-                if (precision <= MAX_DECIMAL32_PRECISION) {
-                    type = PrimitiveType.DECIMAL32;
-                } else if (precision <= MAX_DECIMAL64_PRECISION) {
-                    type = PrimitiveType.DECIMAL64;
-                } else {
-                    type = PrimitiveType.DECIMAL128;
-                }
-                return ScalarType.createDecimalV3Type(type, decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
+                return ScalarType.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
                 return Type.DOUBLE;
             case CHAR:

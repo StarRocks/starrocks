@@ -54,6 +54,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -76,9 +77,9 @@ public class OdpsMetadata implements ConnectorMetadata {
     private final OdpsProperties properties;
 
     private String catalogOwner;
-    private LoadingCache<String, Set<String>> projectCache;
+    private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
-    private LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
+    private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -101,12 +102,13 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private void initMetaCache() {
         Executor executor = MoreExecutors.newDirectExecutorService();
-        if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PROJECT_CACHE))) {
-            projectCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.PROJECT_CACHE_EXPIRE_TIME)),
-                    Long.parseLong(properties.get(OdpsProperties.PROJECT_CACHE_SIZE)))
-                    .build(asyncReloading(CacheLoader.from(this::loadProjects), executor));
+        if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_TABLE_NAME_CACHE))) {
+            tableNameCache =
+                    newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.TABLE_NAME_CACHE_EXPIRE_TIME)),
+                            Long.parseLong(properties.get(OdpsProperties.PROJECT_CACHE_SIZE)))
+                            .build(asyncReloading(CacheLoader.from(this::loadProjects), executor));
         } else {
-            projectCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
+            tableNameCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
                     .build(CacheLoader.from(this::loadProjects));
         }
         if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_TABLE_CACHE))) {
@@ -143,9 +145,14 @@ public class OdpsMetadata implements ConnectorMetadata {
                 builder.add(project.getName());
             }
         } catch (OdpsException odpsException) {
+            odpsException.printStackTrace();
             throw new StarRocksConnectorException("fail to list project names", odpsException);
         }
-        return builder.build();
+        ImmutableList<String> databases = builder.build();
+        if (databases.isEmpty()) {
+            return ImmutableList.of(odps.getDefaultProject());
+        }
+        return databases;
     }
 
     @Override
@@ -153,6 +160,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         try {
             return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), name);
         } catch (StarRocksConnectorException e) {
+            e.printStackTrace();
             return null;
         }
     }
@@ -160,7 +168,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(String dbName) {
         try {
-            return new ArrayList<>(projectCache.get(dbName));
+            return new ArrayList<>(tableNameCache.get(dbName));
         } catch (ExecutionException e) {
             LOG.error("listTableNames error", e);
             return Collections.emptyList();
@@ -195,7 +203,11 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
-        return get(partitionCache, odpsTableName).stream()
+        List<Partition> partitions = get(partitionCache, odpsTableName);
+        if (partitions == null || partitions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return partitions.stream().map(Partition::getPartitionSpec)
                 .map(p -> p.toString(false, true)).collect(
                         Collectors.toList());
     }
@@ -203,9 +215,14 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<PartitionSpec> partitionSpecs = get(partitionCache, OdpsTableName.of(databaseName, tableName));
-        List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
+        List<Partition> partitions = get(partitionCache, OdpsTableName.of(databaseName, tableName));
         ImmutableList.Builder<String> builder = ImmutableList.builder();
+        if (partitions == null || partitions.isEmpty()) {
+            return builder.build();
+        }
+        List<PartitionSpec> partitionSpecs =
+                partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
+        List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
         for (PartitionSpec partitionSpec : partitionSpecs) {
             boolean present = true;
             for (int index = 0; index < keys.size(); index++) {
@@ -240,20 +257,27 @@ public class OdpsMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
+    private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
         com.aliyun.odps.Table odpsTable =
                 odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        List<Partition> partitions = odpsTable.getPartitions();
-        return partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
+        return odpsTable.getPartitions();
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        if (partitionNames == null || partitionNames.isEmpty()) {
+            return Collections.emptyList();
+        }
         OdpsTable odpsTable = (OdpsTable) table;
-        ImmutableList.Builder<PartitionInfo> builder = ImmutableList.builder();
-        odps.tables().get(odpsTable.getProjectName(), odpsTable.getTableName()).getPartitions()
-                .forEach(p -> builder.add(new OdpsPartition(p)));
-        return builder.build();
+        List<Partition> partitions = get(partitionCache,
+                OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
+        if (partitions == null || partitions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> filter = new HashSet<>(partitionNames);
+        return partitions.stream()
+                .filter(partition -> filter.contains(partition.getPartitionSpec().toString(false, true)))
+                .map(OdpsPartition::new).collect(Collectors.toList());
     }
 
     @Override

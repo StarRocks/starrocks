@@ -14,22 +14,15 @@
 
 package com.starrocks.catalog;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.common.io.Text;
 import com.starrocks.connector.odps.EntityConvertUtils;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,10 +33,6 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class OdpsTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
-
-    private static final String TABLE = "table";
-    private static final String PROJECT = "project";
-    public static final String PARTITION_NULL_VALUE = "null";
 
     @SerializedName(value = "tn")
     private String tableName;
@@ -75,10 +64,6 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         this.fullSchema.addAll(partitionColumns);
     }
 
-    public String getProjectName() {
-        return dbName;
-    }
-
     @Override
     public String getResourceName() {
         return tableName;
@@ -89,6 +74,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         return catalogName;
     }
 
+    @Override
     public String getDbName() {
         return dbName;
     }
@@ -132,42 +118,19 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getUUID() {
-        if (!Strings.isNullOrEmpty(catalogName)) {
-            return String.join(".", catalogName, dbName, name, Long.toString(createTime));
-        } else {
-            return Long.toString(id);
-        }
+        return String.join(".", catalogName, dbName, name, Long.toString(createTime));
     }
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ODPS_TABLE,
-                fullSchema.size(), 0, getName(), getProjectName());
+                fullSchema.size(), 0, getName(), getDbName());
         THdfsTable hdfsTable = new THdfsTable();
         hdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
         // for be, partition column is equals to data column
         hdfsTable.setPartition_columnsIsSet(false);
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject obj = new JsonObject();
-        obj.addProperty(PROJECT, dbName);
-        obj.addProperty(TABLE, tableName);
-        Text.writeString(out, obj.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String jsonStr = Text.readString(in);
-        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
-        tableName = obj.getAsJsonPrimitive(TABLE).getAsString();
-        dbName = obj.getAsJsonPrimitive(PROJECT).getAsString();
     }
 
     @Override
