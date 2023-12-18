@@ -500,10 +500,6 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
-std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    return _query_ctx->intermediate_query_statistic();
-}
-
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     return _query_ctx->maintained_query_recv();
 }
