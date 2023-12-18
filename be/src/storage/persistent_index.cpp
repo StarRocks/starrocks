@@ -1042,10 +1042,6 @@ public:
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
-                if (659248 == value.get_value()) {
-                    LOG(INFO) << "upsert 659248 new "
-                              << " " << this;
-                }
             } else {
                 const auto& old_compose_key = *it;
                 auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
@@ -1053,10 +1049,6 @@ public:
                 nfound += old_value != NullIndexValue;
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);
-                if (659248 == value.get_value()) {
-                    LOG(INFO) << "upsert 659248 old "
-                              << " " << this;
-                }
             }
         }
         *num_found = nfound;
@@ -1077,10 +1069,6 @@ public:
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
-                if (659248 == value.get_value()) {
-                    LOG(INFO) << "upsert 659248 new "
-                              << " " << this;
-                }
             } else {
                 const auto& old_compose_key = *it;
                 const auto old_value =
@@ -1089,10 +1077,6 @@ public:
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);
-                if (659248 == value.get_value()) {
-                    LOG(INFO) << "upsert 659248 old "
-                              << " " << this;
-                }
             }
         }
         *num_found = nfound;
@@ -1135,18 +1119,11 @@ public:
                 old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
-                if (659248 == old_values[idx].get_value()) {
-                    LOG(INFO) << "erase 659248: not found. " << this;
-                }
             } else {
                 auto& old_compose_key = *it;
                 auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
                 old_values[idx] = old_value;
                 nfound += old_value != NullIndexValue;
-                if (659248 == old_value) {
-                    LOG(INFO) << "erase 659248: found: "
-                              << " " << this;
-                }
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
                 _set.emplace_with_hash(hash, composite_key);

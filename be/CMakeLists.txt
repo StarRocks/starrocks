@@ -86,6 +86,8 @@ option(WITH_STARCACHE "Build binary with starcache library" ON)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
+option(WITH_CONSISTENCY_TEST "Build binary with consistency test" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
@@ -1055,11 +1057,15 @@ add_subdirectory(${SRC_DIR}/block_cache)
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
-add_subdirectory(${SRC_DIR}/consistency_test)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
+endif()
+
+if (WITH_CONSISTENCY_TEST STREQUAL "ON")
+    message(STATUS "Build binary with consistency test")
+    add_subdirectory(${SRC_DIR}/consistency_test)
 endif()
 
 if (${MAKE_TEST} STREQUAL "ON")

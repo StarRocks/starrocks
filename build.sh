@@ -90,6 +90,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-consistency-test  build Backend with consistency test(default without consistency test)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
@@ -117,6 +118,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-consistency-test' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
@@ -140,6 +142,7 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
+WITH_CONSISTENCY_TEST=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
@@ -233,6 +236,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-consistency-test) WITH_CONSISTENCY_TEST=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             -h) HELP=1; shift ;;
@@ -264,6 +268,7 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
+    WITH_CONSISTENCY_TEST -- $WITH_CONSISTENCY_TEST
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
@@ -367,6 +372,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG  \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DWITH_CONSISTENCY_TEST=${WITH_CONSISTENCY_TEST}                       \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \

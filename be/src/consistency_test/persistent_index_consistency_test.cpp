@@ -39,6 +39,8 @@ DEFINE_bool(debug, false, "debug mode");
 DEFINE_int64(seed, -1, "random seed");
 DEFINE_int64(second, 60, "custom run second");
 DEFINE_bool(fixlen, false, "fix len or not");
+DEFINE_int64(max_number, 1000000, "max number");
+DEFINE_int64(max_n, 10000, "max N");
 
 namespace starrocks {
 
@@ -58,6 +60,14 @@ enum PICT_OP {
     REPLACE = 4,
     RELOAD = 5,
     MAX = 6,
+};
+
+class WeightedItem {
+public:
+    PICT_OP id;
+    double weight;
+
+    WeightedItem(PICT_OP id, double weight) : id(id), weight(weight) {}
 };
 
 struct TestParams {
@@ -80,8 +90,6 @@ public:
     ~DeterRandomGenerator() = default;
 
     int64_t random() { return _distribution(_rng); }
-
-    PICT_OP random_op() { return static_cast<PICT_OP>(random() % PICT_OP::MAX); }
 
     int64_t random_n() { return (random() % _params.max_n) + 1; }
 
@@ -129,6 +137,43 @@ private:
     TestParams _params;
     std::mt19937 _rng;
     std::uniform_int_distribution<int64_t> _distribution;
+};
+
+template <typename T>
+class WeightedRandomOpSelector {
+public:
+    WeightedRandomOpSelector(DeterRandomGenerator<T>* ran_generator) : _ran_generator(ran_generator) {
+        _items.emplace_back(PICT_OP::UPSERT, 30);
+        _items.emplace_back(PICT_OP::ERASE, 15);
+        _items.emplace_back(PICT_OP::GET, 30);
+        _items.emplace_back(PICT_OP::MAJOR_COMPACT, 5);
+        _items.emplace_back(PICT_OP::REPLACE, 15);
+        _items.emplace_back(PICT_OP::RELOAD, 5);
+    }
+
+    PICT_OP select() {
+        double totalWeight = 0.0;
+
+        for (const auto& item : _items) {
+            totalWeight += item.weight;
+        }
+
+        double randomValue = ((double)(_ran_generator->random() % 100) / (double)100) * totalWeight;
+
+        double currentWeight = 0.0;
+        for (const auto& item : _items) {
+            currentWeight += item.weight;
+            if (randomValue <= currentWeight) {
+                return item.id;
+            }
+        }
+
+        return _items.back().id;
+    }
+
+private:
+    DeterRandomGenerator<T>* _ran_generator;
+    std::vector<WeightedItem> _items;
 };
 
 template <typename T>
@@ -429,6 +474,7 @@ public:
         _index_wrapper = std::make_unique<PersistentIndexWrapper<T>>();
         _replayer = std::make_unique<Replayer<T>>(params.print_debug_info);
         _checker = std::make_unique<Checker>(seed);
+        _op_selector = std::make_unique<WeightedRandomOpSelector<T>>(_rand.get());
     }
 
     ~PersistentIndexConsistencyTest() = default;
@@ -458,7 +504,7 @@ public:
     }
 
     std::unique_ptr<PictOpBase<T>> generate_op() {
-        PICT_OP op = _rand->random_op();
+        PICT_OP op = _op_selector->select();
         if (op == UPSERT) {
             return std::make_unique<PictOpUpsert<T>>();
         } else if (op == ERASE) {
@@ -481,6 +527,7 @@ private:
     std::unique_ptr<PersistentIndexWrapper<T>> _index_wrapper;
     std::unique_ptr<Replayer<T>> _replayer;
     std::unique_ptr<Checker> _checker;
+    std::unique_ptr<WeightedRandomOpSelector<T>> _op_selector;
 };
 
 } // namespace starrocks
@@ -506,18 +553,12 @@ static void test_func(int64_t max_number, int64_t max_n, size_t run_second, int 
 int main(int argc, char** argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     if (FLAGS_seed == -1) {
-        // Total cost 10min
-        for (int i = 1; i <= 5; i++) {
-            int seed = time(nullptr);
-            test_func(1000000, 10000, 60, seed, true);
-        }
-        for (int i = 1; i <= 5; i++) {
-            int seed = time(nullptr);
-            test_func(1000000, 10000, 60, seed, false);
-        }
+        int seed = time(nullptr);
+        test_func(FLAGS_max_number, FLAGS_max_n, FLAGS_second, seed, true);
+        test_func(FLAGS_max_number, FLAGS_max_n, FLAGS_second, seed, false);
     } else {
         // custom run by specific seed
-        test_func(1000000, 10000, FLAGS_second, FLAGS_seed, FLAGS_fixlen);
+        test_func(FLAGS_max_number, FLAGS_max_n, FLAGS_second, FLAGS_seed, FLAGS_fixlen);
     }
     gflags::ShutDownCommandLineFlags();
     return 0;
