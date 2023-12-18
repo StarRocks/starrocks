@@ -33,6 +33,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class OdpsTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
+    public static final String PARTITION_NULL_VALUE = "null";
 
     @SerializedName(value = "tn")
     private String tableName;

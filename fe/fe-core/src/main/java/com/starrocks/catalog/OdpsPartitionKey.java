@@ -14,7 +14,8 @@
 
 package com.starrocks.catalog;
 
-import java.util.Collections;
+import com.google.common.collect.ImmutableList;
+
 import java.util.List;
 
 public class OdpsPartitionKey extends PartitionKey implements NullablePartitionKey {
@@ -24,6 +25,6 @@ public class OdpsPartitionKey extends PartitionKey implements NullablePartitionK
 
     @Override
     public List<String> nullPartitionValueList() {
-        return Collections.emptyList();
+        return ImmutableList.of(OdpsTable.PARTITION_NULL_VALUE);
     }
 }
