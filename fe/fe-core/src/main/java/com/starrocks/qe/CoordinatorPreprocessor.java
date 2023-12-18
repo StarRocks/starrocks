@@ -516,7 +516,7 @@ public class CoordinatorPreprocessor {
             computeNodes.put(backend.getId(), backend);
         }
 
-        //return the whole CN Resource Pool
+        //return Resource Pool
         return ImmutableMap.copyOf(computeNodes);
     }
 
