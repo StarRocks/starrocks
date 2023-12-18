@@ -316,11 +316,16 @@
           "type": "category",
           "label": "Streaming Data",
           "description": "Stream with Kafka, Flink, and StarRocks tools",
-          "link": {"type": "doc", "id": "integrations/streaming/streaming"},
+          "link": {"type": "doc", "id": "integrations/streaming"},
           "items": [
-            "integrations/streaming/apache_kafka",
-            "loading/automq-routine-load",
             "integrations/streaming/flink",
+            {
+              "type":"category",
+              "label": "Kafka",
+              "description": "Kafka: XXXX",
+              "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
+              "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
+            },
             {
               "type":"category",
               "label": "StarRocks Pipe",
@@ -1096,9 +1101,63 @@
       "label": "外部系统集成",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-        "integrations/authenticate_to_aws_resources",
-        "integrations/authenticate_to_azure_storage",
-        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "Cloud Authentication",
+          "description": "Use AWS, Azure, or GCP authentication",
+          "link": {"type": "doc", "id": "cover_pages/csp_auth"},
+          "items": [
+            "integrations/authenticate_to_aws_resources",
+            "integrations/authenticate_to_azure_storage",
+            "integrations/authenticate_to_gcs"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Data Warehouse",
+          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
+          "link": {"type": "doc", "id": "integrations/data_lakes"},
+          "items": [
+             "data_source/catalog/hive_catalog",
+             "data_source/catalog/iceberg_catalog",
+             "data_source/catalog/hudi_catalog",
+             "data_source/catalog/deltalake_catalog"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Streaming Data",
+          "description": "Stream with Kafka, Flink, and StarRocks tools",
+          "link": {"type": "doc", "id": "integrations/streaming"},
+          "items": [
+            "integrations/streaming/apache_kafka",
+            "loading/automq-routine-load",
+            "integrations/streaming/flink",
+            {
+              "type":"category",
+              "label": "StarRocks Pipe",
+              "description": "Pipe: Ideal for continuous loading at scale",
+              "link": {"type": "doc", "id": "integrations/streaming/pipe"},
+              "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Batch Loading Data",
+          "description": "Batch loading and data transformation",
+          "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
+          "items": [
+             "integrations/batch/Spark-connector-starrocks",
+             "integrations/batch/SparkLoad",
+             {
+              "type": "link",
+              "label": "dbt",
+              "description": "Modeling and transformation with dbt",
+              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+             }
+           ]
+        },
         {
           "type": "category",
           "label": "BI 集成",
@@ -1123,6 +1182,10 @@
             "integrations/IDE_integrations/DBeaver",
             "integrations/IDE_integrations/jupysql"
           ]
+        },
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
         }
       ]
     },
