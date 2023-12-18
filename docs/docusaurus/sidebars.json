@@ -334,19 +334,16 @@
           "label": "Batch Loading Data",
           "description": "Batch loading and data transformation",
           "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
-          "items": ["loading/Spark-connector-starrocks", "loading/SparkLoad"]
-        },
-        {
-          "type": "category",
-          "label": "Loading Tools",
-          "link": {"type": "doc", "id": "cover_pages/loading_tools"},
           "items": [
-            {
+             "integrations/batch/Spark-connector-starrocks",
+             "integrations/batch/SparkLoad",
+             {
               "type": "link",
-              "label": "DBT",
-              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector"
-            }
-          ]
+              "label": "dbt",
+              "description": "Modeling and transformation with dbt",
+              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+             }
+           ]
         },
         {
           "type": "category",
