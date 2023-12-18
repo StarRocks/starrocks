@@ -524,8 +524,10 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
 Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                             int64_t base_version, Tablet* tablet, const MetaFileBuilder* builder) {
     _builder = builder;
-    // check if base version is match and pk index has not been updated yet, and we can skip resolve conflict
-    if (base_version == _base_version && !_builder->has_update_index()) {
+    // There are two cases that we must resolve conflict here:
+    // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
+    // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
+    if (base_version == _base_version && base_version + 1 == metadata.version()) {
         return Status::OK();
     }
     _base_version = base_version;
