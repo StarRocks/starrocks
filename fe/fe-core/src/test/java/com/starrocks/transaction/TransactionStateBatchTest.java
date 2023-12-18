@@ -120,12 +120,13 @@ public class TransactionStateBatchTest {
         nodeToTablets1.put(node1, Lists.newArrayList(1L, 2L));
         nodeToTablets1.put(node2, Lists.newArrayList(3L, 4L));
         Map<ComputeNode, List<Long>> nodeToTablets2 = new HashMap<>();
-        nodeToTablets2.put(node1, Lists.newArrayList(3L, 4L, 5L));
+        nodeToTablets2.put(node1, Lists.newArrayList(2L, 3L, 4L));
 
         stateBatch.putBeTablets(partitionId1, nodeToTablets1);
         stateBatch.putBeTablets(partitionId1, nodeToTablets2);
         Assert.assertEquals(1, stateBatch.getPartitionToTablets().size());
-        Assert.assertEquals(3, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
+        Assert.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
+        Assert.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
 
         stateBatch.putBeTablets(partitionId2, nodeToTablets2);
         Assert.assertEquals(2, stateBatch.getPartitionToTablets().size());
