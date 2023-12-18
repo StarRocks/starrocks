@@ -184,7 +184,7 @@ public class UtFrameUtils {
         StatementBase statementBase;
         try {
             statementBase =
-                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
