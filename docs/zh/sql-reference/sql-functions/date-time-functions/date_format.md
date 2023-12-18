@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # date_format
 
 ## 功能

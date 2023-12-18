@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Sorted streaming aggregate
 
 数据库常见的聚合方法有 Hash 聚合和排序聚合。

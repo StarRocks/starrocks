@@ -52,6 +52,7 @@ public class LogicalWindowOperator extends LogicalOperator {
      * we can perform hash-based partition according to hint.
      */
     private boolean useHashBasedPartition;
+    private boolean isSkewed;
 
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
@@ -59,6 +60,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.orderByElements = ImmutableList.of();
         this.enforceSortColumns = ImmutableList.of();
         this.useHashBasedPartition = false;
+        this.isSkewed = false;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -83,6 +85,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isUseHashBasedPartition() {
         return useHashBasedPartition;
+    }
+
+    public boolean isSkewed() {
+        return isSkewed;
     }
 
     @Override
@@ -134,13 +140,14 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(partitionExpressions, that.partitionExpressions)
                 && Objects.equals(orderByElements, that.orderByElements)
                 && Objects.equals(analyticWindow, that.analyticWindow)
-                && Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
+                && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
+                && Objects.equals(isSkewed, that.isSkewed);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition);
+                useHashBasedPartition, isSkewed);
     }
 
     public static Builder builder() {
@@ -163,6 +170,7 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.analyticWindow = windowOperator.analyticWindow;
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
+            builder.isSkewed = windowOperator.isSkewed;
             return this;
         }
 
@@ -193,6 +201,11 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setUseHashBasedPartition(boolean useHashBasedPartition) {
             builder.useHashBasedPartition = useHashBasedPartition;
+            return this;
+        }
+
+        public Builder setIsSkewed(boolean isSkewed) {
+            builder.isSkewed = isSkewed;
             return this;
         }
     }

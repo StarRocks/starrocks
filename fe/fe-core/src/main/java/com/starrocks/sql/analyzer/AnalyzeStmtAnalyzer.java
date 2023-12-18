@@ -62,6 +62,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_BUCKET_NUM,
             StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+            StatsConstants.INIT_SAMPLE_STATS_JOB,
 
             //Deprecated , just not throw exception
             StatsConstants.PRO_SAMPLE_RATIO,
@@ -91,8 +92,9 @@ public class AnalyzeStmtAnalyzer {
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-
             List<String> columnNames = statement.getColumnNames();
+            // The actual column name, avoiding case sensitivity issues
+            List<String> realColumnNames = Lists.newArrayList();
             if (columnNames != null) {
                 for (String colName : columnNames) {
                     Column col = analyzeTable.getColumn(colName);
@@ -102,7 +104,9 @@ public class AnalyzeStmtAnalyzer {
                     if (!mentionedColumns.add(colName)) {
                         throw new SemanticException("Column '%s' specified twice", colName);
                     }
+                    realColumnNames.add(col.getName());
                 }
+                statement.setColumnNames(realColumnNames);
             }
 
             analyzeProperties(statement.getProperties());
@@ -118,6 +122,8 @@ public class AnalyzeStmtAnalyzer {
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
+            } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                throw new SemanticException("Don't support analyze external table created by resource mapping");
             }
             return null;
         }
@@ -166,10 +172,16 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
+                    if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                        throw new SemanticException("Don't support analyze external table created by resource mapping");
+                    }
+
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
                     List<String> columnNames = statement.getColumnNames();
+                    // The actual column name, avoiding case sensitivity issues
+                    List<String> realColumnNames = Lists.newArrayList();
                     if (columnNames != null && !columnNames.isEmpty()) {
                         for (String colName : columnNames) {
                             Column col = analyzeTable.getColumn(colName);
@@ -180,7 +192,9 @@ public class AnalyzeStmtAnalyzer {
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
                             }
+                            realColumnNames.add(col.getName());
                         }
+                        statement.setColumnNames(realColumnNames);
                     }
 
                     statement.setDbId(db.getId());

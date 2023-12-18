@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 debuginfo 文件进行调试
 
 为了降低 StarRocks 二进制包的空间占用，自 2.5 版本开始，我们将 StarRocks BE 二进制中的调试信息 debuginfo 文件单独分离并打包提供下载。

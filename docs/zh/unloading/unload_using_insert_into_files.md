@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 INSERT INTO FILES 导出数据
 
 本文描述了如何使用 INSERT INTO FILES 将 StarRocks 数据导出至远程存储。
@@ -111,5 +115,5 @@ SELECT * FROM sales_records;
 
 ## 另请参阅
 
-- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。
+- 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。
 - 有关使用 FILES() 的更多说明，请参阅 [SQL 参考 - FILES()](../sql-reference/sql-functions/table-functions/files.md)。

@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE RESOURCE
 
 ## 功能
 
-创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](/loading/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](../../../data_source/External_table.md)是管理数据源的访问信息。
+创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](../../../loading/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](../../../data_source/External_table.md)是管理数据源的访问信息。
 
 > 说明：
 >
@@ -47,7 +51,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
     | spark.hadoop.yarn.resourcemanager.address | 是       | YARN ResourceManager 地址。                                  |
     | spark.hadoop.fs.defaultFS                 | 是       | HDFS 中 NameNode 的地址。格式为：`hdfs://namenode_host:port`。 |
     | working_dir                               | 是       | 一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如：`hdfs://host: port/tmp/starrocks`。 |
-    | broker                                    | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
+    | broker                                    | 是       | Broker 名称。您可以使用 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](../Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
     | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
     | broker.password                           | 否       | HDFS 用户密码。                                              |
 
@@ -64,7 +68,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
     | spark.hadoop.yarn.resourcemanager.address.rm-id  | 是       | 对于每个rm-id，需指定 ResourceManager 对应 `host:port`。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.hostname.rm-id`。 |
     | spark.hadoop.fs.defaultFS                        | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
     | working_dir                                      | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
-    | broker                                           | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
+    | broker                                           | 是       | Broker 名称。您可以使用 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](../Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
     | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
     | broker.password                           | 否       | HDFS 用户密码。                                              |
 
@@ -81,7 +85,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
     | spark.hadoop.dfs.namenode.rpc-address.[nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Spark 使用。 |
     | spark.hadoop.dfs.client.failover.proxy.provider              | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Spark 使用。 |
     | working_dir                                                  | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
-    | broker                                                       | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
+    | broker                                                       | 是       | Broker 名称。您可以使用 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](../Administration/ALTER_SYSTEM.md) 语句添加 Broker。 |
     | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问，则不需要传入该参数。 |
     | broker.password                           | 否       | HDFS 用户密码。                                              |
     | broker.dfs.nameservices                                      | 是       | HDFS nameservice 的 ID。该配置项供 Broker 使用。             |
@@ -92,7 +96,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 - 如果使用无 Broker 进程的方式导入，则在创建资源时参数设置与使用Broker 进程的方式导入稍有差异，具体差异如下：
 
   - 无需传入 `broker`。
-  - 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
+  - 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](../data-manipulation/BROKER_LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
 
 > **说明**
 >
@@ -237,8 +241,8 @@ PROPERTIES (
 示例七：创建一个名为`jdbc0`的 JDBC 资源。
 
 ```SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOURCE jdbc0
+PROPERTIES (
     "type"="jdbc",
     "user"="postgres",
     "password"="changeme",
@@ -250,7 +254,7 @@ properties (
 
 ## 相关操作
 
-- 如要修改资源属性，参见 [ALTER RESOURCE](/sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md)。
-- 如要删除资源，参见 [DROP RESOURCE](/sql-reference/sql-statements/data-definition/DROP_RESOURCE.md)。
-- 如要使用 Spark 资源进行 Spark Load，参见 [Spark Load](/loading/SparkLoad.md)。
-- 如要引用 Hive、Iceberg、Hudi 和 JDBC 资源创建外部表，参见[外部表](/data_source/External_table.md)。
+- 如要修改资源属性，参见 [ALTER RESOURCE](../data-definition/ALTER_RESOURCE.md)。
+- 如要删除资源，参见 [DROP RESOURCE](../data-definition/DROP_RESOURCE.md)。
+- 如要使用 Spark 资源进行 Spark Load，参见 [Spark Load](../../../loading/SparkLoad.md)。
+- 如要引用 Hive、Iceberg、Hudi 和 JDBC 资源创建外部表，参见[外部表](../../../data_source/External_table.md)。

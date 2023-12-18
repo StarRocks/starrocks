@@ -182,7 +182,7 @@ public class KafkaUtil {
             try {
                 // TODO: need to refactor after be split into cn + dn
                 List<Long> nodeIds = new ArrayList<>();
-                if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
+                if ((RunMode.isSharedDataMode())) {
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                     for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # unhex
 
 ## 功能

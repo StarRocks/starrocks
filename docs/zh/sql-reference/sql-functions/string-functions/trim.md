@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # trim
 
 ## 功能

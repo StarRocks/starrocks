@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW CREATE MATERIALIZED VIEW
 
 ## 功能
 
 查看指定[异步物化视图](../../../using_starrocks/Materialized_view.md)的定义。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 

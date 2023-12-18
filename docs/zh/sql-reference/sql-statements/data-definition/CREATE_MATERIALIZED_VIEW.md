@@ -1,10 +1,14 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE MATERIALIZED VIEW
 
 ## 功能
 
 创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/Materialized_view.md)。
 
-创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../administration/information_schema.md) 中的元数据表 `tasks` 和 `task_runs` 来查看异步物化视图的构建状态。
+创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../reference/overview-pages/information_schema.md) 中的 [`tasks`](../../../reference/information_schema/tasks.md) 和 [`task_runs`](../../../reference/information_schema/task_runs.md) 来查看异步物化视图的构建状态。
 
 > **注意**
 >
@@ -49,6 +53,7 @@ AS
 
 ```SQL
 SELECT select_expr[, select_expr ...]
+[WHERE where_expr]
 [GROUP BY column_name[, column_name ...]]
 [ORDER BY column_name[, column_name ...]]
 ```
@@ -63,14 +68,16 @@ SELECT select_expr[, select_expr ...]
   > **说明**
   >
   > - 该参数至少需包含一个单列。
-  > - 同步物化视图仅支持在单列上使用聚合函数。不支持形如 `sum(a+b)` 形式的查询语句。
   > - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
   > - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
-  >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图。
-  >   - 每个复杂表达式只能引用一列。不支持形如 `a + b as col1` 形式的查询语句。
+  >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图，你可以为同一复杂表达式设置多个不同别名。
   >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+
+- WHERE （选填）
+
+  自 v3.2 起，同步物化视图支持通过 WHERE 子句筛选数据。
 
 - GROUP BY（选填）
 
@@ -227,8 +234,9 @@ AS
 该参数支持如下值：
 
 - `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- date_trunc 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-- time_slice or date_slice 函数：从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
+- `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+- `str2date` 函数：用于将基表的 STRING 类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
+- `time_slice` 或 `date_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
 如不指定该参数，则默认物化视图为无分区。
 
@@ -240,6 +248,7 @@ AS
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](./ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 
+- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.query_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
@@ -326,7 +335,7 @@ AS
   - 同步物化视图仅支持单列聚合函数，不支持形如 `sum(a+b)` 的查询语句。
   - 同步物化视图仅支持对同一列数据使用一种聚合函数，不支持形如 `select sum(a), min(a) from table` 的查询语句。
   - 同步物化视图中使用聚合函数需要与 GROUP BY 语句一起使用，且 SELECT 的列中至少包含一个分组列。
-  - 同步物化视图创建语句不支持 JOIN、WHERE 以及 GROUP BY 的 HAVING 子句。
+  - 同步物化视图创建语句不支持 JOIN 以及 GROUP BY 的 HAVING 子句。
   - 使用 ALTER TABLE DROP COLUMN 删除基表中特定列时，需要保证该基表所有同步物化视图中不包含被删除列，否则无法进行删除操作。如果必须删除该列，则需要将所有包含该列的同步物化视图删除，然后进行删除列操作。
   - 为一张表创建过多的同步物化视图会影响导入的效率。导入数据时，同步物化视图和基表数据将同步更新，如果一张基表包含 n 个物化视图，向基表导入数据时，其导入效率大约等同于导入 n 张表，数据导入的速度会变慢。
 
@@ -477,6 +486,79 @@ mysql> desc duplicate_table;
     |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
+
+6. 使用 WHERE 子句和复杂表达式创建同步物化视图。
+
+  ```sql
+  -- 创建基表 user_event
+  CREATE TABLE user_event (
+      ds date   NOT NULL,
+      id  varchar(256)    NOT NULL,
+      user_id int DEFAULT NULL,
+      user_id1    varchar(256)    DEFAULT NULL,
+      user_id2    varchar(256)    DEFAULT NULL,
+      column_01   int DEFAULT NULL,
+      column_02   int DEFAULT NULL,
+      column_03   int DEFAULT NULL,
+      column_04   int DEFAULT NULL,
+      column_05   int DEFAULT NULL,
+      column_06   DECIMAL(12,2)   DEFAULT NULL,
+      column_07   DECIMAL(12,3)   DEFAULT NULL,
+      column_08   JSON   DEFAULT NULL,
+      column_09   DATETIME    DEFAULT NULL,
+      column_10   DATETIME    DEFAULT NULL,
+      column_11   DATE    DEFAULT NULL,
+      column_12   varchar(256)    DEFAULT NULL,
+      column_13   varchar(256)    DEFAULT NULL,
+      column_14   varchar(256)    DEFAULT NULL,
+      column_15   varchar(256)    DEFAULT NULL,
+      column_16   varchar(256)    DEFAULT NULL,
+      column_17   varchar(256)    DEFAULT NULL,
+      column_18   varchar(256)    DEFAULT NULL,
+      column_19   varchar(256)    DEFAULT NULL,
+      column_20   varchar(256)    DEFAULT NULL,
+      column_21   varchar(256)    DEFAULT NULL,
+      column_22   varchar(256)    DEFAULT NULL,
+      column_23   varchar(256)    DEFAULT NULL,
+      column_24   varchar(256)    DEFAULT NULL,
+      column_25   varchar(256)    DEFAULT NULL,
+      column_26   varchar(256)    DEFAULT NULL,
+      column_27   varchar(256)    DEFAULT NULL,
+      column_28   varchar(256)    DEFAULT NULL,
+      column_29   varchar(256)    DEFAULT NULL,
+      column_30   varchar(256)    DEFAULT NULL,
+      column_31   varchar(256)    DEFAULT NULL,
+      column_32   varchar(256)    DEFAULT NULL,
+      column_33   varchar(256)    DEFAULT NULL,
+      column_34   varchar(256)    DEFAULT NULL,
+      column_35   varchar(256)    DEFAULT NULL,
+      column_36   varchar(256)    DEFAULT NULL,
+      column_37   varchar(256)    DEFAULT NULL
+  )
+  PARTITION BY date_trunc("day", ds)
+  DISTRIBUTED BY hash(id);
+  
+  -- 使用 WHERE 子句和复杂表达式创建同步物化视图
+  CREATE MATERIALIZED VIEW test_mv1
+  AS 
+  SELECT
+  ds,
+  column_19,
+  column_36,
+  sum(column_01) as column_01_sum,
+  bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt,
+  bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,
+  bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,
+  bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,
+  bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,
+  bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+  FROM user_event
+  WHERE ds >= '2023-11-02'
+  GROUP BY
+  ds,
+  column_19,
+  column_36;
+  ```
 
 ### 异步物化视图示例
 
@@ -705,6 +787,58 @@ SELECT
 INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
+```
+
+示例四：创建分区物化视图，并将基表 STRING 类型分区键转化为日期类型作为异步物化视图分区键。
+
+```sql
+-- 创建分区键为 STRING 类型的基表。
+CREATE TABLE `part_dates` (
+  `d_date` varchar(20) DEFAULT NULL,
+  `d_dayofweek` varchar(10) DEFAULT NULL,
+  `d_month` varchar(11) DEFAULT NULL,
+  `d_year` int(11) DEFAULT NULL,
+  `d_yearmonthnum` int(11) DEFAULT NULL,
+  `d_yearmonth` varchar(9) DEFAULT NULL,
+  `d_daynuminweek` int(11) DEFAULT NULL,
+  `d_daynuminmonth` int(11) DEFAULT NULL,
+  `d_daynuminyear` int(11) DEFAULT NULL,
+  `d_monthnuminyear` int(11) DEFAULT NULL,
+  `d_weeknuminyear` int(11) DEFAULT NULL,
+  `d_sellingseason` varchar(14) DEFAULT NULL,
+  `d_lastdayinweekfl` int(11) DEFAULT NULL,
+  `d_lastdayinmonthfl` int(11) DEFAULT NULL,
+  `d_holidayfl` int(11) DEFAULT NULL,
+  `d_weekdayfl` int(11) DEFAULT NULL,
+  `d_datekey` varchar(11) DEFAULT NULL
+) partition by (d_datekey);
+
+
+-- 使用 `str2date` 函数创建分区物化视图。
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
+PARTITION BY str2date(`d_datekey`,'%Y%m%d')
+DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
+REFRESH MANUAL 
+AS
+SELECT
+  `d_date` ,
+  `d_dayofweek`,
+  `d_month` ,
+  `d_yearmonthnum` ,
+  `d_yearmonth` ,
+  `d_daynuminweek`,
+  `d_daynuminmonth`,
+  `d_daynuminyear` ,
+  `d_monthnuminyear` ,
+  `d_weeknuminyear` ,
+  `d_sellingseason`,
+  `d_lastdayinweekfl`,
+  `d_lastdayinmonthfl`,
+  `d_holidayfl` ,
+  `d_weekdayfl`,
+  `d_datekey`
+FROM
+`hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
 
 ## 更多操作

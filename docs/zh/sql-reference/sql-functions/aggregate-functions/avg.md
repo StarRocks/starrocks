@@ -1,4 +1,8 @@
-# AVG
+---
+displayed_sidebar: "Chinese"
+---
+
+# avg
 
 ## 功能
 

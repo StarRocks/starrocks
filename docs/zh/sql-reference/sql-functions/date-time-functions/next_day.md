@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # next_day
 
 ## 功能

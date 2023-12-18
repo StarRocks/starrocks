@@ -1,4 +1,8 @@
-# JSON_EXISTS
+---
+displayed_sidebar: "Chinese"
+---
+
+# json_exists
 
 ## 功能
 

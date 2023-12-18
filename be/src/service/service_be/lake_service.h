@@ -103,6 +103,9 @@ private:
                                           ::starrocks::lake::PublishLogVersionResponse* response);
 
 private:
+    static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
+    static constexpr int64_t kDefaultTimeoutForPublishVersion = 1 * 60 * 1000L; // 1 minute
+
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
 };

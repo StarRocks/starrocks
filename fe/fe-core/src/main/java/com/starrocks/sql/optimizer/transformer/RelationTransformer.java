@@ -126,6 +126,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -144,7 +145,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext());
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()));
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
@@ -172,10 +173,15 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     }
 
     public LogicalPlan transform(Relation relation) {
-        OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
-            Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor =
-                    buildCTEAnchorAndProducer((QueryRelation) relation);
+            QueryRelation queryRelation = (QueryRelation) relation;
+            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1)) {
+                // all cte is only referenced once, no need to reuse
+                return visit(relation);
+            }
+
+            OptExprBuilder optExprBuilder;
+            Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor = buildCTEAnchorAndProducer(queryRelation);
             optExprBuilder = cteRootAndMostDeepAnchor.first;
             LogicalPlan logicalPlan = visit(relation);
             cteRootAndMostDeepAnchor.second.addChild(logicalPlan.getRootBuilder());
@@ -189,7 +195,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
-            int cteId = cteContext.registerCteRef(cteRelation.getCteMouldId());
+            if (cteRelation.getRefs() <= 1 || cteContext.isForceInline()) {
+                continue;
+            }
+
+            int cteId = cteContext.registerCte(cteRelation.getCteMouldId());
             LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteId);
             LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteId);
             LogicalPlan producerPlan =
@@ -273,17 +283,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relationType)) {
-                        try {
-                            if (relationType.isNull()) {
-                                row.get(i).setType(outputType);
-                            } else {
-                                ScalarOperator expr = foldCast(((ConstantOperator) row.get(i)).castTo(outputType));
-                                row.set(i, expr);
+                        if (relationType.isNull()) {
+                            row.get(i).setType(outputType);
+                        } else {
+                            Optional<ConstantOperator> expr = ((ConstantOperator) row.get(i)).castTo(outputType);
+                            if (!expr.isPresent()) {
+                                throw new SemanticException("can not cast value " + row.get(i) + "to type " + outputType);
                             }
-                            valuesOperator.getColumnRefSet().get(i).setType(outputType);
-                        } catch (Exception e) {
-                            throw new SemanticException(e.toString());
+                            row.set(i, expr.get());
                         }
+                        valuesOperator.getColumnRefSet().get(i).setType(outputType);
                     }
                 }
                 // Note: must copy here
@@ -590,6 +599,15 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
+        if (!cteContext.hasRegisteredCte(node.getCteMouldId())) {
+            // doesn't register CTE, should inline directly
+            LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
+            OptExprBuilder builder = new OptExprBuilder(childPlan.getRoot().getOp(),
+                    childPlan.getRootBuilder().getInputs(),
+                    new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
+            return new LogicalPlan(builder, childPlan.getOutputColumn(), childPlan.getCorrelation());
+        }
+
         int cteId = cteContext.getCurrentCteRef(node.getCteMouldId());
         ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
         Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
@@ -715,10 +733,25 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     .collect(Collectors.toList()));
         }
 
+        ScalarOperator skewColumn = null;
+        if (node.getSkewColumn() != null) {
+            skewColumn = SqlToScalarOperatorTranslator.translate(node.getSkewColumn(),
+                    expressionMapping, columnRefFactory,
+                    session, cteContext, leftOpt, null, false);
+        }
+
+        List<ScalarOperator> skewValues = Lists.newArrayList();
+        if (node.getSkewValues() != null) {
+            skewValues = node.getSkewValues().stream().map(SqlToScalarOperatorTranslator::translate).
+                    collect(Collectors.toList());
+        }
+
         LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
                 .setJoinType(node.getJoinOp())
                 .setOnPredicate(onPredicate)
                 .setJoinHint(node.getJoinHint())
+                .setSkewColumn(skewColumn)
+                .setSkewValues(skewValues)
                 .build();
 
         OptExprBuilder joinOptExprBuilder =

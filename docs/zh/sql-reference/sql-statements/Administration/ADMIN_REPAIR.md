@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN REPAIR
 
 ## 功能
 
 该语句用于尝试优先修复指定的表或分区。
+
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # query_dump 接口
 
 本文介绍如何使用 StarRocks 的 query_dump 接口来查看 SQL 查询的相关信息。

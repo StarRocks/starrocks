@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 准备部署文件
 
 本文介绍如何准备 StarRocks 部署文件。

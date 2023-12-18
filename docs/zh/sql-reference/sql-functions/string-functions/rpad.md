@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # rpad
 
 ## 功能

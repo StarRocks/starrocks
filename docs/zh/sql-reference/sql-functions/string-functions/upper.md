@@ -1,4 +1,8 @@
-# UPPER
+---
+displayed_sidebar: "Chinese"
+---
+
+# upper
 
 ## 功能
 

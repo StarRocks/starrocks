@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE RESOURCE GROUP
 
 ## 功能
 
 创建资源组。关于资源组的更多信息，参见[资源隔离](../../../administration/resource_group.md)。
+
+:::tip
+
+该操作需要 SYSTEM 级 CREATE RESOURCE GROUP 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

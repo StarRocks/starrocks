@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # log2
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CANCEL DECOMMISSION
 
 ## 功能
@@ -6,7 +10,7 @@
 
 > **注意**
 >
-> 仅管理员使用！
+> 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关操作。
 
 ## 语法
 

@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DELETE
 
 该语句用于从表中删除数据行。表可以是分区表或者非分区表。
 
-对于明细类型 (Duplicate Key)、聚合类型 (Aggregate Key)，以及更新类型表 (Unique Key)，支持删除表中**指定分区**的数据。主键类型表 (Primary Key) 目前还**不支持**删除指定分区中的数据。从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义，即支持按主键、任意列、以及子查询结果删除数据。从 3.0 版本开始，主键类型表丰富了 DELETE...WHERE 语义，支持使用多表关联和公用表表达式（CTE）。
+对于明细类型 (Duplicate Key)、聚合类型 (Aggregate Key)，以及更新类型表 (Unique Key)，支持删除表中**指定分区**的数据。从 2.3 版本开始，主键类型表支持完整的 DELETE...WHERE 语义，即支持按主键、任意列、以及子查询结果删除数据。从 3.0 版本开始，主键类型表丰富了 DELETE...WHERE 语义，支持使用多表关联和公用表表达式（CTE）。
 
 ## 注意事项
 
@@ -166,6 +170,7 @@ DELETE FROM <table_name>
 
 ### 注意事项
 
+- 主键类型表目前**还不支持**删除指定分区中的数据，例如 `DELETE FROM <table_name> PARTITION <partition_id> WHERE <where_condition>`。
 - 支持如下比较运算符：`=`、`>`、`<`、`>=`、`<=`、`!=`、`IN` 和 `NOT IN`。
 - 支持如下逻辑运算符：`AND` 和 `OR`。
 - 不支持并发删除或导入数据时删除，因为可能无法保证导入的事务性。

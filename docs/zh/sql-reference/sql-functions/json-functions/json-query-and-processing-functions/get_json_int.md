@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # get_json_int
 
 ## 功能

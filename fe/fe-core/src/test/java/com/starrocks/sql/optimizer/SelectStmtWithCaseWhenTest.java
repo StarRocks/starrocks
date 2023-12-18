@@ -684,8 +684,8 @@ class SelectStmtWithCaseWhenTest {
                         "if (ship_code >= 1 and ship_code <= 4, 1, 0) as layer1," +
                         "if(ship_code is null or ship_code < 1, 1, 0) as layer2 from t0) " +
                         "select * from tmp where layer2 = 1 and layer0 != 1 and layer1 !=1",
-                        "(13: ship_code IS NULL) OR (13: ship_code < 1), if[([13: ship_code, INT, true] > 4, 1, 0)",
-                        "if[((13: ship_code >= 1) AND (13: ship_code <= 4), 1, 0)"
+                        "(5: ship_code IS NULL) OR (5: ship_code < 1), if[([5: ship_code, INT, true] > 4, 1, 0)",
+                        "if[((5: ship_code >= 1) AND (5: ship_code <= 4), 1, 0)"
                 },
 
                 {"select * from test.t0 where nullif('China', region) = 'China'", "[1: region, VARCHAR, false] != 'China'"},

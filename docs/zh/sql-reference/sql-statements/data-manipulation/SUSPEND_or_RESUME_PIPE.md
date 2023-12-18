@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SUSPEND or RESUME PIPE
 
 ## 功能
@@ -10,7 +14,7 @@
 ## 语法
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] [ <pipe_name> ] { SUSPEND | RESUME [ IF SUSPENDED ] }
+ALTER PIPE [ IF EXISTS ] <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
 ```
 
 ## 参数说明

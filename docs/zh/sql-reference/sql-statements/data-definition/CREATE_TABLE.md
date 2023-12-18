@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE TABLE
 
 ## 功能
@@ -40,6 +44,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 说明：
 
 **col_name**：列名称
+
+注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 **col_type**：列数据类型
 
@@ -133,7 +139,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -147,9 +153,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 **从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
 
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/insert.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
+**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
 
-**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/insert.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
+**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -416,7 +422,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     * 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     * 仅支持指定一列作为分区列。
 
-    更多信息，请参见[批量创建分区](/table_design/Data_distribution.md#range-分区)。
+    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
 
     示例：
 
@@ -455,7 +461,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * 不支持主键模型表、更新模型表和聚合表。
   * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
   更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
 
@@ -481,7 +487,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * **建表时，必须指定分桶键**。
   * 作为分桶键的列，该列的值不支持更新。
   * 分桶键指定后不支持修改。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 ### **ORDER BY**
 
@@ -586,7 +592,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 
@@ -612,13 +618,13 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
-#### 设置随机分桶的表中分桶大小
+#### 设置随机分桶表中分桶大小
 
-自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小。默认为 `1024 * 1024 * 1024 B`（1 GB），最大支持为 4 GB。通常情况下建议保留默认值。
+自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
 
 ``` sql
 PROPERTIES (
-    "bucket_size" = "3221225472"
+    "bucket_size" = "1073741824"
 )
 ```
 
@@ -708,7 +714,7 @@ PROPERTIES (
 
 #### 为 StarRocks 存算分离集群创建云原生表
 
-为了[使用 StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md#使用-starrocks-存算分离集群)，您需要通过以下 PROPERTIES 创建云原生表：
+为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)，您需要通过以下 PROPERTIES 创建云原生表：
 
 ```SQL
 PROPERTIES (
@@ -725,7 +731,7 @@ PROPERTIES (
 
   > **说明**
   >
-  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/Configuration.md#be-配置项)
+  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/BE_configuration.md)。
 
 * `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
 
@@ -737,6 +743,15 @@ PROPERTIES (
 
   * 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
   * 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
+
+#### 设置 fast schema evolution
+
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
+
+> **NOTE**
+>
+> * StarRocks 存算分离集群不支持该参数。
+> * 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`fast_schema_evolution`](../../../administration/FE_configuration.md#fast_schema_evolution)。
 
 ## 示例
 
@@ -758,10 +773,6 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
-
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### 创建表并设置存储介质和数据自动降冷时间
 
@@ -1007,7 +1018,7 @@ PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.prefix" = "p"
 );
 ```
 

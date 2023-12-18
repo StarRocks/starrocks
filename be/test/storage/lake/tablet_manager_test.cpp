@@ -61,8 +61,7 @@ public:
     void TearDown() override {
         delete _tablet_manager;
         delete _location_provider;
-        auto st = FileSystem::Default()->delete_dir_recursive(_test_dir);
-        st.permit_unchecked_error();
+        (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
     starrocks::lake::TabletManager* _tablet_manager{nullptr};

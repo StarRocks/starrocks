@@ -28,7 +28,7 @@ import java.util.Set;
 
 public class RewriteContext {
     private final OptExpression queryExpression;
-    private final PredicateSplit queryPredicateSplit;
+    private PredicateSplit queryPredicateSplit;
     private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns;
@@ -41,10 +41,10 @@ public class RewriteContext {
     private final ColumnRefFactory mvRefFactory;
     private EquivalenceClasses queryBasedViewEquivalenceClasses;
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
-
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
+    private ScalarOperator unionRewriteQueryExtraPredicate;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -88,6 +88,10 @@ public class RewriteContext {
 
     public PredicateSplit getQueryPredicateSplit() {
         return queryPredicateSplit;
+    }
+
+    public void setQueryPredicateSplit(PredicateSplit queryPredicateSplit) {
+        this.queryPredicateSplit = queryPredicateSplit;
     }
 
     public EquivalenceClasses getQueryEquivalenceClasses() {
@@ -148,5 +152,13 @@ public class RewriteContext {
 
     public Map<ColumnRefOperator, ScalarOperator> getMVColumnRefToScalarOp() {
         return MvUtils.getColumnRefMap(getMvExpression(), getMvRefFactory());
+    }
+
+    public ScalarOperator getUnionRewriteQueryExtraPredicate() {
+        return unionRewriteQueryExtraPredicate;
+    }
+
+    public void setUnionRewriteQueryExtraPredicate(ScalarOperator unionRewriteQueryExtraPredicate) {
+        this.unionRewriteQueryExtraPredicate = unionRewriteQueryExtraPredicate;
     }
 }

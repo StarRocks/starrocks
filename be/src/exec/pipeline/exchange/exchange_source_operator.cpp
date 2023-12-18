@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
+#include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
@@ -24,7 +25,7 @@ namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics.get());
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     return Status::OK();
 }
 
@@ -51,6 +52,20 @@ StatusOr<ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     return std::move(chunk);
 }
 
+ExchangeSourceOperatorFactory::~ExchangeSourceOperatorFactory() {
+    if (_stream_recvr != nullptr && _stream_recvr_cnt != 0) {
+        // NOTE: it is possible that the ExchangeSourceOperator::prepare() is called, but the ExchangeSourceOperator::set_finishing()
+        // is never called. The `_stream_recvr_cnt` can never count down to 0. It is not a good idea to call
+        // ExchangeSourceOperatorFactory::close_stream_recvr() in ~ExchangeSourceOperator because the operator is held by shared_ptr,
+        // and its _factory is a raw pointer. It is not guaranteed that the factory may live longer than the operator.
+        // Ideally, the operator should take the responsibility to create and destroy the `_stream_recvr`. However, this shared
+        // `_stream_recvr` design, moves the responsibility from the operator to the operator factory.
+        LOG(INFO) << "ExchangeSourceOperatorFactory::_stream_recvr_cnt=" << _stream_recvr_cnt
+                  << ", the _stream_recvr is created without properly cleaned. Force close it!";
+        _stream_recvr->close();
+    }
+}
+
 std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_recvr(RuntimeState* state) {
     if (_stream_recvr != nullptr) {
         return _stream_recvr;
@@ -71,6 +86,9 @@ void ExchangeSourceOperatorFactory::close_stream_recvr() {
 
 bool ExchangeSourceOperatorFactory::could_local_shuffle() const {
     DCHECK(_texchange_node.__isset.partition_type);
+    if (!_enable_pipeline_level_shuffle) {
+        return true;
+    }
     // There are two ways of shuffle
     // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
     // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so

@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -43,6 +44,9 @@ public class AnalyzeInsertTest {
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
+
+        starRocksAssert.withCatalog("create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")");
     }
 
     @Test
@@ -215,6 +219,39 @@ public class AnalyzeInsertTest {
     }
 
     @Test
+    public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = hiveTable;
+            }
+        };
+
+        new Expectations(hiveTable) {
+            {
+                hiveTable.supportInsert();
+                result = true;
+
+                hiveTable.isHiveTable();
+                result = true;
+
+                hiveTable.isUnPartitioned();
+                result = false;
+
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+            }
+        };
+
+        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3",
+                "Only support to write hive managed table");
+    }
+
+    @Test
     public void testTableFunctionTable() {
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -318,5 +355,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }

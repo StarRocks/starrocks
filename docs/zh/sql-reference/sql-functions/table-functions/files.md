@@ -1,12 +1,16 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # FILES
 
 ## 功能
 
 定义远程存储中的数据文件。
 
-从 v3.1.0 版本开始，StarRocks 支持使用表函数 FILES() 在远程存储中定义只读文件。该函数根据给定的数据路径等参数读取数据，并自动根据数据文件的格式、列信息等推断出 Table Schema，最终以数据行形式返回文件中的数据。您可以通过 [SELECT](../../sql-statements/data-manipulation/SELECT.md) 直接直接查询该数据，通过 [INSERT](../../sql-statements/data-manipulation/insert.md) 导入数据，或通过 [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 建表并导入数据。
+从 v3.1.0 版本开始，StarRocks 支持使用表函数 FILES() 在远程存储中定义只读文件。该函数根据给定的数据路径等参数读取数据，并自动根据数据文件的格式、列信息等推断出 Table Schema，最终以数据行形式返回文件中的数据。您可以通过 [SELECT](../../sql-statements/data-manipulation/SELECT.md) 直接直接查询该数据，通过 [INSERT](../../sql-statements/data-manipulation/INSERT.md) 导入数据，或通过 [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 建表并导入数据。
 
-从 v3.2.0 版本开始，FILES() 支持在远程存储中定义可写入的数据文件。您可以[使用 INSERT INTO FILES() 将数据从 StarRocks 导出到远程存储](../../../unloading/unload_using_insert_into_files.md)。
+从 v3.2.0 版本开始，FILES() 写入数据至远程存储。您可以[使用 INSERT INTO FILES() 将数据从 StarRocks 导出到远程存储](../../../unloading/unload_using_insert_into_files.md)。
 
 目前 FILES() 函数支持以下数据源和文件格式：
 
@@ -21,39 +25,18 @@
 
 ## 语法
 
-```SQL
-FILES( data_location , data_format [, StorageCredentialParams ] 
-    [, columns_from_path ] [, schema_detect ] [, unload_data ] )
+- **导入**:
 
-data_location ::=
-    "path" = { "hdfs://<hdfs_host>:<hdfs_port>/<hdfs_path>"
-             | "s3://<s3_path>" 
-             | "s3a://<gcs_path>" 
-             | "wasb://<container>@<storage_account>.blob.core.windows.net/<blob_path>"
-             | "wasbs://<container>@<storage_account>.blob.core.windows.net/<blob_path>"
-             }
+  ```SQL
+  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  ```
 
-data_format ::=
-    "format" = { "parquet" | "orc" }
+- **导出**:
 
+  ```SQL
+  FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
+  ```
 
--- 自 v3.2 起支持。
-columns_from_path ::=
-    "columns_from_path" = <column_name> [, ...]
-
-
--- 自 v3.2 起支持。
-schema_detect::=
-    [ "schema_auto_detect_sample_rows" = "<INT>" ]
-    [, "schema_auto_detect_sample_files" = "<INT>" ]
-
--- 自 v3.2 起支持。
-unload_data::=
-    "compression" = "<compression_method>"
-    [, "max_file_size" = "<file_size>" ]
-    [, "partition_by" = "<column_name> [, ...]" ]
-    [, "single" = { "true" | "false" } ]
-```
 
 ## 参数说明
 
@@ -183,6 +166,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
 
+<!--
+
 ### schema_detect
 
 自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
@@ -203,21 +188,27 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
 
-### unload_data
+-->
+
+### unload_data_param
 
 从 v3.2 版本开始，FILES() 支持在远程存储中定义可写入文件以进行数据导出。有关详细说明，请参阅[使用 INSERT INTO FILES 导出数据](../../../unloading/unload_using_insert_into_files.md)。
 
-- `compression`（必填）：导出数据时要使用的压缩方法。有效值：
-  - `uncompressed`：不使用任何压缩算法。
-  - `gzip`：使用 gzip 压缩算法。
-  - `brotli`：使用 Brotli 压缩算法。
-  - `zstd`：使用 Zstd 压缩算法。
-  - `lz4`：使用 LZ4 压缩算法。
-- `max_file_size`：当数据导出为多个文件时，每个数据文件的最大大小。默认值：`1GB`。单位：B、KB、MB、GB、TB 和 PB。
-- `partition_by`：用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。
-- `single`：是否将数据导出到单个文件中。有效值：
-  - `true`：数据存储在单个数据文件中。
-  - `false`：如果达到 `max_file_size`，则数据存储在多个文件中。
+```sql
+-- 自 v3.2 版本起支持。
+unload_data_param::=
+    "compression" = "<compression_method>",
+    "max_file_size" = "<file_size>",
+    "partition_by" = "<column_name> [, ...]" 
+    "single" = { "true" | "false" } 
+```
+
+| **参数**          | **必填** | **说明**                                                          |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`brotli`：使用 Brotli 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
+| max_file_size    | 否           | 当数据导出为多个文件时，每个数据文件的最大大小。默认值：`1GB`。单位：B、KB、MB、GB、TB 和 PB。 |
+| partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
+| single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果达到 `max_file_size`，则数据存储在多个文件中。</li></ul>                  |
 
 > **注意**
 >

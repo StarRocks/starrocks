@@ -1,4 +1,8 @@
-# STDDEV_SAMP
+---
+displayed_sidebar: "Chinese"
+---
+
+# stddev_samp
 
 ## 功能
 

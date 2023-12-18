@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理黑名单
 
 本文介绍如何管理 SQL 黑名单 (SQL Blacklist)。

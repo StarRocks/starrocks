@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # version
 
 ## 功能
@@ -32,4 +36,4 @@ mysql> select version();
 
 ## 相关文档
 
-[current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
+[current_version](./current_version.md)

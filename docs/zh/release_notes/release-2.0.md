@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks version 2.0
 
 ## 2.0.9
@@ -143,7 +147,7 @@
 - Broker Load支持华为OBS [#1182](https://github.com/StarRocks/starrocks/pull/1182)
 - 支持国密算法sm3
 - 适配ARM类国产CPU：通过鲲鹏架构验证
-- 主键模型（Primary Key）正式发布，该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](/table_design/table_types/primary_key_table.md)
+- 主键模型（Primary Key）正式发布，该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](../table_design/table_types/primary_key_table.md)
 
 ### 功能优化
 

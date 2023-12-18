@@ -1,4 +1,8 @@
-# PERCENTILE_APPROX
+---
+displayed_sidebar: "Chinese"
+---
+
+# percentile_approx
 
 ## 功能
 

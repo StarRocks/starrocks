@@ -1,4 +1,8 @@
-# MIN
+---
+displayed_sidebar: "Chinese"
+---
+
+# min
 
 ## 功能
 

@@ -1,4 +1,8 @@
-# RAND, RANDOM
+---
+displayed_sidebar: "Chinese"
+---
+
+# rand, random
 
 ## 功能
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # fmod
 
 ## 功能

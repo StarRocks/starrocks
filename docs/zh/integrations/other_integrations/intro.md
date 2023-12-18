@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 其他集成
 
 本文介绍 StarRocks 支持集成的其他系统和工具。
@@ -19,6 +23,8 @@
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
 [Apache Kafka](../../loading/RoutineLoad.md)
+
+[AutoMQ Kafka](../../loading/automq-routine-load.md)
 
 ## 集群管理
 

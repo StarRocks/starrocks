@@ -206,3 +206,52 @@ select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is nu
 -- result:
 13336
 -- !result
+-- name: testEmptyArray
+with t0 as (
+    select c1 from (values([])) as t(c1)
+)
+select 
+array_concat(c1, [1])
+from t0;
+-- result:
+[1]
+-- !result
+with t0 as (
+    select c1 from (values([])) as t(c1)
+)
+select 
+array_concat([1], c1)
+from t0;
+-- result:
+[1]
+-- !result
+select array_concat(c1, [[]])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[[]]
+-- !result
+select array_concat(c1, [[1]])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[[1]]
+-- !result
+select array_concat(c1, [[1]])
+from (select c1 from (values([[]])) as t(c1)) t;
+-- result:
+[[],[1]]
+-- !result
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([map()])) as t(c1)) t;
+-- result:
+[{},{"a":1}]
+-- !result
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1}]
+-- !result
+select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1,"b":2,"c":3}]
+-- !result

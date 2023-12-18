@@ -1,10 +1,14 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Paimon catalog
 
 StarRocks 从 3.1 版本开始支持 Paimon Catalog。
 
 Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要执行数据导入就可以直接查询 Apache Paimon 里的数据。
 
-此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
 
 为保证正常访问 Paimon 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -210,8 +214,8 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -219,8 +223,8 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
 
 ###### Azure Data Lake Storage Gen1
@@ -483,8 +487,8 @@ PROPERTIES
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<blob_paimon_warehouse_path>",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -629,13 +633,13 @@ PROPERTIES
 
 ## 查看 Paimon Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
@@ -643,7 +647,7 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ## 删除 Paimon Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Paimon Catalog `paimon_catalog_fs`：
 
@@ -669,7 +673,7 @@ DROP Catalog paimon_catalog_fs;
 
 ## 查询 Paimon 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
@@ -693,7 +697,7 @@ DROP Catalog paimon_catalog_fs;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

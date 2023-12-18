@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 检查环境配置
 
 本文列出了在部署 StarRocks 之前需要检查并配置的所有环境和系统配置项。正确设置这些配置项可以确保集群的高可用并提升性能。
@@ -33,7 +37,7 @@ netstat -tunlp | grep 9010
 - `9060`：BE Thrift Server 端口（`be_port`）
 - `8040`：BE HTTP Server 端口（`be_http_port`）
 - `9050`：BE 心跳服务端口（`heartbeat_service_port`）
-- `8060`：BE BRPC 端口（`brpc_port`）
+- `8060`：BE bRPC 端口（`brpc_port`）
 
 在 BE 实例上执行如下命令查看这些端口是否被占用：
 
@@ -53,7 +57,8 @@ netstat -tunlp | grep 8060
 - `9060`：CN Thrift Server 端口（`be_port`）
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
-- `8060`：CN BRPC 端口（`brpc_port`）
+- `8060`：CN bRPC 端口（`brpc_port`）
+- `9070`：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。（`starlet_port`）
 
 在 CN 实例上执行如下命令查看这些端口是否被占用：
 

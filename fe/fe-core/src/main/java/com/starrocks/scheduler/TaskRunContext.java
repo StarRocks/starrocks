@@ -28,6 +28,22 @@ public class TaskRunContext {
     Map<String, String> properties;
     Constants.TaskType type;
     TaskRunStatus status;
+    ExecuteOption executeOption;
+
+    public TaskRunContext() {
+    }
+
+    public TaskRunContext(TaskRunContext context) {
+        this.ctx = context.ctx;
+        this.definition = context.definition;
+        this.postRun = context.postRun;
+        this.remoteIp = context.remoteIp;
+        this.priority = context.priority;
+        this.properties = context.properties;
+        this.type = context.type;
+        this.status = context.status;
+        this.executeOption = context.executeOption;
+    }
 
     public ConnectContext getCtx() {
         return ctx;
@@ -91,5 +107,13 @@ public class TaskRunContext {
 
     public void setStatus(TaskRunStatus status) {
         this.status = status;
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
     }
 }

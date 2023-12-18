@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CANCEL REFRESH MATERIALIZED VIEW
 
 ## 功能
 
 取消异步物化视图的刷新任务。
+
+:::tip
+
+该操作需要对应物化视图的 REFRESH 权限。
+
+:::
 
 ## 语法
 

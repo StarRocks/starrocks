@@ -1,10 +1,16 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE FILE
 
 CREATE FILE 语句用于创建文件。文件创建后会自动上传并持久化在 StarRocks 集群中。
 
-> **注意**
->
-> 只有拥有 System 级 FILE 权限的用户才可以创建文件。当一个文件归属于一个数据库时，对该数据库拥有访问权限的用户都可以使用该文件。
+:::tip
+
+该操作需要 SYSTEM 级 FILE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。当一个文件归属于一个数据库时，对该数据库拥有访问权限的用户都可以使用该文件。
+
+:::
 
 ## 基本概念
 
@@ -25,7 +31,7 @@ CREATE FILE "file_name" [IN database]
 | database   | 否       | 文件所属的数据库。如果没有指定该参数，则使用当前会话的数据库。 |
 | properties | 是       | 文件属性，具体配置项见下表：`properties` 配置项。            |
 
-**properties** **配置项**
+**properties 配置项**
 
 | **配置项** | **必填** | **描述**                                                     |
 | ---------- | -------- | ------------------------------------------------------------ |

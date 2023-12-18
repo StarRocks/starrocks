@@ -1,0 +1,47 @@
+-- name: testArrayUniqueAgg
+CREATE TABLE `array_unique_agg_test` (
+id    int,
+s_1   Array<String>,
+i_1   Array<BigInt>,
+f_1   Array<Double>,
+d_1   Array<DECIMAL(26, 2)>,
+ai_1  Array<Array<BigInt>>
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into array_unique_agg_test values
+(1, ['a', 'a'], [1.0], [1.2, 1.2], [1.3], [[1]]),
+(2, ['1'], [2.0], [2.1], [100.0], [[2]]),
+(1, ['a'], [1.0], [1.2, 1.2], [1.3], [[1]]),
+(2, ['1'], [2.0], [2.1, 2.1], [100.0], [[2]]);
+-- result:
+-- !result
+select array_unique_agg(s_1) from array_unique_agg_test group by id order by id;
+-- result:
+["a"]
+["1"]
+-- !result
+select array_unique_agg(i_1) from array_unique_agg_test group by id order by id;
+-- result:
+[1]
+[2]
+-- !result
+select array_unique_agg(f_1) from array_unique_agg_test group by id order by id;
+-- result:
+[1.2]
+[2.1]
+-- !result
+select array_unique_agg(d_1) from array_unique_agg_test group by id order by id;
+-- result:
+[1.30]
+[100.00]
+-- !result

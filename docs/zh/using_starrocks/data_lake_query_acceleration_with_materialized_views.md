@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用物化视图加速数据湖查询
 
 本文描述了如何使用 StarRocks 的异步物化视图来优化数据湖中的查询性能。
@@ -88,9 +92,9 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 
 ### 选择合适的刷新策略
 
-目前，StarRocks 无法检测 Hudi Catalog、Iceberg Catalog 和 JDBC Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
+目前，StarRocks 无法检测 Hudi Catalog 和 JDBC Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
-对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。请注意，物化视图的分区键必须包含在基表的分区键中。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。从而，StarRocks 可以：
+对于 Hive Catalog 和 Iceberg Catalog (从 v3.1.4 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
@@ -99,6 +103,10 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
   >
   > 您仍然可以选择在创建物化视图时通过设置属性 `mv_rewrite_staleness_second` 来容忍一定程度的数据不一致。有关更多信息，请参阅 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
 
+请注意，如需按照分区刷新，物化视图的分区键必须包含在基表的分区键中。
+
+对于 Hive Catalog，您可以启用 Hive 元数据缓存刷新功能，允许 StarRocks 在分区级别检测数据更改。启用此功能后，StarRocks 定期访问 Hive 元数据存储服务（HMS）或 AWS Glue，以检查最近查询的热数据的元数据信息。
+
 要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
 | **配置名称**                                                 | **默认值**                      | **说明**                                                     |
@@ -106,6 +114,8 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和
 | enable_background_refresh_connector_metadata                 | v3.0 为 `true`，v2.5 为 `false` | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
 | background_refresh_metadata_interval_millis                  | 600000（10 分钟）               | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）                | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 |
+
+对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
 
 ### 启用 External Catalog 物化视图的查询改写
 

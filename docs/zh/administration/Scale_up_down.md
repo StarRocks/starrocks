@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 扩容缩容 StarRocks
 
 本文介绍如何扩容以及缩容 StarRocks 集群。
@@ -15,7 +19,7 @@ StarRocks FE 节点分为 Follower 节点和 Observer 节点。Follower 节点�
 
 ### 扩容 FE 集群
 
-部署并启动新增 FE 节点。详细部署方式参考 [部署 StarRocks](/deployment/deploy_manually.md)。
+部署并启动新增 FE 节点。详细部署方式参考 [部署 StarRocks](../deployment/deploy_manually.md)。
 
 ```bash
 bin/start_fe.sh --helper "fe_leader_host:edit_log_port" --daemon
@@ -71,7 +75,7 @@ BE 集群成功扩缩容后，StarRocks 会自动根据负载情况，进行数�
 
 ### 扩容 BE 集群
 
-部署并启动新增 BE 节点。详细部署方式参考 [部署 StarRocks](/deployment/deploy_manually.md)。
+部署并启动新增 BE 节点。详细部署方式参考 [部署 StarRocks](../deployment/deploy_manually.md)。
 
 ```bash
 bin/start_be.sh --daemon

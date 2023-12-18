@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 启用 FQDN 访问
 
 本文介绍如何启用基于完全限定域名（fully qualified domain name，FQDN）访问 StarRocks 节点。 FQDN 是指可以在 Internet 上访问的特定实体的**完整域名**。FQDN 由两部分组成：主机名和域名。
@@ -24,7 +28,7 @@ sh bin/start_fe.sh --host_type FQDN --daemon
 
 `--host_type` 属性用于指定该节点的访问方式。有效值包括 `FQDN` 和 `IP`。只需在第一次启动节点时指定该属性。
 
-有关如何部署 StarRocks 的详细说明，请参阅 [手动部署 StarRocks](/deployment/deploy_manually.md)。
+有关如何部署 StarRocks 的详细说明，请参阅 [手动部署 StarRocks](../deployment/deploy_manually.md)。
 
 新集群中的 BE 节点将通过 FE 元数据中定义的 `BE Address` 判定使用 FQDN 或 IP 地址标识自身，所以您无需在启动 BE 节点时指定 `--host_type`。例如，如果 `BE Address` 记录了一个 BE 节点的 FQDN，则该 BE 节点使用这个 FQDN 来标识自身。
 

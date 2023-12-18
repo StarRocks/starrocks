@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # degrees
 
 ## 功能

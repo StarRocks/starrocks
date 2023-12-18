@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP RESOURCE GROUP
 
 ## 功能
 
 删除指定资源组。
+
+:::tip
+
+该操作需要对应 Resource Group 的 DROP 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

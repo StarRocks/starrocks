@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW STORAGE VOLUMES
 
 ## 功能
 
 显示当前 StarRocks 集群中的存储卷。该功能自 v3.1 起支持。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 

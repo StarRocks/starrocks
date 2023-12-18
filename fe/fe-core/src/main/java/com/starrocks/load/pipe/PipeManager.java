@@ -16,6 +16,7 @@ package com.starrocks.load.pipe;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -125,6 +126,7 @@ public class PipeManager {
                     pipe.suspend();
                     pipe.destroy();
                     pipeMap.remove(id);
+                    repo.deletePipe(pipe);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
@@ -168,12 +170,7 @@ public class PipeManager {
     }
 
     protected void updatePipe(Pipe pipe) {
-        try {
-            lock.writeLock().lock();
-            repo.alterPipe(pipe);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        repo.alterPipe(pipe);
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
@@ -212,6 +209,14 @@ public class PipeManager {
 
     public PipeRepo getRepo() {
         return repo;
+    }
+
+    protected CloseableLock takeWriteLock() {
+        return CloseableLock.lock(this.lock.writeLock());
+    }
+
+    protected CloseableLock takeReadLock() {
+        return CloseableLock.lock(this.lock.readLock());
     }
 
     //============================== RAW CRUD ===========================================

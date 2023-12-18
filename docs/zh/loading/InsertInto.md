@@ -1,4 +1,10 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 INSERT 语句导入数据
+
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
@@ -21,6 +27,12 @@
 - 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
+
+### 查看权限
+
+<InsertPrivNote />
+
+### 创建对象
 
 在 StarRocks 中创建数据库 `load_test`，并在其中创建导入目标表 `insert_wiki_edit` 以及数据源表 `source_wiki_edit`。
 
@@ -101,7 +113,7 @@ DISTRIBUTED BY HASH(user);
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 
-您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -125,7 +137,7 @@ VALUES
 
 ## 通过 INSERT INTO SELECT 语句导入数据
 
-您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 ### 通过 INSERT INTO SELECT 将内外表数据导入内表
 
@@ -207,7 +219,7 @@ INSERT INTO insert_wiki_edit
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -247,7 +259,7 @@ VALUES
 
 ## 通过 INSERT OVERWRITE SELECT 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
 
 > 说明
 >
@@ -375,7 +387,7 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-您可以通过查询 Information Schema 中的元数据表 `task_runs` 来查看异步 INSERT 任务的状态。
+您可以通过查询 Information Schema 中的元数据视图 `task_runs` 来查看异步 INSERT 任务的状态。
 
 以下示例查看异步 INSERT 任务 `async` 的状态。
 
@@ -463,7 +475,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
+有关返回字段的说明，参见 [`information_schema.loads`](../reference/information_schema/loads.md)。
 
 ## 相关配置项
 

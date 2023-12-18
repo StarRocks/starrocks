@@ -15,6 +15,8 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
@@ -22,9 +24,11 @@ import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MapExpr;
@@ -87,6 +91,30 @@ public class ComplexFunctionCallTransformer {
             BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, regexpExtractFunc, new StringLiteral(""));
             // regexp_extract -> if(regexp_extract(xxx)='', null, regexp_extract(xxx))
             return new FunctionCallExpr("if", ImmutableList.of(predicate, new NullLiteral(), regexpExtractFunc));
+        } else if ((functionName.equalsIgnoreCase("rand")
+                || functionName.equalsIgnoreCase("random")) && args.length > 0) {
+            // random(n) -> floor(random()*n)
+            // random(m, n) -> floor(random()*(n-m)+m)
+            FunctionCallExpr random = new FunctionCallExpr("random", Lists.newArrayList());
+            if (args.length == 1) {
+                return new FunctionCallExpr("floor",
+                        ImmutableList.of(new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, random, args[0])));
+            } else {
+                ArithmeticExpr subExpr = new ArithmeticExpr(ArithmeticExpr.Operator.SUBTRACT, args[1], args[0]);
+                ArithmeticExpr mulExpr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, random, subExpr);
+                ArithmeticExpr addExpr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, mulExpr, args[0]);
+                return new FunctionCallExpr("floor", ImmutableList.of(addExpr));
+            }
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], false);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.ISNOTNULL)) {
+            if (args.length != 1) {
+                throw new SemanticException("isnotnull function must have 1 argument");
+            }
+            return new IsNullPredicate(args[0], true);
         }
         return null;
     }

@@ -1,8 +1,16 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW PROC
 
 ## 功能
 
 查看当前集群中的特定指标。
+
+> **注意**
+>
+> 该操作需要 SYSTEM 级 OPERATE 权限。
 
 ## 语法
 
@@ -80,7 +88,7 @@ ClusterDecommissioned: false
 | HeartbeatPort         | BE 节点心跳服务端口。                                        |
 | BePort                | BE 节点 Thrift Server 端口。                                 |
 | HttpPort              | BE 节点 HTTP Server 端口。                                   |
-| BrpcPort              | BE 节点 BRPC 端口。                                          |
+| BrpcPort              | BE 节点 bRPC 端口。                                          |
 | LastStartTime         | BE 节点上一次启动时间。                                      |
 | LastHeartbeat         | BE 节点上一次接受 FE 心跳时间。                              |
 | Alive                 | BE 节点存活状态。                                            |

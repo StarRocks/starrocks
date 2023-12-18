@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN SET REPLICA STATUS
 
 ## 功能
@@ -5,6 +9,12 @@
 该语句用于设置指定副本的状态。
 
 该命令目前仅用于手动将某些副本状态设置为 bad 或 ok，从而使得系统能够自动修复这些副本。
+
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

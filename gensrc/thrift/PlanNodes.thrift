@@ -809,6 +809,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
+  31: optional bool analytic_partition_skewed;
 }
 
 enum TAnalyticWindowType {
@@ -904,6 +905,7 @@ struct TAnalyticNode {
 
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
+  22: optional bool is_skewed
 }
 
 struct TMergeNode {

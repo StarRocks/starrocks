@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # percentile_disc
 
 ## 功能

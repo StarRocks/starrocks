@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 优化性能
 
 本文介绍如何优化 StarRocks 性能。

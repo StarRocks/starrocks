@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW PIPES
 
 ## 功能
 
-查看当前数据库或指定数据库下 Pipe。
+查看当前数据库或指定数据库下 Pipe。该命令从 3.2 版本开始支持。
 
 ## 语法
 

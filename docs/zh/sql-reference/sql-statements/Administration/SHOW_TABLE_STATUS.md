@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW TABLE STATUS
 
 ## 功能
 
 该语句用于查看 Table 的一些信息。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 

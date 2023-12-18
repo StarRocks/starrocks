@@ -1,4 +1,8 @@
-# JSON_ARRAY
+---
+displayed_sidebar: "Chinese"
+---
+
+# json_array
 
 ## 功能
 

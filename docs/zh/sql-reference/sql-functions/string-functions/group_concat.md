@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # group_concat
 
 ## 功能

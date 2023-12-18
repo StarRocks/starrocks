@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # time_slice
 
 ## 功能

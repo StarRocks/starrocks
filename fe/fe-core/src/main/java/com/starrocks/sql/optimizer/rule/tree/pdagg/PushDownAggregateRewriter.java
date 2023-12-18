@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.Collection;
 import java.util.List;
@@ -77,14 +78,19 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
     }
 
-    public OptExpression rewrite(OptExpression root) {
+    public void collectRewriteContext(OptExpression root) {
         collector.collect(root);
         allRewriteContext = collector.getAllRewriteContext();
+    }
 
-        if (allRewriteContext.isEmpty()) {
+    public boolean isNeedRewrite() {
+        return MapUtils.isNotEmpty(allRewriteContext);
+    }
+
+    public OptExpression rewrite(OptExpression root) {
+        if (!isNeedRewrite()) {
             return root;
         }
-
         allPushDownGroupBys = new ColumnRefSet();
         allRewriteContext.values().stream()
                 .flatMap(Collection::stream)

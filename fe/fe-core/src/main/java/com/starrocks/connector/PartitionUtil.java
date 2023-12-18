@@ -567,13 +567,11 @@ public class PartitionUtil {
         if (partitionColumnFilter == null || partitionColumn == null) {
             return false;
         }
-        LiteralExpr lowerBound = partitionColumnFilter.getLowerBound();
-        LiteralExpr upperBound = partitionColumnFilter.getUpperBound();
-        LiteralExpr literalExpr = (lowerBound == null) ? upperBound : lowerBound;
-        if (literalExpr == null) {
+        Type filterType = partitionColumnFilter.getFilterType();
+        if (filterType == null) {
             return false;
         }
-        return isConvertToDate(partitionColumn.getType(), literalExpr.getType());
+        return isConvertToDate(partitionColumn.getType(), filterType);
     }
 
     /**
@@ -674,9 +672,10 @@ public class PartitionUtil {
             if (partitionField.transform().isVoid()) {
                 continue;
             }
+            org.apache.iceberg.types.Type type = partitionSpec.partitionType().fieldType(partitionField.name());
             sb.append(partitionField.name());
             sb.append("=");
-            String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
+            String value = partitionField.transform().toHumanString(type, getPartitionValue(partition, index,
                     partitionSpec.javaClasses()[index]));
             sb.append(value);
             sb.append("/");

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # UPDATE
 
 该语句用于更新一张主键模型表中的数据行。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # round, dround
 
 ## 功能

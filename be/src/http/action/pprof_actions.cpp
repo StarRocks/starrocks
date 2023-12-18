@@ -41,13 +41,14 @@
 #include <mutex>
 
 #include "common/config.h"
+#include "common/prof/heap_prof.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "jemalloc/jemalloc.h"
+#include "io/io_profiler.h"
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -59,12 +60,6 @@ static const int kPprofDefaultSampleSecs = 30;
 // Protect, only one thread can work
 static std::mutex kPprofActionMutex;
 
-int set_jemalloc_profiling(bool enable) {
-    int ret = je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
-    ret |= je_mallctl("prof.thread_active_init", nullptr, nullptr, &enable, 1);
-    return ret;
-}
-
 void HeapAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
@@ -73,38 +68,15 @@ void HeapAction::handle(HttpRequest* req) {
 
     HttpChannel::send_reply(req, str);
 #else
-    int seconds = kPprofDefaultSampleSecs;
-    const std::string& seconds_str = req->param(SECOND_KEY);
-    if (!seconds_str.empty()) {
-        if (int value = std::atoi(seconds_str.c_str()); value > 0) {
-            seconds = value;
-        }
-    }
-
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
-    std::string str;
-    std::stringstream tmp_prof_file_name;
-    tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
-    if (set_jemalloc_profiling(true) != 0) {
-        std::string error_msg = "enable jemalloc profiling error.";
-        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, error_msg);
-        return;
-    }
-    LOG(INFO) << "enable jemalloc profiling";
-    sleep(seconds);
+    std::string str = HeapProf::getInstance().snapshot();
 
-    // NOTE: Use fname to make the content which fname_cstr references to is still valid
-    // when je_mallctl is executing
-    auto fname = tmp_prof_file_name.str();
-    const char* fname_cstr = fname.c_str();
-    if (je_mallctl("prof.dump", nullptr, nullptr, &fname_cstr, sizeof(const char*)) == 0) {
-        std::ifstream f(fname_cstr);
-        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    } else {
+    if (str.empty()) {
         str = "dump jemalloc prof file failed";
+    } else {
+        std::ifstream f(str);
+        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     }
-    (void)set_jemalloc_profiling(false);
-    LOG(INFO) << "disable jemalloc profiling";
     HttpChannel::send_reply(req, str);
 #endif
 }
@@ -155,6 +127,28 @@ void ProfileAction::handle(HttpRequest* req) {
 
     HttpChannel::send_reply(req, str);
 #endif
+}
+
+static std::mutex kIOPprofActionMutex;
+
+void IOProfileAction::handle(HttpRequest* req) {
+    std::lock_guard<std::mutex> lock(kIOPprofActionMutex);
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_io_profile"));
+
+    int seconds = 10;
+    const std::string& seconds_str = req->param(SECOND_KEY);
+    if (!seconds_str.empty()) {
+        seconds = std::atoi(seconds_str.c_str());
+    }
+    int topn = 10;
+    const std::string& topn_str = req->param("topn");
+    if (!topn_str.empty()) {
+        topn = std::atoi(topn_str.c_str());
+    }
+    topn = std::max(1, topn);
+
+    auto ret = IOProfiler::profile_and_get_topn_stats_str(req->param("mode"), seconds, topn);
+    HttpChannel::send_reply(req, ret);
 }
 
 void CmdlineAction::handle(HttpRequest* req) {

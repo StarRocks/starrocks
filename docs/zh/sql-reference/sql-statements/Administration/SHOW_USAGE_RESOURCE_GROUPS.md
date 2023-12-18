@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW USAGE RESOURCE GROUPS
 
 ## 功能
 
 展示所有资源组在各 BE 上的使用信息。此功能从 v3.1.4 开始支持。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 

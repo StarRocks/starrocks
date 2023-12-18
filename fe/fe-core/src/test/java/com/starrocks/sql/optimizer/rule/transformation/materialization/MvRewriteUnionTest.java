@@ -23,15 +23,22 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.List;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteUnionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+
+        starRocksAssert.withTable(cluster, "depts");
+        starRocksAssert.withTable(cluster, "emps");
+        starRocksAssert.withTable(cluster, "test_base_part");
+        starRocksAssert.withTable(cluster, "test_all_type");
 
         starRocksAssert.withTable("create table emps2 (\n" +
                         "    empid int not null,\n" +
@@ -52,12 +59,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\"\n" +
                         ");");
 
-        cluster.runSql("test", "insert into emps2 values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps2 values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps2 values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts2 values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts2 values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts2 values(3, \"dept_name3\")");
+        executeInsertSql(connectContext, "insert into emps2 values(1, 1, \"emp_name1\", 100),(2, 1, \"emp_name1\", 120)," +
+                "(3, 1, \"emp_name1\", 150);");
+        executeInsertSql(connectContext, "insert into depts2 values(1, \"dept_name1\"),(2, \"dept_name2\")," +
+                "(3, \"dept_name3\")");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
@@ -86,16 +91,12 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"" +
                 ");");
-        cluster.runSql("test", "insert into t02 values(1, 2, 3)");
-        cluster.runSql("test", "insert into test_all_type2 values(" +
+        executeInsertSql(connectContext, "insert into t02 values(1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_all_type2 values(" +
                 "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
 
-        cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_base_part values(1, 1, 2, 3),(100, 1, 2, 3),(200, 1, 2, 3)," +
+                "(1000, 1, 2, 3),(2000, 1, 2, 3),(2500, 1, 2, 3)");
 
 
         Table emps2 = getTable("test", "emps2");
@@ -114,7 +115,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     @Test
     public void testUnionRewrite1() throws Exception {
         // single table union
-        createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
+        createAndRefreshMv("create materialized view union_mv_1" +
                 " distributed by hash(empid)  as select empid, deptno, name, salary from emps2 where empid < 3");
         MaterializedView mv1 = getMv("test", "union_mv_1");
         PlanTestBase.setTableStatistics(mv1, 10);
@@ -144,7 +145,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     @Test
     public void testUnionRewrite2() throws Exception {
         // multi tables query
-        createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
+        createAndRefreshMv("create materialized view join_union_mv_1" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
@@ -167,7 +168,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     @Test
     public void testUnionRewrite3() throws Exception {
         // multi tables query
-        createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
+        createAndRefreshMv("create materialized view join_union_mv_1" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
@@ -197,7 +198,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
 
     @Test
     public void testUnionRewrite4() throws Exception {
-        createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
+        createAndRefreshMv("create materialized view join_agg_union_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t02.v1 as v1, test_all_type2.t1d," +
@@ -223,7 +224,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
 
     @Test
     public void testUnionRewrite5() throws Exception {
-        createAndRefreshMv("test", "join_agg_union_mv_2", "create materialized view join_agg_union_mv_2" +
+        createAndRefreshMv("create materialized view join_agg_union_mv_2" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t02.v1 as v1, test_all_type2.t1d," +
@@ -263,7 +264,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
 
     @Test
     public void testUnionRewrite6() throws Exception {
-        createAndRefreshMv("test", "ttl_union_mv_1", "CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`c3`)\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
@@ -305,15 +306,15 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "                PARTITION `p6` VALUES LESS THAN ('18')\n" +
                 "                )\n" +
                 "                DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
-        cluster.runSql("test", "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
-                "                                      (4,1,1),(5,1,1),(6,1,1),\n" +
-                "                                      (7,1,1),(8,1,1),(9,1,1),\n" +
-                "                                      (10,1,1),(11,1,1);");
-        createAndRefreshMv("test", "multi_mv_1", "CREATE MATERIALIZED VIEW multi_mv_1" +
+        executeInsertSql(connectContext, "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
+                "(4,1,1),(5,1,1),(6,1,1),\n" +
+                "(7,1,1),(8,1,1),(9,1,1),\n" +
+                "(10,1,1),(11,1,1);");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_1" +
                 " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_table where k1>1;");
-        createAndRefreshMv("test", "multi_mv_2", "CREATE MATERIALIZED VIEW multi_mv_2" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_2" +
                 " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_1 where k1>2;");
-        createAndRefreshMv("test", "multi_mv_3", "CREATE MATERIALIZED VIEW multi_mv_3" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_3" +
                 " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_2 where k1>3;");
 
         String query5 = "select * from multi_mv_1";
@@ -324,7 +325,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         dropMv("test", "multi_mv_3");
         starRocksAssert.dropTable("multi_mv_table");
 
-        createAndRefreshMv("test", "mv_agg_1", "CREATE MATERIALIZED VIEW `mv_agg_1`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_agg_1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`name`) BUCKETS 2\n" +
                 "REFRESH MANUAL\n" +

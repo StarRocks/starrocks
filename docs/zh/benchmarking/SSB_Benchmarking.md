@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SSB Flat Table 性能测试
 
 ## 测试结论

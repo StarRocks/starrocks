@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN SHOW REPLICA DISTRIBUTION
 
 ## 功能
 
 该语句用于展示一个表或分区副本分布状态。
+
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

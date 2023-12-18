@@ -1,4 +1,8 @@
-# ANY_VALUE
+---
+displayed_sidebar: "Chinese"
+---
+
+# any_value
 
 ## 功能
 

@@ -1,4 +1,8 @@
-# VARIANCE, VAR_POP, VARIANCE_POP
+---
+displayed_sidebar: "Chinese"
+---
+
+# variance, var_pop, variance_pop
 
 ## 功能
 

@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SET
 
 ## 功能
 
 为 StarRocks 设置指定的系统变量或用户自定义变量。您可以通过 [SHOW VARIABLES](../Administration/SHOW_VARIABLES.md) 查看 StarRocks 的系统变量。有关系统变量的详细信息，请参阅[系统变量](../../../reference/System_variable.md)。有关用户自定义变量的详细信息，请参阅[用户自定义变量](../../../reference/user_defined_variables.md)。
+
+:::tip
+
+该操作不需要权限。
+
+:::
 
 ## 语法
 
@@ -31,5 +41,14 @@ Query OK, 0 rows affected (0.00 sec)
 
 ```Plain
 mysql> SET GLOBAL exec_mem_limit = 2147483648;
+Query OK, 0 rows affected (0.00 sec)
+```
+
+示例三：同时设置多个全局变量。需要在所有变量名前添加 `GLOBAL` 关键字。
+
+```Plain
+mysql> SET 
+       GLOBAL exec_mem_limit = 2147483648,
+       GLOBAL time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```

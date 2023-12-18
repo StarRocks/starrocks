@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 配置 Microsoft Azure Storage 认证信息
 
 StarRocks 从 3.0 版本起支持在以下场景中集成 Microsoft Azure Storage（Azure Blob Storage 或 Azure Data Lake Storage）：
@@ -73,7 +77,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*")
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>")
     INTO TABLE test_ingestion_2
     FORMAT AS "parquet"
 )
@@ -88,7 +92,7 @@ WITH BROKER
 
 #### External Catalog
 
-在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name` 和 `azure.blob.sas_token`：
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container` 和 `azure.blob.sas_token`：
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -96,15 +100,15 @@ PROPERTIES
 (
     "type" = "hive", 
     "hive.metastore.uris" = "thrift://10.1.0.18:9083",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### 文件外部表
 
-在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name`、`azure.blob.sas_token` 和文件路径 (`path`)：
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`path`)：
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -117,27 +121,27 @@ PROPERTIES
 (
     "path" = "wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### Broker load
 
-在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.account_name`、`azure.blob.container_name`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
+在 [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 语句中，按如下配置 `azure.blob.storage_account`、`azure.blob.container`、`azure.blob.sas_token` 和文件路径 (`DATA INFILE`)：
 
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*")
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
 WITH BROKER
 (
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
@@ -275,8 +279,8 @@ StarRocks 支持通过以下认证方式来访问 Data Lake Storage Gen2：
 >
 > 从 Data Lake Storage Gen2 导入数据或直接查询 Azure Data Lake Storage Gen2 中的数据文件时，需要使用 abfs 或 abfss 作为文件协议访问目标数据：
 >
-> - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
-> - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
+> - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`。
+> - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`。
 
 ### 基于 Managed Identity 认证鉴权
 
@@ -315,7 +319,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.oauth2_use_managed_identity" = "true",
     "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -330,7 +334,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
@@ -372,7 +376,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.storage_account" = "<storage_account_name>",
     "azure.adls2.shared_key" = "<shared_key>"
@@ -386,7 +390,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )
@@ -430,7 +434,7 @@ CREATE EXTERNAL TABLE external_table_azure
 ENGINE=FILE
 PROPERTIES
 (
-    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>",
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
     "azure.adls2.oauth2_client_id" = "<service_client_id>",
     "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -445,7 +449,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label000
 (
-    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<file_name>")
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
     INTO TABLE target_table
     FORMAT AS "parquet"
 )

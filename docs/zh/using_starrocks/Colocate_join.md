@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Colocate Join
 
 本小节介绍如何使用 Colocate Join。

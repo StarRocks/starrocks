@@ -32,6 +32,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -211,13 +213,22 @@ public class InsertOverwriteJobRunner {
             tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
         }
         job.setTmpPartitionIds(tmpPartitionIds);
-        Database db = getAndWriteLockDatabase(dbId);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
+
         try {
             InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                     InsertOverwriteJobState.OVERWRITE_RUNNING, job.getSourcePartitionIds(), job.getTmpPartitionIds());
             GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
@@ -328,12 +339,19 @@ public class InsertOverwriteJobRunner {
 
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
-        Database db = getAndReadLockDatabase(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
         OlapTable targetTable;
         try {
             targetTable = checkAndGetTable(db, tableId);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                 job.getSourcePartitionIds(), job.getTmpPartitionIds(), null);
@@ -342,7 +360,16 @@ public class InsertOverwriteJobRunner {
 
     private void gc(boolean isReplay) {
         LOG.info("start to garbage collect");
-        Database db = getAndWriteLockDatabase(dbId);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
+
         try {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -379,12 +406,19 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     private void doCommit(boolean isReplay) {
-        Database db = getAndWriteLockDatabase(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
@@ -426,14 +460,14 @@ public class InsertOverwriteJobRunner {
                     LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
                 }
 
-                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+                targetTable.lastSchemaUpdateTime.set(System.nanoTime());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
                     job.getTargetDbId(), job.getTargetTableId(), e);
             throw new DmlException("replace partitions failed", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -441,7 +475,14 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
 
-        Database db = getAndReadLockDatabase(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new DmlException("database id:%s does not exist", dbId);
+        }
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.READ)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
             if (job.getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
@@ -464,32 +505,8 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             throw new DmlException("prepareInsert exception", e);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
-    }
-
-    // when this function return, write lock of db is acquired
-    private Database getAndWriteLockDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new DmlException("database id:%s does not exist", dbId);
-        }
-        if (!db.writeLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
-        }
-        return db;
-    }
-
-    // when this function return, read lock of db is acquired
-    private Database getAndReadLockDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new DmlException("database id:%s does not exist", dbId);
-        }
-        if (!db.readLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
-        }
-        return db;
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) {

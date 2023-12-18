@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # days_sub
 
 ## 功能

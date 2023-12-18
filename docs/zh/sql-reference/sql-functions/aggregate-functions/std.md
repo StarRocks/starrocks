@@ -1,4 +1,8 @@
-# STD
+---
+displayed_sidebar: "Chinese"
+---
+
+# std
 
 ## 功能
 

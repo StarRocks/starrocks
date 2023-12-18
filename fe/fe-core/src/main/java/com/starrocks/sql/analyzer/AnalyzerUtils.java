@@ -66,8 +66,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -189,8 +192,9 @@ public class AnalyzerUtils {
             return null;
         }
 
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
@@ -208,7 +212,7 @@ public class AnalyzerUtils {
 
             return fn;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -513,6 +517,12 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static List<Pair<Expr, Relation[]>> collectAllJoinPredicatesRelations(StatementBase statementBase) {
+        List<Pair<Expr, Relation[]>> joinPredicates = Lists.newArrayList();
+        new AnalyzerUtils.JoinPredicateRelationCollector(joinPredicates).visit(statementBase);
+        return joinPredicates;
+    }
+
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -570,7 +580,11 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            if (!node.getTable().isNativeTableOrMaterializedView()) {
+
+            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+            boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
+                    relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -600,8 +614,7 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
-            } else if (node.getTable().isMaterializedView()) {
+            } else if (node.getTable().isOlapMaterializedView()) {
                 MaterializedView table = (MaterializedView) node.getTable();
                 if (!idMap.containsKey(table.getId())) {
                     olapTables.add(table);
@@ -613,8 +626,8 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
             }
+            // TODO: support cloud native table and mv
             return null;
         }
     }
@@ -734,6 +747,30 @@ public class AnalyzerUtils {
                 return null;
             }
             allTableAndViewRelations.put(node.getName(), node);
+            return null;
+        }
+    }
+
+    private static class JoinPredicateRelationCollector extends TableCollector {
+        private final List<Pair<Expr, Relation[]>> joinPredicates;
+
+        public JoinPredicateRelationCollector(List<Pair<Expr, Relation[]>> joinPredicates) {
+            super(null);
+            this.joinPredicates = joinPredicates;
+        }
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            Relation[] relations = new Relation[2];
+            relations[0] = node.getLeft();
+            relations[1] = node.getRight();
+            joinPredicates.add(Pair.create(node.getOnPredicate(), relations));
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
             return null;
         }
     }

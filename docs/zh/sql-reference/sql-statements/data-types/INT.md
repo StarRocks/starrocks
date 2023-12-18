@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # INT
 
 ## 描述

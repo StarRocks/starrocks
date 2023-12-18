@@ -1,4 +1,8 @@
-# COVAR_SAMP
+---
+displayed_sidebar: "Chinese"
+---
+
+# covar_samp
 
 ## 功能
 

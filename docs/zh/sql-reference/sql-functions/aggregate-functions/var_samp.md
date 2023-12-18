@@ -1,5 +1,9 @@
+---
+displayed_sidebar: "Chinese"
+---
 
-# VAR_SAMP, VARIANCE_SAMP
+
+# var_samp, variance_samp
 
 ## 功能
 

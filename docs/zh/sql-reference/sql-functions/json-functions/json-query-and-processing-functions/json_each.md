@@ -1,4 +1,8 @@
-# JSON_EACH
+---
+displayed_sidebar: "Chinese"
+---
+
+# json_each
 
 ## 功能
 

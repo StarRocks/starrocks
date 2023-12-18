@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 监控报警
 
 本文介绍如何为 StarRocks 设置监控报警。
@@ -271,7 +275,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |指标|单位|类型|描述|
 |---|:---:|:---:|---|
 |be_broker_count|个|平均值|Broker的数量。|
-|be_brpc_endpoint_count|个|平均值|Brpc 中 StubCache 的数量。|
+|be_brpc_endpoint_count|个|平均值|bRPC 中 StubCache 的数量。|
 |be_bytes_read_per_second|bytes/s|平均值|BE 读取速度。|
 |be_bytes_written_per_second|bytes/s|平均值|BE 写入速度。|
 |be_base_compaction_bytes_per_second|bytes/s|平均值|BE 的基线合并速率。|
@@ -361,6 +365,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |starrocks_be_resource_group_cpu_use_ratio|百分比|平均值|该资源组 CPU 使用时间占所有资源组 CPU 时间的比率|
 |starrocks_be_resource_group_mem_limit_bytes|Byte|瞬时值|该资源组内存配额比率的瞬时值|
 |starrocks_be_resource_group_mem_allocated_bytes|Byte|瞬时值|该资源组内存使用率瞬时值|
+|starrocks_be_pipe_prepare_pool_queue_len|个|瞬时值|Pipeline 准备线程池任务队列长度的瞬时值|
 
 ## 最佳实践
 

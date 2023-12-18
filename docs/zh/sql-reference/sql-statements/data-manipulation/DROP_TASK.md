@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP TASK
 
 ## 功能
@@ -11,7 +15,7 @@
 ## 语法
 
 ```SQL
-DROP TASK '<task_name>'
+DROP TASK <task_name>
 ```
 
 ## 参数说明
@@ -22,7 +26,7 @@ DROP TASK '<task_name>'
 
 ## 使用说明
 
-您可以通过查询 Information Schema 中的元数据表 `tasks` 和 `task_runs` 来查看异步任务的信息。
+您可以通过查询 Information Schema 中的元数据视图 `tasks` 和 `task_runs` 来查看异步任务的信息。
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -44,6 +48,6 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
 +----------+-----------+
 1 row in set (1.19 sec)
 
-MySQL > DROP TASK 'ctas';
+MySQL > DROP TASK ctas;
 Query OK, 0 rows affected (0.35 sec)
 ```

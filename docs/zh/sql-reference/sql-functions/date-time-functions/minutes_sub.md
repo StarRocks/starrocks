@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # minutes_sub
 
 ## 功能

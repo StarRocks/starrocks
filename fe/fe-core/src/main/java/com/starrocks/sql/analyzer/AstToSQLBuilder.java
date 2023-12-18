@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -85,9 +86,7 @@ public class AstToSQLBuilder {
                 res += ".";
             }
 
-            res +=  fieldName.startsWith("`") ?
-                    fieldName
-                    : '`' + fieldName + '`';
+            res += '`' + fieldName + '`';
             if (!fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
@@ -135,11 +134,25 @@ public class AstToSQLBuilder {
             return "";
         }
 
+        private void visitVarHint(StringBuilder sqlBuilder, Map<String, String> hints) {
+            if (MapUtils.isNotEmpty(hints)) {
+                sqlBuilder.append("/*+SET_VAR(");
+                sqlBuilder.append(hints.entrySet().stream()
+                        .map(entry -> String.format("%s='%s'", entry.getKey(), entry.getValue()))
+                        .collect(Collectors.joining(",")));
+                sqlBuilder.append(")*/ ");
+            }
+        }
+
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // set_var
+            visitVarHint(sqlBuilder, selectList.getOptHints());
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
@@ -163,10 +176,7 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
-                        selectListString.add(
-                                expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                        visit(expr) + " AS `" + columnName.replace("`", "") + "`" :
-                                        visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
                     }
                 }
             } else {
@@ -368,6 +378,10 @@ public class AstToSQLBuilder {
         public String visitInsertStatement(InsertStmt insert, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("INSERT ");
+
+            // set_var
+            visitVarHint(sb, insert.getOptHints());
+
             if (insert.isOverwrite()) {
                 sb.append("OVERWRITE ");
             } else {
@@ -376,11 +390,25 @@ public class AstToSQLBuilder {
 
             // target
             sb.append(insert.getTableName().toSql()).append(" ");
-            // TODO: not support specify partition and columns
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
 
             // label
             if (StringUtils.isNotEmpty(insert.getLabel())) {
                 sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
+            }
+
+            // target column
+            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
             }
 
             // source

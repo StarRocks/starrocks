@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用窗口函数组织过滤数据
 
 本文介绍如何使用 StarRocks 窗口函数。
@@ -370,7 +374,7 @@ FROM test_tbl ORDER BY col_1;
 语法：
 
 ```SQL
-LAST_VALUE(expr [IGNORE NULLS])) OVER(partition_by_clause order_by_clause [window_clause])
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ```
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。

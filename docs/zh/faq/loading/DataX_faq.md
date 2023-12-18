@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DataX 导入常见问题
 
 本页列举了使用 DataX 导入数据时可能会遇到的常见问题及潜在解决方案。

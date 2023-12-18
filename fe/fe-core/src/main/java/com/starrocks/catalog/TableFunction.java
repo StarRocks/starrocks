@@ -46,14 +46,27 @@ public class TableFunction extends Function {
     private List<Type> tableFnReturnTypes;
     @SerializedName(value = "symbolName")
     private String symbolName = "";
-
     // only used for serialization
     protected TableFunction() {
     }
 
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+    }
+
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
+        this.tableFnReturnTypes = tableFnReturnTypes;
+        this.defaultColumnNames = defaultColumnNames;
+        setArgNames(argNames);
+        setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
@@ -61,7 +74,6 @@ public class TableFunction extends Function {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
-
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -82,15 +94,23 @@ public class TableFunction extends Function {
         functionSet.addBuiltin(jsonEach);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
+                    Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
+            functionSet.addBuiltin(func);
+        }
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
             // generate_series with default step size: 1
             TableFunction func = new TableFunction(new FunctionName("generate_series"),
-                                                   Lists.newArrayList("generate_series"),
-                                                   Lists.newArrayList(type, type),
-                                                   Lists.newArrayList(type));
+                    Lists.newArrayList("start", "end"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type),
+                    Lists.newArrayList(type));
             functionSet.addBuiltin(func);
 
             // generate_series with explicit step size
             func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type));

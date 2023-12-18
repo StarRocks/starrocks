@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW MATERIALIZED VIEWS
 
 ## 功能
@@ -7,6 +11,7 @@
 > **注意**
 >
 > 该命令当前仅针对异步物化视图生效。针对同步物化视图您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态。
+> 该操作不需要权限。
 
 ## 语法
 

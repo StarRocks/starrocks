@@ -159,8 +159,7 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
-        st = cache.get_libpath(fid, URL, jar_md5sum, &libpath);
-        st.permit_unchecked_error();
+        (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
     }
 }
 

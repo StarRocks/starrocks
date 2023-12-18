@@ -1,9 +1,13 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Unified catalog
 
 Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 等多个数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
 - 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据进行加工建模，并导入至 StarRocks。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
 为保证正常访问融合数据源内的数据，StarRocks 集群必须集成以下两个关键组件：
@@ -267,8 +271,8 @@ StarRocks 访问文件存储的相关参数配置。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.container" = "<blob_container_name>",
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
@@ -276,8 +280,8 @@ StarRocks 访问文件存储的相关参数配置。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
 
 ###### Azure Data Lake Storage Gen1
@@ -616,8 +620,8 @@ PROPERTIES
       "type" = "unified",
       "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -839,7 +843,7 @@ DROP CATALOG unified_catalog_glue;
 
 ## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
 
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
 例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 
@@ -937,7 +941,7 @@ PARTITION BY (id,dt);
 
 ## 向 Unified Catalog 内的表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
 
 > **说明**
 >
@@ -945,7 +949,7 @@ PARTITION BY (id,dt);
 
 注意当前仅支持向 Hive 表和 Iceberg 表中插入数据。
 
-[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 向 Hive 表或 Iceberg 表中插入数据：
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 向 Hive 表或 Iceberg 表中插入数据：
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>

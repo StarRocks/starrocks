@@ -1,4 +1,8 @@
-# CORR
+---
+displayed_sidebar: "Chinese"
+---
+
+# corr
 
 ## 功能
 

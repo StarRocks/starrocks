@@ -1,4 +1,8 @@
-# APPROX_COUNT_DISTINCT
+---
+displayed_sidebar: "Chinese"
+---
+
+# approx_count_distinct
 
 ## 功能
 

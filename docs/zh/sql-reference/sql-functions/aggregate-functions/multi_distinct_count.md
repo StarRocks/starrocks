@@ -1,3 +1,6 @@
+---
+displayed_sidebar: "Chinese"
+---
 
 # multi_distinct_count
 

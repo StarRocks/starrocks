@@ -1,8 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE DATABASE
 
 ## 功能
 
 该语句用于创建数据库 (database)。
+
+:::tip
+
+该操作需要对应 Catalog 下的 CREATE DATABASE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

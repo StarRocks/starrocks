@@ -220,7 +220,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
-            doris::PBackendService_Stub* stub =
+            PInternalService_Stub* stub =
                     ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
@@ -238,9 +238,9 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
     return st;
 }
 
-Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version,
-                                          Chunk& keys, const std::vector<std::string>& value_columns,
-                                          std::vector<bool>& found, Chunk& values, SchemaPtr& value_schema) {
+Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
+                                          const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                                          Chunk& values, SchemaPtr& value_schema) {
     PTabletReaderMultiGetRequest request;
     request.set_tablet_id(tablet_id);
     request.set_version(version);

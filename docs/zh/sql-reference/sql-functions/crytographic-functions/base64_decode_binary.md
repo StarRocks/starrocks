@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # base64_decode_binary
 
 ## 功能
