@@ -321,15 +321,11 @@
             "integrations/streaming/apache_kafka",
             "loading/automq-routine-load",
             "integrations/streaming/flink",
-            "integrations/streaming/pipes",
             {
               "type":"category",
-              "label": "StarRocks Pipes",
-              "link":{"type": "doc", "id": "integrations/streaming/pipes"},
-              "items": [
-                "loading/s3",
-                "loading/hdfs_load"
-              ]
+              "label": "StarRocks Pipe",
+              "link": {"type": "doc", "id": "integrations/streaming/pipe"},
+              "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
             }
           ]
         },
