@@ -354,7 +354,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | inc_rowset_expired_sec                                | 1800        | second | 导入生效的数据，存储引擎保留的时间，用于增量克隆。           |
 | tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。                                       |
 | snapshot_expire_time_sec                              | 172800      | second | 快照文件清理的间隔，默认 48 个小时。                         |
-| trash_file_expire_time_sec                            | 259200      | second | 回收站清理的间隔，默认 72 个小时。                           |
+| trash_file_expire_time_sec                            | 86,400      | second | 回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。                           |
 | base_compaction_check_interval_seconds                | 60          | second | BaseCompaction 线程轮询的间隔。                              |
 | min_base_compaction_num_singleton_deltas              | 5           | N/A    | 触发 BaseCompaction 的最小 segment 数。                            |
 | max_base_compaction_num_singleton_deltas              | 100         | N/A    | 单次 BaseCompaction 合并的最大 segment 数。                        |
