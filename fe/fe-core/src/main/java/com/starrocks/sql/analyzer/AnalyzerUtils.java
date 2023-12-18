@@ -389,6 +389,7 @@ public class AnalyzerUtils {
         protected Map<TableName, Table> tables;
 
         public TableCollector() {
+            this.tables = Maps.newHashMap();
         }
 
         public TableCollector(Map<TableName, Table> dbs) {
