@@ -47,6 +47,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
         return _status;
     }
     std::call_once(_load_once_flag, [&] {
+        TRACE_COUNTER_SCOPE_LATENCY_US("update_state_load_latency_us");
         _base_version = base_version;
         _builder = builder;
         _tablet_id = metadata.id();
@@ -530,6 +531,7 @@ Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, co
     if (base_version == _base_version && base_version + 1 == metadata.version()) {
         return Status::OK();
     }
+    TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     _base_version = base_version;
     // skip resolve conflict when not partial update happen.
     if (!op_write.has_txn_meta() || op_write.rowset().segments_size() == 0 ||
