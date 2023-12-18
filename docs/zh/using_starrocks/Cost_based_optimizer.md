@@ -154,7 +154,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
 | statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。默认值：20971520（20 MB）。                              |
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
-| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：秒。默认值：600000（10 分钟）。 |
+| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：毫秒。默认值：600000（10 分钟）。 |
 
 ### 手动采集 (Manual Collection)
 

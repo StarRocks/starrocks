@@ -153,7 +153,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
-| statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: seconds. Default value: 600000 (10 minutes).  |
+| statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: ms. Default value: 600000 (10 minutes).  |
 
 You can rely on automatic jobs for a majority of statistics collection, but if you have specific requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
