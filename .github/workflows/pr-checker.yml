@@ -176,14 +176,8 @@ jobs:
   behavior-check:
     runs-on: ubuntu-latest
     if: >
-<<<<<<< HEAD
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport') &&
-      !startsWith(github.event.pull_request.title, '[Doc]')
-=======
       !startsWith(github.event.pull_request.title, '[Doc]') &&
       (!startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
->>>>>>> 310515b67f ([Tool] Set body for backport pr and enable behavior checker in branch (#37139))
     steps:
       - name: Format Check
         id: check
