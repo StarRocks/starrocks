@@ -115,7 +115,7 @@ private:
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
-                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata.get());
+                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
                 RETURN_IF_ERROR(recover.pre_cleanup());
                 RETURN_IF_ERROR(recover.recover());
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
@@ -142,7 +142,7 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(_metadata, &_builder,
                                                                                        _base_version, _new_version));
         }
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
@@ -161,7 +161,7 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(_metadata, &_builder,
                                                                                        _base_version, _new_version));
         }
         if (op_compaction.input_rowsets().empty()) {
