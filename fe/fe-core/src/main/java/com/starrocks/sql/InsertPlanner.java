@@ -148,18 +148,15 @@ public class InsertPlanner {
         boolean isSchemaValid = true;
         Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = System.nanoTime();
+            long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
                 olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
             }
             ExecPlan plan = planImpl(insertStmt, session);
 
-            isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
-            boolean valid = isSchemaValid &&
-                    olapTables.stream().allMatch(t ->
-                            t.lastVersionUpdateEndTime.get() < planStartTime &&
-                                    t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
-            if (valid) {
+            isSchemaValid =
+                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
+            if (isSchemaValid) {
                 return plan;
             }
         }
