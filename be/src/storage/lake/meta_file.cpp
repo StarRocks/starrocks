@@ -146,6 +146,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
             if (!config::experimental_lake_ignore_pk_consistency_check) {
+                set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);
             }
         } else {

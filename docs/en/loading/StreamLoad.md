@@ -246,7 +246,7 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/Configuration.md#configure-be-dynamic-parameters).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/BE_configuration.md#configure-be-dynamic-parameters).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
@@ -262,7 +262,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::
 
-- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/Configuration.md#configure-fe-dynamic-parameters).
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/FE_configuration.md#configure-fe-dynamic-parameters).
   
   If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
 

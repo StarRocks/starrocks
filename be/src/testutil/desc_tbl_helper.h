@@ -61,9 +61,8 @@ public:
             generate_desc_tuple(slot_info, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
-        auto st = DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
-                                        config::vector_chunk_size);
-        st.permit_unchecked_error();
+        (void)DescriptorTbl::create(runtime_state, &obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size);
         return desc_tbl;
     }
 

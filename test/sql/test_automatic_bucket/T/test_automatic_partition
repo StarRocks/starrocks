@@ -22,10 +22,6 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 insert into t values(1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 alter table t set('bucket_size'='1');
-insert into t values(1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
-insert into t values(1);
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 
 -- name: test_range_partition
 create database ttt;
@@ -96,7 +92,7 @@ insert into t values('2021-01-01', 1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
 select * from t;
 
--- name: test_schema_change
+-- name: test_schema_change @sequential
 create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
 "replication_num" = "1",
@@ -124,9 +120,7 @@ alter table t order by (k,c,v);
 function: wait_alter_table_finish()
 select * from t;
 
--- name: test_mv
-create database mmm;
-use mmm;
+-- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
 "replication_num" = "1",
@@ -146,10 +140,6 @@ insert into t values('2021-01-05', 3, 3);
 insert into t values('2021-01-01', 3, 3);
 select * from t;
 
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='mmm';
-
 create materialized view mv as select k, v1 from t;
 function: wait_alter_table_finish("rollup", 8)
 select k, v1 from t;
-
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='mmm';

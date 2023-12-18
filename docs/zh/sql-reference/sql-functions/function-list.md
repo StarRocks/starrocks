@@ -152,10 +152,15 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [strleft](./string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](./string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](./string-functions/substring.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
+| [substring_index](./string-functions/substring_index.md) | 从给定字符串中截取第 `count` 个分隔符之前或之后的字符串。  |
+| [translate](./string-functions/translate.md) | 将给定字符串 `source` 中出现在 `from_string` 中的字符替换为对应位置的 `to_string` 中的字符。 |
 | [trim](./string-functions/trim.md) | 从字符串的左侧和右侧移除连续出现的空格或指定的字符。  |
 | [ucase](./string-functions/ucase.md) | 该函数与 upper 一致，将字符串转换为大写形式。  |
 | [unhex](./string-functions/unhex.md) | 将输入的字符串中的两个字符为一组转化为 16 进制的字符，然后拼接成字符串输出。  |
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
+| [url_decode](./string-functions/url_decode.md) | 将字符串从 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式转换回来。 |
+| [url_encode](./string-functions/url_encode.md)  | 将字符串根据 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式进行编码。  |
+| [url_extract_parameter](./string-functions/url_extract_parameter.md)   | 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。  |
 
 ## 聚合函数
 
@@ -301,8 +306,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_min](./bitmap-functions/bitmap_min.md)| 获取 Bitmap 中的最小值。|
 |  [bitmap_or](./bitmap-functions/bitmap_or.md)| 计算两个 bitmap 的并集，返回新的 bitmap。|
 |  [bitmap_remove](./bitmap-functions/bitmap_remove.md)| 从 Bitmap 中删除指定的数值。 |
-| [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
-| [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
+|  [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
+|  [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
 |  [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)| 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。|
 |  [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)| 将 bitmap 转换为 Base64 字符串。|
 |  [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)| 将 bitmap 转换为特定格式的 binary 字符串。|
@@ -313,6 +318,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)| 计算 TINYINT，SMALLINT 和 INT 类型的列中不重复值的个数。|
 |  [bitmap_xor](./bitmap-functions/bitmap_xor.md)| 计算两个 Bitmap 中不重复元素所构成的集合。|
 |  [intersect_count](./bitmap-functions/intersect_count.md)| 求 bitmap 交集大小。|
+|  [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 |  [sub_bitmap](./bitmap-functions/sub_bitmap.md)| 计算两个 bitmap 之间相同元素的个数。|
 |  [to_bitmap](./bitmap-functions/to_bitmap.md)| 将输入值转换为 bitmap。 |
 
@@ -367,6 +373,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [files](./table-functions/files.md) | 从云存储或 HDFS 读取数据文件。|
 | [generate_series](./table-functions/generate_series.md) | 生成一系列从 start 到 end 的数值，步长为 step。 |
 | [json_each](./json-functions/json-query-and-processing-functions/json_each.md) | 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。 |
+| [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 | [unnest](./array-functions/unnest.md) | 用于将一个数组展开成多行。|
 
 ## Bit 函数

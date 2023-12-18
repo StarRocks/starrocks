@@ -53,9 +53,9 @@ displayed_sidebar: "Chinese"
 
 #### 配置参数
 
-- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
-- FE 配置项 [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
-- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
+- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- FE 配置项 [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/BE_configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
 
 #### 系统变量
 

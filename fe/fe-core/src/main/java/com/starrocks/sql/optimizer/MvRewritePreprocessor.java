@@ -100,10 +100,8 @@ public class MvRewritePreprocessor {
                 Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
                 prepareRelatedMVs(queryTables, validMVs);
             } catch (Exception e) {
-                // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
-                throw e;
+                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
             }
         }
     }
@@ -139,7 +137,7 @@ public class MvRewritePreprocessor {
         logMVPrepare(connectContext, "---------------------------------");
         logMVPrepare(connectContext, "Materialized View Limit Params: ");
         logMVPrepare(connectContext, "  optimizer_materialized_view_timelimit: {}",
-                sessionVariable.getMaterializedViewJoinSameTablePermutationLimit());
+                sessionVariable.getOptimizerMaterializedViewTimeLimitMillis());
         logMVPrepare(connectContext, "  materialized_view_join_same_table_permutation_limit: {}",
                 sessionVariable.getMaterializedViewJoinSameTablePermutationLimit());
         logMVPrepare(connectContext, "  skip_whole_phase_lock_mv_limit: {}",
@@ -390,12 +388,17 @@ public class MvRewritePreprocessor {
             // then it can not be a candidate
 
             StringBuilder sb = new StringBuilder();
-            for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
-                sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+            try {
+                for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+                }
+            } catch (Exception e) {
+                // ignore exception for `getPartitions` is only supported for hive/jdbc.
             }
             logMVPrepare(connectContext, mv, "MV {} is outdated and all its partitions need to be " +
-                    "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
+                    "refreshed: {}, refreshed mv partitions: {}, base table detailed info: {}", mv.getName(),
+                    partitionNamesToRefresh, mv.getPartitionNames(), sb.toString());
             return;
         }
 
@@ -443,7 +446,7 @@ public class MvRewritePreprocessor {
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : copiedMV.getBaseSchema()) {
+        for (Column column : getMvOutputColumns(copiedMV)) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -461,6 +464,19 @@ public class MvRewritePreprocessor {
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
         logMVPrepare(connectContext, copiedMV, "Prepare MV {} success", copiedMV.getName());
+    }
+
+    public List<Column> getMvOutputColumns(MaterializedView mv) {
+        if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
+            return mv.getBaseSchema();
+        } else {
+            List<Column> schema = mv.getBaseSchema();
+            List<Column> outputColumns = Lists.newArrayList();
+            for (Integer index : mv.getQueryOutputIndices()) {
+                outputColumns.add(schema.get(index));
+            }
+            return outputColumns;
+        }
     }
 
     /**

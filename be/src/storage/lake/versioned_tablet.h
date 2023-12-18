@@ -42,10 +42,15 @@ class VersionedTablet {
     using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
 
 public:
+    // Default constructor. After construction, valid() is false
+    VersionedTablet() : _tablet_mgr(nullptr), _metadata() {}
+
     // |tablet_mgr| cannot be nullptr and must outlive this VersionedTablet.
     // |metadata| cannot be nullptr.
     explicit VersionedTablet(TabletManager* tablet_mgr, TabletMetadataPtr metadata)
             : _tablet_mgr(tablet_mgr), _metadata(std::move(metadata)) {}
+
+    bool valid() const { return _metadata != nullptr; }
 
     // Same as metadata()->id()
     int64_t id() const;

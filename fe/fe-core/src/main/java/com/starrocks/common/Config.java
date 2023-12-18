@@ -2600,6 +2600,17 @@ public class Config extends ConfigBase {
     public static boolean enable_mv_automatic_active_check = true;
 
     /**
+     * The refresh partition number when refreshing materialized view at once by default.
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
+    /**
      * Whether analyze the mv after refresh in async mode.
      */
     @ConfField(mutable = true)
@@ -2659,4 +2670,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean use_lock_manager = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
+    /**
+     * dictionary cache refresh task thread pool size
+     */
+    @ConfField(mutable = true)
+    public static int refresh_dictionary_cache_thread_num = 2;
 }

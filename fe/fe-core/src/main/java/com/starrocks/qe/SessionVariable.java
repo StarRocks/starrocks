@@ -97,11 +97,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * The mem limit of query on BE. It takes effects only when enabling pipeline engine.
-     * - If `query_mem_limit` > 0, use it to limit the memory of a query.
-     * The memory a query able to be used is just `query_mem_limit`.
-     * - Otherwise, use `exec_mem_limit` to limit the memory of a query.
-     * The memory a query able to be used is `exec_mem_limit * num_fragments * pipeline_dop`.
-     * To maintain compatibility, the default value is 0.
+     * If `query_mem_limit` > 0, use it to limit the memory of a query.
+     * Otherwise, no limitation
      */
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
@@ -285,6 +282,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
+    public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -305,6 +303,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
+
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
 
     // --------  New planner session variables end --------
 
@@ -587,6 +587,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -680,7 +682,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
 
-    // max memory used on every backend.
+    // max memory used on each fragment instance
+    // NOTE: only used for non-pipeline engine and stream_load
+    // The pipeline engine uses the query_mem_limit
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
@@ -1015,6 +1019,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
 
+    @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
+    private boolean useLowCardinalityOptimizeV2 = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -1201,6 +1208,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
     }
@@ -1269,7 +1279,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int connectorIoTasksPerScanOperator = 16;
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
-    private boolean enableConnectorAdaptiveIoTasks = true;
+    private boolean enableConnectorAdaptiveIoTasks = false;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
@@ -1496,6 +1506,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -2381,6 +2394,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableLowCardinalityOptimize;
     }
 
+    public boolean isUseLowCardinalityOptimizeV2() {
+        return useLowCardinalityOptimizeV2;
+    }
+
+    public void setUseLowCardinalityOptimizeV2(boolean useLowCardinalityOptimizeV2) {
+        this.useLowCardinalityOptimizeV2 = useLowCardinalityOptimizeV2;
+    }
+
     public boolean isEnableRewriteGroupingsetsToUnionAll() {
         return enableRewriteGroupingSetsToUnionAll;
     }
@@ -2923,14 +2944,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
-        if (queryMemLimit > 0) {
-            tResult.setQuery_mem_limit(queryMemLimit);
-        }
+        tResult.setQuery_mem_limit(queryMemLimit);
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
@@ -3020,6 +3047,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         return tResult;
     }
 

@@ -39,7 +39,6 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
-        ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -114,6 +113,7 @@ set(EXEC_FILES
         ./exprs/string_fn_concat_test.cpp
         ./exprs/string_fn_locate_test.cpp
         ./exprs/string_fn_pad_test.cpp
+        ./exprs/string_fn_regexp_replace_test.cpp
         ./exprs/string_fn_repeat_test.cpp
         ./exprs/string_fn_reverse_test.cpp
         ./exprs/string_fn_sm3_test.cpp
@@ -250,6 +250,7 @@ set(EXEC_FILES
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+        ./storage/tablet_index_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/table_schema_test.cpp
@@ -292,6 +293,7 @@ set(EXEC_FILES
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
         ./storage/meta_reader_test.cpp
+        ./storage/dictionary_cache_manager_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -403,6 +405,7 @@ endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
 if (USE_AVX2)

@@ -1,18 +1,22 @@
 ---
 displayed_sidebar: "English"
 sidebar_position: 3
-description: Query Iceberg
+description: Data Lakehouse with Apache Iceberg
+toc_max_heading_level: 2
 ---
-
-# Query Iceberg
+import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
+
+# Data Lakehouse with Apache Iceberg
 
 ## Overview
 
-- Deploy an Iceberg warehouse using Docker compose
-- Load New York City Green Taxi data for the month of May 2023 into the Iceberg warehouse
-- Configure StarRocks to access the Iceberg warehouse using an external catalog
-- Query the data with StarRocks where it sits
+- Deploy Object Storage, Apache Spark, Iceberg catalog, and StarRocks using Docker compose
+- Load New York City Green Taxi data for the month of May 2023 into the Iceberg data lake
+- Configure StarRocks to access the Iceberg catalog
+- Query the data with StarRocks where the data sits
+
+<DataLakeIntro />
 
 ## Prerequisites
 
@@ -32,7 +36,7 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 ---
 
-## Terminology
+## StarRocks terminology
 
 ### FE
 Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
@@ -44,17 +48,16 @@ Backend nodes are responsible for both data storage and executing query plans in
 
 ## The environment
 
-To run StarRocks with an Iceberg warehouse using Object Storage we need:
+There are six containers (services) used in this guide, and all are deployed with Docker compose. The services and their responsibilities are:
 
-- A frontend node (FE)
-- A backend node (BE)
-- Object Storage
-- rest
-- mc: MinIO Client
-- minio: MinIO Server
-- spark-iceberg:
-
-This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+| Service             | Responsibilities                                                    |
+|---------------------|---------------------------------------------------------------------|
+| **`starrocks-fe`**  | Metadata management, client connections, query plans and scheduling |
+| **`starrocks-be`**  | Running query plans                                                 |
+| **`rest`** | Providing the Iceberg catalog (metadata service)                             |
+| **`spark-iceberg`** | An Apache Spark environment to run PySpark in                       |
+| **`mc`**            | MinIO configuration (MinIO command line client)                     |
+| **`minio`**         | MinIO Object Storage                                                |
 
 ## Download the Docker configuration and NYC Green Taxi data
 
@@ -100,6 +103,15 @@ Check the progress of the services. It should take around 30 seconds for the FE 
 Run `docker compose ps` until the FE and BE show a status of `healthy`. The rest of the services do not have
 healthcheck configurations, but you will be interacting with them and will know whether or not they are working:
 
+:::tip
+If you have `jq` installed and prefer a shorter list from `docker compose ps` try:
+
+```bash
+docker compose ps --format json | jq '{Service: .Service, State: .State, Status: .Status}'
+```
+
+:::
+
 ```bash
 docker compose ps
 ```
@@ -139,21 +151,31 @@ This command will connect to the `spark-iceberg` service and run the command `py
 docker compose exec -it spark-iceberg pyspark
 ```
 
-```python
+```py
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 3.5.0
+      /_/
+
 Using Python version 3.9.18 (main, Nov  1 2023 11:04:44)
-Spark context Web UI available at http://3e198a12df0b:4041
-Spark context available as 'sc' (master = local[*], app id = local-1701792401103).
+Spark context Web UI available at http://6ad5cb0e6335:4041
+Spark context available as 'sc' (master = local[*], app id = local-1701967093057).
 SparkSession available as 'spark'.
+>>>
 ```
 
 ### Read the dataset into a dataframe
 
-The Green Taxi data is provided by NYC Taxi and Limousine Commission in Parquet format. Load the file from the `/opt/spark` directory and inspect the first few records by SELECTing from a temporary view. These commands should be run in the `pyspark` session. The commands:
+A dataframe is park of Spark SQL, and provides a data structure similar to a database table or a spreadsheet.
+
+The Green Taxi data is provided by NYC Taxi and Limousine Commission in Parquet format. Load the file from the `/opt/spark` directory and inspect the first few records by SELECTing the first few columns of the first three rows of data. These commands should be run in the `pyspark` session. The commands:
 
 - Read the dataset file from disk into a dataframe named `df`
 - Display the schema of the Parquet file
 
-```python
+```py
 df = spark.read.parquet("/opt/spark/green_tripdata_2023-05.parquet")
 df.printSchema()
 ```
@@ -183,7 +205,21 @@ root
 
 >>>
 ```
+Examine the first few (seven) columns of the first few (three) rows of data:
 
+```python
+df.select(df.columns[:7]).show(3)
+```
+```plaintext
++--------+--------------------+---------------------+------------------+----------+------------+------------+
+|VendorID|lpep_pickup_datetime|lpep_dropoff_datetime|store_and_fwd_flag|RatecodeID|PULocationID|DOLocationID|
++--------+--------------------+---------------------+------------------+----------+------------+------------+
+|       2| 2023-05-01 00:52:10|  2023-05-01 01:05:26|                 N|         1|         244|         213|
+|       2| 2023-05-01 00:29:49|  2023-05-01 00:50:11|                 N|         1|          33|         100|
+|       2| 2023-05-01 00:25:19|  2023-05-01 00:32:12|                 N|         1|         244|         244|
++--------+--------------------+---------------------+------------------+----------+------------+------------+
+only showing top 3 rows
+```
 ### Write to a table
 
 The table created in this step will be in the catalog that will be made available in StarRocks in the next step.
@@ -197,6 +233,8 @@ df.writeTo("demo.nyc.greentaxis").create()
 ```
 
 ## Configure StarRocks to access the Iceberg Catalog
+
+You can exit from PySpark now, or you can open a new terminal to run the SQL commands. If you do open a new terminal change your directory into the `quickstart` directory that contains the `docker-compose.yml` file before continuing.
 
 ### Connect to StarRocks with a SQL client
 
@@ -249,10 +287,17 @@ PROPERTIES
 
 #### PROPERTIES
 
-- type: In this example the type is `iceberg`. Other options include Hive, Hudi, Delta Lake, and JDBC.
-- iceberg.catalog.type: In this example `rest` is used. Tabular provides the Docker image used and Tabular uses rest.
-- iceberg.catalog.uri: The rest server endpoint.
-- iceberg.catalog.warehouse: 
+|    Property                      |     Description                                                                               |
+|:---------------------------------|:----------------------------------------------------------------------------------------------|
+|`type`                            | In this example the type is `iceberg`. Other options include Hive, Hudi, Delta Lake, and JDBC.|
+|`iceberg.catalog.type`            | In this example `rest` is used. Tabular provides the Docker image used and Tabular uses REST.|
+|`iceberg.catalog.uri`             | The REST server endpoint.|
+|`iceberg.catalog.warehouse`       | The identifier of the Iceberg catalog. In this case the warehouse name specified in the compose file is `warehouse`. |
+|`aws.s3.access_key`               | The MinIO key. In this case the key and password are set in the compose file to `admin` |
+|`aws.s3.secret_key`               | and `password`. |
+|`aws.s3.endpoint`                 | The MinIO endpoint. |
+|`aws.s3.enable_path_style_access` | When using MinIO for Object Storage this is required. MinIO expects this format `http://host:port/<bucket_name>/<key_name>` |
+|`client.factory`                  | By setting this property to use `iceberg.IcebergAwsClientFactory` the `aws.s3.access_key` and `aws.s3.secret_key` parameters are used for authentication. |
 
 ```sql
 SHOW CATALOGS;
@@ -318,6 +363,10 @@ SHOW TABLES;
 DESCRIBE greentaxis;
 ```
 
+:::tip
+Compare the schema that StarRocks uses with the output of `df.printSchema()` from the earlier PySpark session. The Spark `timestamp_ntz` datatypes are represented as StarRocks `DATETIME` etc.
+:::
+
 ```plaintext
 +-----------------------+------------------+------+-------+---------+-------+
 | Field                 | Type             | Null | Key   | Default | Extra |
@@ -347,10 +396,10 @@ DESCRIBE greentaxis;
 ```
 
 :::tip
-Some of the SQL in this document, and many other documents in the StarRocks documentation, and with `\G` instead
+Some of the SQL queries in the StarRocks documentation end with `\G` instead
 of a semicolon. The `\G` causes the mysql CLI to render the query results vertically.
 
-Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;`.
+Many SQL clients do not interpret vertical formatting output, so you should replace `\G` with `;` if you are not using the mysql CLI.
 :::
 
 ## Query with StarRocks
@@ -426,32 +475,21 @@ ORDER BY trips DESC;
 
 ---
 
-```plaintext
-*************************** 1. row ***************************
-     Name: shared
-     Type: S3
-IsDefault: true
-# highlight-start
- Location: s3://starrocks/shared/
-   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"http://minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
-# highlight-end
-  Enabled: true
-  Comment:
-1 row in set (0.03 sec)
-```
----
-
 ## Summary
+
+This tutorial exposed you to the use of a StarRocks external catalog to show you that you can query your data where it sits using the Iceberg REST catalog. Many other integrations are available using Hive, Hudi, Delta Lake, and JDBC catalogs.
 
 In this tutorial you:
 
-- Deployed StarRocks and Iceberg in Docker
-- Configured a StarRocks external catalog to provide access to the Iceberg warehouse
-- Loaded taxi data provided by New York City into the Iceberg warehouse
-- Queried the data with SQL in StarRocks without copying the data from the warehouse
+- Deployed StarRocks and an Iceberg/PySpark/MinIO environment in Docker
+- Configured a StarRocks external catalog to provide access to the Iceberg catalog
+- Loaded taxi data provided by New York City into the Iceberg data lake
+- Queried the data with SQL in StarRocks without copying the data from the data lake
 
 ## More information
 
-[Apache Iceberg documentation](https://iceberg.apache.org/docs/latest/) and [Quickstart](https://iceberg.apache.org/spark-quickstart/)
+[StarRocks Catalogs](../data_source/catalog/catalog_overview.md)
+
+[Apache Iceberg documentation](https://iceberg.apache.org/docs/latest/) and [Quickstart (includes PySpark)](https://iceberg.apache.org/spark-quickstart/)
 
 The [Green Taxi Trip Records](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).

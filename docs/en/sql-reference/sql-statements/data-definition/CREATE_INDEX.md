@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to create indexes.
 
-Syntax:
+:::tip
+
+This operation requires the ALTER privilege on the target table. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
 CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'balabala']
