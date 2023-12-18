@@ -100,6 +100,7 @@ set(EXPR_FILES
   dict_query_expr.cpp
   runtime_filter_layout.cpp
   dictionary_get_expr.cpp
+  ngram.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
