@@ -4,14 +4,31 @@ displayed_sidebar: "Chinese"
 
 # RESUME ROUTINE LOAD
 
+import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
+
 ## 功能
 
-恢复已暂停 routine load 导入任务，通过 [PASUE](../data-manipulation/PAUSE_ROUTINE_LOAD.md) 命令可以暂停导入的任务，并进行 routine load 任务属性的修改，详细操作请参考 [ALTER ROUTINE LOAD](./ALTER_ROUTINE_LOAD.md)。
+恢复 Routine Load 导入作业。导入作业会先短暂地进入 **NEED_SCHEDULE** 状态，表示正在重新调度导入作业，一段时间后会恢复至 **RUNNING** 状态，继续消费数据源的消息并且导入数据。您可以执行 [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) 语句查看已恢复的导入作业。
+
+<RoutineLoadPrivNote />
+
+## 语法
+
+```SQL
+RESUME ROUTINE LOAD FOR [db_name.]<job_name>
+```
+
+## 参数说明
+
+| 参数名称 | 是否必填 | 说明                        |
+| -------- | -------- | --------------------------- |
+| db_name  |          | Routine Load 导入作业所属数据库名称。         |
+| job_name | ✅        | Routine Load 导入作业名称。 |
 
 ## 示例
 
-1. 恢复名称为 test1 的例行导入作业。
+恢复 `example_db` 数据库中名称为 `example_tbl1_ordertest1` 的 Routine Load 导入作业。
 
-```sql
-    RESUME ROUTINE LOAD FOR test1;
+```SQL
+RESUME ROUTINE LOAD FOR example_db.example_tbl1_ordertest1;
 ```
