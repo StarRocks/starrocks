@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -1967,7 +1968,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " group by a, b, dt;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "UNION");
-            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+            UtFrameUtils.matchPlanWithoutId(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 9: dt = '2023-08-01'\n" +
