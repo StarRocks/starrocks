@@ -267,6 +267,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testURLFnTransform() throws Exception {
+        String sql = "select url_extract_path('https://www.starrocks.io/showcase?query=1')";
+        assertPlanContains(sql, "parse_url('https://www.starrocks.io/showcase?query=1', 'PATH')");
+    }
+
+    @Test
     public void testJsonFnTransform() throws Exception {
         String sql = "select json_array_length('[1, 2, 3]')";
         assertPlanContains(sql, "json_length(CAST('[1, 2, 3]' AS JSON))");
