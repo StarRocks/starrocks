@@ -17,6 +17,8 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -819,6 +821,15 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         _compaction_cache.release(compaction_entry);
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
+}
+
+void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        index.set_enable_persistent_index(enable_persistent_index);
+        _index_cache.release(index_entry);
+    }
 }
 
 } // namespace starrocks::lake
