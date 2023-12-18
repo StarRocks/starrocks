@@ -69,12 +69,13 @@ public class TaskBuilder {
         if (ctx == null) {
             return "";
         }
-        String stmt;
         String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        String stmt;
+        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
         if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
         } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
+            stmt = "ANALYZE TABLE " + tableName + async;
         } else {
             stmt = "";
         }

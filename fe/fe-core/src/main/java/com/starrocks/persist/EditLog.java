@@ -109,6 +109,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -600,6 +601,12 @@ public class EditLog {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
+                    break;
+                }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
@@ -1110,7 +1117,7 @@ public class EditLog {
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                                 GlobalStateMgr.getCurrentState().isLeader(),
+                        GlobalStateMgr.getCurrentState().isLeader(),
                 "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
