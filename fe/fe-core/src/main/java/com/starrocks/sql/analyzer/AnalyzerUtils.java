@@ -620,34 +620,27 @@ public class AnalyzerUtils {
             return null;
         }
 
+        // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
-            if (originalTable.isOlapTable()) {
-                OlapTable table = (OlapTable) originalTable;
-                if (!idMap.containsKey(table.getId())) {
-                    olapTables.add(table);
-                    idMap.put(table.getId(), table);
-                    // Only copy the necessary olap table meta to avoid the lock when plan query
-                    OlapTable copied = new OlapTable();
-                    table.copyOnlyForQuery(copied);
-                    return copied;
-                } else {
-                    return idMap.get(table.getId());
-                }
-            } else if (originalTable.isOlapMaterializedView()) {
-                MaterializedView table = (MaterializedView) originalTable;
-                if (!idMap.containsKey(table.getId())) {
-                    olapTables.add(table);
-                    idMap.put(table.getId(), table);
-                    // Only copy the necessary olap table meta to avoid the lock when plan query
-                    MaterializedView copied = new MaterializedView();
-                    table.copyOnlyForQuery(copied);
-                    return copied;
-                } else {
-                    return idMap.get(table.getId());
-                }
+            OlapTable table = (OlapTable) originalTable;
+            OlapTable existed = idMap.get(table.getId());
+            if (existed != null) {
+                return existed;
             }
-            // TODO: support cloud native table and mv
-            return null;
+
+            OlapTable copied = null;
+            if (originalTable.isOlapTable()) {
+                copied = new OlapTable();
+            } else if (originalTable.isOlapMaterializedView()) {
+                copied = new MaterializedView();
+            } else {
+                return null;
+            }
+
+            olapTables.add(table);
+            idMap.put(table.getId(), table);
+            table.copyOnlyForQuery(copied);
+            return copied;
         }
     }
 
