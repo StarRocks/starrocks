@@ -785,42 +785,27 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
     PProcessDictionaryCacheRequestType request_type = request->type();
     switch (request_type) {
     case PProcessDictionaryCacheRequestType::BEGIN: {
-        if (!request->has_txn_id() || !request->has_dict_id()) {
-            std::stringstream ss;
-            ss << "Incomplete request information for refresh dictionary cache begin";
-            LOG(WARNING) << ss.str();
-            Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
-            break;
-        }
-
-        int64_t dict_id = request->dict_id();
-        int64_t txn_id = request->txn_id();
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
             break;
         }
-
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }
     case PProcessDictionaryCacheRequestType::REFRESH: {
-        StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
         break;
     }
     case PProcessDictionaryCacheRequestType::COMMIT: {
-        if (!request->has_txn_id() || !request->has_dict_id()) {
-            std::stringstream ss;
-            ss << "Incomplete request information for refresh dictionary cache commit";
-            LOG(WARNING) << ss.str();
-            Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
-            break;
-        }
-
-        int64_t dict_id = request->dict_id();
-        int64_t txn_id = request->txn_id();
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());

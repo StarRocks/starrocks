@@ -174,9 +174,9 @@ public:
         request.set_key_size(1);
         request.set_type(PProcessDictionaryCacheRequestType::REFRESH);
 
-        ASSERT_TRUE(dictionary_cache_manager->begin(dict, txn_id).ok());
+        ASSERT_TRUE(dictionary_cache_manager->begin(&request).ok());
         ASSERT_TRUE(dictionary_cache_manager->refresh(&request).ok());
-        ASSERT_TRUE(dictionary_cache_manager->commit(dict, txn_id).ok());
+        ASSERT_TRUE(dictionary_cache_manager->commit(&request).ok());
 
         request.release_chunk();
         request.release_schema();

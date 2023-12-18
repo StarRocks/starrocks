@@ -18,7 +18,9 @@
 
 namespace starrocks {
 
-Status DictionaryCacheManager::begin(DictionaryId dict_id, DictionaryCacheTxnId txn_id) {
+Status DictionaryCacheManager::begin(const PProcessDictionaryCacheRequest* request) {
+    auto dict_id = request->dict_id();
+    auto txn_id = request->txn_id();
     std::unique_lock wlock(_refresh_lock);
     if (LIKELY(_mutable_dict_caches.find(dict_id) == _mutable_dict_caches.end())) {
         _mutable_dict_caches[dict_id] = std::make_shared<OrderedMutableDictionaryCache>();
@@ -203,7 +205,9 @@ Status DictionaryCacheManager::_refresh_encoded_chunk(DictionaryId dict_id, Dict
     return Status::OK();
 }
 
-Status DictionaryCacheManager::commit(DictionaryId dict_id, DictionaryCacheTxnId txn_id) {
+Status DictionaryCacheManager::commit(const PProcessDictionaryCacheRequest* request) {
+    auto dict_id = request->dict_id();
+    auto txn_id = request->txn_id();
     std::unique_lock wlock1(_lock);
     std::unique_lock wlock2(_refresh_lock);
 
