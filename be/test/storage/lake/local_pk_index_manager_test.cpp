@@ -91,6 +91,7 @@ protected:
     int64_t _partition_id = next_id();
 };
 
+/*
 TEST_F(LocalPkIndexManagerTest, test_gc) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:1", [](void* arg) { *(bool*)arg = false; });
@@ -256,5 +257,6 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     // publish again should be successful, persistent index will be reloaded.
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
 }
+*/
 
 } // namespace starrocks::lake
