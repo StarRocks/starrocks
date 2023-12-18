@@ -110,7 +110,7 @@ class DecodeContext {
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = createNewDictColumn(stringRef);
             stringRefToDictRefMap.put(stringRef, dictRef);
-            ScalarOperator defineExpr = new DictMappingOperator(dictRef, stringRef.clone(), stringRef.getType());
+            ScalarOperator defineExpr = new DictMappingOperator(dictRef, stringRef.clone(), dictRef.getType());
             stringExprToDictExprMap.put(stringRef, defineExpr);
         }
 

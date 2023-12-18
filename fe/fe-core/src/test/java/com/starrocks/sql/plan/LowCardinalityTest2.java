@@ -16,10 +16,13 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -2039,4 +2042,5 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setNewPlanerAggStage(0);
         }
     }
+
 }
