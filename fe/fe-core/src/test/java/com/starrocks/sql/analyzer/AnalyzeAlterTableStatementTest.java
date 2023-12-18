@@ -21,10 +21,15 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -65,6 +70,22 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testNoClause() {
         List<AlterClause> ops = Lists.newArrayList();
+        AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+        AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCompactionClause()  {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        List<AlterClause> ops = Lists.newArrayList();
+        NodePosition pos = new NodePosition(1, 23, 1, 48);
+        ops.add(new CompactionClause(true, pos));
         AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
         AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
     }
