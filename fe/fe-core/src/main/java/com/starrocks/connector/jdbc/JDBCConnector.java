@@ -15,7 +15,9 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -30,6 +32,8 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class JDBCConnector implements Connector {
 
@@ -39,6 +43,10 @@ public class JDBCConnector implements Connector {
     private final String catalogName;
 
     private ConnectorMetadata metadata;
+
+    private final boolean enableJDBCMetadataCache;
+
+    private ExecutorService refreshJDBCMetadataExecutor;
 
     public JDBCConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -54,6 +62,9 @@ public class JDBCConnector implements Connector {
         if (this.properties.get(JDBCResource.CHECK_SUM) == null) {
             computeDriverChecksum();
         }
+
+        this.enableJDBCMetadataCache =
+                Boolean.parseBoolean(properties.getOrDefault("enable_jdbc_metadata_cache", "true"));
     }
 
     private void validate(String propertyKey) {
@@ -95,12 +106,39 @@ public class JDBCConnector implements Connector {
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
-                metadata = new JDBCMetadata(properties, catalogName);
+                JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, catalogName);
+                if (enableJDBCMetadataCache) {
+                    long cacheTtlSec = Long.parseLong(properties.getOrDefault("jdbc_metadata_cache_ttl_sec",
+                            String.valueOf(Config.jdbc_metadata_cache_ttl_s)));
+                    long cacheRefreshIntervalSec =
+                            Long.parseLong(properties.getOrDefault("jdbc_metadata_cache_refresh_interval_sec",
+                                    String.valueOf(Config.jdbc_metadata_cache_refresh_interval_s)));
+                    long cacheMaxNum = Long.parseLong(properties.getOrDefault("jdbc_metadata_cache_max_num",
+                            String.valueOf(Config.jdbc_metadata_cache_max_num)));
+
+                    refreshJDBCMetadataExecutor = Executors.newCachedThreadPool(
+                            new ThreadFactoryBuilder().setNameFormat("jdbc-metadata-refresh-%d").build());
+                    // Note: JDBCMetadata is thread-safe now, but we need to ensure it remain thread-safe in the future
+                    metadata = new CachingJDBCMetadata(jdbcMetadata,
+                            refreshJDBCMetadataExecutor,
+                            cacheTtlSec,
+                            cacheRefreshIntervalSec,
+                            cacheMaxNum);
+                } else {
+                    metadata = jdbcMetadata;
+                }
             } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
                 throw e;
             }
         }
         return metadata;
+    }
+
+    @Override
+    public void shutdown() {
+        if (refreshJDBCMetadataExecutor != null) {
+            refreshJDBCMetadataExecutor.shutdown();
+        }
     }
 }

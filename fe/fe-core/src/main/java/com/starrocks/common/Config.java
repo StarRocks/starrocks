@@ -2008,6 +2008,24 @@ public class Config extends ConfigBase {
     public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
+     * The interval of lazy refreshing JDBC metadata cache
+     */
+    @ConfField
+    public static long jdbc_metadata_cache_refresh_interval_s = 600L;
+
+    /**
+     * JDBC metadata cache ttl
+     */
+    @ConfField
+    public static long jdbc_metadata_cache_ttl_s = 3600L * 24L;
+
+    /**
+     * JDBC metadata cache max num
+     */
+    @ConfField
+    public static long jdbc_metadata_cache_max_num = 1_000_000L;
+
+    /**
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)

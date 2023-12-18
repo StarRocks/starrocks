@@ -18,6 +18,7 @@ package com.starrocks.connector.jdbc;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorMetadata;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -42,5 +43,29 @@ public class JDBCConnectorTest {
             System.out.println(e.getMessage());
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testEnableCachingMetadata() {
+        FeConstants.runningUnitTest = true;
+        Map<String, String> properties = new HashMap<>();
+        properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        properties.put(JDBCResource.USER, "root");
+        properties.put(JDBCResource.PASSWORD, "123456");
+        properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+        ConnectorContext context = new ConnectorContext("jdbcmysql", "jdbc", properties);
+        JDBCConnector connector = new JDBCConnector(context);
+        ConnectorMetadata metadata = connector.getMetadata();
+        Assert.assertTrue("Should use CachingJDBCMetadata by default",
+                metadata instanceof CachingJDBCMetadata);
+
+        properties.put("enable_jdbc_metadata_cache", "false");
+        context = new ConnectorContext("jdbcmysql", "jdbc", properties);
+        connector = new JDBCConnector(context);
+        metadata = connector.getMetadata();
+        Assert.assertTrue("Should use JDBCMetadata when enable_jdbc_metadata_cache=false",
+                metadata instanceof JDBCMetadata);
     }
 }

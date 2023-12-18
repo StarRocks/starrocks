@@ -158,7 +158,7 @@ public class JDBCMetadataTest {
     @Test
     public void testListTableNames() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            ConnectorMetadata jdbcMetadata = factory.create(properties, "catalog");
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -215,7 +215,7 @@ public class JDBCMetadataTest {
 
     @Test
     public void testColumnTypes() {
-        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        ConnectorMetadata jdbcMetadata = factory.create(properties, "catalog");
         Table table = jdbcMetadata.getTable("test", "tbl1");
         List<Column> columns = table.getColumns();
         Assert.assertEquals(columns.size(), columnResult.getRowCount());
@@ -238,7 +238,7 @@ public class JDBCMetadataTest {
         // user/password are optional fields for jdbc.
         properties.put(JDBCResource.USER, "");
         properties.put(JDBCResource.PASSWORD, "");
-        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        ConnectorMetadata jdbcMetadata = factory.create(properties, "catalog");
         Table table = jdbcMetadata.getTable("test", "tbl1");
         Assert.assertNotNull(table);
     }
@@ -246,7 +246,7 @@ public class JDBCMetadataTest {
     @Test
     public void testCacheTableId() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            ConnectorMetadata jdbcMetadata = factory.create(properties, "catalog");
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table1.getId() == 100000);
         } catch (Exception e) {
@@ -255,4 +255,19 @@ public class JDBCMetadataTest {
         }
     }
 
+    interface JDBCMetadataFactory {
+        ConnectorMetadata create(Map<String, String> properties, String catalogName);
+    }
+
+    @Parameterized.Parameters
+    public static Collection<Object[]> getParameters() {
+        JDBCMetadataFactory jdbcMetadataFactory = JDBCMetadata::new;
+
+        JDBCMetadataFactory cachingJDBCMetadataFactory = (properties, catalogName) -> {
+            ConnectorContext context = new ConnectorContext(catalogName, "jdbc", properties);
+            return new JDBCConnector(context).getMetadata();
+        };
+
+        return Arrays.asList(new Object[] {jdbcMetadataFactory}, new Object[] {cachingJDBCMetadataFactory});
+    }
 }
