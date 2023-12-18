@@ -62,7 +62,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -2130,14 +2129,22 @@ public class MaterializedViewRewriter {
                 .build();
         OptExpression result = OptExpression.create(unionOperator, newQueryInput, viewInput);
 
+        // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            LogicalFilterOperator filter =
-                    new LogicalFilterOperator(rewriteContext.getUnionRewriteQueryExtraPredicate());
-            result = OptExpression.create(filter, result);
+            addUnionAllExtraPredicate(result.getOp(), rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
 
         deriveLogicalProperty(result);
         return result;
+    }
+
+    protected void addUnionAllExtraPredicate(Operator unionOp,
+                                             ScalarOperator extraPredicate) {
+        Preconditions.checkState(unionOp.getProjection() != null);
+        ScalarOperator origPredicate = unionOp.getPredicate();
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(unionOp.getProjection().getColumnRefMap());
+        ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
+        unionOp.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
     }
 
     protected EquationRewriter buildEquationRewriter(

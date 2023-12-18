@@ -399,11 +399,16 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         List<Pair<String, String>> sqls = List.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
-                                        "7:SELECT\n" +
-                                                "  |  predicates: 2: k2 LIKE 'a%'"),
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 10: k2 LIKE 'a%'"),
+                                // TODO: remove redundant predicates
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
-                                        "7:SELECT\n" +
-                                                "  |  predicates: 2: k2 LIKE 'a%'")
+                                        "TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3")
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
@@ -420,14 +425,20 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         List<Pair<String, String>> sqls = List.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "7:SELECT\n" +
-                                                "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'"),
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, (9: k1 >= 3) OR (9: k1 IS NULL), 10: k2 LIKE 'a%'"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "7:SELECT\n" +
-                                                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1"),
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
-                                        "7:SELECT\n" +
-                                                "  |  predicates: 1: k1 > 0, 2: k2 LIKE 'a%'")
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
                                 );
                         QueryDebugOptions debugOptions = new QueryDebugOptions();
                         debugOptions.setEnableMVEagerUnionAllRewrite(true);
