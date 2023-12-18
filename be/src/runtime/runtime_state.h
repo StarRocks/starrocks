@@ -395,11 +395,8 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-<<<<<<< HEAD
     bool enable_query_statistic() const;
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
-=======
->>>>>>> cd07b2df79 ([Refactor] reduce sending audit stats in exchange (#37083))
+
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     Status reset_epoch();
