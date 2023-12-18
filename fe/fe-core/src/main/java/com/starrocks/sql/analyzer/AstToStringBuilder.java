@@ -68,7 +68,7 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
@@ -1204,7 +1204,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitDictionaryExpr(DictionaryExpr node, Void context) {
+        public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
             return "DICTIONARY_GET";
         }
 

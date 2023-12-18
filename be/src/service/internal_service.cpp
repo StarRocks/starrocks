@@ -805,6 +805,7 @@ void PInternalServiceImplBase<T>::refresh_dictionary_cache_begin(google::protobu
     if (!st.ok()) {
         LOG(WARNING) << st.message();
         Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+        return;
     }
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -830,6 +831,7 @@ void PInternalServiceImplBase<T>::refresh_dictionary_cache_commit(google::protob
     if (!st.ok()) {
         LOG(WARNING) << st.message();
         Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+        return;
     }
     Status::OK().to_protobuf(response->mutable_status());
 }

@@ -174,6 +174,8 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
 
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
         if (!res.ok()) {
+            request.release_chunk();
+            request.release_schema();
             LOG(WARNING) << "create brpc stub failed, " << res.status().message();
             return res.status();
         }

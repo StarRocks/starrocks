@@ -126,10 +126,10 @@ Status DictionaryCacheManager::refresh(const PRefreshDictionaryCacheRequest* req
                             dictionary_id, txn_id));
     }
 
-    // release after get the encoded column
-    key_chunk->reset();
-    value_chunk->reset();
-    chunk->reset();
+    // release memory after get the encoded column
+    key_chunk.reset();
+    value_chunk.reset();
+    chunk.reset();
 
     // 4. refresh
     return _refresh_encoded_chunk(dictionary_id, txn_id, encoded_key_column.get(), encoded_value_column.get(),
