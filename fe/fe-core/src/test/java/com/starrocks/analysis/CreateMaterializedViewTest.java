@@ -366,7 +366,7 @@ public class CreateMaterializedViewTest {
                 "partition by date_trunc('month',k1)\n" +
                 "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
-                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "') EVERY(INTERVAL 3 minute)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
@@ -593,7 +593,7 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view mv1\n" +
                 "partition by s1\n" +
                 "distributed by hash(s2) buckets 10\n" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 minute)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
@@ -660,7 +660,7 @@ public class CreateMaterializedViewTest {
         };
         String sql = "create materialized view mv1 " +
                 "distributed by hash(k2) buckets 10 " +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 minute) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -697,7 +697,7 @@ public class CreateMaterializedViewTest {
             MaterializedView.AsyncRefreshContext asyncRefreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
             Assert.assertTrue(asyncRefreshContext.getStartTime() > 0);
-            Assert.assertEquals("SECOND", asyncRefreshContext.getTimeUnit());
+            Assert.assertEquals("MINUTE", asyncRefreshContext.getTimeUnit());
             Assert.assertEquals(3, asyncRefreshContext.getStep());
             Assert.assertTrue(materializedView.isActive());
         } catch (Exception e) {
@@ -716,7 +716,7 @@ public class CreateMaterializedViewTest {
         };
         String sql = "create materialized view mv1 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 minute) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -3154,7 +3154,7 @@ public class CreateMaterializedViewTest {
                 "partition by date_trunc('month',k1)\n" +
                 "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
-                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "') EVERY(INTERVAL 3 minute)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"," +
                 "\"mv_rewrite_staleness_second\" = \"60\"\n" +
