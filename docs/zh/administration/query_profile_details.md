@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Query Profile 结构与详细指标
 
 ## Query Profile 的结构
@@ -928,7 +932,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### NetworkTime
 
-描述：数据包传输时间（不包括接收后处理时间）。请参阅下方 FAQ，了解有关指标计算以及潜在异常的更多信息。
+描述：数据包传输时间（不包括接收后处理时间）。
 
 ##### NetworkBandwidth
 
