@@ -330,7 +330,7 @@ public class TransactionState implements Writable {
         if (this.tabletCommitInfos == null) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
-            LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
+            LOG.debug("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
                     tabletId, backend != null ? backend.toString() : "", transactionId);
             return true;
         }
