@@ -50,10 +50,6 @@
 
 namespace llvm {
 class Module;
-//class ConstantFolder;
-//class IRBuilderDefaultInserter;
-//template <typename FolderTy = ConstantFolder, typename InserterTy = IRBuilderDefaultInserter>
-//class IRBuilder;
 
 } // namespace llvm
 
@@ -74,7 +70,7 @@ class ColumnPredicateRewriter;
 class JITExpr;
 struct LLVMDatum;
 
-        // This is the superclass of all expr evaluation nodes.
+// This is the superclass of all expr evaluation nodes.
 class Expr {
 public:
     // Empty virtual destructor

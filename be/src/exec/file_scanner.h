@@ -17,8 +17,8 @@
 #include "common/statusor.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/types.pb.h"
-#include "util/runtime_profile.h"
 #include "runtime/runtime_state.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class ExprContext;

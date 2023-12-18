@@ -14,7 +14,6 @@
 
 #pragma once
 
-
 namespace starrocks {
 class Expr;
 class TExprNode;
