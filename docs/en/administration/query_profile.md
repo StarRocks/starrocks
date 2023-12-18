@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+unlisted: true
 ---
 
 # Analyze query profile
