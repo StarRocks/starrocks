@@ -79,7 +79,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
             spill::AcquireBlockOptions opts{.query_id = state->query_id(),
                                             .plan_node_id = options().plan_node_id,
                                             .name = options().name,
-                                            .direct_io = state->enable_spill_direct_io()};
+                                            .direct_io = state->spill_enable_direct_io()};
             ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
             COUNTER_UPDATE(_spiller->metrics().block_count, 1);
             yield_ctx.task_context_data = FlushContext{block};
@@ -407,7 +407,7 @@ Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledParti
         opts.query_id = _runtime_state->query_id();
         opts.plan_node_id = options().plan_node_id;
         opts.name = options().name;
-        opts.direct_io = _runtime_state->enable_spill_direct_io();
+        opts.direct_io = _runtime_state->spill_enable_direct_io();
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
         std::lock_guard<std::mutex> l(_mutex);
         partition->spill_writer->block_group().append(block);
