@@ -442,6 +442,10 @@ public class StmtExecutor {
 
             processVarHint(sessionVariableBackup);
 
+            // set warehouse for auditLog
+            context.getAuditEventBuilder().setWarehouse(context.getCurrentWarehouseName());
+            LOG.debug("set warehouse {} for stmt: {}", context.getCurrentWarehouseName(), parsedStmt);
+
             if (parsedStmt.isExplain()) {
                 context.setExplainLevel(parsedStmt.getExplainLevel());
             }
