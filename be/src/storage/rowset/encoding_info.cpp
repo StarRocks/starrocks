@@ -228,7 +228,7 @@ private:
 };
 
 // We have adjusted the default encoding for some scalar types to dictionary encoding.
-// As TYPE_DATE_V1/TYPE_DATETIME_V1/TYPE_DECIMAL are legacy types, no changes are made here.
+// As TYPE_DATE_V1/TYPE_DATETIME_V1 are legacy types, no changes are made here.
 EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
     _add_map<TYPE_TINYINT, FOR_ENCODING, true>();
@@ -310,6 +310,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DOUBLE, DICT_ENCODING>();
     _add_map<TYPE_DATE, DICT_ENCODING>();
     _add_map<TYPE_DATETIME, DICT_ENCODING>();
+    _add_map<TYPE_DECIMAL, DICT_ENCODING>();
     _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
 }
 

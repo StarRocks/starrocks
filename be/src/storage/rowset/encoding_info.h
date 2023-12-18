@@ -70,6 +70,7 @@ inline bool number_types_supports_dict_encoding(LogicalType type) {
         case TYPE_DOUBLE:
         case TYPE_DATE:
         case TYPE_DATETIME:
+        case TYPE_DECIMAL:
         case TYPE_DECIMALV2:
             return true;
         default:
