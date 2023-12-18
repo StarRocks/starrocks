@@ -50,7 +50,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -133,15 +132,7 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) stmt;
-                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect &&
-                        !session.getSessionVariable().isCboUseDBLock();
-                if (useOptimisticLock) {
-                    unLock(locker, dbs);
-                    needWholePhaseLock = false;
-                }
-                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return new InsertPlanner().plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -232,8 +223,7 @@ public class StatementPlanner {
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                reAnalyzeStmt(queryStmt, dbs, session);
-                colNames = query.getColumnOutputNames();
+                colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
@@ -274,19 +264,16 @@ public class StatementPlanner {
                 long buildFragmentStartTime = OptimisticVersion.generate();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
-                        resultSinkType,
-                        !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
-
-                isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
-                        t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
-                                t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
+                        resultSinkType, !session.getSessionVariable().isSingleNodeExecPlan());
+                isSchemaValid = olapTables.stream().allMatch(t ->
+                        OptimisticVersion.validateSchemaUpdate(t, planStartTime) &&
+                                OptimisticVersion.validateDataUpdate(t, buildFragmentStartTime));
                 if (isSchemaValid) {
                     return plan;
                 }
 
                 // if exists table is applying visible log, we wait 10 ms to retry
-                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
+                if (olapTables.stream().anyMatch(OptimisticVersion::isVersionPublish)) {
                     try (Timer timer = Tracers.watchScope("PlanRetrySleepTime")) {
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
@@ -301,7 +288,7 @@ public class StatementPlanner {
         return null;
     }
 
-    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
+    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
         Locker locker = new Locker();
         try {
@@ -314,17 +301,16 @@ public class StatementPlanner {
         }
     }
 
-    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
-                                               ConnectContext session) {
+    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs,
+                                             ConnectContext session) {
         Locker locker = new Locker();
         try {
             lock(locker, dbs);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
-            Set<OlapTable> copiedTables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
-            return copiedTables;
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
+            return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(locker, dbs);
         }
@@ -445,6 +431,7 @@ public class StatementPlanner {
                     tbl.getSourceTableHost(),
                     tbl.getSourceTablePort(),
                     authenticateParams);
+
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn

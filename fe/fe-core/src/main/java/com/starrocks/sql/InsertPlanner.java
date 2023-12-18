@@ -124,47 +124,10 @@ public class InsertPlanner {
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
-    private Map<String, Database> dbs;
-    private boolean useOptimisticLock;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
-    public InsertPlanner() {
-        this.useOptimisticLock = false;
-    }
-
-    public InsertPlanner(Map<String, Database> dbs, boolean optimisticLock) {
-        this.dbs = dbs;
-        this.useOptimisticLock = optimisticLock;
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
-        // Pessimistic path
-        if (!useOptimisticLock) {
-            return planImpl(insertStmt, session);
-        }
-
-        // Optimistic Lock Optimization
-        boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
-        for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = OptimisticVersion.generate();
-            if (!isSchemaValid) {
-                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
-            }
-            ExecPlan plan = planImpl(insertStmt, session);
-
-            isSchemaValid =
-                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
-            if (isSchemaValid) {
-                return plan;
-            }
-        }
-        throw new SemanticException("got concurrent metadata modification during query planning, " +
-                "please retry this query");
-    }
-
-    private ExecPlan planImpl(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -730,6 +693,7 @@ public class InsertPlanner {
                 return new PhysicalPropertySet(sortProperty);
             }
         }
+
 
         if (targetTable instanceof TableFunctionTable) {
             TableFunctionTable table = (TableFunctionTable) targetTable;

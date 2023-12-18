@@ -32,14 +32,26 @@ public class OptimisticVersion {
     }
 
     /**
-     * Validate the candidate version
+     * Validate any schema change during planning
      */
-    public static boolean validateTableUpdate(OlapTable olapTable, long candidateVersion) {
+    public static boolean validateSchemaUpdate(OlapTable olapTable, long candidateVersion) {
         long schemaUpdate = olapTable.lastSchemaUpdateTime.get();
+        return schemaUpdate < candidateVersion;
+    }
+
+    /**
+     * Validate any data change during planning
+     */
+    public static boolean validateDataUpdate(OlapTable olapTable, long candidateVersion) {
         long dataUpdateStart = olapTable.lastVersionUpdateStartTime.get();
         long dataUpdateEnd = olapTable.lastVersionUpdateEndTime.get();
+        return dataUpdateEnd >= dataUpdateStart && dataUpdateEnd < candidateVersion;
+    }
 
-        return (schemaUpdate < candidateVersion) &&
-                (dataUpdateEnd >= dataUpdateStart && dataUpdateEnd < candidateVersion);
+    /**
+     * Is this table under version publishing ?
+     */
+    public static boolean isVersionPublish(OlapTable olapTable) {
+        return olapTable.lastVersionUpdateStartTime.get() > olapTable.lastVersionUpdateEndTime.get();
     }
 }

@@ -601,46 +601,34 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitInsertStatement(InsertStmt node, Void context) {
-            super.visitInsertStatement(node, context);
-
-            Table copied = copyTable(node.getTargetTable());
-            if (copied != null) {
-                node.setTargetTable(copied);
-            }
-            return null;
-        }
-
-        @Override
         public Void visitTable(TableRelation node, Void context) {
-            Table copied = copyTable(node.getTable());
-            if (copied != null) {
-                node.setTable(copied);
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    OlapTable copied = new OlapTable();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
+            } else if (node.getTable().isOlapMaterializedView()) {
+                MaterializedView table = (MaterializedView) node.getTable();
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    MaterializedView copied = new MaterializedView();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
             }
+            // TODO: support cloud native table and mv
             return null;
-        }
-
-        // TODO: support cloud native table and mv
-        private Table copyTable(Table originalTable) {
-            OlapTable table = (OlapTable) originalTable;
-            OlapTable existed = idMap.get(table.getId());
-            if (existed != null) {
-                return existed;
-            }
-
-            OlapTable copied = null;
-            if (originalTable.isOlapTable()) {
-                copied = new OlapTable();
-            } else if (originalTable.isOlapMaterializedView()) {
-                copied = new MaterializedView();
-            } else {
-                return null;
-            }
-
-            olapTables.add(table);
-            idMap.put(table.getId(), table);
-            table.copyOnlyForQuery(copied);
-            return copied;
         }
     }
 
