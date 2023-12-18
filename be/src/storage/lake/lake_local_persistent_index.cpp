@@ -67,17 +67,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         EditVersion version = index_meta.version();
 
         // Compaction of Lake tablet also generate a new version
-<<<<<<< HEAD
         // here just use version.major so that PersistentIndexMetaPB need't to be modified,
         // the minor is meaningless
         if (version.major() == base_version) {
-            // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
-            // PERSISTENT_INDEX_VERSION_2.
-=======
-        // here just use version.major_number so that PersistentIndexMetaPB need't to be modified,
-        // the minor_number is meaningless
-        if (version.major_number() == base_version) {
->>>>>>> 17babdfadc ([BugFix] upgrade lake persistent index version (#35894))
             // We need to rebuild persistent index because the meta structure is changed
             if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
                 index_meta.format_version() != PERSISTENT_INDEX_VERSION_3 &&
