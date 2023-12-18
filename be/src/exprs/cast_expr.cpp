@@ -1081,7 +1081,9 @@ public:
         // NOTE
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
-        if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+        if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
+            result_column = column->clone();
+        } else  if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             if constexpr (lt_is_decimal<FromType>) {
                 ColumnPtr double_column;
                 if (context != nullptr && context->error_if_overflow()) {
@@ -1277,6 +1279,10 @@ public:
                       Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT || Type == TYPE_BIGINT ||
                       Type == TYPE_LARGEINT) {
             return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(column);
+        }
+
+        if constexpr (Type == TYPE_VARBINARY) {
+            return column->clone();
         }
 
         if constexpr (lt_is_decimal<Type>) {
@@ -1551,6 +1557,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_STRING_FROM(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_VARBINARY, allow_throw_exception);
         default:
             LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
                          << ", to type: " << type_to_string(to_type);
@@ -1599,10 +1606,18 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 return nullptr;
             }
         }
-    } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
-        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                     << ", to type: " << type_to_string(to_type);
-        return nullptr;
+    } else if (is_binary_type(to_type)) {
+        if (is_string_type(from_type)) {
+            if (allow_throw_exception) {
+                return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, true>(node);
+            } else {
+                return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
+            }
+        } else {
+            LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                         << ", to type: " << type_to_string(to_type);
+            return nullptr;
+        }
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
