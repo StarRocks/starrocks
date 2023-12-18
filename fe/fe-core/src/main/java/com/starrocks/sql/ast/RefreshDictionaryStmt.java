@@ -12,12 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/client_cache.h"
+package com.starrocks.sql.ast;
 
-#include "gen_cpp/FrontendService.h"
+import com.starrocks.sql.parser.NodePosition;
 
-namespace starrocks {
+public class RefreshDictionaryStmt extends DdlStmt {
+    private final String dictionaryName;
 
-FrontendServiceClientCache g_frontend_service_client_cache;
+    public RefreshDictionaryStmt(String dictionaryName,  NodePosition pos) {
+        super(pos);
+        this.dictionaryName = dictionaryName;
+    }
 
-} // namespace starrocks
+    public String getDictionaryName() {
+        return dictionaryName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRefreshDictionaryStatement(this, context);
+    }
+}

@@ -19,6 +19,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "util/slice.h"
 
 namespace starrocks::spill {
 

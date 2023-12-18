@@ -93,7 +93,7 @@ WITH BROKER
 
 #### External catalog
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, and `azure.blob.sas_token` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md) statement:
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_catalog_azure
@@ -101,15 +101,15 @@ PROPERTIES
 (
     "type" = "hive", 
     "hive.metastore.uris" = "thrift://10.1.0.18:9083",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### File external table
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement:
 
 ```SQL
 CREATE EXTERNAL TABLE external_table_azure
@@ -122,15 +122,15 @@ PROPERTIES
 (
     "path" = "wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>",
     "format" = "ORC",
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```
 
 #### Broker load
 
-Configure `azure.blob.account_name`, `azure.blob.container_name`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
+Configure `azure.blob.storage_account`, `azure.blob.container`, `azure.blob.sas_token`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) statement:
 
 ```SQL
 LOAD LABEL test_db.label000
@@ -141,8 +141,8 @@ LOAD LABEL test_db.label000
 )
 WITH BROKER
 (
-    "azure.blob.account_name" = "<blob_storage_account_name>",
-    "azure.blob.container_name" = "<blob_container_name>",
+    "azure.blob.storage_account" = "<blob_storage_account_name>",
+    "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
 );
 ```

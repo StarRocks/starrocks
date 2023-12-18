@@ -14,10 +14,12 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {

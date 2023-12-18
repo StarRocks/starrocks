@@ -94,7 +94,7 @@ protected:
             return;
         }
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
         }
         ASSERT_TRUE(status.ok());
 
@@ -114,7 +114,7 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
-                std::cout << status.get_error_msg() << std::endl;
+                std::cout << status.message() << std::endl;
                 break;
             }
             check_chunk_values(chunk, expected_value);

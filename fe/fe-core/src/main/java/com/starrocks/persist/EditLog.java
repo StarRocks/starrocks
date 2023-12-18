@@ -47,6 +47,7 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
@@ -1153,6 +1154,21 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+                case OperationType.OP_CREATE_DICTIONARY: {
+                    Dictionary dictionary = (Dictionary) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
+                    break;
+                }
+                case OperationType.OP_DROP_DICTIONARY: {
+                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
+                    break;
+                }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2178,5 +2194,17 @@ public class EditLog {
 
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
         logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
     }
 }

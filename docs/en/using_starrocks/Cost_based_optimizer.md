@@ -100,15 +100,17 @@ From 2.4.5 onwards, StarRocks allows you to specify a collection period for auto
 
 Conditions that trigger automatic collection:
 
-- Table data has changed since previous statistics collection.
+- `enable_statistic_collect` is `true`
+
+- The collection time is within the range of the configured collection period. (The default collection period is all day.)
+
+- The update time of the previous collecting job is earlier than the latest update time of partitions.
 
 - The health of table statistics is below the specified threshold (`statistic_auto_collect_ratio`).
 
 > Formula for calculating statistics health: 1 - Number of added rows since the previous statistics collection/Total number of rows in the smallest partition
 
-- Partition data has been modified. Partitions whose data is not modified will not be collected again.
-
-- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
+  *After the data of a table is changed, manually triggering a sampling collection task to this table will make its update time is later than the update time of partition, which will not trigger automatic full collection for it in this scheduling period.*
 
 Automatic full collection is enabled by default and run by the system using the default settings.
 

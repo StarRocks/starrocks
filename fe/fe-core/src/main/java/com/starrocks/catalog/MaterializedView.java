@@ -780,6 +780,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.active = this.active;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        mv.viewDefineSql = this.viewDefineSql;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
@@ -788,6 +789,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (this.partitionRefTableExprs != null) {
             mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
+        }
+        if (!queryOutputIndices.isEmpty()) {
+            mv.setQueryOutputIndices(Lists.newArrayList(queryOutputIndices));
         }
     }
 

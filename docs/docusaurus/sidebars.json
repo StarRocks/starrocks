@@ -213,6 +213,10 @@
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
+          "type": "doc",
+          "id": "data_source/icebergtutorial"
+        },
+        {
           "type": "category",
           "label": "Catalog",
           "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
@@ -391,7 +395,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             "administration/Monitor_and_Alert",
             "administration/audit_loader",
             "administration/enable_fqdn",
@@ -1140,7 +1145,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             "administration/Monitor_and_Alert",
             "administration/audit_loader",
             "administration/enable_fqdn",

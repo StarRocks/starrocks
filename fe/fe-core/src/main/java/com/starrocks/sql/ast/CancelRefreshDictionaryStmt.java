@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
 
-#include "runtime/client_cache.h"
+package com.starrocks.sql.ast;
 
-namespace starrocks {
+import com.starrocks.sql.parser.NodePosition;
 
-extern FrontendServiceClientCache g_frontend_service_client_cache;
+public class CancelRefreshDictionaryStmt extends CancelStmt {
 
+    private String dictionaryName;
+
+    public CancelRefreshDictionaryStmt(String dictionaryName, NodePosition pos) {
+        super(pos);
+        this.dictionaryName = dictionaryName;
+    }
+
+    public String getDictionaryName() {
+        return dictionaryName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCancelRefreshDictionaryStatement(this, context);
+    }
 }
