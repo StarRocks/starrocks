@@ -482,6 +482,7 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
+<<<<<<< HEAD
 bool RuntimeState::enable_query_statistic() const {
     return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
 }
@@ -493,6 +494,8 @@ std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
     return _query_ctx->intermediate_query_statistic();
 }
 
+=======
+>>>>>>> cd07b2df79 ([Refactor] reduce sending audit stats in exchange (#37083))
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     if (!enable_query_statistic()) {
         return nullptr;
