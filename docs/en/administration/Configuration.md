@@ -124,6 +124,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_routine_load_batch_size             | Byte | 4294967296                                      | The maximum amount of data that can be loaded by a Routine Load task, in bytes. |
 | routine_load_task_consume_second        | s    | 15                                              | The maximum duration each Routine Load task can consume data, in seconds. |
 | routine_load_task_timeout_second        | s    | 60                                              | The timeout duration for each Routine Load task, in seconds. |
+| routine_load_unstable_threshold_second | s     | 3600  | Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed the current time exceeds this threshold. Also, unconsumed messages exist in the data source.| 
 | max_tolerable_backend_down_num          | -    | 0                                               | The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered. |
 | period_of_auto_resume_min               | Min  | 5                                               | The interval at which Routine Load jobs are automatically recovered, in minutes. |
 | spark_load_default_timeout_second       | s    | 86400                                           | The timeout duration for each Spark Load job, in seconds.    |

@@ -46,7 +46,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             MaterializedView mv = getMv("test", "mv_with_window");
             MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
             Assert.assertNotNull(planContext);
-            Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
             starRocksAssert.dropMaterializedView("mv_with_window");
         }
 
