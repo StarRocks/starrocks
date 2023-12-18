@@ -255,9 +255,14 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         commitAlterTable(table, schemaChanges, tableChanges);
 
-        synchronized(this) {
+        synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
-            icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+            try {
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+            } catch (Exception exception) {
+                LOG.error("Failed to refresh caching iceberg table.");
+                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+            }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
     }
