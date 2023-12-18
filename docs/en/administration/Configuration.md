@@ -360,7 +360,7 @@ BE dynamic parameters are as follows.
 | inc_rowset_expired_sec | 1800 | Second | The expiration time of the incoming data. This configuration item is used in incremental clone. |
 | tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. |
 | snapshot_expire_time_sec | 172800 | Second | The expiration time of snapshot files. |
-| trash_file_expire_time_sec | 259200 | Second | The time interval at which to clean trash files. |
+| trash_file_expire_time_sec | 86,400 | Second | The time interval at which to clean trash files.  The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6. |
 | base_compaction_check_interval_seconds | 60 | Second | The time interval of thread polling for a Base Compaction. |
 | min_base_compaction_num_singleton_deltas | 5 | N/A | The minimum number of segments that trigger a Base Compaction. |
 | max_base_compaction_num_singleton_deltas | 100 | N/A | The maximum number of segments that can be compacted in each Base Compaction. |
