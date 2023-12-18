@@ -98,6 +98,7 @@ public class HeartbeatMgr extends FrontendDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
+        tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -272,6 +273,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
+                copiedMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
