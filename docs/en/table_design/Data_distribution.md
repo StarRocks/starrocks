@@ -11,6 +11,7 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 
 > **NOTE**
 >
+> - After the data distribution is specified at table creation and query patterns or data characteristics in the business scenario evolves, since v3.2 StarRocks supports [modifying certain data distribution-related properties after table creation](#optimize-data-distribution-after-table-creation-since-32) to meet the requirements for query performance in the latest business scenarios.
 > - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
 > - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#set-the-number-of-buckets).
 
@@ -477,7 +478,7 @@ If partition data cannot be evenly distributed across all the buckets by using o
 
 - **When a table is created, you must specify the bucketing columns**.
 - The data types of bucketing columns must be INTEGER, DECIMAL, DATE/DATETIME, or CHAR/VARCHAR/STRING.
-- Bucketing columns cannot be modified after they are specified.
+- Since 3.2, bucketing columns can be modified by using ALTER TABLE after table creation.
 
 #### Examples
 
@@ -762,3 +763,35 @@ After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-s
 - For this table type, the actual hierarchy within a partition is as follows: partition > subpartition > bucket. To increase the number of buckets, StarRocks actually adds a new subpartition which includes a certain number of buckets. As a result, the SHOW PARTITIONS statement may return multiple data rows with the same partition name, which show the information of the subpartitions within the same partition.
 
 :::
+
+## Optimize data distribution after table creation (since 3.2)
+
+> **NOTICE**
+>
+> StarRocks's [shared-data mode](../deployment/shared_data/s3.md) currently does not support this feature.
+
+As query patterns and data volume evolve in business scenarios, the configurations specified at table creation, such as the bucketing method, the number of buckets, and the sort key, may no longer be suitable for the new business scenario and even may cause query performance to decrease. At this point, you can use `ALTER TABLE` to modify the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
+
+- **Increase the number of buckets when data volume within partitions is significantly increased**
+
+  When the data volume within partitions becomes significantly larger than before, it is necessary to modify the number of buckets to maintain tablet sizes generally within the range of 1 GB to 10 GB.
+  
+- **Modify the bucketing key to avoid data skew**
+
+  When the current bucketing key can cause data skew (for example, only the `k1` column is configured as the bucketing key), it is necessary to specify more suitable columns or add additional columns to the bucketing key. For example:
+  
+  ```SQL
+  ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+  -- When the StarRocks's version is 3.1 or later, and the table is Duplicate Key table, you can consider directly using the system's default bucketing settings, that is, random bucketing and the number of buckets automatically set by StarRocks.
+  ALTER TABLE t DISTRIBUTED BY RANDOM;
+  ```
+
+- **Adapting the sort key due to changes in query patterns**
+  
+  If the business query patterns are significantly changed and additional columns are used as conditional columns, it can be beneficial to adjust the sort key. For example:
+  
+  ```SQL
+  ALTER TABLE t ORDER BY k2, k1;
+  ```
+
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
