@@ -4168,7 +4168,7 @@ public class CreateMaterializedViewTest {
                         Assert.assertThrows("Refresh schedule interval 30 is too small which may cost a lot of memory/cpu " +
                                         "resources to refresh the asynchronous materialized view, " +
                                         "please config an interval larger than " +
-                                        "Config.min_allowed_materialized_view_schedule_time(60).",
+                                        "Config.min_allowed_materialized_view_schedule_time(60s).",
                                 AssertionError.class, () -> starRocksAssert.withMaterializedView(sql, () -> {}));
                     }
                     {

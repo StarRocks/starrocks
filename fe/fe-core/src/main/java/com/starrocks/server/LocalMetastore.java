@@ -3132,7 +3132,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
                                         "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
                                         "please config an interval larger than " +
-                                        "Config.min_allowed_materialized_view_schedule_time(%s).",
+                                        "Config.min_allowed_materialized_view_schedule_time(%ss).",
                                 periodSeconds,
                                 Config.materialized_view_min_refresh_interval));
                     }
