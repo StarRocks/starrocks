@@ -23,7 +23,8 @@
 
 namespace starrocks {
 
-DictionaryGetExpr::DictionaryGetExpr(const TExprNode& node) : Expr(node), _dictionary_get_expr(node.dictionary_get_expr) {}
+DictionaryGetExpr::DictionaryGetExpr(const TExprNode& node)
+        : Expr(node), _dictionary_get_expr(node.dictionary_get_expr) {}
 
 StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
@@ -82,8 +83,9 @@ Status DictionaryGetExpr::open(RuntimeState* state, ExprContext* context, Functi
     _schema = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_schema_by_id(
             _dictionary_get_expr.dict_id);
     if (_schema == nullptr) {
-        return Status::InternalError(fmt::format(
-                "open dictionary expression failed, there is no cache for dictionary: {}", _dictionary_get_expr.dict_id));
+        return Status::InternalError(
+                fmt::format("open dictionary expression failed, there is no cache for dictionary: {}",
+                            _dictionary_get_expr.dict_id));
     }
     auto res = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_by_version(
             _dictionary_get_expr.dict_id, _dictionary_get_expr.txn_id);

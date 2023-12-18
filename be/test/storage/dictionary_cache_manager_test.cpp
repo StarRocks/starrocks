@@ -51,7 +51,8 @@ public:
         }
     }
 
-    static TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int64_t schema_hash, const std::vector<TColumn>* tcolumns = nullptr) {
+    static TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int64_t schema_hash,
+                                                      const std::vector<TColumn>* tcolumns = nullptr) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -90,7 +91,8 @@ public:
     }
 
     static void create_new_dictionary_cache(starrocks::DictionaryCacheManager* dictionary_cache_manager, int64_t dict,
-                                            int64_t txn_id, TabletSharedPtr tablet, const std::vector<TColumn>* tcolumns = nullptr) {
+                                            int64_t txn_id, TabletSharedPtr tablet,
+                                            const std::vector<TColumn>* tcolumns = nullptr) {
         sleep(30);
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, 0);
@@ -101,7 +103,6 @@ public:
             } else {
                 std::string s(60000, 'a');
                 down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_by_index(i).get())->append_string(s);
-
             }
         }
 
@@ -125,7 +126,11 @@ public:
             if (tcolumns != nullptr) {
                 for (int i = 0; i < tcolumns->size(); ++i) {
                     std::string column_name = "large_column_" + std::to_string(i);
-                    tuple_builder.add_slot(TSlotDescriptorBuilder().string_type(60000).column_name(column_name).column_pos(i + 4).build());
+                    tuple_builder.add_slot(TSlotDescriptorBuilder()
+                                                   .string_type(60000)
+                                                   .column_name(column_name)
+                                                   .column_pos(i + 4)
+                                                   .build());
                 }
             }
 
@@ -177,13 +182,15 @@ public:
         request.release_schema();
     }
 
-    static TabletSharedPtr create_tablet(int64_t tablet_id, int64_t schema_hash, const std::vector<TColumn>* tcolumns = nullptr) {
+    static TabletSharedPtr create_tablet(int64_t tablet_id, int64_t schema_hash,
+                                         const std::vector<TColumn>* tcolumns = nullptr) {
         auto st = StorageEngine::instance()->create_tablet(get_create_tablet_request(tablet_id, schema_hash, tcolumns));
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    static void read_dictionary(starrocks::DictionaryCacheManager* dictionary_cache_manager, TabletSharedPtr tablet, int64_t dict_id, int64_t txn_id) {
+    static void read_dictionary(starrocks::DictionaryCacheManager* dictionary_cache_manager, TabletSharedPtr tablet,
+                                int64_t dict_id, int64_t txn_id) {
         auto res = dictionary_cache_manager->get_dictionary_by_version(dict_id, txn_id);
         ASSERT_TRUE(res.ok());
         DictionaryCachePtr dictionary = std::move(res.value());
@@ -198,7 +205,6 @@ public:
             } else {
                 std::string s(60000, 'a');
                 down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_by_index(i).get())->append_string(s);
-
             }
         }
         std::vector<ColumnId> kids{0};
@@ -211,8 +217,8 @@ public:
         key_chunk->get_column_by_index(0)->append(*chunk->get_column_by_index(0));
 
         ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(&schema, vids), 0);
-        auto st = DictionaryCacheManager::probe_given_dictionary_cache(*key_chunk->schema().get(),
-                    *value_chunk->schema().get(), dictionary, key_chunk, value_chunk);
+        auto st = DictionaryCacheManager::probe_given_dictionary_cache(
+                *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk);
         ASSERT_TRUE(st.ok());
         ASSERT_TRUE(value_chunk->num_rows() == 1);
         for (int i = 0; i < value_chunk->num_columns(); ++i) {
