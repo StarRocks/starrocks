@@ -547,11 +547,7 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
-    if (UNLIKELY(_num_remaining_senders < 0)) {
-        LOG(ERROR) << "decremented senders < 0 : fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
-                   << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
-                   << " be_number=" << be_number;
-    }
+    DCHECK(_num_remaining_senders >= 0);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
