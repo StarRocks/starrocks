@@ -76,6 +76,9 @@ public class MvRewriteTestBase {
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
 
+        // Default REFRESH DEFERRED
+        Config.default_mv_refresh_immediate = false;
+
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
