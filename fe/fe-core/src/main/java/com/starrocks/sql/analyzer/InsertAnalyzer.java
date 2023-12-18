@@ -219,12 +219,12 @@ public class InsertAnalyzer {
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
                     !column.isAutoIncrement() && !column.isGeneratedColumn() &&
                     !mentionedColumns.contains(column.getName())) {
-                String msg = "";
+                StringBuilder msg = new StringBuilder();
                 for (String s : mentionedColumns) {
-                    msg = msg + " " + s + " ";
+                    msg.append(" ").append(s).append(" ");
                 }
                 throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg);
+                        column.getName(), msg.toString());
             }
         }
 
@@ -335,4 +335,71 @@ public class InsertAnalyzer {
         }
         return copiedTable;
     }
+<<<<<<< HEAD
+=======
+
+    private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
+        if (insertStmt.useTableFunctionAsTargetTable()) {
+            return insertStmt.makeTableFunctionTable();
+        } else if (insertStmt.useBlackHoleTableAsTargetTable()) {
+            return insertStmt.makeBlackHoleTable();
+        }
+
+        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
+
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
+
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+        }
+
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
+                throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
+            }
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
+                String msg =
+                        String.format("table state is %s, please wait to insert overwrite until table state is normal",
+                                ((OlapTable) table).getState());
+                throw unsupportedException(msg);
+            }
+        }
+
+        if (!table.supportInsert()) {
+            if (table.isIcebergTable() || table.isHiveTable()) {
+                throw unsupportedException(String.format("Only support insert into %s table with parquet file format",
+                        table.getType()));
+            }
+            throw unsupportedException("Only support insert into olap/mysql/iceberg/hive table");
+        }
+
+        if ((table.isHiveTable() || table.isIcebergTable()) && CatalogMgr.isInternalCatalog(catalogName)) {
+            throw unsupportedException(String.format("Doesn't support %s table sink in the internal catalog. " +
+                    "You need to use %s catalog.", table.getType(), table.getType()));
+        }
+
+        return table;
+    }
+
+    public static boolean isUnSupportedPartitionColumnType(Type type) {
+        return type.isFloat() || type.isDecimalOfAnyVersion() || type.isDatetime();
+    }
+>>>>>>> 925b892ed4 ([Enhancement] Fix typo for insert overwrite (#37193))
 }

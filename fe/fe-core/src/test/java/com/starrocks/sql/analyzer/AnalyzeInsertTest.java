@@ -20,7 +20,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+>>>>>>> 925b892ed4 ([Enhancement] Fix typo for insert overwrite (#37193))
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -76,6 +82,16 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
         analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
+    }
+
+    @Test
+    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("t0");
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        analyzeFail("insert overwrite t0 select * from t0;",
+                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
+        table.setState(OlapTable.OlapTableState.NORMAL);
     }
 
     @Test
