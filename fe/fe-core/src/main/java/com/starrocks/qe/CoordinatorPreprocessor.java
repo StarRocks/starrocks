@@ -480,10 +480,10 @@ public class CoordinatorPreprocessor {
             return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
-        //define CN Resource Pool
+        //define Resource Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
-        //add CN to CN Resource Pool
+        //add CN to Resource Pool
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
         int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
@@ -505,7 +505,7 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        //add BE to CN Resource Pool
+        //add BE to Resource Pool
         ImmutableMap<Long, ComputeNode> idToBackend
                 = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend());
         for (int i = 0; i < idToBackend.size(); i++) {
