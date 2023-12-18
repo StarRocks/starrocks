@@ -113,7 +113,7 @@ public interface ConnectorMetadata {
     }
 
     default boolean tableExists(String dbName, String tblName) {
-        return getTable(dbName, tblName) != null;
+        return listTableNames(dbName).contains(tblName);
     }
 
     /**
