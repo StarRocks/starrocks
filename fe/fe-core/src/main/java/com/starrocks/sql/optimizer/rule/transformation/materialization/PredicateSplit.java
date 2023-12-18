@@ -81,14 +81,14 @@ public class PredicateSplit {
 
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
     public static PredicateSplit splitPredicate(ScalarOperator predicate) {
-        ScalarOperator normaPredicate = filterPredicate(predicate);
-        if (normaPredicate == null) {
+        ScalarOperator normalPredicate = filterPredicate(predicate);
+        if (normalPredicate == null) {
             return PredicateSplit.of(null, null, null);
         }
 
         PredicateExtractor extractor = new PredicateExtractor();
         RangePredicate rangePredicate =
-                normaPredicate.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
+                normalPredicate.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
         ScalarOperator equalityConjunct = Utils.compoundAnd(extractor.getColumnEqualityPredicates());
         ScalarOperator rangeConjunct = null;
         ScalarOperator residualConjunct = Utils.compoundAnd(extractor.getResidualPredicates());
@@ -96,7 +96,7 @@ public class PredicateSplit {
             // convert rangePredicate to rangeConjunct
             rangeConjunct = rangePredicate.toScalarOperator();
         } else if (extractor.getColumnEqualityPredicates().isEmpty() && extractor.getResidualPredicates().isEmpty()) {
-            residualConjunct = Utils.compoundAnd(residualConjunct, normaPredicate);
+            residualConjunct = Utils.compoundAnd(residualConjunct, normalPredicate);
         }
         return PredicateSplit.of(equalityConjunct, rangeConjunct, residualConjunct);
     }

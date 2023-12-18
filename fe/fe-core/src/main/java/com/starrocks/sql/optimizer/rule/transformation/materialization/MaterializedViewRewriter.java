@@ -1577,8 +1577,19 @@ public class MaterializedViewRewriter {
                     // 2. filter out predicates whose column refs are in query's output columns because we can always compensate
                     // by output column using Union-All.
                     // eg:
-                    //    query: select dt, k2 from tblA where dt >= '2023-11-01'
-                    //      mv : select dt, k2 from tblA
+                    //    query: select dt, k2 from tblA where date_trunc('day', dt) >= '2023-11-01'
+                    //      mv : select dt, k2 from tblA where dt = '2023-11-01'
+                    // NOTE: This is not supported by default because it can generate some bad cases (not the best plan):
+                    // eg:
+                    //    query: select dt, k2 from tblA where a < 1
+                    //    mv   : select dt, k2 from tblA where a > 2
+                    // this rule still can rewrite query by mv like this:
+                    //    select * from (select dt, k2 from tblA) t where t.a < 1
+                    // rewrite to:
+                    //    select * from (select * from mv union all select dt, k2 from tblA where a <= 2 or a is null)
+                    //          t where t.a < 1
+                    // If you want to use this feature, you can use it by the setting:
+                    //      set query_debug_options = "{'enableMVEagerUnionAllRewrite':true}";
                     if (queryOutputColumnRefs != null && queryOutputColumnRefs.contains(col)) {
                         return true;
                     }
