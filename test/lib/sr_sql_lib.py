@@ -27,6 +27,7 @@ import bz2
 import configparser
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -59,8 +60,30 @@ LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
+
+class Filter(logging.Filter):
+    """
+    Msg filters by log levels
+    """
+
+    # pylint: disable= super-init-not-called
+    def __init__(self, msg_level=logging.WARNING):
+        super().__init__()
+        self.msg_level = msg_level
+
+    def filter(self, record):
+        # replace secret infos
+        for secret_k, secret_v in SECRET_INFOS.items():
+            record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+
+        if record.levelno >= self.msg_level:
+            return False
+        return True
+
+
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
@@ -73,6 +96,8 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
+
+SECRET_INFOS = {}
 
 
 class StarrocksSQLApiLib(object):
@@ -135,6 +160,11 @@ class StarrocksSQLApiLib(object):
         for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
+            else:
+                # save secrets info
+                if 'aws' in env_key:
+                    SECRET_INFOS[env_key] = env_value
+
             self.__setattr__(env_key, env_value)
 
     def connect_starrocks(self):
