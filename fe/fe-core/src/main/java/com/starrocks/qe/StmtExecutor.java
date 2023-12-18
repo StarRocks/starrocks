@@ -43,7 +43,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -151,7 +150,6 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -419,7 +417,6 @@ public class StmtExecutor {
         // Try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
-        SessionVariable sessionVariableBackup = context.getSessionVariable();
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -435,8 +432,6 @@ public class StmtExecutor {
                 // set isQuery before `forwardToLeader` to make it right for audit log.
                 context.getState().setIsQuery(isQuery);
             }
-
-            processVarHint(sessionVariableBackup);
 
             if (parsedStmt.isExplain()) {
                 context.setExplainLevel(parsedStmt.getExplainLevel());
@@ -744,25 +739,6 @@ public class StmtExecutor {
                     }
                 }
             }
-
-            context.setSessionVariable(sessionVariableBackup);
-        }
-    }
-
-    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
-        if (parsedStmt == null) {
-            return;
-        }
-        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
-
-        if (MapUtils.isNotEmpty(optHints)) {
-            SessionVariable sessionVariable = (SessionVariable) variables.clone();
-            for (String key : optHints.keySet()) {
-                VariableMgr.setSystemVariable(sessionVariable,
-                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-            }
-            context.setSessionVariable(sessionVariable);
         }
     }
 

@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -73,6 +74,7 @@ import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -81,6 +83,7 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,6 +98,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
@@ -343,6 +347,8 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
 
+        SessionVariable sessionVariableBackup = ctx.getSessionVariable();
+
         // execute this query.
         StatementBase parsedStmt = null;
         try {
@@ -371,6 +377,16 @@ public class ConnectProcessor {
                 // because the audit log will only show the last stmt.
                 if (i == stmts.size() - 1) {
                     addRunningQueryDetail(parsedStmt);
+                }
+
+                // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+                Map<String, String> optHints = StmtExecutor.VarHintVisitor.extractAllHints(parsedStmt);
+                if (MapUtils.isNotEmpty(optHints)) {
+                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+                    }
                 }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
@@ -426,6 +442,8 @@ public class ConnectProcessor {
             // executor can be null if we encounter analysis error.
             auditAfterExec(originStmt, null, null);
         }
+
+        ctx.setSessionVariable(sessionVariableBackup);
 
         addFinishedQueryDetail();
     }

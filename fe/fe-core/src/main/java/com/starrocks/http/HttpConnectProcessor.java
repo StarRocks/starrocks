@@ -40,6 +40,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -75,6 +76,10 @@ public class HttpConnectProcessor extends ConnectProcessor {
         String sql = parsedStmt.getOrigStmt().originStmt;
 
         addRunningQueryDetail(parsedStmt);
+
+        SessionVariable sessionVariableBackup = ctx.getSessionVariable();
+
+
 
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
@@ -123,6 +128,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
             auditAfterExec(sql, null, null);
         }
 
+        ctx.setSessionVariable(sessionVariableBackup);
         addFinishedQueryDetail();
     }
 
