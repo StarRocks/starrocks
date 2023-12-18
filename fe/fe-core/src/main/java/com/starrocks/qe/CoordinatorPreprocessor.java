@@ -480,15 +480,22 @@ public class CoordinatorPreprocessor {
             return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
+        //define CN Resource Pool
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+
+        //add CN to CN Resource Pool
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
-
         int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
-        if (useComputeNodeNumber < 0
-                || useComputeNodeNumber >= idToComputeNode.size()) {
-            return idToComputeNode;
+        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNode.size()) {
+            for (int i = 0; i < idToComputeNode.size(); i++) {
+                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
+                if (computeNode == null) {
+                    continue;
+                }
+                computeNodes.put(computeNode.getId(), computeNode);
+            }
         } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>();
             for (int i = 0; i < useComputeNodeNumber; i++) {
                 ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
                 if (computeNode == null) {
@@ -496,8 +503,21 @@ public class CoordinatorPreprocessor {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-            return ImmutableMap.copyOf(computeNodes);
         }
+
+        //add BE to CN Resource Pool
+        ImmutableMap<Long, ComputeNode> idToBackend
+                = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend());
+        for (int i = 0; i < idToBackend.size(); i++) {
+            ComputeNode backend = SimpleScheduler.getBackend(idToBackend);
+            if (backend == null) {
+                continue;
+            }
+            computeNodes.put(backend.getId(), backend);
+        }
+
+        //return the whole CN Resource Pool
+        return ImmutableMap.copyOf(computeNodes);
     }
 
     private void traceInstance() {
