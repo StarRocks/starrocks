@@ -1129,7 +1129,8 @@ public class Config extends ConfigBase {
      * may cost a lot of FE's memory, so add a config to control the min schedule time to avoid it.
      * </p>
      */
-    public static int min_allowed_materialized_view_schedule_time = 60; // 1 min
+    @ConfField(mutable = true)
+    public static int materialized_view_min_refresh_interval = 60; // 1 min
 
     /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N

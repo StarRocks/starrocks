@@ -3125,16 +3125,16 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setTimeUnit(refreshTimeUnit);
 
                 // Check the interval time should not be less than the min allowed config time.
-                if (Config.min_allowed_materialized_view_schedule_time > 0) {
+                if (Config.materialized_view_min_refresh_interval > 0) {
                     TimeUnit intervalTimeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(refreshTimeUnit);
                     long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(intervalStep, intervalTimeUnit);
-                    if (periodSeconds < Config.min_allowed_materialized_view_schedule_time) {
+                    if (periodSeconds < Config.materialized_view_min_refresh_interval) {
                         throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
                                         "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
                                         "please config an interval larger than " +
                                         "Config.min_allowed_materialized_view_schedule_time(%s).",
                                 periodSeconds,
-                                Config.min_allowed_materialized_view_schedule_time));
+                                Config.materialized_view_min_refresh_interval));
                     }
                 }
             }
