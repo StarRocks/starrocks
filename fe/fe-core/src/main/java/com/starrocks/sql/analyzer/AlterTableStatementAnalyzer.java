@@ -20,8 +20,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AddColumnClause;
+>>>>>>> b484282b1d ([Enhancement] refactor error msg for manual compact in shared_data mode (#36979))
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.common.MetaUtils;
@@ -53,6 +59,18 @@ public class AlterTableStatementAnalyzer {
         AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
         alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
+<<<<<<< HEAD
+=======
+            if ((table instanceof OlapTable) &&
+                    ((OlapTable) table).hasRowStorageType() &&
+                    (alterClause instanceof AddColumnClause || alterClause instanceof DropColumnClause ||
+                            alterClause instanceof AlterTableColumnClause)) {
+                throw new SemanticException(String.format("row store table %s can't do schema change", table.getName()));
+            }
+            if (RunMode.isSharedDataMode() && alterClause instanceof CompactionClause) {
+                throw new SemanticException("manually compact not supported in SHARED_DATA runMode");
+            }
+>>>>>>> b484282b1d ([Enhancement] refactor error msg for manual compact in shared_data mode (#36979))
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
     }
