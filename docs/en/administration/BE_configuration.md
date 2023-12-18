@@ -151,12 +151,12 @@ BE dynamic parameters are as follows.
 
 #### snapshot_expire_time_sec
 
-- **Default:** 86,400 seconds
+- **Default:** 172,800 seconds
 - **Description:** The expiration time of snapshot files.
 
 #### trash_file_expire_time_sec
 
-- **Default:** 259,200 seconds
+- **Default:** 86,400 seconds
 - **Description:** The time interval at which to clean trash files.
 
 #### base_compaction_check_interval_seconds
