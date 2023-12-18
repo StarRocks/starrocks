@@ -15,7 +15,9 @@
 #pragma once
 
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 
@@ -33,6 +35,11 @@ public:
      * @return BigIntColumn
      */
     DEFINE_VECTORIZED_FN(xx_hash3_64);
+    /**
+     * @param columns: [ANYColumn, ...]
+     * @return BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(crc32);
 };
 
 inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context, const starrocks::Columns& columns) {
@@ -101,6 +108,22 @@ inline StatusOr<ColumnPtr> HashFunctions::xx_hash3_64(FunctionContext* context, 
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+inline StatusOr<ColumnPtr> HashFunctions::crc32(FunctionContext* context, const starrocks::Columns& columns) {
+    std::vector<uint32_t> hash_values;
+    size_t num_rows = columns[0]->size();
+    hash_values.resize(num_rows);
+    for (size_t i = 0; i < columns.size(); ++i) {
+        auto column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, columns[i]);
+        column->crc32_hash(hash_values.data(), 0, num_rows);
+    }
+    auto res = Int64Column::create(num_rows);
+    auto& data = res->get_data();
+    for (size_t i = 0; i < num_rows; ++i) {
+        data[i] = hash_values[i];
+    }
+    return res;
 }
 
 } // namespace starrocks

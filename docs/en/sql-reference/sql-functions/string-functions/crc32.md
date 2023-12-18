@@ -6,12 +6,12 @@ displayed_sidebar: "English"
 
 ## Description
 
-This function returns the CRC32 checksum of a string
+This function returns the CRC32 checksum of a element
 
 ## Syntax
 
 ```Haskell
-BIGINT crc32(VARCHAR str)
+BIGINT crc32(ANY_TYPE, ...)
 ```
 
 ## Examples
@@ -29,9 +29,16 @@ MySQL [(none)]> select crc32(null);
 +-------------+
 | crc32(NULL) |
 +-------------+
-|        NULL |
+|   558161692 |
 +-------------+
-1 row in set (0.18 sec)
+```
+```Plain Text
+MySQL [(none)]> select crc32(null, 1, "string");
++--------------------------+
+| crc32(NULL, 1, 'string') |
++--------------------------+
+|               3800869202 |
++--------------------------+
 ```
 
 ## keyword

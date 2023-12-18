@@ -4258,12 +4258,4 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
         return url_extract_parameter_general(columns);
     }
 }
-// crc32
-DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
-    return static_cast<uint32_t>(crc32_z(0L, (const unsigned char*)str.data, str.size));
-}
-
-StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
-}
 } // namespace starrocks

@@ -340,6 +340,7 @@ public class FunctionSet {
 
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
+    public static final String CRC32 = "crc32";
 
     // Percentile functions:
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
@@ -544,7 +545,7 @@ public class FunctionSet {
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
-                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT);
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, CRC32);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
