@@ -8,6 +8,8 @@ import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
+import PipeAdvantages from '../assets/commonMarkdown/pipeAdvantages.md'
+
 StarRocks provides the following options for loading data from HDFS:
 
 <LoadMethodIntro />
@@ -417,6 +419,8 @@ The following query result is returned, indicating that the data has been succes
 Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
 
 ### Advantages of Pipe
+
+<PipeAdvantages menu=" HDFS uses LastModifiedTime "/>
 
 Pipe is ideal for continuous data loading and large-scale data loading:
 
