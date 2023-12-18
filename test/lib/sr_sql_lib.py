@@ -81,6 +81,14 @@ class Filter(logging.Filter):
         return True
 
 
+def self_print(msg):
+    # replace secret infos
+    for secret_k, secret_v in SECRET_INFOS.items():
+        msg = msg.replace(secret_v, '${%s}' % secret_k)
+
+    print(msg)
+
+
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
 logging.getLogger().addFilter(Filter())
