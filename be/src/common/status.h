@@ -193,10 +193,7 @@ public:
 
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
-    bool is_yield() const {
-        mark_checked();
-        return code() == TStatusCode::YIELD;
-    }
+    bool is_yield() const { return code() == TStatusCode::YIELD; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
