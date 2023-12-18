@@ -4,7 +4,7 @@ description: Monitor with Datadog
 sidebar_label: Datadog
 ---
 
-# Integrate Datadog with StarRocks
+# Monitor with Datadog
 
 This topic describes how to integrate your StarRocks cluster with [Datadog](https://www.datadoghq.com/), a monitoring and security platform.
 

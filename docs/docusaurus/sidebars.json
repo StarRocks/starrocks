@@ -304,7 +304,7 @@
           "type": "category",
           "label": "Data Warehouse",
           "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
-          "link": {"type": "doc", "id": "cover_pages/warehouse"},
+          "link": {"type": "doc", "id": "integrations/data_lakes"},
           "items": [
              "data_source/catalog/hive_catalog",
              "data_source/catalog/iceberg_catalog",
@@ -324,6 +324,7 @@
             {
               "type":"category",
               "label": "StarRocks Pipe",
+              "description": "Pipe: Ideal for continuous loading at scale",
               "link": {"type": "doc", "id": "integrations/streaming/pipe"},
               "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
             }
