@@ -95,7 +95,7 @@ std::string MySQLDataSource::name() const {
 }
 
 Status MySQLDataSource::open(RuntimeState* state) {
-    _init_params(state);
+    RETURN_IF_ERROR(_init_params(state));
     DCHECK(state != nullptr);
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());

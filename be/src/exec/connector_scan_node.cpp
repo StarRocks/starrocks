@@ -227,7 +227,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     for (TScanRangeParams& scan_range : _scan_ranges) {
-        _create_and_init_scanner(state, scan_range.scan_range);
+        RETURN_IF_ERROR(_create_and_init_scanner(state, scan_range.scan_range));
     }
     _num_scanners = _pending_scanners.size();
     if (_num_scanners == 0) {
@@ -264,7 +264,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_profile(_runtime_profile.get());
     data_source->update_has_any_predicate();
     ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
-    scanner->init(state);
+    RETURN_IF_ERROR(scanner->init(state));
     _push_pending_scanner(scanner);
     return Status::OK();
 }
