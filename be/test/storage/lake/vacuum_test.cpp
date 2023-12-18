@@ -66,7 +66,7 @@ protected:
         std::string full_path;
         if (is_tablet_metadata(name)) {
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
-        } else if (is_txn_log(name) || is_txn_vlog(name)) {
+        } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
@@ -437,6 +437,28 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         }
     )DEL")));
 
+    // txn slog
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 100,
+            "txn_id": 12344
+        }
+    )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 100,
+            "txn_id": 12345
+        }
+    )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 100,
+            "txn_id": 12346
+        }
+    )DEL")));
+
     auto ensure_all_files_exist = [&]() {
         EXPECT_TRUE(file_exist(tablet_metadata_filename(100, 2)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(100, 4)));
@@ -449,6 +471,9 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         EXPECT_TRUE(file_exist(txn_log_filename(100, 12344)));
         EXPECT_TRUE(file_exist(txn_log_filename(100, 12345)));
         EXPECT_TRUE(file_exist(txn_log_filename(100, 12346)));
+        EXPECT_TRUE(file_exist(txn_slog_filename(100, 12344)));
+        EXPECT_TRUE(file_exist(txn_slog_filename(100, 12345)));
+        EXPECT_TRUE(file_exist(txn_slog_filename(100, 12346)));
 
         EXPECT_TRUE(file_exist("00000000000059e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec"));
         EXPECT_TRUE(file_exist("00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
@@ -571,7 +596,8 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         // 3 compaction input files
         // 2 orphan files
         // 1 txn log file
-        EXPECT_EQ(14, response.vacuumed_files());
+        // 1 txn slog file
+        EXPECT_EQ(15, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 2)));
@@ -585,6 +611,9 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         EXPECT_FALSE(file_exist(txn_log_filename(100, 12344)));
         EXPECT_TRUE(file_exist(txn_log_filename(100, 12345)));
         EXPECT_TRUE(file_exist(txn_log_filename(100, 12346)));
+        EXPECT_FALSE(file_exist(txn_slog_filename(100, 12344)));
+        EXPECT_TRUE(file_exist(txn_slog_filename(100, 12345)));
+        EXPECT_TRUE(file_exist(txn_slog_filename(100, 12346)));
 
         EXPECT_FALSE(file_exist("00000000000059e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec"));
         EXPECT_FALSE(file_exist("00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
@@ -955,6 +984,35 @@ TEST_P(LakeVacuumTest, test_dont_delete_txn_log) {
         }
         )DEL")));
 
+    // txn slog
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 1900,
+            "txn_id": 2000
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 1900,
+            "txn_id": 3000
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 1900,
+            "txn_id": 4000
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_slog(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 2000,
+            "txn_id": 3000
+        }
+        )DEL")));
+
     // delete_txn_log = false
     {
         VacuumRequest request;
@@ -972,6 +1030,9 @@ TEST_P(LakeVacuumTest, test_dont_delete_txn_log) {
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 2000)));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 3000)));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 4000)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 2000)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 3000)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 4000)));
     }
     // delete_txn_log = true
     {
@@ -985,12 +1046,16 @@ TEST_P(LakeVacuumTest, test_dont_delete_txn_log) {
 
         vacuum(_tablet_mgr.get(), request, &response);
         EXPECT_EQ(0, response.status().status_code());
-        EXPECT_EQ(3, response.vacuumed_files());
+        EXPECT_EQ(6, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 2000)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 3000)));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(2000, 3000)));
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(1900, 4000)));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 2000)));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 3000)));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_slog_location(2000, 3000)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_slog_location(1900, 4000)));
     }
 }
 
