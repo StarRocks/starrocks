@@ -161,13 +161,13 @@ public class IcebergApiConverterTest {
         PartitionSpec partitionSpec = builder.hour("ts").build();
         String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "ts_hour=62255"));
-        Assert.assertEquals("ts_hour=62255", partitionName);
+        Assert.assertEquals("ts_hour=1977-02-06-23", partitionName);
 
         builder = PartitionSpec.builderFor(schema);
         partitionSpec = builder.hour("ts").truncate("data", 2).build();
         partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "ts_hour=365/data_trunc=xy"));
-        Assert.assertEquals("ts_hour=365/data_trunc=xy", partitionName);
+        Assert.assertEquals("ts_hour=1970-01-16-05/data_trunc=xy", partitionName);
     }
 
     @Test
