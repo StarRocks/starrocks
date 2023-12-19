@@ -31,7 +31,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 public class SchedulerTPCHTest extends SchedulerTestBase {
-    private static final String directory = "scheduler/tpch/";
+    private static final String DIRECTORY = "scheduler/tpch/";
 
     @BeforeAll
     public static void beforeAll() throws Exception {
@@ -51,7 +51,7 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
 
     public static Stream<Arguments> listTest() {
         String sqlRootPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-        File folder = new File(sqlRootPath + "/" + directory);
+        File folder = new File(sqlRootPath + "/" + DIRECTORY);
 
         File[] files = folder.listFiles();
         if (files == null) {
@@ -61,7 +61,7 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
         return Arrays.stream(files).filter(file -> file.isFile() && file.getName().endsWith(".sql"))
                 .map(file -> file.getName().replace(".sql", ""))
                 .filter(s -> !TpchSQL.contains(s))
-                .map(s -> Arguments.of(s, directory + s));
+                .map(s -> Arguments.of(s, DIRECTORY + s));
     }
 
     @ParameterizedTest(name = "Tpch.{0}")
@@ -73,7 +73,7 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
     private static Stream<Arguments> tpchSource() {
         List<Arguments> cases = Lists.newArrayList();
         for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
-            cases.add(Arguments.of(entry.getKey(), entry.getValue(), directory + entry.getKey()));
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), DIRECTORY + entry.getKey()));
         }
         return cases.stream();
     }
