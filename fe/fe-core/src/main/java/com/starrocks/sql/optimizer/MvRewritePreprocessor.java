@@ -349,10 +349,12 @@ public class MvRewritePreprocessor {
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
                 logMVPrepare(connectContext, mv, "Partitioned MV {} is outdated which contains some partitions " +
-                        "to be refreshed: {}", mv.getName(), partitionNamesToRefresh);
+                        "to be refreshed: {}, and cannot compensate it to predicate", mv.getName(), partitionNamesToRefresh);
                 return;
             }
         }
+        logMVPrepare(connectContext, mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
+        logMVPrepare(connectContext, mv, "MV compensate partition predicate: {}", mvPartialPartitionPredicates);
 
         // Add mv info into dump info
         if (connectContext.getDumpInfo() != null) {
@@ -362,6 +364,21 @@ public class MvRewritePreprocessor {
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
+<<<<<<< HEAD
+=======
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+
+        // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
+        // to be compensated by using it.
+        Set<String> refTableUpdatedPartitionNames = null;
+        if (mvPartialPartitionPredicates != null) {
+            Table refBaseTable = partitionTableAndColumns.first;
+            refTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(refBaseTable, true);
+            logMVPrepare(connectContext, mv, "Ref table {} partitions to refresh: {}", refBaseTable.getName(),
+                    refTableUpdatedPartitionNames);
+        }
+>>>>>>> 683cf75641 ([BugFix] Compensate extra predicates after union all pull up rewrite (#37085))
+
 
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.

@@ -182,7 +182,13 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+<<<<<<< HEAD
             queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+=======
+            logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
+                    queryPartitionPredicate);
+            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
+>>>>>>> 683cf75641 ([BugFix] Compensate extra predicates after union all pull up rewrite (#37085))
         }
         return PredicateSplit.splitPredicate(queryPredicate);
     }

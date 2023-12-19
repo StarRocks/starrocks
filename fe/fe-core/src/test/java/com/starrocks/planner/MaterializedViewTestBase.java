@@ -281,6 +281,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 } else {
                     this.rewritePlan = getFragmentPlan(query);
                 }
+<<<<<<< HEAD
+=======
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
+                }
+                this.traceLog = planAndTrace.second;
+>>>>>>> 683cf75641 ([BugFix] Compensate extra predicates after union all pull up rewrite (#37085))
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
