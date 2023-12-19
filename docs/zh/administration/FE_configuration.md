@@ -532,12 +532,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_fast_schema_evolution
 
-- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。
   > **NOTE**
   >
   > - StarRocks 存算分离集群不支持该参数。
   > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
-- 默认值：TRUE
+- 默认值：FALSE
 - 引入版本：3.2.0
 
 #### recover_with_empty_tablet

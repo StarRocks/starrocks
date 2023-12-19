@@ -593,8 +593,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_fast_schema_evolution
 
-- **Default**: TRUE
-- **Description**: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` (default) and `FALSE`. Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- **Default**: FALSE
+- **Description**: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
   > **NOTE**
   >
   > - StarRocks shared-data clusters do not support this parameter.
