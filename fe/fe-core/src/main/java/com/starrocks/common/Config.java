@@ -1122,6 +1122,17 @@ public class Config extends ConfigBase {
     public static boolean enable_backup_materialized_view = true;
 
     /**
+     * The smaller schedule time is, the higher frequency TaskManager schedule which means
+     * materialized view need to schedule to refresh.
+     * <p>
+     * When schedule time is too frequent and consumes a bit slow, FE will generate too much task runs and
+     * may cost a lot of FE's memory, so add a config to control the min schedule time to avoid it.
+     * </p>
+     */
+    @ConfField(mutable = true)
+    public static int materialized_view_min_refresh_interval = 60; // 1 min
+
+    /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
      * to determine which strategy you choose:
      *  N <0      : always use non lock optimization and no copy related materialized views which
@@ -2605,6 +2616,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
 
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
@@ -2665,4 +2681,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean use_lock_manager = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
+    /**
+     * dictionary cache refresh task thread pool size
+     */
+    @ConfField(mutable = true)
+    public static int refresh_dictionary_cache_thread_num = 2;
 }

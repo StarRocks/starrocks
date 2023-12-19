@@ -257,6 +257,8 @@ public:
     static Status remove_table_meta(DataDir* store, TTableId table_id);
 
     static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_tablet_persistent_index_meta(DataDir* store, TTabletId table_id);
 };
 
 } // namespace starrocks

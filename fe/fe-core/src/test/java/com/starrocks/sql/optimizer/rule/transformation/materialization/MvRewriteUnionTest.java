@@ -17,16 +17,23 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.List;
+import java.util.Set;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteUnionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -56,12 +63,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\"\n" +
                         ");");
 
-        cluster.runSql("test", "insert into emps2 values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps2 values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps2 values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts2 values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts2 values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts2 values(3, \"dept_name3\")");
+        executeInsertSql(connectContext, "insert into emps2 values(1, 1, \"emp_name1\", 100),(2, 1, \"emp_name1\", 120)," +
+                "(3, 1, \"emp_name1\", 150);");
+        executeInsertSql(connectContext, "insert into depts2 values(1, \"dept_name1\"),(2, \"dept_name2\")," +
+                "(3, \"dept_name3\")");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
@@ -90,16 +95,12 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"" +
                 ");");
-        cluster.runSql("test", "insert into t02 values(1, 2, 3)");
-        cluster.runSql("test", "insert into test_all_type2 values(" +
+        executeInsertSql(connectContext, "insert into t02 values(1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_all_type2 values(" +
                 "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
 
-        cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_base_part values(1, 1, 2, 3),(100, 1, 2, 3),(200, 1, 2, 3)," +
+                "(1000, 1, 2, 3),(2000, 1, 2, 3),(2500, 1, 2, 3)");
 
 
         Table emps2 = getTable("test", "emps2");
@@ -309,10 +310,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "                PARTITION `p6` VALUES LESS THAN ('18')\n" +
                 "                )\n" +
                 "                DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
-        cluster.runSql("test", "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
-                "                                      (4,1,1),(5,1,1),(6,1,1),\n" +
-                "                                      (7,1,1),(8,1,1),(9,1,1),\n" +
-                "                                      (10,1,1),(11,1,1);");
+        executeInsertSql(connectContext, "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
+                "(4,1,1),(5,1,1),(6,1,1),\n" +
+                "(7,1,1),(8,1,1),(9,1,1),\n" +
+                "(10,1,1),(11,1,1);");
         createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_1" +
                 " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_table where k1>1;");
         createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_2" +
@@ -345,5 +346,121 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertContains(plan6, "mv_agg_1", "emps", "UNION");
         dropMv("test", "mv_agg_1");
+    }
+
+    @Test
+    public void testUnionAllRewriteWithExtraPredicates() {
+        starRocksAssert.withTable(new MTable("mt1", "k1",
+                        List.of(
+                                "k1 INT",
+                                "k2 string",
+                                "v1 INT",
+                                "v2 INT"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION `p1` VALUES LESS THAN ('3')",
+                                "PARTITION `p2` VALUES LESS THAN ('6')",
+                                "PARTITION `p3` VALUES LESS THAN ('9')"
+                        )
+                ),
+                () -> {
+                    cluster.runSql("test", "insert into mt1 values (1,1,1,1), (4,2,1,1);");
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW union_mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS SELECT k1,k2, v1,v2 from mt1;");
+                    starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW union_mv0 \n" +
+                            "PARTITION START ('%s') END ('%s')", "1", "3"));
+                    MaterializedView mv1 = getMv("test", "union_mv0");
+                    Set<String> mvNames = mv1.getPartitionNames();
+                    Assert.assertEquals("[p1]", mvNames.toString());
+
+                    {
+                        String[] sqls = {
+                                "SELECT k1,k2, v1,v2 from mt1 where k1=1",
+                                "SELECT k1,k2, v1,v2 from mt1 where k1<3",
+                                "SELECT k1,k2, v1,v2 from mt1 where k1<2",
+                        };
+                        for (String query : sqls) {
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertNotContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "union_mv0");
+                        }
+                    }
+                    {
+                        String query = "SELECT k1,k2, v1,v2 from mt1 where k1<6";
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "union_mv0");
+                    }
+
+                    {
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 10: k2 LIKE 'a%'"),
+                                // TODO: remove redundant predicates
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
+                                        "TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3")
+                        );
+                        for (Pair<String, String> p : sqls) {
+                            String query = p.first;
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
+                        }
+                    }
+                    {
+                        String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
+                    }
+                    {
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, (9: k1 >= 3) OR (9: k1 IS NULL), 10: k2 LIKE 'a%'"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
+                                );
+                        QueryDebugOptions debugOptions = new QueryDebugOptions();
+                        debugOptions.setEnableMVEagerUnionAllRewrite(true);
+                        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+                        for (Pair<String, String> p : sqls) {
+                            String query = p.first;
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
+                        }
+                    }
+                    starRocksAssert.dropMaterializedView("union_mv0");
+                }
+        );
+    }
+    @Test
+    public void testAssertContainsIgnoreColRefs() {
+        String p1 = "7:SELECT\n" +
+                "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'";
+        String p =
+                "7:SELECT\n" +
+                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
+        PlanTestBase.assertContainsIgnoreColRefs(p1, p);
     }
 }

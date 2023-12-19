@@ -10,7 +10,7 @@ Shows the SQL regular expressions in the SQL blacklist.
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/Blacklist.md).
 
-::tip
+:::tip
 
 This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
 

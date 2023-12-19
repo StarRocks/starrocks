@@ -76,6 +76,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
@@ -231,7 +232,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
-            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -305,7 +306,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
 
     auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
-        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -515,7 +516,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
-            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -776,6 +777,84 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PRefreshDictionaryCacheRequest* request,
+                                                           PRefreshDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->refresh(request).to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache_begin(google::protobuf::RpcController* controller,
+                                                                 const PRefreshDictionaryCacheBeginRequest* request,
+                                                                 PRefreshDictionaryCacheBeginResult* response,
+                                                                 google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_txn_id() || !request->has_dict_id()) {
+        std::stringstream ss;
+        ss << "Incomplete request information for refresh dictionary cache begin";
+        LOG(WARNING) << ss.str();
+        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+        return;
+    }
+
+    int64_t dict_id = request->dict_id();
+    int64_t txn_id = request->txn_id();
+    auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(dict_id, txn_id);
+    if (!st.ok()) {
+        LOG(WARNING) << st.message();
+        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+    }
+
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::refresh_dictionary_cache_commit(google::protobuf::RpcController* controller,
+                                                                  const PRefreshDictionaryCacheCommitRequest* request,
+                                                                  PRefreshDictionaryCacheCommitResult* response,
+                                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_txn_id() || !request->has_dict_id()) {
+        std::stringstream ss;
+        ss << "Incomplete request information for refresh dictionary cache commit";
+        LOG(WARNING) << ss.str();
+        Status::Uninitialized(ss.str()).to_protobuf(response->mutable_status());
+        return;
+    }
+
+    int64_t dict_id = request->dict_id();
+    int64_t txn_id = request->txn_id();
+    auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(dict_id, txn_id);
+    if (!st.ok()) {
+        LOG(WARNING) << st.message();
+        Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+    }
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::clear_dictionary_cache(google::protobuf::RpcController* controller,
+                                                         const PClearDictionaryCacheRequest* request,
+                                                         PClearDictionaryCacheResult* response,
+                                                         google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::get_dictionary_statistic(google::protobuf::RpcController* controller,
+                                                           const PGetDictionaryStatisticRequest* request,
+                                                           PGetDictionaryStatisticResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -856,7 +935,7 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
-        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;

@@ -242,7 +242,7 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
@@ -465,14 +465,19 @@ public class UtFrameUtils {
             Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
             return Pair.create(planPair.first, planAndTrace);
         } else {
+            Tracers.register(connectContext);
+            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
             try {
-                Tracers.register(connectContext);
-                Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+
                 Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
                 String pr = Tracers.printLogs();
                 Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
                 return Pair.create(planPair.first, planAndTrace);
             } catch (Exception e) {
+                String pr = Tracers.printLogs();
+                if (!Strings.isNullOrEmpty(pr)) {
+                    System.out.println(pr);
+                }
                 throw e;
             } finally {
                 Tracers.close();

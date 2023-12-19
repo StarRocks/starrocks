@@ -470,6 +470,32 @@ public class StarRocksAssert {
         return withMaterializedView(sql, false);
     }
 
+    public StarRocksAssert withMaterializedView(String sql, ExceptionRunnable action) {
+        String mvName = null;
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+            mvName = createMaterializedViewStatement.getTableName().getTbl();
+            System.out.println(sql);
+            withMaterializedView(sql);
+            action.run();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            // Create mv may fail.
+            if (!Strings.isNullOrEmpty(mvName)) {
+                try {
+                    dropMaterializedView(mvName);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return this;
+    }
+
     public void assertMVWithoutComplexExpression(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
@@ -493,8 +519,7 @@ public class StarRocksAssert {
             checkAlterJob();
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
-            CreateMaterializedViewStatement createMaterializedViewStatement =
-                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
             if (isOnlySingleReplica) {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }

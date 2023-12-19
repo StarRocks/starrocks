@@ -570,6 +570,10 @@ public class Database extends MetaObject implements Writable {
         return idToTable.get(tableId);
     }
 
+    public Optional<Table> mayGetTable(long tableId) {
+        return Optional.ofNullable(getTable(tableId));
+    }
+
     public static Database read(DataInput in) throws IOException {
         Database db = new Database();
         db.readFields(in);

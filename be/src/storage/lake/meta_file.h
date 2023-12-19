@@ -32,6 +32,8 @@ namespace lake {
 
 class UpdateManager;
 
+enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -58,6 +60,9 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
+    void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
+    RecoverFlag recover_flag() const { return _recover_flag; }
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
@@ -80,6 +85,8 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // ready to be removed
     std::shared_ptr<std::vector<std::string>> _trash_files;
+    // When recover flag isn't ok, need recover later
+    RecoverFlag _recover_flag = RecoverFlag::OK;
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);

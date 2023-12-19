@@ -205,6 +205,29 @@ public class JobSpec {
                     .build();
         }
 
+        public static JobSpec fromRefreshDictionaryCacheSpec(ConnectContext context,
+                                                             TUniqueId queryId,
+                                                             DescriptorTable descTable,
+                                                             List<PlanFragment> fragments,
+                                                             List<ScanNode> scanNodes) {
+            TQueryOptions queryOptions = context.getSessionVariable().toThrift();
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
+                                                         context.getSessionVariable().getTimeZone());
+
+            return new JobSpec.Builder()
+                    .queryId(queryId)
+                    .fragments(fragments)
+                    .scanNodes(scanNodes)
+                    .descTable(descTable.toThrift())
+                    .enableStreamPipeline(false)
+                    .isBlockQuery(false)
+                    .needReport(false)
+                    .queryGlobals(queryGlobals)
+                    .queryOptions(queryOptions)
+                    .commonProperties(context)
+                    .build();
+        }
+
         public static JobSpec fromNonPipelineBrokerLoadJobSpec(ConnectContext context,
                                                                Long loadJobId, TUniqueId queryId,
                                                                DescriptorTable descTable,
