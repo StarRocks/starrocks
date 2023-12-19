@@ -244,7 +244,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         if (deleteTxnLogExecutor == null) {
             // Create a new thread for every task if there is no idle threads available.
             // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
-            deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(Config.lake_publish_delete_txnlog_max_threads,
+            int numThreads = Math.max(Config.lake_publish_delete_txnlog_max_threads, 1);
+            deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads,
                     "lake-publish-delete-txnLog", true);
 
             // register ThreadPool config change listener
