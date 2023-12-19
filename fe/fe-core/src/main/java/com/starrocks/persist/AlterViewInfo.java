@@ -97,9 +97,17 @@ public class AlterViewInfo implements Writable {
             return false;
         }
         AlterViewInfo otherInfo = (AlterViewInfo) other;
+        boolean commentEqual;
+        if (comment == null && otherInfo.getComment() == null) {
+            commentEqual = true;
+        } else if (comment != null) {
+            commentEqual = comment.equalsIgnoreCase(otherInfo.getComment());
+        } else {
+            commentEqual = false;
+        }
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
-                newFullSchema.equals(otherInfo.getNewFullSchema()) && comment.equalsIgnoreCase(otherInfo.getComment());
+                newFullSchema.equals(otherInfo.getNewFullSchema()) && commentEqual;
     }
 
     @Override
