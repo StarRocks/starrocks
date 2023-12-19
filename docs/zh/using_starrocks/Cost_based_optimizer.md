@@ -86,23 +86,11 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 - 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过 `statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
 
-<<<<<<< HEAD
-对于数据量较大的表，StarRocks按照以下策略限制：
-
-- 默认采集的间隔不低于 12 小时，通过  `statistic_auto_collect_large_table_interval` 配置。
-=======
 - 对于数据量较大的表，StarRocks 按照以下策略限制：
 
   - 默认采集的间隔不低于 12 小时，通过 `statistic_auto_collect_large_table_interval` 配置。
->>>>>>> 09d243a6de ([Doc] Align en CBO with zh CBO (backport #37261) (#37292))
-
   - 满足采集间隔的条件下，当健康度低于抽样采集阈值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
-
   - 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
-
-<<<<<<< HEAD
-- 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
-=======
   - 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
 :::tip
@@ -110,7 +98,6 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。
 
 :::
->>>>>>> 09d243a6de ([Doc] Align en CBO with zh CBO (backport #37261) (#37292))
 
 自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
@@ -128,13 +115,8 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_large_table_interval | LONG    | 86400        | 自动全量采集任务的大表采集间隔，单位：秒。                               |
 | statistic_auto_collect_ratio                | DOUBLE  | 0.8          | 触发自动统计信息收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。           |
 | statistic_auto_collect_sample_threshold     | DOUBLE  | 0.3          | 触发自动统计信息抽样收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动抽样采集。       |
-<<<<<<< HEAD
-| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
-| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。                              |
-=======
 | statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
 | statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。默认值：20971520（20 MB）。                              |
->>>>>>> 09d243a6de ([Doc] Align en CBO with zh CBO (backport #37261) (#37292))
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
 | statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：毫秒。默认值：600000（10 分钟）。 |
 
