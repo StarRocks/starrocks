@@ -131,7 +131,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
+    public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
+    public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -717,6 +719,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to compatible mysql 5.8
     @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
     private String transactionIsolation = "REPEATABLE-READ";
+    @VariableMgr.VarAttr(name = TRANSACTION_READ_ONLY, alias = TX_READ_ONLY)
+    private String transactionReadOnly = "OFF";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
