@@ -63,11 +63,9 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-<<<<<<< HEAD
     [[nodiscard]] Status delete_tablet(int64_t tablet_id);
-=======
+
     StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
->>>>>>> a8f422e70c ([Enhancement][1/n] Get tablet schema from a specific version of tablet metadata (#33466))
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 

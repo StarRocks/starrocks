@@ -19,11 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
-<<<<<<< HEAD
-#include "storage/lake/tablet.h"
-=======
 #include "storage/lake/versioned_tablet.h"
->>>>>>> a8f422e70c ([Enhancement][1/n] Get tablet schema from a specific version of tablet metadata (#33466))
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 

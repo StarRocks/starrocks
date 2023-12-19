@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,15 +34,7 @@ struct OlapMetaReaderParams : MetaReaderParams {
     OlapMetaReaderParams() = default;
 
     TabletSharedPtr tablet;
-<<<<<<< HEAD
-    void check_validation() const {
-        if (UNLIKELY(version.first == -1)) {
-            LOG(FATAL) << "version is not set. tablet=" << tablet->full_name();
-        }
-    }
-=======
-    TabletSchemaCSPtr tablet_schema;
->>>>>>> a8f422e70c ([Enhancement][1/n] Get tablet schema from a specific version of tablet metadata (#33466))
+    std::shared_ptr<const TabletSchema> tablet_schema;
 };
 
 class OlapMetaReader final : public MetaReader {
