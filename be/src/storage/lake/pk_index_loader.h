@@ -29,6 +29,8 @@
 namespace starrocks::lake {
 
 class MetaFileBuilder;
+class TabletManager;
+class TabletMetadataPB;
 
 struct ChunkInfo {
     ChunkUniquePtr chunk;
@@ -36,27 +38,16 @@ struct ChunkInfo {
     std::vector<uint32_t> rowids;
 };
 
-struct PkSegmentScanTaskContext {
-    std::queue<std::shared_ptr<ChunkInfo>> chunk_infos;
-    uint64_t subtask_num;
-    std::condition_variable cv;
-    Status status;
-
-    std::shared_ptr<ChunkInfo> get_chunk_info() {
-        auto chunk_info = chunk_infos.front();
-        chunk_infos.pop();
-        return chunk_info;
-    }
-};
-
 class PkIndexLoader {
+    using TabletMetadataPtr = std::shared_ptr<const TabletMetadataPB>;
+
 public:
     PkIndexLoader() = default;
 
     ~PkIndexLoader();
 
-    Status load(Tablet* tablet, const std::vector<RowsetPtr>& rowsets, const Schema& schema, int64_t version,
-                const MetaFileBuilder* builder);
+    Status load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, const std::vector<RowsetPtr>& rowsets,
+                const Schema& schema, int64_t version, const MetaFileBuilder* builder);
 
     void add_chunk(int64_t tablet_id, const std::shared_ptr<ChunkInfo>& chunk_info);
 
@@ -65,8 +56,25 @@ public:
     void finish_subtask(int64_t tablet_id, const Status& status);
 
 private:
-    std::mutex _mutex;
+    struct PkSegmentScanTaskContext {
+        std::queue<std::shared_ptr<ChunkInfo>> chunk_infos;
+        uint64_t subtask_num;
+        std::condition_variable cv;
+        Status status;
+
+        std::shared_ptr<ChunkInfo> get_chunk_info() {
+            if (chunk_infos.empty()) {
+                return nullptr;
+            }
+
+            auto chunk_info = chunk_infos.front();
+            chunk_infos.pop();
+            return chunk_info;
+        }
+    };
+
     std::unordered_map<int64_t, std::shared_ptr<PkSegmentScanTaskContext>> _contexts;
+    std::mutex _mutex;
 };
 
 } // namespace starrocks::lake

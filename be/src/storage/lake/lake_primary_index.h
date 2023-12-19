@@ -58,16 +58,15 @@ public:
         return nullptr;
     }
 
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
-
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
 
 private:
     // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
-    std::mutex _mutex;
     int64_t _data_version = 0;
+    // make sure at most 1 thread is read or write primary index
+    std::mutex _mutex;
 };
 
 } // namespace lake

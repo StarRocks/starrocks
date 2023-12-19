@@ -56,8 +56,8 @@ bool LakePrimaryIndex::is_load(int64_t base_version) {
     return _loaded && _data_version >= base_version;
 }
 
-Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
-                                       const MetaFileBuilder* builder) {
+Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                       int64_t base_version, const MetaFileBuilder* builder) {
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
@@ -116,11 +116,11 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    if (config::use_lake_pk_index_loader) {
-        RETURN_IF_ERROR(ExecEnv::GetInstance()->lake_pk_index_loader()->load(tablet, *rowsets, pkey_schema,
+    if (config::lake_enable_pk_index_loader) {
+        RETURN_IF_ERROR(ExecEnv::GetInstance()->lake_pk_index_loader()->load(tablet_mgr, metadata, rowsets, pkey_schema,
                                                                              base_version, builder));
         while (true) {
-            auto chunk_or_st = ExecEnv::GetInstance()->lake_pk_index_loader()->get_chunk(tablet->id());
+            auto chunk_or_st = ExecEnv::GetInstance()->lake_pk_index_loader()->get_chunk(metadata->id());
             auto st = chunk_or_st.status();
             if (!st.is_ok_or_eof()) {
                 return st;
@@ -147,7 +147,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
         rowids.reserve(4096);
         auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
         auto chunk = chunk_shared_ptr.get();
-        for (auto& rowset : *rowsets) {
+        for (auto& rowset : rowsets) {
             auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
             if (!res.ok()) {
                 return res.status();

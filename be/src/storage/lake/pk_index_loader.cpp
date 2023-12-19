@@ -16,10 +16,13 @@
 
 #include <fmt/format.h>
 
+#include <chrono>
+
 #include "common/constexpr.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_options.h"
@@ -29,9 +32,10 @@ namespace starrocks::lake {
 
 class PkSegmentScanTask {
 public:
-    PkSegmentScanTask(Tablet* tablet, uint32_t rowset_id, uint32_t seg_id, const std::string& seg_name,
-                      const Schema& schema, int64_t version, const MetaFileBuilder* builder)
-            : _tablet(tablet),
+    PkSegmentScanTask(TabletManager* tablet_mgr, TabletMetadataPtr metadata, uint32_t rowset_id, uint32_t seg_id,
+                      std::string seg_name, Schema schema, int64_t version, const MetaFileBuilder* builder)
+            : _tablet_mgr(tablet_mgr),
+              _metadata(std::move(metadata)),
               _rowset_id(rowset_id),
               _seg_id(seg_id),
               _seg_name(std::move(seg_name)),
@@ -45,16 +49,21 @@ public:
             if (st.is_end_of_file()) {
                 st = Status::OK();
             }
-            ExecEnv::GetInstance()->lake_pk_index_loader()->finish_subtask(_tablet->id(), st);
+            ExecEnv::GetInstance()->lake_pk_index_loader()->finish_subtask(_metadata->id(), st);
         });
         size_t footer_size_hint = 16 * 1024;
-        auto seg = _tablet->load_segment(_seg_name, _seg_id, &footer_size_hint, false, false);
+        std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
+        auto segment_path = _tablet_mgr->segment_location(_metadata->id(), _seg_name);
+        auto segment_info = FileInfo{.path = segment_path};
+        LakeIOOptions lake_io_opts{.fill_data_cache = false};
+        auto seg =
+                _tablet_mgr->load_segment(segment_info, _seg_id, &footer_size_hint, lake_io_opts, false, tablet_schema);
         if (!seg.ok()) {
             st = seg.status();
             return;
         }
         SegmentReadOptions seg_options;
-        auto fs = FileSystem::CreateSharedFromString(_tablet->root_location());
+        auto fs = FileSystem::CreateSharedFromString(_tablet_mgr->tablet_root_location(_metadata->id()));
         if (!fs.ok()) {
             st = fs.status();
             return;
@@ -63,9 +72,9 @@ public:
         seg_options.fs = *fs;
         seg_options.stats = &stats;
         seg_options.is_primary_keys = true;
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), _builder);
+        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), _builder);
         seg_options.version = _version;
-        seg_options.tablet_id = _tablet->id();
+        seg_options.tablet_id = _metadata->id();
         seg_options.rowset_id = _rowset_id;
         auto seg_itr = (*seg)->new_iterator(_schema, seg_options);
         if (!seg_itr.ok()) {
@@ -84,13 +93,14 @@ public:
             } else if (!st.ok()) {
                 return;
             }
-            ExecEnv::GetInstance()->lake_pk_index_loader()->add_chunk(_tablet->id(), chunk_info);
+            ExecEnv::GetInstance()->lake_pk_index_loader()->add_chunk(_metadata->id(), chunk_info);
         }
         (*seg_itr)->close();
     }
 
 private:
-    Tablet* _tablet;
+    TabletManager* _tablet_mgr;
+    const TabletMetadataPtr _metadata;
     uint32_t _rowset_id;
     uint32_t _seg_id;
     const std::string _seg_name;
@@ -103,20 +113,28 @@ PkIndexLoader::~PkIndexLoader() {
     _contexts.clear();
 }
 
-Status PkIndexLoader::load(Tablet* tablet, const std::vector<RowsetPtr>& rowsets, const Schema& schema, int64_t version,
+Status PkIndexLoader::load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                           const std::vector<RowsetPtr>& rowsets, const Schema& schema, int64_t version,
                            const MetaFileBuilder* builder) {
+    if (_contexts.count(metadata->id())) {
+        auto error_msg = fmt::format("Already exists pk segment scan substask, tablet: {}", metadata->id());
+        LOG(ERROR) << error_msg;
+        return Status::AlreadyExist(error_msg);
+    }
+
     uint64_t subtask_num = 0;
     std::vector<std::shared_ptr<PkSegmentScanTask>> scan_tasks;
     for (auto& rowset : rowsets) {
         auto& rowset_meta = rowset->metadata();
         for (uint32_t i = 0; i < rowset_meta.segments_size(); ++i) {
-            auto scan_task = std::make_shared<PkSegmentScanTask>(tablet, rowset->id(), i, rowset_meta.segments(i),
-                                                                 schema, version, builder);
+            auto scan_task = std::make_shared<PkSegmentScanTask>(tablet_mgr, metadata, rowset->id(), i,
+                                                                 std::move(rowset_meta.segments(i)), std::move(schema),
+                                                                 version, builder);
             bool ret = ExecEnv::GetInstance()->connector_scan_executor()->submit(
                     workgroup::ScanTask(workgroup::WorkGroupManager::instance()->get_default_workgroup().get(),
-                                        [scan_task]() { scan_task->run(); }));
+                                        [scan_task](workgroup::YieldContext&) { scan_task->run(); }));
             if (!ret) {
-                auto error_msg = fmt::format("Fail to submit pk segment scan subtask, tablet: {}", tablet->id());
+                auto error_msg = fmt::format("Fail to submit pk segment scan subtask, tablet: {}", metadata->id());
                 LOG(ERROR) << error_msg;
                 return Status::IOError(error_msg);
             }
@@ -127,7 +145,7 @@ Status PkIndexLoader::load(Tablet* tablet, const std::vector<RowsetPtr>& rowsets
     std::lock_guard<std::mutex> lg(_mutex);
     auto context = std::make_shared<PkSegmentScanTaskContext>();
     context->subtask_num = subtask_num;
-    _contexts.emplace(tablet->id(), context);
+    _contexts.emplace(metadata->id(), context);
     return Status::OK();
 }
 
@@ -167,7 +185,7 @@ StatusOr<std::shared_ptr<ChunkInfo>> PkIndexLoader::get_chunk(int64_t tablet_id)
         return context->get_chunk_info();
     }
 
-    context->cv.wait(lk, [&] {
+    context->cv.wait_for(lk, std::chrono::seconds(1), [&] {
         return !context->chunk_infos.empty() || !context->status.is_ok_or_eof() || context->subtask_num == 0;
     });
 

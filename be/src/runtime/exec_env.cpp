@@ -506,7 +506,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         });
         config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
     }
-    _lake_pk_index_loader = new lake::PkIndexLoader();
+    if (config::lake_enable_pk_index_loader) {
+        _lake_pk_index_loader = new lake::PkIndexLoader();
+    }
 
 #elif defined(BE_TEST)
     _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
@@ -693,6 +695,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    SAFE_DELETE(_lake_pk_index_loader);
     _metrics = nullptr;
 }
 

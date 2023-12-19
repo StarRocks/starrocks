@@ -954,6 +954,7 @@ CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+CONF_Bool(lake_enable_pk_index_loader, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1205,7 +1206,6 @@ CONF_mInt32(json_flat_internal_column_min_limit, "5");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "20");
-CONF_mBool(use_lake_pk_index_loader, "true");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0

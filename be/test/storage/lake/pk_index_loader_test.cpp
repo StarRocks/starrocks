@@ -36,7 +36,7 @@ namespace starrocks::lake {
 class PkIndexLoaderTest : public TestBase {
 public:
     PkIndexLoaderTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -119,7 +119,7 @@ TEST_F(PkIndexLoaderTest, test_load) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -129,10 +129,7 @@ TEST_F(PkIndexLoaderTest, test_load) {
 
     writer->close();
 
-    auto use_lake_pk_index_loader = config::use_lake_pk_index_loader;
-    config::use_lake_pk_index_loader = false;
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
-    config::use_lake_pk_index_loader = use_lake_pk_index_loader;
 
     vector<ColumnId> pk_columns(_tablet_schema->num_key_columns());
     for (auto i = 0; i < _tablet_schema->num_key_columns(); i++) {
@@ -142,7 +139,8 @@ TEST_F(PkIndexLoaderTest, test_load) {
     ASSIGN_OR_ABORT(auto rowsets, tablet.get_rowsets(2));
     auto index = std::make_unique<LakePrimaryIndex>(pkey_schema);
     MetaFileBuilder builder(tablet, _tablet_metadata);
-    ASSERT_OK(ExecEnv::GetInstance()->lake_pk_index_loader()->load(&tablet, rowsets, pkey_schema, 2, &builder));
+    ASSERT_OK(ExecEnv::GetInstance()->lake_pk_index_loader()->load(_tablet_mgr.get(), _tablet_metadata, rowsets,
+                                                                   pkey_schema, 2, &builder));
 
     uint64_t num_rows = 0;
     while (true) {
