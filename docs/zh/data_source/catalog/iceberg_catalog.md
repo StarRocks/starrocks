@@ -245,11 +245,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-<<<<<<< HEAD
-    "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
-=======
-    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
+    "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -265,11 +261,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-<<<<<<< HEAD
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
-=======
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -300,11 +292,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-<<<<<<< HEAD
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
-=======
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -338,11 +326,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-<<<<<<< HEAD
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
-=======
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -379,11 +363,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-<<<<<<< HEAD
-    "iceberg.catalog.hive.metastore.uris" = "thrift://34.132.15.127:9083",
-=======
-    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
+    "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -392,223 +372,6 @@ PROPERTIES
 );
 ```
 
-<<<<<<< HEAD
-=======
-#### Microsoft Azure Storage
-
-##### Azure Blob Storage
-
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.blob.storage_account" = "<blob_storage_account_name>",
-      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
-  );
-  ```
-
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.blob.storage_account" = "<blob_storage_account_name>",
-      "azure.blob.container" = "<blob_container_name>",
-      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
-  );
-  ```
-
-##### Azure Data Lake Storage Gen1
-
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.adls1.use_managed_service_identity" = "true"    
-  );
-  ```
-
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.adls1.oauth2_client_id" = "<application_client_id>",
-      "azure.adls1.oauth2_credential" = "<application_client_credential>",
-      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
-  );
-  ```
-
-##### Azure Data Lake Storage Gen2
-
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.adls2.oauth2_use_managed_identity" = "true",
-      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-      "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  );
-  ```
-
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.adls2.storage_account" = "<storage_account_name>",
-      "azure.adls2.shared_key" = "<shared_key>"     
-  );
-  ```
-
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.adls2.oauth2_client_id" = "<service_client_id>",
-      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  );
-  ```
-
-#### Google GCS
-
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "gcp.gcs.use_compute_engine_service_account" = "true"    
-  );
-  ```
-
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG iceberg_catalog_hms
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "gcp.gcs.service_account_email" = "<google_service_account_email>",
-      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
-      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
-  );
-  ```
-
-- 如果基于 Impersonation 进行认证和鉴权
-
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Iceberg Catalog：
-
-    ```SQL
-    CREATE EXTERNAL CATALOG iceberg_catalog_hms
-    PROPERTIES
-    (
-        "type" = "iceberg",
-        "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-        "gcp.gcs.use_compute_engine_service_account" = "true",
-        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
-    );
-    ```
-
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Iceberg Catalog：
-
-    ```SQL
-    CREATE EXTERNAL CATALOG iceberg_catalog_hms
-    PROPERTIES
-    (
-        "type" = "iceberg",
-        "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-        "gcp.gcs.service_account_email" = "<google_service_account_email>",
-        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
-        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
-        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
-    );
-    ```
-
-## 查看 Iceberg Catalog
-
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
-
-```SQL
-SHOW CATALOGS;
-```
-
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
-
-```SQL
-SHOW CREATE CATALOG iceberg_catalog_glue;
-```
-
-## 切换 Iceberg Catalog 和数据库
-
-您可以通过如下方法切换至目标 Iceberg Catalog 和数据库：
-
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Iceberg Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
-
-  ```SQL
-  -- 切换当前会话生效的 Catalog：
-  SET CATALOG <catalog_name>
-  -- 指定当前会话生效的数据库：
-  USE <db_name>
-  ```
-
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Iceberg Catalog 下的指定数据库：
-
-  ```SQL
-  USE <catalog_name>.<db_name>
-  ```
-
-## 删除 Iceberg Catalog
-
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
-
-例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
-
-```SQL
-DROP Catalog iceberg_catalog_glue;
-```
-
->>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
 ## 查看 Iceberg 表结构
 
 您可以通过如下方法查看 Iceberg 表的表结构：
