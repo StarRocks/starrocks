@@ -484,11 +484,13 @@ public class StarRocksAssert {
             e.printStackTrace();
             Assert.fail();
         } finally {
-            Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
-            try {
-                dropMaterializedView(mvName);
-            } catch (Exception e) {
-                e.printStackTrace();
+            // Create mv may fail.
+            if (!Strings.isNullOrEmpty(mvName)) {
+                try {
+                    dropMaterializedView(mvName);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         }
         return this;
