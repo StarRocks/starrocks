@@ -134,8 +134,13 @@ public class MockedBackend {
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
+<<<<<<< HEAD
         ((MockGenericPool) ClientPool.heartbeatPool).register(this);
         ((MockGenericPool) ClientPool.backendPool).register(this);
+=======
+        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.backendPool).register(this);
+>>>>>>> 1d6e2688c3 ([Enhancement] Create a new connection pool for broker RPC (#37218))
 
         new MockUp<BrpcProxy>() {
             @Mock
