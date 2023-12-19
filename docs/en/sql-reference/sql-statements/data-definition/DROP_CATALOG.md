@@ -26,7 +26,7 @@ Create a Hive catalog named `hive1`.
 CREATE EXTERNAL CATALOG hive1
 PROPERTIES(
   "type"="hive", 
-  "hive.metastore.uris"="thrift://x.x.x.x:9083"
+  "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
