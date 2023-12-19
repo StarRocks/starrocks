@@ -47,6 +47,9 @@ public class ClientPool {
     static GenericKeyedObjectPoolConfig backendConfig = new GenericKeyedObjectPoolConfig();
     static int backendTimeoutMs = 60000; // 1min
 
+    static GenericKeyedObjectPoolConfig brokerPoolConfig = new GenericKeyedObjectPoolConfig();
+    public static int brokerTimeoutMs = Config.broker_client_timeout_ms;
+
     static {
         heartbeatConfig.setLifo(true);            // set Last In First Out strategy
         heartbeatConfig.setMaxIdlePerKey(2);      // (default 2)
@@ -65,9 +68,6 @@ public class ClientPool {
         backendConfig.setMaxWaitMillis(500);    //  wait for the connection
     }
 
-    static GenericKeyedObjectPoolConfig brokerPoolConfig = new GenericKeyedObjectPoolConfig();
-    public static int brokerTimeoutMs = Config.broker_client_timeout_ms;
-
     static {
         brokerPoolConfig.setLifo(true);            // set Last In First Out strategy
         brokerPoolConfig.setMaxIdlePerKey(128);    // (default 128)
@@ -77,8 +77,10 @@ public class ClientPool {
         brokerPoolConfig.setMaxWaitMillis(500);    //  wait for the connection
     }
 
-    public static GenericPool<HeartbeatService.Client> heartbeatPool =
+    public static GenericPool<HeartbeatService.Client> beHeartbeatPool =
             new GenericPool("HeartbeatService", heartbeatConfig, heartbeatTimeoutMs);
+    public static GenericPool<TFileBrokerService.Client> brokerHeartbeatPool =
+            new GenericPool("TFileBrokerService", heartbeatConfig, heartbeatTimeoutMs);
     public static GenericPool<FrontendService.Client> frontendPool =
             new GenericPool("FrontendService", backendConfig, backendTimeoutMs);
     public static GenericPool<BackendService.Client> backendPool =
