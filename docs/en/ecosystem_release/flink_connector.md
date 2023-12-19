@@ -28,7 +28,7 @@ displayed_sidebar: "English"
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 | --------- | ------------------------ | ------------- | ---- | --------- |
-| 1.2.9     | | |     |  |
+| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
@@ -42,17 +42,18 @@ displayed_sidebar: "English"
 
 #### 1.2.9
 
-This release includes some features and bug fixes.
+This release includes some features and bug fixes. The notable change is that the Flink connector is integrated with [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) to easily build a streaming ELT pipeline from CDC sources (such as MySQL, Kafka) to StarRocks. You can see [Flink CDC Synchronization](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#flink-cdc--synchronization) for details.
 
 **Features**
 
-- Implement the new sink API introduced in [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction) to support [Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/issues/2600). [#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
+- Implement catalog to support Flink CDC 3.0. [#295](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/295)
+- Implement new sink api in [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction) to support Flink CDC 3.0. [#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
 - Support Flink 1.18. [#305](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/305)
 
 **Bug Fixes**
 
 - Fix misleading thread name and log. [#290](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/290)
-- Fix wrong configurations when writing to multiple tables. [#298](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/298)
+- Fix wrong stream-load-sdk configurations when writing to multiple tables. [#298](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/298)
 
 #### 1.2.8
 

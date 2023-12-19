@@ -10,7 +10,7 @@ The Flink connector supports two reading methods: Flink SQL and Flink DataStream
 
 > **NOTE**
 >
-> The Flink connector also supports writing the data read by Flink to another StarRocks cluster or storage system. See [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
+> The Flink connector also supports writing the data read by Flink to another StarRocks cluster or storage system. See [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md#flink-cdc-synchronization-schema-change-supportedd).
 
 ## Background information
 
@@ -32,6 +32,7 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
+| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
 
