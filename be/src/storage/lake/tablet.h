@@ -87,8 +87,6 @@ public:
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0);
 
-    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, Schema schema);
-
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 

@@ -142,8 +142,8 @@ public:
     }
 
     int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);

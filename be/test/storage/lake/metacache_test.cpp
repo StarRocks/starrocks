@@ -40,7 +40,7 @@ using namespace starrocks;
 class LakeMetacacheTest : public TestBase {
 public:
     LakeMetacacheTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -84,7 +84,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_metadata_cache";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -220,7 +220,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // no segment
     auto sz0 = metacache->memory_usage();
 
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
