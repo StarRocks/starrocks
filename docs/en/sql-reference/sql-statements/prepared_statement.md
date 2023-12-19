@@ -42,7 +42,7 @@ PREPARE <stmt_name> FROM <preparable_stmt>
 **Parameters:**
 
 - `stmt_name`: the name given to the prepared statement, which is subsequently used to execute or deallocate that prepared statement. The name must be unique within a single session.
-- `preparable_stmt`: the SQL statement to be prepared, where the placeholder for variables is a question mark (`?`).
+- `preparable_stmt`: the SQL statement (**only support `SELECT` statement**) to be prepared, where the placeholder for variables is a question mark (`?`).
 
 **Example:**
 
