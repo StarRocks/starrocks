@@ -428,9 +428,9 @@ In the load command, you can specify the required fields for building the global
 
 - **Import of bitmap binary type columns**
 
-The data type applicable to the StarRocks table aggregate column is bitmap type, and the data type of the corresponding column in the data source Hive table or HDFS file type is binary (through com.starrocks.load.loadv2.dpp.BitmapValue in spark-dpp in FE class serialization) type.
+The data type of a aggregate column in the StarRocks aggregate table is bitmap, while the data type of the corresponding column in the data source (a Hive table or HDFS file) is binary.
 
-There is no need to build a global dictionary, just specify the corresponding fields in the load command. The format is: ```StarRocks field name=bitmap_from_binary(Hive table field name)```
+You do not need to build a global dictionary. You can just specify the corresponding fields in the load command to load data. The format is: `StarRocks field name=bitmap_from_binary(Hive table field name)`.
 
 ## Viewing Import Jobs
 
