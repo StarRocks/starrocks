@@ -21,10 +21,14 @@
 #include <fstream>
 
 #include "exec/tablet_info.h"
+#include "exprs/dictionary_get_expr.h"
+#include "exprs/mock_vectorized_expr.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/assert.h"
+#include "testutil/column_test_helper.h"
+#include "testutil/exprs_test_helper.h"
 
 namespace starrocks {
 
@@ -32,22 +36,13 @@ class DictionaryCacheManagerTest : public testing::Test {
 public:
     ~DictionaryCacheManagerTest() override = default;
 
-    void SetUp() override {
-        if (dictionary_cache_manager == nullptr) {
-            dictionary_cache_manager = new starrocks::DictionaryCacheManager();
-        }
-    }
+    void SetUp() override {}
 
     void TearDown() override {
         if (test_tablet) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(test_tablet->tablet_id());
             test_tablet.reset();
             test_tablet = nullptr;
-        }
-
-        if (dictionary_cache_manager) {
-            delete dictionary_cache_manager;
-            dictionary_cache_manager = nullptr;
         }
     }
 
@@ -228,7 +223,20 @@ public:
         }
     }
 
-    starrocks::DictionaryCacheManager* dictionary_cache_manager = nullptr;
+    static MockExpr* new_mock_expr(ColumnPtr value, const LogicalType& type, ObjectPool& objpool) {
+        return new_mock_expr(std::move(value), TypeDescriptor(type), objpool);
+    }
+
+    static MockExpr* new_mock_expr(ColumnPtr value, const TypeDescriptor& type, ObjectPool& objpool) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::INT_LITERAL);
+        node.__set_num_children(0);
+        node.__set_type(type.to_thrift());
+        MockExpr* e = objpool.add(new MockExpr(node, std::move(value)));
+        return e;
+    }
+
+    starrocks::DictionaryCacheManager* dictionary_cache_manager = StorageEngine::instance()->dictionary_cache_manager();
     TabletSharedPtr test_tablet = nullptr;
 };
 
@@ -272,6 +280,55 @@ TEST_F(DictionaryCacheManagerTest, large_column_refresh_and_read) {
     auto test_tablet = create_tablet(9144, 6544, &large_string_column);
     create_new_dictionary_cache(dictionary_cache_manager, 300, 301, test_tablet, &large_string_column);
     read_dictionary(dictionary_cache_manager, test_tablet, 300, 301);
+}
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
+    auto test_tablet = create_tablet(9145, 6545);
+    create_new_dictionary_cache(dictionary_cache_manager, 400, 1, test_tablet);
+    ObjectPool objpool;
+
+    TypeDescriptor type;
+    type.type = LogicalType::TYPE_STRUCT;
+    type.field_names.emplace_back("k2");
+    type.field_names.emplace_back("k3");
+    type.children.emplace_back();
+    type.children.back().type = LogicalType::TYPE_BIGINT;
+    type.children.emplace_back();
+    type.children.back().type = LogicalType::TYPE_BIGINT;
+
+    TDictionaryGetExpr t_dictionary_get_expr;
+    t_dictionary_get_expr.__set_dict_id(400);
+    t_dictionary_get_expr.__set_txn_id(1);
+    t_dictionary_get_expr.__set_key_size(1);
+
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::DICTIONARY_GET_EXPR);
+    node.__set_is_nullable(false);
+    node.__set_type(type.to_thrift());
+    node.__set_num_children(0);
+    node.__set_dictionary_get_expr(t_dictionary_get_expr);
+
+    auto dictionary_get_expr = std::make_unique<DictionaryGetExpr>(node);
+
+    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
+    type_varchar.len = 100;
+    std::string dictionary_name("dictionary_name");
+    Slice slice(dictionary_name);
+    dictionary_get_expr->add_child(
+            new_mock_expr(ColumnTestHelper::build_column<Slice>({slice}), type_varchar, objpool));
+
+    dictionary_get_expr->add_child(
+            new_mock_expr(ColumnTestHelper::build_column<long>({0}), LogicalType::TYPE_BIGINT, objpool));
+
+    ASSERT_TRUE(dictionary_get_expr->prepare(nullptr, nullptr).ok());
+    auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_TRUE(res.ok());
+
+    auto res_column = std::move(res.value());
+    ASSERT_TRUE(res_column->size() == 1);
+    auto struct_column = down_cast<StructColumn*>(res_column.get());
+    ASSERT_TRUE(struct_column->fields_column().size() == 2);
 }
 
 } // namespace starrocks

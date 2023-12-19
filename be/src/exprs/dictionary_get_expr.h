@@ -30,8 +30,6 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictionaryGetExpr(*this)); }
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
-    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
-    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
     int64_t get_dict_id() { return _dictionary_get_expr.dict_id; }
     int64_t get_txn_id() { return _dictionary_get_expr.txn_id; }

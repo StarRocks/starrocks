@@ -74,12 +74,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
 Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
     _runtime_state = state;
-    return Status::OK();
-}
 
-Status DictionaryGetExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    // init parent open
-    RETURN_IF_ERROR(Expr::open(state, context, scope));
     _schema = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_schema_by_id(
             _dictionary_get_expr.dict_id);
     if (_schema == nullptr) {
@@ -125,10 +120,6 @@ Status DictionaryGetExpr::open(RuntimeState* state, ExprContext* context, Functi
     DCHECK(_struct_column != nullptr);
 
     return Status::OK();
-}
-
-void DictionaryGetExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    Expr::close(state, context, scope);
 }
 
 } // namespace starrocks
