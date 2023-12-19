@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
@@ -118,7 +117,8 @@ public class AnalyzeStmtAnalyzer {
                 }
                 if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                         !analyzeTable.isOdpsTable()) {
-                    throw new SemanticException("Analyze external table only support hive, iceberg, hudi and odps table",
+                    throw new SemanticException(
+                            "Analyze external table only support hive, iceberg and odps table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -154,7 +154,7 @@ public class AnalyzeStmtAnalyzer {
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
                     if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                             !analyzeTable.isOdpsTable()) {
-                        throw new SemanticException("Analyze external table only support hive and iceberg table",
+                        throw new SemanticException("Analyze external table only support hive, iceberg and odps table",
                                 statement.getTableName().toString());
                     }
                 }
