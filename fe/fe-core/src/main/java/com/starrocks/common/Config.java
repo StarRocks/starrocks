@@ -1122,6 +1122,17 @@ public class Config extends ConfigBase {
     public static boolean enable_backup_materialized_view = true;
 
     /**
+     * The smaller schedule time is, the higher frequency TaskManager schedule which means
+     * materialized view need to schedule to refresh.
+     * <p>
+     * When schedule time is too frequent and consumes a bit slow, FE will generate too much task runs and
+     * may cost a lot of FE's memory, so add a config to control the min schedule time to avoid it.
+     * </p>
+     */
+    @ConfField(mutable = true)
+    public static int materialized_view_min_refresh_interval = 60; // 1 min
+
+    /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
      * to determine which strategy you choose:
      *  N <0      : always use non lock optimization and no copy related materialized views which
