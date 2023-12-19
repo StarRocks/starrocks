@@ -55,10 +55,12 @@ struct StringFunctionsState {
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
                                                     NUM_LOCK_SHARD_LOG, std::mutex>;
 
+    starrocks::Slice row;
     std::string pattern;
     std::unique_ptr<re2::RE2> regex;
     std::unique_ptr<re2::RE2::Options> options;
     bool const_pattern{false};
+    bool const_row{false};
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
