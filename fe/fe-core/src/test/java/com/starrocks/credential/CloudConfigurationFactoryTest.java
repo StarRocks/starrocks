@@ -39,11 +39,20 @@ public class CloudConfigurationFactoryTest {
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
+<<<<<<< HEAD
                 "AWSCloudConfiguration{resources='', jars='', cred=AWSCloudCredential{" +
                         "useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                         "accessKey='ak', secretKey='sk', sessionToken='token', iamRoleArn='', " +
                         "externalId='', region='region', endpoint=''}, enablePathStyleAccess=false, " +
                         "enableSSL=true}", cloudConfiguration.toConfString());
+=======
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                cloudConfiguration.toConfString());
+>>>>>>> b06817f833 ([Feature] Support configure aws sts endpoint and region (#36680))
     }
 
     @Test
@@ -66,9 +75,17 @@ public class CloudConfigurationFactoryTest {
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
         Assert.assertEquals(cc.toConfString(),
+<<<<<<< HEAD
                 "AWSCloudConfiguration{resources='', jars='', cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', " +
                         "externalId='', region='ZZ', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}");
+=======
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
+                        "accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='ZZ', endpoint=''}, " +
+                        "enablePathStyleAccess=false, enableSSL=true}");
+>>>>>>> b06817f833 ([Feature] Support configure aws sts endpoint and region (#36680))
     }
 
     @Test
@@ -227,8 +244,9 @@ public class CloudConfigurationFactoryTest {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
-        Assert.assertEquals(cred.toCredString(),
-                "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
-                        "sessionToken='', iamRoleArn='', externalId='', region='us-east-1', endpoint=''}");
+        Assert.assertNotNull(cred);
+        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
+                        "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='us-east-1', endpoint=''}", cred.toCredString());
     }
 }
