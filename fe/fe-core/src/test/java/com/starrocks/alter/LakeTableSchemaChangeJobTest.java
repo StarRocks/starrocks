@@ -41,6 +41,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -58,6 +59,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
@@ -121,6 +123,20 @@ public class LakeTableSchemaChangeJobTest {
                 return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
                         "An internal warehouse contains all compute nodes in this system");
+            }
+
+            @Mock
+            public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
+                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getAvailableComputeNodeIds() {
+                return Collections.singletonList(1L);
             }
         };
 

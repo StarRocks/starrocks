@@ -118,6 +118,7 @@ import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1159,6 +1160,13 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
+        // check warehouse
+        long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+        if (warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().isEmpty()) {
+            throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+        }
+
         // create job
         AlterJobV2Builder jobBuilder = olapTable.alterTable();
         jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
@@ -1168,7 +1176,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(bfColumns, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
-                .withWarehouse(ConnectContext.get().getCurrentWarehouseId());
+                .withWarehouse(warehouseId);
 
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
