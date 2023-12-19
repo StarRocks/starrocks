@@ -15,15 +15,14 @@
 #pragma once
 
 #include <utility>
+
 #include "exprs/expr.h"
 #include "exprs/jit/ir_helper.h"
 
 namespace starrocks {
 
 class JITCompilableExpr : public Expr {
-
 public:
-
     JITCompilableExpr(const Expr& expr) : Expr(expr) {}
 
     explicit JITCompilableExpr(TypeDescriptor type) : Expr(std::move(type)) {}

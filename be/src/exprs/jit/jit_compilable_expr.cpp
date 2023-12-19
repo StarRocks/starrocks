@@ -16,8 +16,8 @@
 
 namespace starrocks {
 
-StatusOr<LLVMDatum> JITCompilableExpr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                      const std::vector<LLVMDatum>& datums) const {
+StatusOr<LLVMDatum> JITCompilableExpr::generate_ir(ExprContext* context, const llvm::Module& module,
+                                                   llvm::IRBuilder<>& b, const std::vector<LLVMDatum>& datums) const {
     if (!is_compilable()) {
         return Status::NotSupported("JIT expr not supported");
     }
@@ -34,9 +34,9 @@ StatusOr<LLVMDatum> JITCompilableExpr::generate_ir(ExprContext* context, const l
 }
 
 StatusOr<LLVMDatum> JITCompilableExpr::generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                               llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
+                                                        llvm::IRBuilder<>& b,
+                                                        const std::vector<LLVMDatum>& datums) const {
+    return Status::NotSupported("JIT expr not supported");
 }
 
 } // namespace starrocks
