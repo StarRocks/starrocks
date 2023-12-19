@@ -19,11 +19,9 @@ import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -52,7 +50,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * full scan on JDBC table.
+ * full scan on ODPS table.
  */
 public class OdpsScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OdpsScanNode.class);
@@ -152,10 +150,6 @@ public class OdpsScanNode extends ScanNode {
         return helper.toString();
     }
 
-    @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
-        computeStats(analyzer);
-    }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
@@ -195,11 +189,6 @@ public class OdpsScanNode extends ScanNode {
     @Override
     public int getNumInstances() {
         return scanRangeLocationsList.size();
-    }
-
-    @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
     }
 
 }

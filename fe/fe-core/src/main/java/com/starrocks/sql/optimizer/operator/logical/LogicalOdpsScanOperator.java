@@ -28,7 +28,6 @@ import java.util.Map;
 
 public class LogicalOdpsScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-    private boolean hasUnknownColumn;
 
     public LogicalOdpsScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -60,14 +59,6 @@ public class LogicalOdpsScanOperator extends LogicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
-    }
-
-    public boolean hasUnknownColumn() {
-        return hasUnknownColumn;
-    }
-
-    public void setHasUnknownColumn(boolean hasUnknownColumn) {
-        this.hasUnknownColumn = hasUnknownColumn;
     }
 
     public boolean isEmptyOutputRows() {

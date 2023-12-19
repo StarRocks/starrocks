@@ -118,7 +118,7 @@ public class AnalyzeStmtAnalyzer {
                 }
                 if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
                         !analyzeTable.isOdpsTable()) {
-                    throw new SemanticException("Analyze external table only support hive and iceberg table",
+                    throw new SemanticException("Analyze external table only support hive, iceberg, hudi and odps table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);

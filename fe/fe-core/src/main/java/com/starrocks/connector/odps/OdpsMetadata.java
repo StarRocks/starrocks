@@ -337,10 +337,10 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         try {
-            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
+            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getDbName(),
                     odpsTable.getTableName(), columnNames);
             TableReadSessionBuilder tableReadSessionBuilder =
-                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
+                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getDbName(), odpsTable.getTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
                             .requiredPartitions(partitionSpecs);

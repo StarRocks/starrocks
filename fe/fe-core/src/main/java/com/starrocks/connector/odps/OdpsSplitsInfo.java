@@ -29,11 +29,11 @@ import java.util.Map;
 public class OdpsSplitsInfo {
     public enum SplitPolicy {
         /**
-         * 按字节数切分
+         * Split by bytes
          */
         SIZE,
         /**
-         * 按行数切分
+         * Split by row count
          */
         ROW_OFFSET
     }
