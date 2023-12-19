@@ -1120,4 +1120,13 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
+<<<<<<< HEAD
+=======
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
+
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+>>>>>>> 995f378336 ([Enhancement] Add a switch to enable copmaction task fill data cache (#37296))
 } // namespace starrocks::config
