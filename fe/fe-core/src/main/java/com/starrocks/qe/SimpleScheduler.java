@@ -52,6 +52,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -226,7 +227,7 @@ public class SimpleScheduler {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
         lock.lock();
-        Map<Long, Integer> blackListBackendsCopy = new HashMap(blacklistBackends);
+        Map<Long, Integer> blackListBackendsCopy = new HashMap<>(blacklistBackends);
         lock.unlock();
 
         {
@@ -266,15 +267,15 @@ public class SimpleScheduler {
 
         lock.lock();
         try {
-            Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
+            Iterator<Map.Entry<Long, Integer>> iterator = blacklistBackends.entrySet().iterator();
             while (iterator.hasNext()) {
                 Map.Entry<Long, Integer> entry = iterator.next();
-                if (blacklistBackends.containsKey(entry.getKey())) {
+                if (blackListBackendsCopy.containsKey(entry.getKey())) {
                     // update the retry times.
-                    blacklistBackends.put(entry.getKey(), entry.getValue());
+                    entry.setValue(blackListBackendsCopy.get(entry.getKey()));
                 } else {
                     // remove the backend.
-                    blacklistBackends.remove(entry.getKey());
+                    iterator.remove();
                 }
             }
         } finally {
