@@ -158,11 +158,11 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
-    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. hive.metastore.uris is the server address.
+    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. `hive.metastore.uris` is the server address.
 
 - For JDBC, specify the following properties:
 
