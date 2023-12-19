@@ -74,7 +74,10 @@ class Filter(logging.Filter):
     def filter(self, record):
         # replace secret infos
         for secret_k, secret_v in SECRET_INFOS.items():
-            record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+            try:
+                record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+            except Exception:
+                record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
 
         if record.levelno >= self.msg_level:
             return False
