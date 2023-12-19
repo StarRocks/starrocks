@@ -907,7 +907,7 @@ Status DictColumnWriter::append(const Column& column) {
 inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& column) {
     Status st;
     EncodingTypePB detect_encoding;
-    LogicalType logicalType = type_info()->type();
+    LogicalType logicalType = delegate_type(type_info()->type());
     switch (logicalType) {
     case TYPE_TINYINT:
         detect_encoding = speculate_encoding<TYPE_TINYINT>(column);
