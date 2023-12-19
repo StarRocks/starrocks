@@ -19,7 +19,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
 
 public class MvPlanContextBuilder {
-    public MvPlanContext getPlanContext(MaterializedView mv) {
+    public static MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
         ConnectContext connectContext = new ConnectContext();
