@@ -16,7 +16,7 @@ package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.sql.parser.SqlParser;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -29,16 +29,18 @@ public class TrinoCtasTest extends TrinoTestBase {
     @Test
     public void testCtasTrinoDialect() throws Exception {
         String ctasSql = "create table test.t_doy as select doy(date '2022-03-06')";
+        try {
+            // test trino dialect
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) SqlParser.parse(ctasSql, connectContext.getSessionVariable()).get(0);
+            QueryStatement queryStmt = ctasStmt.getQueryStatement();
+            assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
 
-        // test starrocks dialect
-        connectContext.getSessionVariable().setSqlDialect("starrocks");
-        analyzeFail(ctasSql, "No matching function with signature: doy(date)");
-
-        // test trino dialect
-        connectContext.getSessionVariable().setSqlDialect("trino");
-        CreateTableAsSelectStmt ctasStmt =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, connectContext);
-        QueryStatement queryStmt = ctasStmt.getQueryStatement();
-        assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
+            // test starrocks dialect
+            connectContext.getSessionVariable().setSqlDialect("starrocks");
+            analyzeFail(ctasSql, "No matching function with signature: doy(date)");
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
     }
 }
