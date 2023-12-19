@@ -144,8 +144,8 @@ public class OdpsMetadata implements ConnectorMetadata {
                 Project project = iterator.next();
                 builder.add(project.getName());
             }
-        } catch (OdpsException odpsException) {
-            odpsException.printStackTrace();
+        } catch (OdpsException e) {
+            e.printStackTrace();
             throw new StarRocksConnectorException("fail to list project names", e);
         }
         ImmutableList<String> databases = builder.build();
