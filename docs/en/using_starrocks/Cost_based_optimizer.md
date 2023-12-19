@@ -101,13 +101,10 @@ From 2.4.5 onwards, StarRocks allows you to specify a collection period for auto
 Conditions that will trigger automatic collection:
 
 - Table data has changed since previous statistics collection.
-<<<<<<< HEAD
-=======
 
 - The collection time falls within the range of the configured collection period. (The default collection period is all day.)
 
 - The update time of the previous collecting job is earlier than the latest update time of partitions.
->>>>>>> 05473c2ecb ([Doc] Align en CBO with zh CBO (#37261))
 
 - The health of table statistics is below the specified threshold (`statistic_auto_collect_ratio`).
 
@@ -116,11 +113,6 @@ Conditions that will trigger automatic collection:
 > If the number of partitions with data updated is less than 10, the formula is `1 - (Number of updated rows since previous collection/Total number of rows)`.
 > If the number of partitions with data updated is greater than or equal to 10, the formula is `1 - MIN(Number of updated rows since previous collection/Total number of rows, Number of updated partitions since previous collection/Total number of partitions)`.
 
-<<<<<<< HEAD
-- Partition data has been modified. Partitions whose data is not modified will not be collected again.
-
-- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
-=======
 In addition, StarRocks allows you to configure collection policies based on table size and table update frequency:
 
 - For tables with small data volume, **statistics are collected in real time with no restrictions, even though the table data is frequently updated. The `statistic_auto_collect_small_table_size` parameter can be used to determine whether a table is a small table or a large table. You can also use `statistic_auto_collect_small_table_interval` to configure collection intervals for small tables.
@@ -141,7 +133,6 @@ In addition, StarRocks allows you to configure collection policies based on tabl
 
 After the data of a table is changed, manually triggering a sampled collection task for this table will make the update time of the sampled collection task later than the data update time, which will not trigger automatic full collection for this table in this scheduling period.
 :::
->>>>>>> 05473c2ecb ([Doc] Align en CBO with zh CBO (#37261))
 
 Automatic full collection is enabled by default and run by the system using the default settings.
 
