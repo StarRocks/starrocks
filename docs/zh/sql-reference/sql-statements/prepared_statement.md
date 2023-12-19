@@ -46,7 +46,7 @@ PREPARE <stmt_name> FROM <preparable_stmt>
 
 **示例：**
 
-准备一个语句 `SELECT` 语句，其中变量用 `?` 占位。并为该语句赋予一个名称 `select_by_id_stmt`。
+准备一个 `SELECT` 语句，其中变量用 `?` 占位。并为该语句赋予一个名称 `select_by_id_stmt`。
 
 ```SQL
 PREPARE select_by_id_stmt FROM 'SELECT * FROM users WHERE id = ?';
