@@ -33,8 +33,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Types;
 
 import java.io.File;
@@ -274,6 +277,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     @Override
     public List<PartitionKey> getPrunedPartitions(com.starrocks.catalog.Table table, ScalarOperator predicate, long limit) {
         return new ArrayList<>();
+    }
+
+    public void addRowsToPartition(String dbName, String tableName, int rowCount, String partitionName) {
+        IcebergTable icebergTable = MOCK_TABLE_MAP.get(dbName).get(tableName).icebergTable;
+        Table nativeTable = icebergTable.getNativeTable();
+        DataFile file = DataFiles.builder(nativeTable.spec())
+                .withPath("/path/to/data-a.parquet")
+                .withFileSizeInBytes(10)
+                .withPartitionPath(partitionName) // easy way to set partition data for now
+                .withRecordCount(rowCount)
+                .build();
+        writeLock();
+        try {
+            nativeTable.newAppend().appendFile(file).commit();
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void updatePartitions(String dbName, String tableName, List<String> partitionNames) {
