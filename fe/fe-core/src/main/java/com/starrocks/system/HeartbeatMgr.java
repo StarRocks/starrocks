@@ -178,6 +178,9 @@ public class HeartbeatMgr extends LeaderDaemon {
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
+
+        ClientPool.beHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
+        ClientPool.brokerHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
@@ -265,7 +268,7 @@ public class HeartbeatMgr extends LeaderDaemon {
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
-                client = ClientPool.heartbeatPool.borrowObject(beAddr);
+                client = ClientPool.beHeartbeatPool.borrowObject(beAddr);
 
                 TMasterInfo copiedMasterInfo = new TMasterInfo(masterInfo.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
@@ -319,9 +322,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {
-                    ClientPool.heartbeatPool.returnObject(beAddr, client);
+                    ClientPool.beHeartbeatPool.returnObject(beAddr, client);
                 } else {
-                    ClientPool.heartbeatPool.invalidateObject(beAddr, client);
+                    ClientPool.beHeartbeatPool.invalidateObject(beAddr, client);
                 }
             }
         }
@@ -356,7 +359,8 @@ public class HeartbeatMgr extends LeaderDaemon {
             String url = "http://" + fe.getHost() + ":" + Config.http_port
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
-                String result = Util.getResultForUrl(url, null, 2000, 2000);
+                String result = Util.getResultForUrl(url, null,
+                        Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
                 /*
                  * return:
                  * {"replayedJournalId":191224,"queryPort":9131,"rpcPort":9121,"status":"OK","msg":"Success"}
@@ -400,7 +404,7 @@ public class HeartbeatMgr extends LeaderDaemon {
             TNetworkAddress addr = new TNetworkAddress(broker.ip, broker.port);
             boolean ok = false;
             try {
-                client = ClientPool.brokerPool.borrowObject(addr);
+                client = ClientPool.brokerHeartbeatPool.borrowObject(addr);
                 TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
                         clientId);
                 TBrokerOperationStatus status = client.ping(request);
@@ -417,9 +421,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {
-                    ClientPool.brokerPool.returnObject(addr, client);
+                    ClientPool.brokerHeartbeatPool.returnObject(addr, client);
                 } else {
-                    ClientPool.brokerPool.invalidateObject(addr, client);
+                    ClientPool.brokerHeartbeatPool.invalidateObject(addr, client);
                 }
             }
         }
