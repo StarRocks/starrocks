@@ -46,7 +46,7 @@ PREPARE <stmt_name> FROM <preparable_stmt>
 
 **Example:**
 
-Prepare an `SELECT` statement with specific values represented by placeholders `?`.
+Prepare a `SELECT` statement with specific values represented by placeholders `?`.
 
 ```SQL
 PREPARE select_by_id_stmt FROM 'SELECT * FROM users WHERE id = ?';
@@ -88,7 +88,7 @@ EXECUTE <stmt_name> [USING @var_name [, @var_name] ...]
 
 **Example:**
 
-Pass variables to an `SELECT` statement and execute that statement.
+Pass variables to a `SELECT` statement and execute that statement.
 
 ```SQL
 EXECUTE select_by_id_stmt USING @id1;
