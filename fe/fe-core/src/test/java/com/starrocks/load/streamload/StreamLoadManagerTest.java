@@ -183,10 +183,31 @@ public class StreamLoadManagerTest {
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assert.assertEquals(1, tasks.size());
         Assert.assertEquals("label1", tasks.get(0).getLabel());
-        Assert.assertEquals("label1", tasks.get(0).getLabel());
         Assert.assertEquals("test_db", tasks.get(0).getDBName());
         Assert.assertEquals(20000, tasks.get(0).getDBId());
         Assert.assertEquals("test_tbl", tasks.get(0).getTableName());
+    }
+
+    @Test
+    public void testGetTaskByNameWithNullLabelName() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName1 = "label1";
+        String labelName2 = "label2";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName1, timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName2, timeoutMillis, channelNum, channelId, resp);
+
+        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        Assert.assertEquals(2, tasks.size());
+        Assert.assertEquals("label1", tasks.get(0).getLabel());
+        Assert.assertEquals("label2", tasks.get(1).getLabel());
     }
 
     @Test
