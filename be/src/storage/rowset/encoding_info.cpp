@@ -187,7 +187,7 @@ public:
     // 3. In the last scenario, directly retrieve it from _default_encoding_type_map.
     EncodingTypePB get_default_encoding(LogicalType type, bool optimize_value_seek) const {
         if (enable_non_string_column_dict_encoding() &&
-                number_types_supports_dict_encoding(type) &&
+                number_types_supports_dict_encoding(delegate_type(type)) &&
                     !optimize_value_seek) {
             return DICT_ENCODING;
         }
