@@ -168,6 +168,7 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
             LOG(ERROR) << outcome.GetError();
             _io_status.update(Status::IOError(outcome.GetError().GetMessage()));
         }
+        lock.unlock(); // release before notify
         _cv.notify_all();
     });
 
