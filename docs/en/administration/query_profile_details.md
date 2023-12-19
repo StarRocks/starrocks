@@ -1189,7 +1189,7 @@ Description: Time taken to build the output sorted sequence.
 
 ### Merge Operator
 
-For ease of understanding various metrics, Merge can be represented as the following state machine:
+For ease of understanding various metrics, Merge can be represented as the following state machinism:
 
 ```
                ┌────────── PENDING ◄──────────┐
