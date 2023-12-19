@@ -76,7 +76,7 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class)
     Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
