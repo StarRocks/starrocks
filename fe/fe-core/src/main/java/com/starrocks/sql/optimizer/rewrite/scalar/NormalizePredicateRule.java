@@ -136,17 +136,14 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
         if (predicate.isAnd() || predicate.isOr()) {
-            ScalarOperator newTree = getOptimizedCompoundTree(predicate);
-            if (newTree != null) {
-                return newTree;
-            }
+            return getOptimizedCompoundTree(predicate).orElse(predicate);
         }
 
         return predicate;
     }
 
     @Nullable
-    private ScalarOperator getOptimizedCompoundTree(CompoundPredicateOperator parent) {
+    private Optional<ScalarOperator> getOptimizedCompoundTree(CompoundPredicateOperator parent) {
         // reset node first So we can apply NormalizePredicateRule to one tree many times
         parent.setCompoundTreeUniqueLeaves(Sets.newLinkedHashSet());
         parent.setCompoundTreeLeafNodeNumber(0);
@@ -199,10 +196,10 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                 compoundNewTree.setCompoundTreeUniqueLeaves(compoundTreeUniqueLeaves);
             }
 
-            return newTree;
+            return Optional.of(newTree);
         }
         // this tree can't be optimized
-        return null;
+        return Optional.empty();
     }
 
     /*
