@@ -507,6 +507,7 @@ TEST_F(SpillTest, partition_process) {
     auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
     ASSERT_OK(ctx_st.status());
     auto ctx = ctx_st.value();
+    (void)ctx;
 
     std::vector<ExprContext*> tuple;
     ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
