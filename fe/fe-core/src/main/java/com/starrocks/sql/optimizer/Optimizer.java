@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -512,7 +513,9 @@ public class Optimizer {
                 && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && !context.getCandidateMvs().isEmpty()
                 && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable)
-                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite();
+                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite()
+                && Collections.disjoint(
+                        context.getAppliedMvRules(), RuleSet.getRewriteRulesByType(RuleSetType.SINGLE_TABLE_MV_REWRITE));
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,

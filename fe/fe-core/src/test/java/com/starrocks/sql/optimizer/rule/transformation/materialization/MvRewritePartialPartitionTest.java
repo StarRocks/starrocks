@@ -1153,8 +1153,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "((17: date_trunc < '1991-03-31 00:00:00') OR (17: date_trunc >= '1991-04-03 00:00:00'))" +
-                            " OR (17: date_trunc IS NULL)");
+                    "PREDICATES: (date_trunc('day', 15: id_datetime) < '1991-03-31 00:00:00')" +
+                            " OR (date_trunc('day', 15: id_datetime) >= '1991-04-03 00:00:00')");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }
@@ -1177,7 +1177,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "((12: id_date < '1991-03-31') OR (12: id_date >= '1991-04-03')) OR (12: id_date IS NULL)");
+                    "PREDICATES: (14: id_date < '1991-03-31') OR (14: id_date >= '1991-04-03')");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }
@@ -1200,7 +1200,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "((17: date_trunc < '1991-04-01') OR (17: date_trunc >= '1991-04-03')) OR (17: date_trunc IS NULL)");
+                    "((19: date_trunc < '1991-04-01') OR (19: date_trunc >= '1991-04-03')) OR (19: date_trunc IS NULL)");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }

@@ -28,6 +28,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -53,6 +54,7 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
     private final List<MaterializationContext> candidateMvs;
+    private final List<Rule> appliedMvRules;
 
     private Set<OlapTable>  queryTables;
 
@@ -79,6 +81,7 @@ public class OptimizerContext {
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
+        this.appliedMvRules = Lists.newArrayList();
     }
 
     @VisibleForTesting
@@ -103,6 +106,7 @@ public class OptimizerContext {
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
         this.candidateMvs = Lists.newArrayList();
+        this.appliedMvRules = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -252,5 +256,13 @@ public class OptimizerContext {
 
     public Map<LogicalViewScanOperator, OptExpression> getViewPlanMap() {
         return viewPlanMap;
+    }
+
+    public void addAppliedRule(Rule rule) {
+        appliedMvRules.add(rule);
+    }
+
+    public List<Rule> getAppliedMvRules() {
+        return appliedMvRules;
     }
 }
