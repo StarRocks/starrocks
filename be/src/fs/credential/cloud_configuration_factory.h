@@ -81,7 +81,7 @@ public:
         aws_cloud_credential.session_token = get_or_default(properties, AWS_S3_SESSION_TOKEN, std::string());
         aws_cloud_credential.iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
         aws_cloud_credential.sts_region = get_or_default(properties, AWS_S3_STS_REGION, std::string());
-        aws_cloud_credential.sts_endpoint = get_or_default(properties, AWS_S3_ENDPOINT, std::string());
+        aws_cloud_credential.sts_endpoint = get_or_default(properties, AWS_S3_STS_ENDPOINT, std::string());
         aws_cloud_credential.external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
         aws_cloud_credential.region = get_or_default(properties, AWS_S3_REGION, std::string());
         aws_cloud_credential.endpoint = get_or_default(properties, AWS_S3_ENDPOINT, std::string());
