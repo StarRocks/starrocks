@@ -32,5 +32,5 @@ ALTER RESOURCE 'resource_name' SET PROPERTIES ("key"="value", ...)
 修改 Apache Hive™ 资源 `hive0` 的 Hive metastore 地址。
 
 ```SQL
-ALTER RESOURCE 'hive0' SET PROPERTIES ("hive.metastore.uris" = "thrift://10.10.44.91:9083")
+ALTER RESOURCE 'hive0' SET PROPERTIES ("hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083")
 ```
