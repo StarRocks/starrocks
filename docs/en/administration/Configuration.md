@@ -830,26 +830,12 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Default**: FALSE
 - Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.1.5 onwards.
 
-<<<<<<< HEAD:docs/en/administration/Configuration.md
-### Configure FE static parameters
-=======
-#### enable_backup_materialized_view
-
-- **Default**: TRUE
-- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
-
-#### enable_colocate_mv_index
-
-- **Default**: TRUE
-- **Description**: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views. This item is supported from v3.2.0 onwards.
-
-#### enable_mv_automatic_active_check
+##### enable_mv_automatic_active_check
 
 - **Default**: TRUE
 - **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
 
 ## Configure FE static parameters
->>>>>>> c775948300 ([Doc] Add enable_mv_automatic_active_check (#37341)):docs/en/administration/FE_configuration.md
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
 
