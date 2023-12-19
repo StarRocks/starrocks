@@ -1414,11 +1414,18 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     auto* info = request.add_tablet_infos();
     info->set_tablet_id(_tablet_id);
     info->set_version(1);
+
+    // Prune metadata cache before getting tablet stats
+    _tablet_mgr->metacache()->prune();
+
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(1, response.tablet_stats_size());
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+    // get_tablet_stats() should not fill metadata cache
+    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
