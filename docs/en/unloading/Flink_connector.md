@@ -10,7 +10,7 @@ The Flink connector supports two reading methods: Flink SQL and Flink DataStream
 
 > **NOTE**
 >
-> The Flink connector also supports writing the data read by Flink to another StarRocks cluster or storage system. See [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md#flink-cdc-synchronization-schema-change-supportedd).
+> The Flink connector also supports writing the data read by Flink to another StarRocks cluster or storage system. See [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
 
 ## Background information
 
