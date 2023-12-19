@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -2753,6 +2754,10 @@ public class CreateMaterializedViewTest {
                         "You could either create it with default_catalog.<database>.<mv>, " +
                         "or switch to default_catalog through `set catalog <default_catalog>` statement.",
                 ex.getMessage());
+
+        // reset state
+        starRocksAssert.useCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        starRocksAssert.useDatabase(testDb.getFullName());
     }
 
     @Test
