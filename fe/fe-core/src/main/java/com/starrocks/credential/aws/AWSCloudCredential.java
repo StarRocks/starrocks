@@ -147,6 +147,8 @@ public class AWSCloudCredential implements CloudCredential {
                 stsBuilder.setRegion(stsRegion);
             }
             if (!stsEndpoint.isEmpty()) {
+                // Glue is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
+                // But in aws sdk v2, user only need to provide one of the two
                 Preconditions.checkArgument(!stsRegion.isEmpty(),
                         String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
                 stsBuilder.setEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(stsEndpoint, stsRegion));
@@ -188,6 +190,8 @@ public class AWSCloudCredential implements CloudCredential {
             configuration.set("fs.s3a.assumed.role.sts.endpoint.region", stsRegion);
         }
         if (!stsEndpoint.isEmpty()) {
+            // Hadoop is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
+            // But in aws sdk v2, user only need to provide one of the two
             Preconditions.checkArgument(!stsRegion.isEmpty(),
                     String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
             configuration.set("fs.s3a.assumed.role.sts.endpoint", stsEndpoint);
