@@ -835,7 +835,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Default**: TRUE
 - **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
 
-## Configure FE static parameters
+### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
 
