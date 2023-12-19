@@ -146,7 +146,7 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         } catch (OdpsException odpsException) {
             odpsException.printStackTrace();
-            throw new StarRocksConnectorException("fail to list project names", odpsException);
+            throw new StarRocksConnectorException("fail to list project names", e);
         }
         ImmutableList<String> databases = builder.build();
         if (databases.isEmpty()) {
