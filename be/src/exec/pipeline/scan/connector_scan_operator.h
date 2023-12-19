@@ -165,7 +165,6 @@ private:
     uint64_t _chunk_rows_read = 0;
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
-    UniqueId _unique_id;
 };
 
 } // namespace pipeline

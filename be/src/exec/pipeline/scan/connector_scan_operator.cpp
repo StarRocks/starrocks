@@ -54,10 +54,16 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
             per_count = 0;
         }
 
-        VLOG_OPERATOR << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
-                      << chunk_source_mem_bytes_value << ")"
-                      << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
-                      << ", seq = " << driver_sequence << ", per_count = " << per_count;
+        [[maybe_unused]] auto build_debug_string = [&]() {
+            std::stringstream ss;
+            ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
+               << chunk_source_mem_bytes_value << ")"
+               << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
+               << ", seq = " << driver_sequence << ", per_count = " << per_count;
+            return ss.str();
+        };
+
+        // VLOG_OPERATOR << build_debug_string();
         return per_count;
     }
 
@@ -65,12 +71,12 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         running_chunk_source_count.fetch_add(delta, std::memory_order_relaxed);
     }
 
-    void update_chunk_source_mem_bytes(int64_t value, int64_t return_chunk_mem_bytes) {
+    void update_chunk_source_mem_bytes(int64_t value) {
         if (value == 0) return;
 
         std::unique_lock<std::mutex> L(lock);
-        int64_t total = chunk_source_mem_bytes.load(std::memory_order_relaxed) * chunk_source_mem_bytes_update_count +
-                        value + return_chunk_mem_bytes;
+        int64_t total =
+                chunk_source_mem_bytes.load(std::memory_order_relaxed) * chunk_source_mem_bytes_update_count + value;
         chunk_source_mem_bytes_update_count += 1;
         chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count, std::memory_order_relaxed);
     }
@@ -107,7 +113,7 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 }
 
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
-    _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value, 0);
+    _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
     _io_tasks_mem_limiter->last_arb_chunk_source_mem_bytes = value;
 }
 
@@ -299,8 +305,14 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
 
-    VLOG_OPERATOR << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
-                  << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
+    [[maybe_unused]] auto build_debug_string = [&]() {
+        std::stringstream ss;
+        ss << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
+           << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
+        return ss.str();
+    };
+
+    // VLOG_OPERATOR << build_debug_string();
 
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
@@ -378,8 +390,12 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         ChunkBufferLimiter* limiter = factory->get_chunk_buffer().limiter();
         limiter->update_mem_limit(new_scan_mem_limit * ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio);
 
-        VLOG_OPERATOR << "adjust_scan_mem_limit. scan node id = " << _plan_node_id
-                      << ", new value = " << new_scan_mem_limit;
+        [[maybe_unused]] auto build_debug_string = [&]() {
+            std::stringstream ss;
+            ss << "adjust_scan_mem_limit. scan node id = " << _plan_node_id << ", new value = " << new_scan_mem_limit;
+            return ss.str();
+        };
+        // VLOG_OPERATOR << build_debug_string();
     }
 
     // adjust io tasks according information collected
@@ -477,7 +493,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         return ss.str();
     };
 
-    VLOG_OPERATOR << build_debug_string();
+    // VLOG_OPERATOR << build_debug_string();
 
     P.last_cs_speed = cs_speed;
     P.last_cs_pull_chunks = cs_pull_chunks;
@@ -506,7 +522,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
-    _unique_id = UniqueId::gen_uid();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -537,14 +552,20 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
     mem_tracker->release(_request_mem_tracker_bytes);
 
-    VLOG_OPERATOR << "try_mem_tracker. query_id = " << print_id(state->query_id())
-                  << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-                  << ", release. uid = " << _unique_id.to_string() << ", value = " << _request_mem_tracker_bytes;
-
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(-1);
-    limiter->update_chunk_source_mem_bytes(_data_source->estimated_mem_usage(),
-                                           avg_chunk_mem_bytes() * state->chunk_size());
+    int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage() + avg_chunk_mem_bytes() * state->chunk_size();
+    limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
+
+    [[maybe_unused]] auto build_debug_string = [&]() {
+        std::stringstream ss;
+        ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
+           << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+           << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
+           << ", chunk source mem bytes = " << chunk_source_mem_bytes;
+        return ss.str();
+    };
+    VLOG_OPERATOR << build_debug_string();
 
     _closed = true;
     _data_source->close(state);
@@ -562,7 +583,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         std::stringstream ss;
         ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
            << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", " << action
-           << ". uid = " << _unique_id.to_string() << ", value = " << _request_mem_tracker_bytes;
+           << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes;
         return ss.str();
     };
 
