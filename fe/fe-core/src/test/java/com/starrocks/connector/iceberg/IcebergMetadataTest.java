@@ -191,6 +191,21 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testTableExists(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.tableExists("db", "tbl");
+                result = true;
+                minTimes = 0;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        Assert.assertTrue(metadata.tableExists("db", "tbl"));
+    }
+
+    @Test
     public void testNotExistTable(@Mocked IcebergHiveCatalog icebergHiveCatalog,
                                   @Mocked HiveTableOperations hiveTableOperations) {
         new Expectations() {
