@@ -45,7 +45,19 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 
+<<<<<<< HEAD
     @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+=======
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "get_file_schema",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
+    Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
+>>>>>>> 29aed450da ([Enhancement] enlarge execute_command wait time (#37200))
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 }
 
