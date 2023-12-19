@@ -242,7 +242,7 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
