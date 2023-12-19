@@ -746,7 +746,26 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - **默认值**: FALSE
 - 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.1.5 起新增。
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ### 配置 FE 静态参数
+=======
+#### enable_backup_materialized_view
+
+- 含义：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+#### enable_colocate_mv_index
+
+- 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+#### enable_mv_automatic_active_check
+
+- 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
+- 默认值: TRUE
+
+## 配置 FE 静态参数
+>>>>>>> c775948300 ([Doc] Add enable_mv_automatic_active_check (#37341)):docs/zh/administration/FE_configuration.md
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
 
