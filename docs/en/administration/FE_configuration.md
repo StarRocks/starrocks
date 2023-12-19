@@ -900,7 +900,7 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 #### enable_mv_automatic_active_check
 
 - **Default**: TRUE
-- **Description**: Whether to enable StarRocks to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
+- **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
 
 ## Configure FE static parameters
 
