@@ -55,6 +55,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -71,8 +72,10 @@ public class SimpleScheduler {
     private static Map<Long, Integer> blacklistBackends = Maps.newHashMap();
     private static Lock lock = new ReentrantLock();
     private static UpdateBlacklistThread updateBlacklistThread;
+    private static AtomicBoolean enableUpdateBlacklistThread;
 
     static {
+        enableUpdateBlacklistThread = new AtomicBoolean(true);
         updateBlacklistThread = new UpdateBlacklistThread();
         updateBlacklistThread.start();
     }
@@ -226,43 +229,45 @@ public class SimpleScheduler {
         Map<Long, Integer> blackListBackendsCopy = blacklistBackends;
         lock.unlock();
 
-        Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Long, Integer> entry = iterator.next();
-            Long backendId = entry.getKey();
+        {
+            Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Long, Integer> entry = iterator.next();
+                Long backendId = entry.getKey();
 
-            // 1. If the backend is null, means that the backend has been removed.
-            // 2. check the all ports of the backend
-            // 3. retry three times
-            // If both of the above conditions are met, the backend is removed from the blacklist
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
-                iterator.remove();
-                LOG.warn("remove backendID {} from blacklist", backendId);
-            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
-                String host = backend.getHost();
-                List<Integer> ports = new ArrayList<Integer>();
-                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
-                if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
+                // 1. If the backend is null, means that the backend has been removed.
+                // 2. check the all ports of the backend
+                // 3. retry Config.heartbeat_timeout_second + 1 times
+                // If both of the above conditions are met, the backend is removed from the blacklist
+                Backend backend = clusterInfoService.getBackend(backendId);
+                if (backend == null) {
                     iterator.remove();
                     LOG.warn("remove backendID {} from blacklist", backendId);
-                }
-            } else {
-                Integer retryTimes = entry.getValue();
-                retryTimes = retryTimes - 1;
-                if (retryTimes <= 0) {
-                    iterator.remove();
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                } else if (clusterInfoService.checkBackendAvailable(backendId)) {
+                    String host = backend.getHost();
+                    List<Integer> ports = new ArrayList<Integer>();
+                    Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                    if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
+                        iterator.remove();
+                        LOG.warn("remove backendID {} from blacklist", backendId);
+                    }
                 } else {
-                    entry.setValue(retryTimes);
+                    Integer retryTimes = entry.getValue();
+                    retryTimes = retryTimes - 1;
+                    if (retryTimes <= 0) {
+                        iterator.remove();
+                        LOG.warn("remove backendID {} from blacklist", backendId);
+                    } else {
+                        entry.setValue(retryTimes);
+                    }
                 }
             }
         }
 
         lock.lock();
         try {
-            Iterator<Map.Entry<Long, Integer>> itr = blackListBackendsCopy.entrySet().iterator();
-            while (itr.hasNext()) {
+            Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
+            while (iterator.hasNext()) {
                 Map.Entry<Long, Integer> entry = iterator.next();
                 if (blacklistBackends.containsKey(entry.getKey())) {
                     // update the retry times.
@@ -275,6 +280,10 @@ public class SimpleScheduler {
         } finally {
             lock.unlock();
         }
+    }
+
+    public static void disableUpdateBlacklistThread() {
+        enableUpdateBlacklistThread.set(false);
     }
 
     private static class UpdateBlacklistThread implements Runnable {
@@ -293,7 +302,7 @@ public class SimpleScheduler {
         @Override
         public void run() {
             LOG.debug("UpdateBlacklistThread is start to run");
-            while (true) {
+            while (enableUpdateBlacklistThread.get()) {
                 try {
                     Thread.sleep(1000L);
                     LOG.debug("UpdateBlacklistThread retry begin");
