@@ -19,7 +19,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 // EXECUTE ON <BE_ID> <SCRIPT>
 public class ExecuteScriptStmt extends StatementBase {
-    static long TIMEOUT_SEC_DEFAULT = 60;
+    static long TIMEOUT_SEC_DEFAULT = 600;
 
     long beId;
     String script;
