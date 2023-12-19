@@ -2750,17 +2750,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableMaterializedViewPlanCache;
     }
 
-<<<<<<< HEAD
     public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
         this.enableViewBasedMvRewrite = enableViewBasedMvRewrite;
     }
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
-=======
+
+    }
+
     public int getCboMaterializedViewRewriteLimit() {
         return cboMaterializedViewRewriteLimit;
->>>>>>> 6499526c43 (add switch: cbo_materialized_view_rewrite_limit)
     }
 
     public String getQueryExcludingMVNames() {

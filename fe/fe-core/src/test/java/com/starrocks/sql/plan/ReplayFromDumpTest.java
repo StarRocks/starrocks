@@ -818,4 +818,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  group by: 1: TIME"));
     }
 
+    @Test
+    public void testTest() throws Exception {
+        getPlanFragment(getDumpInfoFromFile("query_dump/tmp"), null, TExplainLevel.NORMAL);
+    }
+
 }
