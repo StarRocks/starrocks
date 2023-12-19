@@ -139,7 +139,7 @@ if [[ "$JAVA_VERSION" -lt 11 ]]; then
         export JAVA=${JAVA_HOME}/bin/java
         JAVA_UPDATE_VER=$(${JAVA} -version 2>&1 | sed -n 's/.* version "1\.8\.0_\([0-9]*\)".*/\1/p')
         if [[ $JAVA_UPDATE_VER -lt 192 ]]; then
-            echo "Tips: JAVA_UPDATE_VER is $JAVA_UPDATE_VER, Please upgrade the JAVA version to at least 1.8.0_192 ensure that G1 GC bugs are not triggered."
+            echo "Tips: JAVA_UPDATE_VER is $JAVA_UPDATE_VER, Please upgrade the JAVA version to at least 1.8.0_192 to avoid potential issues of G1 gc on jdk8."
         fi
     fi
 fi
