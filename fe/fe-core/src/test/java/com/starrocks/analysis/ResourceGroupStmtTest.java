@@ -189,14 +189,13 @@ public class ResourceGroupStmtTest {
     }
 
     private static String rowsToString(List<List<String>> rows) {
-        List<String> lines = rows.stream().map(
+        return String.join("\n", rows.stream().filter(k -> !k.isEmpty()).map(
                 row -> {
                     row.remove(1);
                     return String.join("|",
                             row.toArray(new String[0])).replaceAll("id=\\d+(,\\s+)?", "");
                 }
-        ).collect(Collectors.toList());
-        return String.join("\n", lines.toArray(new String[0]));
+        ).toArray(String[]::new));
     }
 
     private static String getClassifierId(String classifierStr) {
@@ -219,7 +218,11 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-        Assert.assertTrue(rows.toString(), rows.isEmpty());
+        String defaultWg = "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                "default_wg|null|100.0%|null|0|0|0|0|100%|DEFAULT|(weight=0.0)";
+        Assert.assertFalse(rows.isEmpty());
+        Assert.assertEquals(2, rows.size());
+        Assert.assertEquals(defaultWg, rowsToString(rows));
     }
 
     private void assertResourceGroupNotExist(String wg) {
@@ -376,7 +379,12 @@ public class ResourceGroupStmtTest {
         }).distinct().collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
-        starRocksAssert.executeResourceGroupDdlSql(alterSql);
+        if (ResourceGroup.isDefaultWgOrMvWg(rgName)) {
+            Assert.assertThrows("Default resource group does default_mv_wg not support change.",
+                    DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterSql));
+        } else {
+            starRocksAssert.executeResourceGroupDdlSql(alterSql);
+        }
         String expect = rowsToString(rows);
         rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
@@ -409,7 +417,14 @@ public class ResourceGroupStmtTest {
                 row.set(row.size() - 1, "(weight=0.0)");
             }
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
-            starRocksAssert.executeResourceGroupDdlSql(alterSql);
+
+            if (ResourceGroup.isDefaultWgOrMvWg(rgName)) {
+                Assert.assertThrows(String.format("Default resource group does %s not support change.", rgName),
+                        DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterSql));
+
+            } else {
+                starRocksAssert.executeResourceGroupDdlSql(alterSql);
+            }
         }
         String expect = rowsToString(rows);
         rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
@@ -625,7 +640,7 @@ public class ResourceGroupStmtTest {
                 "   'max_cpu_cores'='3'\n" +
                 ")";
         String[] sqls =
-                new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql, alterRg1Sql2, alterRg3Sql2};
+                new String[]{alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql, alterRg1Sql2, alterRg3Sql2};
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
@@ -1259,7 +1274,9 @@ public class ResourceGroupStmtTest {
                 "   'type' = 'normal'" +
                 "   );";
         String showResult =
-                "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
+                "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                        "default_wg|null|100.0%|null|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
+                        "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
                         "rg2|32|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
 
         starRocksAssert.executeResourceGroupDdlSql(createSQL1);
@@ -1279,10 +1296,10 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg2");
             List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-            Assert.assertTrue(rows.isEmpty());
+            Assert.assertFalse(rows.isEmpty());
 
             try (ByteArrayInputStream bufferInput = new ByteArrayInputStream(bufferOutput.toByteArray());
-                    DataInputStream inputStream = new DataInputStream(bufferInput)) {
+                 DataInputStream inputStream = new DataInputStream(bufferInput)) {
                 GlobalStateMgr.getCurrentState().getResourceGroupMgr().readFields(inputStream);
             }
         }
@@ -1304,7 +1321,7 @@ public class ResourceGroupStmtTest {
                 }
 
                 try (ByteArrayInputStream bufferInput = new ByteArrayInputStream(bufferOutput.toByteArray());
-                        DataInputStream inputStream = new DataInputStream(bufferInput)) {
+                     DataInputStream inputStream = new DataInputStream(bufferInput)) {
                     ResourceGroupOpEntry opEntryRgRead = ResourceGroupOpEntry.read(inputStream);
                     assertThat(opEntryRgRead).usingRecursiveComparison().isEqualTo(opEntryRg);
                 }
@@ -1356,7 +1373,9 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         String expected =
-                "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
+                "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                        "default_wg|null|100.0%|null|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
+                        "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
                         "rg2|16|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_cpu_cost_range=[21.0, 22.0))\n" +
                         "rg3|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_mem_cost_range=[-100.0, 31000.0))";
         Assert.assertEquals(expected, actual);
