@@ -73,7 +73,11 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class)
     Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 
+<<<<<<< HEAD
     @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+=======
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
+>>>>>>> 29aed450da ([Enhancement] enlarge execute_command wait time (#37200))
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 }
 
