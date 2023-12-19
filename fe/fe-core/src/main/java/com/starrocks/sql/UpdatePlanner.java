@@ -141,7 +141,7 @@ public class UpdatePlanner {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (table instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) table);
+                DataSink dataSink = new SchemaTableSink((SystemTable) table, ConnectContext.get().getCurrentWarehouseId());
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + table.getClass().getName());
