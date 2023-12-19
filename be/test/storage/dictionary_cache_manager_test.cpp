@@ -120,8 +120,8 @@ public:
             TTupleDescriptorBuilder tuple_builder;
 
             tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k1").column_pos(1).build());
-            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k1").column_pos(2).build());
-            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k1").column_pos(3).build());
+            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k2").column_pos(2).build());
+            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k3").column_pos(3).build());
 
             if (tcolumns != nullptr) {
                 for (int i = 0; i < tcolumns->size(); ++i) {
