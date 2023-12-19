@@ -44,12 +44,12 @@ public class TrinoTPCHTest extends TrinoTestBase {
     }
 
     @ParameterizedTest(name = "Tpch.{0}")
-    @MethodSource("TPCHSource")
+    @MethodSource("tpchSource")
     public void testTPCH(String name, String sql, String resultFile) {
         runFileUnitTest(sql, resultFile);
     }
 
-    private static Stream<Arguments> TPCHSource() {
+    private static Stream<Arguments> tpchSource() {
         List<Arguments> cases = Lists.newArrayList();
         for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
             cases.add(Arguments.of(entry.getKey(), entry.getValue(), "tpch/" + entry.getKey()));
