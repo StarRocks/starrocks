@@ -52,7 +52,7 @@ void DynamicChunkBufferLimiter::_unpin(int num_chunks) {
 }
 
 void DynamicChunkBufferLimiter::update_mem_limit(int64_t value) {
-    _mem_limit = value;
+    _mem_limit.store(value);
     // No need to update capacity now, capacity will be updated in next `update_avg_row_bytes` call.
 }
 
