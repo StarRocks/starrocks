@@ -579,7 +579,7 @@ public class RPC {
   public static <T> ProtocolProxy<T> getProtocolProxy(Class<T> protocol,
                                                       long clientVersion, ConnectionId connId, Configuration conf,
                                                       SocketFactory factory, AlignmentContext alignmentContext) throws IOException {
-    if (UserGroupInformation.isSecurityEnabled()) {
+    if (UserGroupInformation.isSecurityEnabled(conf)) {
       SaslRpcServer.init(conf);
     }
     return getProtocolEngine(protocol, conf).getProxy(
@@ -668,7 +668,7 @@ public class RPC {
                                                       RetryPolicy connectionRetryPolicy,
                                                       AtomicBoolean fallbackToSimpleAuth)
           throws IOException {
-    if (UserGroupInformation.isSecurityEnabled()) {
+    if (UserGroupInformation.isSecurityEnabled(conf)) {
       SaslRpcServer.init(conf);
     }
     return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
@@ -706,7 +706,7 @@ public class RPC {
                                                       AtomicBoolean fallbackToSimpleAuth,
                                                       AlignmentContext alignmentContext)
           throws IOException {
-    if (UserGroupInformation.isSecurityEnabled()) {
+    if (UserGroupInformation.isSecurityEnabled(conf)) {
       SaslRpcServer.init(conf);
     }
     return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,

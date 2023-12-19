@@ -266,7 +266,7 @@ public class SaslDataTransferClient {
               + "datanodeId = {}", addr, datanodeId);
       return getEncryptedStreams(addr, underlyingOut, underlyingIn,
               encryptionKey, accessToken, secretKey);
-    } else if (!UserGroupInformation.isSecurityEnabled()) {
+    } else if (!UserGroupInformation.isSecurityEnabled(conf)) {
       LOG.debug("SASL client skipping handshake in unsecured configuration for "
               + "addr = {}, datanodeId = {}", addr, datanodeId);
       return null;

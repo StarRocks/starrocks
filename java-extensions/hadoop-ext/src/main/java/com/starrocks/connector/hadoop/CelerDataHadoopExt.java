@@ -16,7 +16,6 @@ package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
@@ -160,10 +159,7 @@ public class CelerDataHadoopExt extends HadoopExt {
 
     @Override
     public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
-        if (fs instanceof LocalFileSystem) {
-            return fs;
-        }
-        return FileSystemByteBuddyProxy.createFSProxy(fs, ugi);
+        return fs;
     }
 
     @Override

@@ -434,7 +434,7 @@ public class Client implements AutoCloseable {
             UserGroupInformation ticket = remoteId.getTicket();
             // try SASL if security is enabled or if the ugi contains tokens.
             // this causes a SIMPLE client with tokens to attempt SASL
-            boolean trySasl = UserGroupInformation.isSecurityEnabled() ||
+            boolean trySasl = UserGroupInformation.isSecurityEnabled(remoteId.conf) ||
                     (ticket != null && !ticket.getTokens().isEmpty());
             this.authProtocol = trySasl ? AuthProtocol.SASL : AuthProtocol.NONE;
 
@@ -861,7 +861,7 @@ public class Client implements AutoCloseable {
                     LOG.trace("Disabling fallbackToSimpleAuth, target does not use SIMPLE authentication.");
                     fallbackToSimpleAuth.set(false);
                 }
-            } else if (UserGroupInformation.isSecurityEnabled()) {
+            } else if (UserGroupInformation.isSecurityEnabled(remoteId.conf)) {
                 if (!fallbackAllowed) {
                     throw new AccessControlException("Server asks us to fall back to SIMPLE auth, but this "
                             + "client is configured to only allow secure connections.");

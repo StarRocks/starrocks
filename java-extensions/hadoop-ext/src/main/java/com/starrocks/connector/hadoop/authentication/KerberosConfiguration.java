@@ -138,8 +138,8 @@ public class KerberosConfiguration {
 
         private static void verifyFile(String fileLocation) {
             Path filePath = Paths.get(fileLocation);
-            checkArgument(exists(filePath), "File does not exist: %s", fileLocation);
-            checkArgument(isReadable(filePath), "File is not readable: %s", fileLocation);
+            checkArgument(exists(filePath), String.format("File does not exist: %s", fileLocation));
+            checkArgument(isReadable(filePath), String.format("File is not readable: %s", fileLocation));
         }
     }
 }

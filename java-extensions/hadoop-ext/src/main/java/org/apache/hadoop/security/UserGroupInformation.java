@@ -396,6 +396,12 @@ public class UserGroupInformation {
         return !(method == AuthenticationMethod.SIMPLE);
     }
 
+    public static boolean isSecurityEnabled(Configuration conf) {
+        AuthenticationMethod method = SecurityUtil.getAuthenticationMethod(conf);
+        return !(method == AuthenticationMethod.SIMPLE);
+    }
+
+
     @InterfaceAudience.Private
     @InterfaceStability.Evolving
     private static boolean isAuthenticationMethodEnabled(AuthenticationMethod method) {
