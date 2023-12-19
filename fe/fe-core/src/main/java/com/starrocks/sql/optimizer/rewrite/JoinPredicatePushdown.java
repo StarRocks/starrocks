@@ -307,6 +307,10 @@ public class JoinPredicatePushdown {
     private void deriveIsNotNullPredicate(
             List<BinaryPredicateOperator> onEQPredicates, OptExpression join,
             List<ScalarOperator> leftPushDown, List<ScalarOperator> rightPushDown) {
+        if (!ConnectContext.get().getSessionVariable().isCboDeriveJoinIsNullPredicate()) {
+            return;
+        }
+
         List<ScalarOperator> leftEQ = Lists.newArrayList();
         List<ScalarOperator> rightEQ = Lists.newArrayList();
 
@@ -326,14 +330,12 @@ public class JoinPredicatePushdown {
 
         LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
 
-        if (ConnectContext.get().getSessionVariable().isCboDeriveJoinIsNullPredicate()) {
-            JoinOperator joinType = joinOp.getJoinType();
-            if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
-                leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(leftPushDown::add);
-            }
-            if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
-                rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(rightPushDown::add);
-            }
+        JoinOperator joinType = joinOp.getJoinType();
+        if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
+            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(leftPushDown::add);
+        }
+        if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
+            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(rightPushDown::add);
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
     }
