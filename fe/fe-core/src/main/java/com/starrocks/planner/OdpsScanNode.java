@@ -120,7 +120,7 @@ public class OdpsScanNode extends ScanNode {
                     throw new StarRocksConnectorException(
                             "unsupported split policy: " + splitsInfo.getSplitPolicy().name());
             }
-            hdfsScanRange.setOdps_split_info(splitInfo);
+            hdfsScanRange.setOdps_split_infos(splitInfo);
             hdfsScanRange.setUse_odps_jni_reader(true);
             hdfsScanRange.setFile_length(1);
             // backend selector use length to load balancing
