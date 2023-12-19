@@ -418,7 +418,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
-|  [regexp_instr](./like-predicate-functions/regexp_instr.md) | 对字符串 str 进行正则匹配，抽取符合 pattern 的第 1 个匹配部分的索引下标 |
+|  [regexp_instr](./like-predicate-functions/regexp_instr.md) | 对字符串 str 进行正则匹配，抽取符合 pattern 的第 1 个匹配部分的索引下标。 |
 
 ## 条件函数
 
