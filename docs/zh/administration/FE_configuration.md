@@ -530,7 +530,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
-#### fast_schema_evolution
+#### enable_fast_schema_evolution
 
 - 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
   > **NOTE**
