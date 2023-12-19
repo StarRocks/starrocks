@@ -64,6 +64,7 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
@@ -95,6 +96,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
@@ -560,6 +562,9 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
 
+    private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
+    private RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -652,6 +657,10 @@ public class GlobalStateMgr {
         return configRefreshDaemon;
     }
 
+    public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
+        return refreshDictionaryCacheTaskDaemon;
+    }
+
     private static class SingletonHolder {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
@@ -666,7 +675,7 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.starOSAgent = new StarOSAgent();
         }
 
@@ -773,6 +782,7 @@ public class GlobalStateMgr {
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
+        this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -780,7 +790,7 @@ public class GlobalStateMgr {
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
@@ -919,6 +929,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static StarMgrMetaSyncer getCurrentStarMgrMetaSyncer() {
+        return getCurrentState().getStarMgrMetaSyncer();
+    }
+
     public static WarehouseManager getCurrentWarehouseMgr() {
         return getCurrentState().getWarehouseMgr();
     }
@@ -976,6 +990,10 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public StarMgrMetaSyncer getStarMgrMetaSyncer() {
+        return starMgrMetaSyncer;
     }
 
     public CatalogMgr getCatalogMgr() {
@@ -1135,7 +1153,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
+        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1341,7 +1359,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1412,7 +1430,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1440,7 +1458,7 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
@@ -1448,6 +1466,8 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        refreshDictionaryCacheTaskDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1546,6 +1566,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                        .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1964,6 +1985,7 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
+                    dictionaryMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -3828,9 +3850,9 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -4206,5 +4228,9 @@ public class GlobalStateMgr {
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
+    }
+
+    public DictionaryMgr getDictionaryMgr() {
+        return dictionaryMgr;
     }
 }

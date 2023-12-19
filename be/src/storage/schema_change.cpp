@@ -446,7 +446,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
             if (is_eos = st.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header()
-                             << "tablet reader failed to get next chunk, status: " << st.get_error_msg();
+                             << "tablet reader failed to get next chunk, status: " << st.message();
                 return st;
             }
         }
@@ -467,7 +467,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         }
 
         if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.message();
             return st;
         }
 
@@ -477,7 +477,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
-                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.message());
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
@@ -701,6 +701,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (const auto& column : request.columns) {
             base_tablet_schema->append_column(TabletColumn(column));
         }
+        base_tablet_schema->generate_sort_key_idxes();
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
@@ -747,7 +748,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                                      &sc_params.sc_directly, &generated_column_idxs);
 
     if (!status.ok()) {
-        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
+        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.message();
         return status;
     }
 

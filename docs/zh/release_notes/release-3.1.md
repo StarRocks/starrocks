@@ -4,6 +4,53 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.6
+
+发布日期：2023 年 12 月 18 日
+
+### 新增特性
+
+- 增加 [now(p)](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-functions/date-time-functions/now/) 函数用于获取指定秒精度的时间 (最高到毫秒)。如果不指定 `p`，now() 函数仍然只返回秒级精度的时间。[#36676](https://github.com/StarRocks/starrocks/pull/36676)
+- 新增了监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息“too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
+- 支持使用命令行获取 Heap Profile，便于发生问题后进行定位分析。[#35322](https://github.com/StarRocks/starrocks/pull/35322)
+- 支持使用 Common Table Expression (CTE) 创建异步物化视图。[#36142](https://github.com/StarRocks/starrocks/pull/36142)
+- 新增如下 Bitmap 函数：[subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/)、[bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/)、[bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/)。[#35817](https://github.com/StarRocks/starrocks/pull/35817) [#35621](https://github.com/StarRocks/starrocks/pull/35621)
+
+### 参数变更
+
+- 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- 增加了一个 [FE 配置项](https://docs.starrocks.io/zh/docs/administration/Configuration/#配置-fe-动态参数) `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- 新增 BE 配置项 `enable_lazy_delta_column_compaction`，默认取值是 `true`，表示不启用频繁的进行 delta column 的 Compaction。[#36654](https://github.com/StarRocks/starrocks/pull/36654)
+
+### 功能优化
+
+- 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- 主键模型表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- 加载 StarRocks 的插件失败时，不再抛出异常并导致 FE 无法启动，而是 FE 可正常启动、同时可以通过 [SHOW PLUGINS](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_PLUGINS/) 查看插件的错误状态。[#36566](https://github.com/StarRocks/starrocks/pull/36566)
+- 动态分区支持 Random 分布。[#35513](https://github.com/StarRocks/starrocks/pull/35513)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- 隐藏了审计日志（Audit Log）中 Broker Load 作业里 AWS S3 的鉴权信息 `aws.s3.access_key` 和 `aws.s3.access_secret`。[#36571](https://github.com/StarRocks/starrocks/pull/36571)
+- 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
+
+### 问题修复
+
+修复了如下问题：
+
+- 数据损坏情况下，建立持久化索引会引起 BE Crash。[#30841](https://github.com/StarRocks/starrocks/pull/30841)
+- 创建包含嵌套查询的异步物化视图时会报错“resolve partition column failed”。[#26078](https://github.com/StarRocks/starrocks/issues/26078)
+- 创建异步物化视图时如果基表数据损坏，可能会报错“Unexpected exception: null”。[#30038](https://github.com/StarRocks/starrocks/pull/30038)
+- 查询包含窗口函数时会 SQL 错误“[1064] [42000]: Row count of const column reach limit: 4294967296”。[#33561](https://github.com/StarRocks/starrocks/pull/33561)
+- 开启 FE 配置项 `enable_collect_query_detail_info` 后，FE 性能下降严重。[#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- 存算分离模式下，删除对象存储中文件时可能报错“Reduce your request rate”。[#35566](https://github.com/StarRocks/starrocks/pull/35566)
+- 某些情况下，物化视图刷新可能会出现死锁问题。[#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- 启用 DISTINCT 下推窗口算子功能时,  对窗口函数的输出列的复杂表达式进行 SELECT DISTINCT 操作会报错。[#36357](https://github.com/StarRocks/starrocks/pull/36357)
+- 从 ORC 格式数据文件导入嵌套的 Array 会导致 BE Crash。[#36127](https://github.com/StarRocks/starrocks/pull/36127)
+- 某些兼容 S3 协议的对象存储会返回重复的文件，导致 BE Crash。[#36103](https://github.com/StarRocks/starrocks/pull/36103)
+
 ## 3.1.5
 
 发布日期：2023 年 11 月 28 日
@@ -53,9 +100,9 @@ displayed_sidebar: "Chinese"
 
 #### 配置参数
 
-- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
-- FE 配置项 [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
-- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
+- 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- FE 配置项 [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](../administration/BE_configuration.md#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
 
 #### 系统变量
 
@@ -175,7 +222,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- [存算分离架构](../deployment/deploy_shared_data.md)下，支持如下特性：
+- [存算分离架构](../deployment/shared_data/s3.md)下，支持如下特性：
   - 数据存储在 Azure Blob Storage 上。
   - List 分区。
 - 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
@@ -205,7 +252,7 @@ displayed_sidebar: "Chinese"
 - 新增支持主键模型（Primary Key）表，暂不支持持久化索引。
 - 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/expression_partitioning.md)，提高了分区创建的易用性和灵活性。
-- 支持[存储卷（Storage Volume）抽象](../deployment/deploy_shared_data.md#创建默认存储卷)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
+- 支持[存储卷（Storage Volume）抽象](../deployment/shared_data/s3.md)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
 
 #### 数据湖分析
 
@@ -338,7 +385,7 @@ displayed_sidebar: "Chinese"
 - FE 配置项 `quorom_publish_wait_time_ms` 更名为 `quorum_publish_wait_time_ms`，`async_load_task_pool_size` 更名为 `max_broker_load_job_concurrency`。
 - CN 配置项 `thrift_port` 更名为 `be_port`。
 - 废弃 BE 配置项 `routine_load_thread_pool_size`，单 BE 节点上 Routine Load 线程池大小完全由 FE 配置项 `max_routine_load_task_num_per_be` 控制。
-- 废弃 BE 配置项 `txn_commit_rpc_timeout_ms` 和系统变量 `tx_visible_wait_timeout`，通过 `time_out` 设置事务超时时间。
+- 废弃 BE 配置项 `txn_commit_rpc_timeout_ms` 和系统变量 `tx_visible_wait_timeout`。
 - 废弃 FE 配置项 `max_broker_concurrency`、`load_parallel_instance_num`。
 - 废弃 FE 配置项 `max_routine_load_job_num`，通过 `max_routine_load_task_num_per_be` 来动态判断每个 BE 节点上支持的 Routine Load 任务最大数，并且在任务失败时给出建议。
 - Routine Load 作业新增两个属性 `task_consume_second` 和 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。如果作业中没有设置这两个属性，则采用 FE 配置项 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 的配置。

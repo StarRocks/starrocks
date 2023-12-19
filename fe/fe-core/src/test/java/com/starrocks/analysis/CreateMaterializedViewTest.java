@@ -40,6 +40,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -3242,6 +3243,9 @@ public class CreateMaterializedViewTest {
                     "as select v2.k1, v2.s2 from view_2 v2;";
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         }
+        starRocksAssert.dropView("view_1");
+        starRocksAssert.dropView("view_2");
+        starRocksAssert.dropView("view_3");
     }
 
     @Test
@@ -3959,5 +3963,174 @@ public class CreateMaterializedViewTest {
             Assert.assertThrows("Materialized view partition function date_trunc check failed",
                     AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
         }
+    }
+
+    @Test
+    public void testCreateMvWithCTE() throws Exception {
+        starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;");
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select k1, s2 from cte1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select a.k1, a.s2 from cte1 as a;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10), " +
+                    " cte2 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select cte1.k1, cte2.s2 from cte1 join cte2 on cte1.k1=cte2.k1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by d1\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte3 as (select d1, s2 from (select date_trunc('month',k1) d1" +
+                    ", v1.s2 from view_1 v1)t where d1 is not null) " +
+                    " select v3.d1, v3.s2 from cte3 v3;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10), " +
+                    " cte2 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select cte1.k1, cte2.s2 from cte1 join cte2 on cte1.k1=cte2.k1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10), " +
+                    " cte2 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select a.k1, b.s2 from cte1 a join cte2 b on a.k1=b.k1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',b.k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as with cte1 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10), " +
+                    " cte2 as (select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10) " +
+                    " select a.k1, b.s2 from cte1 a join cte2 b on a.k1=b.k1;";
+            Assert.assertThrows("Materialized view partition exp: `b`.`k1` must related to column.",
+                    AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
+        starRocksAssert.dropView("view_1");
+    }
+
+    @Test
+    public void testUseSubQueryWithStar1() {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1) tbl";
+
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
+    public void testUseSubQueryWithStar2() {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by random " +
+                "refresh deferred manual " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select * from (select * from tbl1 where k1 > '19930101') tbl";
+        starRocksAssert.withMaterializedView(sql, () -> {});
+    }
+
+    @Test
+    public void testUseSubQueryWithStar3() throws Exception {
+        starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;",
+                () -> {
+                    String sql = "create materialized view mv1\n" +
+                            "partition by date_trunc('month',k1)\n" +
+                            "distributed by hash(k2) buckets 10\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "as with cte1 as (select * from (select * from tbl1 tb1) t where t.k1 > 10) " +
+                            " select * from cte1;";
+                    starRocksAssert.withMaterializedView(sql, () -> {});
+                });
+    }
+
+    @Test
+    public void testPartitionByWithOrderBy1() {
+        starRocksAssert.withTable(new MTable("tt1", "k1",
+                        List.of(
+                                "k1 datetime",
+                                "k2 string",
+                                "v1 int"
+                        ),
+
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    String sql = "create materialized view mv1 " +
+                            "partition by date_trunc('day', k1) " +
+                            "distributed by random " +
+                            "order by (k3) \n" +
+                            "refresh deferred manual " +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ") " +
+                            "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
+                    starRocksAssert.withMaterializedView(sql, () -> {});
+                });
     }
 }

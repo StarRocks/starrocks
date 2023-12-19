@@ -4,6 +4,53 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.6
+
+Release date: December 18, 2023
+
+### New Features
+
+- Added the [now(p)](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-functions/date-time-functions/now/) function to return the current date and time with the specified fractional seconds precision (accurate to the microsecond). If `p` is not specified, this function returns only date and time accurate to the second. [#36676](https://github.com/StarRocks/starrocks/pull/36676)
+- Added a new metric `max_tablet_rowset_num` for setting the maximum allowed number of rowsets. This metric helps detect possible compaction issues and thus reduces the occurrences of the error "too many versions". [#36539](https://github.com/StarRocks/starrocks/pull/36539)
+- Supports obtaining heap profiles by using a command line tool, making troubleshooting easier.[#35322](https://github.com/StarRocks/starrocks/pull/35322)
+- Supports creating asynchronous materialized views with common table expressions (CTEs). [#36142](https://github.com/StarRocks/starrocks/pull/36142)
+- Added the following bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/). [#35817](https://github.com/StarRocks/starrocks/pull/35817) [#35621](https://github.com/StarRocks/starrocks/pull/35621)
+
+### Parameter Changes
+
+- The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- A new [FE configuration item](https://docs.starrocks.io/zh/docs/administration/Configuration/#配置-fe-动态参数) `routine_load_unstable_threshold_second` is added. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- A new BE configuration item `enable_lazy_delta_column_compaction` is added. The default value is `true`, indicating that StarRocks does not perform frequent compaction operations on delta columns. [#36654](https://github.com/StarRocks/starrocks/pull/36654)
+
+### Improvements
+
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- The Primary Key table size returned by the [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) statement includes the sizes of **.cols** files (these are files related to partial column updates and generated columns) and persistent index files. [#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- Plugin loading failures will no longer cause an error or cause an FE start failure. Instead, the FE can properly start, and the error status of the plug-in can be queried using [SHOW PLUGINS](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_PLUGINS/). [#36566](https://github.com/StarRocks/starrocks/pull/36566)
+- Dynamic partitioning supports random distribution. [#35513](https://github.com/StarRocks/starrocks/pull/35513)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for AWS S3 in Broker Load jobs are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
+- The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes [#35615](https://github.com/StarRocks/starrocks/pull/35615)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The BEs crash if users create persistent indexes in the event of data corruption. [#30841](https://github.com/StarRocks/starrocks/pull/30841)
+- If users create an asynchronous materialized view that contains nested queries, the error "resolve partition column failed" is reported. [#26078](https://github.com/StarRocks/starrocks/issues/26078)
+- If users create an asynchronous materialized view on a base table whose data is corrupted, the error "Unexpected exception: null" is reported. [#30038](https://github.com/StarRocks/starrocks/pull/30038)
+- If users run a query that contains a window function, the SQL error "[1064] [42000]: Row count of const column reach limit: 4294967296" is reported. [#33561](https://github.com/StarRocks/starrocks/pull/33561)
+- The FE performance plunges after the FE configuration item `enable_collect_query_detail_info` is set to `true`. [#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- In the StarRocks shared-data mode, the error "Reduce your request rate" may be reported when users attempt to delete files from object storage. [#35566](https://github.com/StarRocks/starrocks/pull/35566)
+- Deadlocks may occur when users refresh materialized views. [#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- After the DISTINCT window operator pushdown feature is enabled, errors are reported if SELECT DISTINCT operations are performed on the complex expressions of the columns computed by window functions. [#36357](https://github.com/StarRocks/starrocks/pull/36357)
+- The BEs crash if the source data file is in ORC format and contains nested arrays. [#36127](https://github.com/StarRocks/starrocks/pull/36127)
+- Some S3-compatible object storage returns duplicate files, causing the BEs to crash. [#36103](https://github.com/StarRocks/starrocks/pull/36103)
+
 ## 3.1.5
 
 Release date: November 28, 2023
@@ -53,9 +100,9 @@ Fixed the following issues:
 
 #### Parameters
 
-- Added an FE configuration item [`enable_statistics_collect_profile`](../administration/Configuration.md#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
-- The FE configuration item [`mysql_server_version`](../administration/Configuration.md#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
-- Added a BE/CN configuration item [`update_compaction_ratio_threshold`](../administration/Configuration.md#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
+- Added an FE configuration item [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- The FE configuration item [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- Added a BE/CN configuration item [`update_compaction_ratio_threshold`](../administration/BE_configuration.md#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
 
 #### System Variables
 
@@ -335,7 +382,7 @@ Fixed the following issues:
 - The default value of the FE configuration item `max_routine_load_task_num_per_be` is changed from `5` to `16`, and error information will be returned if a large number of Routine Load tasks are created.
 - The FE configuration item `quorom_publish_wait_time_ms` is renamed as `quorum_publish_wait_time_ms`, and the FE configuration item `async_load_task_pool_size` is renamed as `max_broker_load_job_concurrency`.
 - The BE configuration item `routine_load_thread_pool_size` is deprecated. Now the routine load thread pool size per BE node is controlled only by the FE configuration item `max_routine_load_task_num_per_be`.
-- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated. Now the `time_out` parameter is used to specify the transaction timeout duration.
+- The BE configuration item `txn_commit_rpc_timeout_ms` and the system variable `tx_visible_wait_timeout` are deprecated.
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - The CN configuration item `thrift_port` is renamed as `be_port`.

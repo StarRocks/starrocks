@@ -345,8 +345,9 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
 
     _profile.runtime_profile = _runtime_profile;
+    _profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
+    _profile.late_materialize_skip_rows_counter = ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -373,7 +374,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_datacache) {
         static const char* prefix = "DataCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
@@ -568,14 +569,10 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
         nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
     }
     std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["database_name"] = paimon_table->get_database_name();
-    jni_scanner_params["table_name"] = paimon_table->get_table_name();
-    jni_scanner_params["paimon_options"] = paimon_table->get_paimon_options();
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
     jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
     jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
@@ -805,7 +802,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
         // After catching the AWS 404 file not found error and returning it to the FE,
         // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().starts_with("code=404")) {
+        if (st.is_io_error() && st.message().find("404") != std::string_view::npos) {
             st = Status::RemoteFileNotFound(st.message());
         }
         return st.clone_and_append(msg);

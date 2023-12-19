@@ -867,6 +867,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_batch_size_mb = 100;
 
     /**
+     * Stream load max txn num per BE, less than 0 means no limit
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_max_txn_num_per_be = -1;
+
+    /**
      * Default prepared transaction timeout
      */
     @ConfField(mutable = true)
@@ -1713,10 +1719,10 @@ public class Config extends ConfigBase {
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
     /**
-     * Num of thread to handle statistic collect
+     * Num of thread to handle statistic collect(analyze command)
      */
     @ConfField(mutable = true)
-    public static int statistic_collect_concurrency = 3;
+    public static int statistic_analyze_task_pool_size = 3;
 
     /**
      * statistic collect query timeout
@@ -2011,7 +2017,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = 64;
+    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool
@@ -2348,7 +2354,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_fail_history_size = 12;
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
-    public static int lake_publish_version_max_threads = 128;
+    public static int lake_publish_version_max_threads = 512;
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
@@ -2588,6 +2594,23 @@ public class Config extends ConfigBase {
     public static long mv_active_checker_interval_seconds = 60;
 
     /**
+     * Whether enable to active inactive materialized views automatically by the daemon thread or not.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_automatic_active_check = true;
+
+    /**
+     * The refresh partition number when refreshing materialized view at once by default.
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
+    /**
      * Whether analyze the mv after refresh in async mode.
      */
     @ConfField(mutable = true)
@@ -2625,9 +2648,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
 
-    @ConfField(mutable = true)
-    public static boolean replan_on_insert = false;
-
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
@@ -2650,4 +2670,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean use_lock_manager = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
+    /**
+     * dictionary cache refresh task thread pool size
+     */
+    @ConfField(mutable = true)
+    public static int refresh_dictionary_cache_thread_num = 2;
 }

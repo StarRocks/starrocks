@@ -36,7 +36,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ## 前提条件
 
-- 已经部署安装 Apache Ranger 2.0.0 及以上版本。详细的部署步骤，参见 [快速开始](https://ranger.apache.org/quick_start_guide.html)。
+- 已经部署安装 Apache Ranger 2.1.0 及以上版本。详细的部署步骤，参见 [快速开始](https://ranger.apache.org/quick_start_guide.html)。
 - 确保 StarRocks 所有 FE 机器都能够访问 Ranger。您可以在 FE 节点的机器上执行以下语句来判断:
 
   ```SQL
@@ -60,7 +60,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. 下载 [`plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar`](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
+2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
 
 3. 重启 Ranger Admin。
 
@@ -70,7 +70,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ### 在 Ranger Admin 上配置 StarRocks Service
 
-1. 拷贝 [`ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
+1. 拷贝 [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
 
    ```SQL
    wget https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
@@ -108,7 +108,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ![service](../assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
+6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
@@ -170,7 +170,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
     ```SQL
       CREATE EXTERNAL CATALOG hive_catalog_1
       PROPERTIES (
-          "hive.metastore.uris" = "thrift://172.26.195.10:9083",
+          "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
           "ranger.plugin.hive.service.name" = "hive_catalog_1"
       )
     ```

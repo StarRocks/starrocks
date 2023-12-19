@@ -28,6 +28,7 @@ import org.apache.iceberg.TableScan;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 
@@ -62,7 +63,7 @@ public interface IcebergCatalog {
 
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
-    default List<String> listPartitionNames(String dbName, String tableName) {
+    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
         List<String> partitionNames = Lists.newArrayList();
 
@@ -71,7 +72,7 @@ public interface IcebergCatalog {
             return partitionNames;
         }
 
-        TableScan tableScan = icebergTable.newScan();
+        TableScan tableScan = icebergTable.newScan().planWith(executorService);
         List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
 
         for (FileScanTask fileScanTask : tasks) {
@@ -82,5 +83,14 @@ public interface IcebergCatalog {
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
+    }
+
+    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    }
+
+    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
     }
 }

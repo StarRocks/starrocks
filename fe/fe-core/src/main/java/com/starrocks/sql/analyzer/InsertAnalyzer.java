@@ -189,12 +189,12 @@ public class InsertAnalyzer {
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
                     !column.isAutoIncrement() && !column.isGeneratedColumn() &&
                     !mentionedColumns.contains(column.getName())) {
-                String msg = "";
+                StringBuilder msg = new StringBuilder();
                 for (String s : mentionedColumns) {
-                    msg = msg + " " + s + " ";
+                    msg.append(" ").append(s).append(" ");
                 }
                 throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg);
+                        column.getName(), msg.toString());
             }
         }
 
@@ -309,6 +309,8 @@ public class InsertAnalyzer {
     private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
             return insertStmt.makeTableFunctionTable();
+        } else if (insertStmt.useBlackHoleTableAsTargetTable()) {
+            return insertStmt.makeBlackHoleTable();
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
@@ -342,7 +344,7 @@ public class InsertAnalyzer {
             }
             if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
-                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                        String.format("table state is %s, please wait to insert overwrite until table state is normal",
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }

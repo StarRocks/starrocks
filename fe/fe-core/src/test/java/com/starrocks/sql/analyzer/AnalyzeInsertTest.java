@@ -20,8 +20,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -80,6 +82,16 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
         analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
+    }
+
+    @Test
+    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("t0");
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        analyzeFail("insert overwrite t0 select * from t0;",
+                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
+        table.setState(OlapTable.OlapTableState.NORMAL);
     }
 
     @Test
@@ -355,5 +367,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }

@@ -22,7 +22,6 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 
@@ -38,18 +37,16 @@ public class PaimonTable extends Table {
     private final String catalogName;
     private final String databaseName;
     private final String tableName;
-    private final Options paimonOptions;
     private final AbstractFileStoreTable paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                       Options paimonOptions, org.apache.paimon.table.Table paimonNativeTable, long createTime) {
+                       org.apache.paimon.table.Table paimonNativeTable, long createTime) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.paimonOptions = paimonOptions;
         this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
@@ -106,7 +103,7 @@ public class PaimonTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
     }
 
     @Override
@@ -117,14 +114,8 @@ public class PaimonTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TPaimonTable tPaimonTable = new TPaimonTable();
-        StringBuilder sb = new StringBuilder();
-        for (String key : this.paimonOptions.keySet()) {
-            sb.append(key).append("=").append(this.paimonOptions.get(key)).append(",");
-        }
-        String option = sb.substring(0, sb.length() - 1);
-
-        tPaimonTable.setPaimon_options(option);
-        tPaimonTable.setPaimon_native_table(PaimonScanNode.encodeObjectToString(paimonNativeTable));
+        String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
+        tPaimonTable.setPaimon_native_table(encodedTable);
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);

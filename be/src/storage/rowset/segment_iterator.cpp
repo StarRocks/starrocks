@@ -99,10 +99,7 @@ class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
 
-    ~SegmentIterator() override {
-        _get_del_vec_st.permit_unchecked_error();
-        _get_dcg_st.permit_unchecked_error();
-    }
+    ~SegmentIterator() override = default;
 
     void close() override;
 

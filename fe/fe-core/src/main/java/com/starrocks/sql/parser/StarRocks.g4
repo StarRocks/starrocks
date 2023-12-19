@@ -313,6 +313,13 @@ statement
     | executeStatement
     | deallocateStatement
 
+    // Dictionary Statement
+    | createDictionaryStatement
+    | dropDictionaryStatement
+    | refreshDictionaryStatement
+    | showDictionaryStatement
+    | cancelRefreshDictionaryStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -820,6 +827,38 @@ showFailPointStatement
     : SHOW FAILPOINTS ((LIKE pattern=string))? (ON BACKEND string)?
     ;
 
+// ------------------------------------------- Dictionary Statement -----------------------------------------------------
+
+createDictionaryStatement
+    : CREATE DICTIONARY dictionaryName USING qualifiedName
+        '(' dictionaryColumnDesc (',' dictionaryColumnDesc)* ')'
+        properties?
+    ;
+
+dropDictionaryStatement
+    : DROP DICTIONARY qualifiedName CACHE?
+    ;
+
+refreshDictionaryStatement
+    : REFRESH DICTIONARY qualifiedName
+    ;
+
+showDictionaryStatement
+    : SHOW DICTIONARY qualifiedName?
+    ;
+
+cancelRefreshDictionaryStatement
+    : CANCEL REFRESH DICTIONARY qualifiedName;
+
+dictionaryColumnDesc
+    : qualifiedName KEY
+    | qualifiedName VALUE
+    ;
+
+dictionaryName
+    : qualifiedName
+    ;
+
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
@@ -1033,7 +1072,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
+    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -2027,11 +2066,24 @@ relationPrimary
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
-    | TABLE '(' qualifiedName '(' expressionList ')' ')'
+    | TABLE '(' qualifiedName '(' argumentList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
     | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+argumentList
+    : expressionList
+    | namedArgumentList
+    ;
+
+namedArgumentList
+    : namedArgument (',' namedArgument)*
+    ;
+
+namedArgument
+    : identifier '=>' expression                                                        #namedArguments
     ;
 
 joinRelation
@@ -2056,6 +2108,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
+    | '[' identifier '|' primaryExpression literalExpressionList']'
     ;
 
 setVarHint
@@ -2208,6 +2261,7 @@ valueExpression
 primaryExpression
     : userVariable                                                                        #userVariableExpression
     | systemVariable                                                                      #systemVariableExpression
+    | DICTIONARY_GET '(' expressionList ')'                                               #dictionaryGetExpr
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
@@ -2410,6 +2464,10 @@ stringList
     : '(' string (',' string)* ')'
     ;
 
+literalExpressionList
+    : '(' literalExpression (',' literalExpression)* ')'
+    ;
+
 rangePartitionDesc
     : singleRangePartition
     | multiRangePartition
@@ -2530,7 +2588,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
 unitBoundary
@@ -2656,12 +2714,12 @@ number
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | ARRAY_AGG
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
-    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

@@ -575,14 +575,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public DefaultValueType getDefaultValueType() {
-        if (defaultValue != null) {
-            return DefaultValueType.CONST;
-        } else if (defaultExpr != null) {
+        if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;
             }
+        } else if (defaultValue != null) {
+            return DefaultValueType.CONST;
         }
         return DefaultValueType.NULL;
     }
@@ -593,20 +593,24 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // This function is only used to a const default value like "-1" or now().
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValue() {
+        if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // current transaction time
+                if (ConnectContext.get() != null) {
+                    LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+                            .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                    return localDateTime.format(DATE_TIME_FORMATTER);
+                } else {
+                    // should not run up here
+                    return LocalDateTime.now().format(DATE_TIME_FORMATTER);
+                }
+            }
+        }
+        
         if (defaultValue != null) {
             return defaultValue;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            // current transaction time
-            if (ConnectContext.get() != null) {
-                LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
-                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return localDateTime.format(DATE_TIME_FORMATTER);
-            } else {
-                // should not run up here
-                return LocalDateTime.now().format(DATE_TIME_FORMATTER);
-            }
-        }
+
         return null;
     }
 
@@ -617,14 +621,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // This function is only used to a const default value like "-1" or now().
     // If the default value is uuid(), this function is not suitable.
     public String calculatedDefaultValueWithTime(long currentTimestamp) {
+        if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
+                        .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                return localDateTime.format(DATE_TIME_FORMATTER);
+            }
+        }
+
         if (defaultValue != null) {
             return defaultValue;
         }
-        if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
-                    .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-            return localDateTime.format(DATE_TIME_FORMATTER);
-        }
+
         return null;
     }
 
@@ -772,6 +780,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getPhysicalName() {
         return physicalName != null ? physicalName : name;
+    }
+
+    public String getDirectPhysicalName() {
+        return physicalName != null ? physicalName : "";
     }
 
     public void renameColumn(String newName) {

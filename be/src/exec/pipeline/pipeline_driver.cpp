@@ -213,18 +213,6 @@ void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     }
 }
 
-static inline bool is_multilane(pipeline::OperatorPtr& op) {
-    if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
-        return true;
-    }
-    // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
-    // it shall populate cache on receiving EOS chunk of a tablet.
-    if (dynamic_cast<query_cache::CacheOperator*>(op.get()) != nullptr) {
-        return true;
-    }
-    return false;
-}
-
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
@@ -309,7 +297,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
-                    curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+                    curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
                     LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
@@ -349,7 +337,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
-                            next_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+                            next_op->common_metrics()->add_info_string("ErrorMsg",
+                                                                       std::string(return_status.message()));
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
@@ -576,8 +565,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
 
-        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
-                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+        if (!tls_thread_status.try_mem_reserve(request_reserved)) {
             mem_resource_mgr.to_low_memory_mode();
         }
     }
@@ -759,7 +747,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     if (!res.ok()) {
         LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
-                                    res.get_error_msg());
+                                    res.message());
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {

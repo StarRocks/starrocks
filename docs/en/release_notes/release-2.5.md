@@ -4,6 +4,50 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.16
+
+Release date: December 1, 2023
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Global Runtime Filter may cause BEs to crash in certain scenarios. [#35776](https://github.com/StarRocks/starrocks/pull/35776)
+
+## 2.5.15
+
+Release date: November 29, 2023
+
+### Improvements
+
+- Added slow request logs to track slow requests. [#33908](https://github.com/StarRocks/starrocks/pull/33908)
+- Optimized the performance of using Spark Load to read Parquet and ORC files when there are a large number of files. [#34787](https://github.com/StarRocks/starrocks/pull/34787)
+- Optimized the performance of some Bitmap-related operations, including:
+  - Optimized nested loop joins. [#340804](https://github.com/StarRocks/starrocks/pull/34804) [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+### Compatibility Changes
+
+#### Parameters
+
+- The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+
+### Bug Fixes
+
+- If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+- Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- The error "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction" is returned for queries. [#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- A query that contains a window function may cause BEs to crash. [#33671](https://github.com/StarRocks/starrocks/pull/33671)
+- Running `show proc '/statistic'` may cause a deadlock. [#34237](https://github.com/StarRocks/starrocks/pull/34237/files)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34566](https://github.com/StarRocks/starrocks/pull/34566)
+- After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- Running a loading task or a query may cause the FEs to hang. [#34569](https://github.com/StarRocks/starrocks/pull/34569)
+
 ## 2.5.14
 
 Release date: November 14, 2023
@@ -425,7 +469,7 @@ Release date: January 22, 2023
   - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - Optimized the performance of Broker Load when a large number of small ORC files are loaded. [#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - Reduced the memory usage when you load data into Primary Key tables.
-- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../reference/information_schema/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../reference/overview-pages/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - Optimized data backup and restore:
   - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore data](../administration/Backup_and_restore.md). [#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - Supports backing up and restoring data from Primary Key tables. For more information, see Backup and restore. [#11885](https://github.com/StarRocks/starrocks/pull/11885)

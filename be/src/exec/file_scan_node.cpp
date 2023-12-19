@@ -321,8 +321,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << "FileScanner[" << start_idx + i
-                             << "] process failed. status=" << status.get_error_msg();
+                LOG(WARNING) << "FileScanner[" << start_idx + i << "] process failed. status=" << status.message();
                 break;
             }
         }

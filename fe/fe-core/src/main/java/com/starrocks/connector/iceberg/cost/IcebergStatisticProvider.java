@@ -72,28 +72,26 @@ public class IcebergStatisticProvider {
     private final Map<IcebergFilter, IcebergFileStats> icebergFileStatistics = new HashMap<>();
     private final Map<IcebergFilter, Set<String>> scannedFiles = new HashMap<>();
 
-    // only used for iceberg job planning without column statistics.
-    private final Map<IcebergFilter, Long> icebergCardinality = new HashMap<>();
-
     public IcebergStatisticProvider() {
     }
 
-    public Statistics getCardinalityStats(IcebergTable icebergTable,
-                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                          ScalarOperator predicate) {
+    public Statistics getCardinalityStats(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, List<FileScanTask> fileScanTasks) {
         Statistics.Builder statisticsBuilder = Statistics.builder();
-        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-        if (snapshot.isPresent()) {
-            IcebergFilter key = IcebergFilter.of(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
-                    snapshot.get().snapshotId(), predicate);
-            if (icebergCardinality.containsKey(key)) {
-                statisticsBuilder.setOutputRowCount(icebergCardinality.get(key));
-            } else {
-                statisticsBuilder.setOutputRowCount(1);
+        long cardinality = 0;
+        Set<String> currentFiles = new HashSet<>();
+        for (FileScanTask scanTask : fileScanTasks) {
+            DataFile dataFile = scanTask.file();
+            String filePath = dataFile.path().toString();
+            if (currentFiles.contains(filePath)) {
+                continue;
             }
-        } else {
-            statisticsBuilder.setOutputRowCount(1);
+
+            currentFiles.add(filePath);
+            cardinality += dataFile.recordCount();
         }
+
+        statisticsBuilder.setOutputRowCount(cardinality);
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
         return statisticsBuilder.build();
     }
@@ -149,18 +147,6 @@ public class IcebergStatisticProvider {
 
     public Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columns) {
         return columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown()));
-    }
-
-    public void updateIcebergCardinality(IcebergFilter key, FileScanTask fileScanTask) {
-        DataFile dataFile = fileScanTask.file();
-        Set<String> files = scannedFiles.computeIfAbsent(key, ignored -> new HashSet<>());
-        if (files.contains(dataFile.path().toString())) {
-            return;
-        }
-
-        files.add(dataFile.path().toString());
-        long rowNum = fileScanTask.file().recordCount();
-        icebergCardinality.compute(key, (k, v) -> (v == null) ? rowNum : v + rowNum);
     }
 
     public void updateIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,

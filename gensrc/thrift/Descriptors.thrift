@@ -154,6 +154,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -163,6 +164,7 @@ enum TSchemaTableType {
     SCH_PIPES,
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
+    SYS_FE_LOCKS,
 }
 
 enum THdfsCompression {
@@ -289,6 +291,20 @@ struct TOlapTableIndex {
   2: optional list<string> columns
   3: optional TIndexType index_type
   4: optional string comment
+  5: optional i64 index_id
+
+  // for GIN
+  // critical common properties shared for all type of GIN
+  6: optional map<string, string> common_properties
+
+  // properties to affect index building
+  7: optional map<string, string> index_properties
+
+  // default properties to affect index searching, can rewrite them through hint
+  8: optional map<string, string> search_properties
+
+  // properties that are different from the above three
+  9: optional map<string, string> extra_properties
 }
 
 struct TTabletLocation {

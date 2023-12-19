@@ -17,16 +17,21 @@ package com.starrocks.sql;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -105,6 +110,22 @@ public class DeletePlanner {
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
                     table.enableReplicatedStorage(), false, false);
             execPlan.getFragments().get(0).setSink(dataSink);
+
+            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+            session.getSessionVariable().setPreferComputeNode(false);
+            session.getSessionVariable().setUseComputeNodes(0);
+            OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+            TableName catalogDbTable = deleteStatement.getTableName();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                    catalogDbTable.getDb());
+            try {
+                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(),
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                olapTableSink.complete();
+            } catch (UserException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
