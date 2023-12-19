@@ -832,7 +832,6 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     }
-    return;
 }
 
 template <typename T>
