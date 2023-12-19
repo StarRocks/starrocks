@@ -30,15 +30,43 @@ public class TrinoCtasTest extends TrinoTestBase {
     public void testCtasTrinoDialect() throws Exception {
         String ctasSql = "create table test.t_doy as select doy(date '2022-03-06')";
         try {
-            // test trino dialect
+            connectContext.getSessionVariable().setSqlDialect("trino");
             CreateTableAsSelectStmt ctasStmt =
                     (CreateTableAsSelectStmt) SqlParser.parse(ctasSql, connectContext.getSessionVariable()).get(0);
             QueryStatement queryStmt = ctasStmt.getQueryStatement();
             assertPlanContains(queryStmt, "dayofyear('2022-03-06 00:00:00')");
 
-            // test starrocks dialect
             connectContext.getSessionVariable().setSqlDialect("starrocks");
             analyzeFail(ctasSql, "No matching function with signature: doy(date)");
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
+    }
+
+    @Test
+    public void testCtasSubQueryNoAlias() throws Exception {
+        String ctasSql = "create table test.sub_query_alias as select * from ( select * from ( select 1, 2, 3 ) )";
+        try {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+            analyzeSuccess(ctasSql);
+
+            connectContext.getSessionVariable().setSqlDialect("starrocks");
+            analyzeFail(ctasSql, "Every derived table must have its own alias");
+        } finally {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+        }
+    }
+
+    @Test
+    public void testCtasSubQueryHasAlias() throws Exception {
+        String ctasSql =
+                "create table test.sub_query_alias as select * from ( select * from ( select 1, 2, 3 ) t1 ) t2";
+        try {
+            connectContext.getSessionVariable().setSqlDialect("trino");
+            analyzeSuccess(ctasSql);
+
+            connectContext.getSessionVariable().setSqlDialect("starrocks");
+            analyzeSuccess(ctasSql);
         } finally {
             connectContext.getSessionVariable().setSqlDialect("trino");
         }
