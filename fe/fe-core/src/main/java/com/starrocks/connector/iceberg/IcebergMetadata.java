@@ -288,22 +288,39 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable icebergTable = (IcebergTable) table;
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(icebergTable.getNativeTable(), MetadataTableType.PARTITIONS);
-        try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
-            for (FileScanTask task : tasks) {
-                CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                for (StructLike row : rows) {
-                    StructProjection partitionData = row.get(0, StructProjection.class);
-                    int specId = row.get(1, Integer.class);
-                    long lastUpdated = row.get(9, Long.class);
-                    PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
-                    Partition partition = new Partition(lastUpdated);
-                    String partitionName =
-                            PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
-                    partitionMap.put(partitionName, partition);
+
+        if (icebergTable.isUnPartitioned()) {
+            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
+                    for (StructLike row : rows) {
+                        long lastUpdated = row.get(7, Long.class);
+                        Partition partition = new Partition(lastUpdated);
+                        return ImmutableList.of(partition);
+                    }
                 }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
             }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
+        } else {
+            // For partition table, we need to get all partitions from PartitionsTable.
+            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
+                    for (StructLike row : rows) {
+                        StructProjection partitionData = row.get(0, StructProjection.class);
+                        int specId = row.get(1, Integer.class);
+                        long lastUpdated = row.get(9, Long.class);
+                        PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
+                        Partition partition = new Partition(lastUpdated);
+                        String partitionName =
+                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
+                        partitionMap.put(partitionName, partition);
+                    }
+                }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
+            }
         }
         ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
         partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));

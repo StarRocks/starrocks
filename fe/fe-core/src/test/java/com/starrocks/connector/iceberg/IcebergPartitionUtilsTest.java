@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.qe.ConnectContext;
@@ -78,10 +79,10 @@ public class IcebergPartitionUtilsTest {
                 (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
 
-        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("iceberg0",
-                "partitioned_db", "t1");
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-03");
+        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().
+                getTable("iceberg0", "partitioned_db", "t1");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02", "date=2020-01-03"));
         Set<IcebergPartitionUtils.IcebergPartition> partitions = IcebergPartitionUtils.
                 getAllPartition(icebergTable.getNativeTable());
         Assert.assertEquals(2, partitions.size());

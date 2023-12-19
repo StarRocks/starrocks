@@ -19,23 +19,22 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Types;
 
 import java.io.File;
@@ -79,6 +78,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     private static final List<String> PARTITION_NAMES_1 = Lists.newArrayList("d=2023-08-01",
             "d=2023-08-02",
             "d=2023-08-03");
+    private static final long PARTITION_INIT_VERSION = 100;
+
     public static String getStarRocksHome() throws IOException {
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -143,11 +144,11 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
                     col -> ColumnStatistic.unknown()));
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0, 100,
-                        columnStatisticMap));
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_0,
+                        100, columnStatisticMap));
             } else {
-                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_1, 100,
-                        columnStatisticMap));
+                icebergTableInfoMap.put(tblName, new IcebergTableInfo(icebergTable, PARTITION_NAMES_1,
+                        100, columnStatisticMap));
             }
         }
     }
@@ -231,6 +232,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionInfo> getPartitions(com.starrocks.catalog.Table table, List<String> partitionNames) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        readLock();
+        try {
+            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(icebergTable.getRemoteDbName()).
+                    get(icebergTable.getRemoteTableName()).partitionInfoMap;
+            if (icebergTable.isUnPartitioned()) {
+                return Lists.newArrayList(partitionInfoMap.get(icebergTable.getRemoteTableName()));
+            } else {
+                return partitionNames.stream().map(partitionInfoMap::get).collect(Collectors.toList());
+            }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    @Override
     public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table table,
                                          Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate, long limit) {
@@ -258,18 +276,18 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         return new ArrayList<>();
     }
 
-    public void addRowsToPartition(String dbName, String tableName, int rowCount, String partitionName) {
-        IcebergTable icebergTable = MOCK_TABLE_MAP.get(dbName).get(tableName).icebergTable;
-        Table nativeTable = icebergTable.getNativeTable();
-        DataFile file = DataFiles.builder(nativeTable.spec())
-                .withPath("/path/to/data-a.parquet")
-                .withFileSizeInBytes(10)
-                .withPartitionPath(partitionName) // easy way to set partition data for now
-                .withRecordCount(rowCount)
-                .build();
+    public void updatePartitions(String dbName, String tableName, List<String> partitionNames) {
         writeLock();
         try {
-            nativeTable.newAppend().appendFile(file).commit();
+            Map<String, PartitionInfo> partitionInfoMap = MOCK_TABLE_MAP.get(dbName).get(tableName).partitionInfoMap;
+            for (String partitionName : partitionNames) {
+                if (partitionInfoMap.containsKey(partitionName)) {
+                    long modifyTime = partitionInfoMap.get(partitionName).getModifiedTime() + 1;
+                    partitionInfoMap.put(partitionName, new Partition(modifyTime));
+                } else {
+                    partitionInfoMap.put(partitionName, new Partition(PARTITION_INIT_VERSION));
+                }
+            }
         } finally {
             writeUnlock();
         }
@@ -277,16 +295,29 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private static class IcebergTableInfo {
         private MockIcebergTable icebergTable;
-        private List<String> partitionNames;
-        private long rowCount;
-        private Map<String, ColumnStatistic> columnStatsMap;
+        private final List<String> partitionNames;
+        private final Map<String, PartitionInfo> partitionInfoMap;
+        private final long rowCount;
+        private final Map<String, ColumnStatistic> columnStatsMap;
 
-        public IcebergTableInfo(MockIcebergTable icebergTable, List<String> partitionNames, long rowCount,
-                                Map<String, ColumnStatistic> columnStatsMap) {
+        public IcebergTableInfo(MockIcebergTable icebergTable, List<String> partitionNames,
+                                long rowCount, Map<String, ColumnStatistic> columnStatsMap) {
             this.icebergTable = icebergTable;
             this.partitionNames = partitionNames;
+            this.partitionInfoMap = Maps.newHashMap();
             this.rowCount = rowCount;
             this.columnStatsMap = columnStatsMap;
+            initPartitionInfos(partitionNames);
+        }
+
+        private void initPartitionInfos(List<String> partitionNames) {
+            if (partitionNames.isEmpty()) {
+                partitionInfoMap.put(icebergTable.getRemoteTableName(), new Partition(PARTITION_INIT_VERSION));
+            } else {
+                for (String partitionName : partitionNames) {
+                    partitionInfoMap.put(partitionName, new Partition(PARTITION_INIT_VERSION));
+                }
+            }
         }
     }
 
