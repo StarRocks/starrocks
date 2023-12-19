@@ -355,11 +355,9 @@ WITH RESOURCE 'spark0'
   
 适用于 StarRocks 表聚合列的数据类型为 bitmap 类型。 在 load 命令中指定需要构建全局字典的字段即可，格式为：`StarRocks字段名称=bitmap_dict(hive表字段名称)` 需要注意的是目前 **只有在上游数据源为 hive 表** 时才支持全局字典的构建。
 
-* **将源端 binary 类型的列数据导入至 StarRocks 聚合表 bitmap 类型的列**
+* **导入 binary 类型的数据**
 
-当 StarRocks 表聚合列的数据类型是为 bitmap 类型，数据源 Hive 表或 HDFS 文件中相应列的数据类型为 binary 类型。
-
-您无需构建全局字典，只需在导入命令中指定相应的字段即可实现数据导入。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
+当数据源 Hive 表或 HDFS 文件中列的数据类型为 binary 类型， 而 StarRocks 表中相应的列是 bitmap 类型的聚合列时，您无需构建全局字典，只需在导入命令中指定相应的字段即可。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
 
 ### 查看导入任务
 

@@ -426,11 +426,9 @@ Currently, to use a Hive table in the import process, you need to create an exte
   
 In the load command, you can specify the required fields for building the global dictionary in the following format: `StarRocks field name=bitmap_dict(hive table field name)` Note that currently **the global dictionary is only supported when the upstream data source is a Hive table**.
 
-- **Import of bitmap binary type columns**
+- **Import binary type data**
 
-The data type of a aggregate column in the StarRocks aggregate table is bitmap, while the data type of the corresponding column in the data source (a Hive table or HDFS file) is binary.
-
-You do not need to build a global dictionary. You can just specify the corresponding fields in the load command to load data. The format is: `StarRocks field name=bitmap_from_binary(Hive table field name)`.
+When the data type of a column in the data source, a Hive table or HDFS file, is binary and the corresponding column in the StarRocks table is a bitmap-type aggregate column, you can just specify the corresponding fields in the load command, instead of building a global dictionary. The format is: `StarRocks field name=bitmap_from_binary(Hive table field name)`.
 
 ## Viewing Import Jobs
 
