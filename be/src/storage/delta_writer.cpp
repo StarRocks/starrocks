@@ -376,11 +376,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                 fmt::format("can't partial update for column with row. tablet_id: {}", _opt.tablet_id));
     }
     Status st;
-    auto res = _mem_table->insert(chunk, indexes, from, size);
-    if (!res.ok()) {
-        return res.status();
-    }
-    auto full = res.value();
+    ASSIGN_OR_RETURN(auto full, _mem_table->insert(chunk, indexes, from, size));
     _last_write_ts = butil::gettimeofday_s();
     _write_buffer_size = _mem_table->write_buffer_size();
     if (_mem_tracker->limit_exceeded()) {

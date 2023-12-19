@@ -777,8 +777,8 @@ public class SchemaChangeHandler extends AlterHandler {
             // sort key column must include all key columns and can not have any other columns
             boolean res = new HashSet<>(keyColumnIdxes).equals(new HashSet<>(sortKeyIdxes));
             if (!res) {
-                throw new DdlException("The sort columns of " + olapTable.getKeysType().toSql() + " table must include all key " +
-                                       "columns and cannot have any other columns");
+                throw new DdlException("The sort columns of " + olapTable.getKeysType().toSql() +
+                                       " table must be same with key columns");
             }
         } else {
             throw new DdlException("Table type:" + olapTable.getKeysType().toSql() + " does not support sort key column");

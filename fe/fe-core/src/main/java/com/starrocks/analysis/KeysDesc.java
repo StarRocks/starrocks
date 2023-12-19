@@ -279,11 +279,10 @@ public class KeysDesc implements ParseNode, Writable {
                 // the key columns
                 boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
                 if (!res) {
-                    throw new SemanticException("The sort columns of " + type.toSql() + " table must include all key " +
-                                                "columns and cannot have any columns other than key columns.");
+                    throw new SemanticException("The sort columns of " + type.toSql() + " table must be same with key columns");
                 }
             } else {
-                throw new SemanticException("sort key is not support:" + type.toSql());
+                throw new SemanticException("Table type:" + type.toSql() + " does not support sort key column");
             }
         }
     }
