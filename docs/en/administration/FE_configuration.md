@@ -902,17 +902,17 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 - **Default**: TRUE
 - **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
 
-##### jdbc_meta_cache_enable
+##### jdbc_meta_default_cache_enable
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: When set to TRUE, accessing databases and tables in the JDBC Catalog provides a cache of metadata.
+- **Description**: The default value for whether the JDBC Catalog metadata cache is enabled. When set to True, newly created JDBC Catalogs will default to metadata caching enabled.
 
-##### jdbc_meta_cache_expire_sec
+##### jdbc_meta_default_cache_expire_sec
 
 - **Unit**: Second
 - **Default**: 600
-- **Description**: The expiration time of the metadata cache in the JDBC Catalog.
+- **Description**: The default expiration time for the JDBC Catalog metadata cache. When jdbc_meta_default_cache_enable is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 
 ## Configure FE static parameters
 

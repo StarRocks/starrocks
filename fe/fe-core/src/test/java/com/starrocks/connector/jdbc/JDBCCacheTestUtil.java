@@ -23,18 +23,18 @@ import org.junit.Assert;
 
 public class JDBCCacheTestUtil {
     static void openCacheEnable(ConnectContext connectContext) throws Exception {
-        String stmt = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"true\");";
+        String stmt = "admin set frontend config(\"jdbc_meta_default_cache_enable\" = \"true\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-        Assert.assertTrue(Config.jdbc_meta_cache_enable);
+        Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
     }
 
     static void closeCacheEnable(ConnectContext connectContext) throws Exception {
-        String stmt2 = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"false\");";
+        String stmt2 = "admin set frontend config(\"jdbc_meta_default_cache_enable\" = \"false\");";
         AdminSetConfigStmt adminSetConfigStmt2 =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt2, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt2, connectContext);
-        Assert.assertFalse(Config.jdbc_meta_cache_enable);
+        Assert.assertFalse(Config.jdbc_meta_default_cache_enable);
     }
 }

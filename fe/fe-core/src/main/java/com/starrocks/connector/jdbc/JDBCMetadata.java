@@ -33,7 +33,6 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -52,18 +51,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
-    private final @NonNull JDBCAsyncCache<String, List<String>> dbNamesCache
-            = new JDBCAsyncCache<>(false);
-    private final @NonNull JDBCAsyncCache<String, List<String>> tableNamesCache
-            = new JDBCAsyncCache<>(false);
-    private final @NonNull JDBCAsyncCache<String, List<String>> partitionNamesCache
-            = new JDBCAsyncCache<>(false);
-    private final @NonNull JDBCAsyncCache<String, Integer> tableIdCache
-            = new JDBCAsyncCache<>(true);
-    private final @NonNull JDBCAsyncCache<String, Table> tableInstanceCache
-            = new JDBCAsyncCache<>(false);
-    private final @NonNull JDBCAsyncCache<String, List<Partition>> partitionInfoCache
-            = new JDBCAsyncCache<>(false);
+    private   JDBCAsyncCache<String, List<String>> dbNamesCache;
+    private  JDBCAsyncCache<String, List<String>> tableNamesCache;
+    private  JDBCAsyncCache<String, List<String>> partitionNamesCache;
+    private  JDBCAsyncCache<String, Integer> tableIdCache;
+    private  JDBCAsyncCache<String, Table> tableInstanceCache;
+    private  JDBCAsyncCache<String, List<Partition>> partitionInfoCache;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -83,6 +76,16 @@ public class JDBCMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
         checkAndSetSupportPartitionInformation();
+        createMetaAsyncCacheInstances(properties);
+    }
+
+    private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        dbNamesCache = new JDBCAsyncCache<>(properties, false);
+        tableNamesCache = new JDBCAsyncCache<>(properties, false);
+        partitionNamesCache = new JDBCAsyncCache<>(properties, false);
+        tableIdCache = new JDBCAsyncCache<>(properties, true);
+        tableInstanceCache = new JDBCAsyncCache<>(properties, false);
+        partitionInfoCache = new JDBCAsyncCache<>(properties, false);
     }
 
     public void checkAndSetSupportPartitionInformation() {
@@ -251,5 +254,9 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
         partitionNamesCache.invalidate(key);
         partitionInfoCache.invalidate(key);
+    }
+
+    public void refreshCache(Map<String, String> properties) {
+        createMetaAsyncCacheInstances(properties);
     }
 }

@@ -20,28 +20,53 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.common.Config;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public class JDBCAsyncCache<K, V> {
 
+    private boolean enableCache = false;
     private AsyncCache<K, V> asyncCache;
     private long currentExpireSec;
 
-    public JDBCAsyncCache(Boolean permanent) {
+    private final String jdbcMetaCacheEnable = "jdbc_meta_cache_enable";
+    private final String jdbcMetaCacheExpireSec = "jdbc_meta_cache_expire_sec";
+
+
+    public JDBCAsyncCache(Map<String, String> properties, Boolean permanent) {
+
         if (permanent) {
             this.asyncCache = Caffeine.newBuilder().buildAsync();
-        } else {
-            currentExpireSec = Config.jdbc_meta_cache_expire_sec;
+        } else if (checkEnableCache(properties)) {
+            initializeExpireSec(properties);
             this.asyncCache = Caffeine.newBuilder()
                     .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS)
                     .buildAsync();
         }
     }
 
+    private boolean checkEnableCache(Map<String, String> properties) {
+        // The priority of jdbc_meta_cache_enable from properties is higher than that from Config
+        String enableFromProperties = properties.get(jdbcMetaCacheEnable);
+        if (enableFromProperties != null) {
+            return this.enableCache = Boolean.parseBoolean(enableFromProperties);
+        } else {
+            return this.enableCache = Config.jdbc_meta_default_cache_enable;
+        }
+    }
+
+    private void initializeExpireSec(Map<String, String> properties) {
+        String expireSec = properties.get(jdbcMetaCacheExpireSec);
+        if (expireSec != null) {
+            this.currentExpireSec = Long.parseLong(expireSec);
+        } else {
+            currentExpireSec = Config.jdbc_meta_default_cache_expire_sec;
+        }
+    }
+
     public @NonNull V get(@NonNull K key, @NonNull Function<K, V> function) {
-        if (Config.jdbc_meta_cache_enable) {
-            checkExpirationTimeChange();
+        if (this.enableCache) {
             return this.asyncCache.get(key, function).join();
         } else {
             return function.apply(key);
@@ -53,14 +78,16 @@ public class JDBCAsyncCache<K, V> {
     }
 
     public void invalidate(@NonNull K key) {
-        this.asyncCache.synchronous().invalidate(key);
+        if (this.asyncCache != null) {
+            this.asyncCache.synchronous().invalidate(key);
+        }
     }
 
-    private void checkExpirationTimeChange() {
-        if (currentExpireSec != Config.jdbc_meta_cache_expire_sec) {
-            currentExpireSec = Config.jdbc_meta_cache_expire_sec;
-            this.asyncCache = Caffeine.newBuilder()
-                    .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS).buildAsync();
-        }
+    public boolean isEnableCache() {
+        return enableCache;
+    }
+
+    public long getCurrentExpireSec() {
+        return currentExpireSec;
     }
 }
