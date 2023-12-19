@@ -226,7 +226,7 @@ public class SimpleScheduler {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
         lock.lock();
-        Map<Long, Integer> blackListBackendsCopy = blacklistBackends;
+        Map<Long, Integer> blackListBackendsCopy = new HashMap(blacklistBackends);
         lock.unlock();
 
         {
