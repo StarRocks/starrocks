@@ -302,7 +302,7 @@
         },
         {
           "type": "category",
-          "label": "Data Warehouse",
+          "label": "Data Lake",
           "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
           "link": {"type": "doc", "id": "integrations/data_lakes"},
           "items": [
