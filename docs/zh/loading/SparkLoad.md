@@ -276,7 +276,7 @@ PROPERTIES
     properties
     ( 
         "type" = "hive",
-        "hive.metastore.uris" = "thrift://0.0.0.0:8080"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:8080"
     );
     ~~~
 

@@ -284,7 +284,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -300,7 +300,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -331,7 +331,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -365,7 +365,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -402,7 +402,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -411,6 +411,223 @@ PROPERTIES
 );
 ```
 
+<<<<<<< HEAD
+=======
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- If you choose the SAS Token authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- If you choose the Managed Service Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- If you choose the Managed Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+#### Google GCS
+
+- If you choose the VM-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- If you choose the service account-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- If you choose the impersonation-based authentication method:
+
+  - If you make a VM instance impersonate a service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type" = "hive",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - If you make a service account impersonate another service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type" = "hive",
+        "hive.metastore.type" = "hive",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+    );
+    ```
+
+## View Hive catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG hive_catalog_glue;
+```
+
+## Switch to a Hive Catalog and a database in it
+
+You can use one of the following methods to switch to a Hive catalog and a database in it:
+
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hive catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+
+  ```SQL
+  -- Switch to a specified catalog in the current session:
+  SET CATALOG <catalog_name>
+  -- Specify the active database in the current session:
+  USE <db_name>
+  ```
+
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hive catalog and a database in it:
+
+  ```SQL
+  USE <catalog_name>.<db_name>
+  ```
+
+## Drop a Hive catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+
+The following example drops a Hive catalog named `hive_catalog_glue`:
+
+```SQL
+DROP Catalog hive_catalog_glue;
+```
+
+>>>>>>> 7ab94d0330 ([Doc] Mask uris in catalog and authentication related docs (backport #37285) (#37333))
 ## View the schema of a Hive table
 
 You can use one of the following syntaxes to view the schema of a Hive table:
@@ -535,7 +752,7 @@ You can enable automatic incremental update for a single Hive catalog or for all
   PROPERTIES
   (
       "type" = "hive",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
        ....
       "enable_hms_events_incremental_sync" = "true"
   );
