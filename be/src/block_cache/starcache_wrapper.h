@@ -36,6 +36,8 @@ public:
     Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                        ReadCacheOptions* options) override;
 
+    Status read_buffer(const std::string& key, IOBuffer* buffer, ReadCacheOptions* options) override;
+
     Status read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) override;
 
     Status remove(const std::string& key) override;

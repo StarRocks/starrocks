@@ -169,9 +169,12 @@ Status GroupReader::_init_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
     opts.case_sensitive = _param.case_sensitive;
+    opts.use_file_pagecache = _param.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
+    opts.file_size = _param.file_size;
+    opts.file_mtime = _param.file_mtime;
     opts.row_group_meta = _row_group_metadata;
     opts.context = _obj_pool.add(new ColumnReaderContext);
     for (const auto& column : _param.read_cols) {

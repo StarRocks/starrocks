@@ -105,6 +105,13 @@ Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, size_t 
     return write_buffer(cache_key, offset, buffer, options);
 }
 
+Status BlockCache::write_buffer(const CacheKey& cache_key, const IOBuffer& buffer, WriteCacheOptions* options) {
+    if (buffer.empty()) {
+        return Status::OK();
+    }
+    return _kv_cache->write_buffer(cache_key, buffer, options);
+}
+
 Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
                                 CacheHandle* handle, WriteCacheOptions* options) {
     if (!ptr) {
@@ -130,6 +137,10 @@ StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset
     RETURN_IF_ERROR(read_buffer(cache_key, offset, size, &buffer, options));
     buffer.copy_to(data);
     return buffer.size();
+}
+
+Status BlockCache::read_buffer(const CacheKey& cache_key, IOBuffer* buffer, ReadCacheOptions* options) {
+    return _kv_cache->read_buffer(cache_key, buffer, options);
 }
 
 Status BlockCache::read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options) {

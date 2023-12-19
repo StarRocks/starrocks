@@ -35,6 +35,8 @@ public:
         return _buf.append_user_data(data, size, deleter);
     }
 
+    size_t pop_back(size_t n) { return _buf.pop_back(n); }
+
     size_t copy_to(void* data, ssize_t size = -1, size_t pos = 0) const;
 
     size_t size() const { return _buf.size(); }
@@ -44,6 +46,18 @@ public:
     IOBuf& raw_buf() { return _buf; }
 
     const IOBuf& const_raw_buf() const { return _buf; }
+
+    size_t backing_block_num() { return _buf.backing_block_num(); }
+
+    const char* backing_block_data(size_t i) {
+        return _buf.backing_block(i).data();
+    }
+
+    size_t backing_block_size(size_t i) {
+        return _buf.backing_block(i).size();
+    }
+
+    void clear() { _buf.clear(); }
 
 private:
     butil::IOBuf _buf;

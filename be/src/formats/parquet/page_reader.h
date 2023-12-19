@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "block_cache/block_cache.h"
 #include "common/status.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
@@ -25,10 +26,13 @@ class HdfsScanStats;
 }
 namespace starrocks::parquet {
 
+struct ColumnReaderOptions;
+
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values, HdfsScanStats* stats);
+    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values,
+               const ColumnReaderOptions& opts);
 
     ~PageReader() = default;
 
@@ -57,17 +61,49 @@ public:
 
     uint64_t get_offset() const { return _offset; }
 
+    uint64_t get_header_length()const { return _header_length; }
+
+    Status set_page_buffer(Slice* slice);
+
+    Status get_page_buffer(size_t size, Slice* slice);
+
 private:
+    struct PageBuffer {
+        int64_t offset = -1;
+        std::vector<uint8_t> header;
+        std::vector<uint8_t> page;
+
+        void reset() {
+            header.clear();
+            page.clear();
+            offset = -1;
+        }
+    };
+
+    void _init_pagecache_key();
+    void _update_pagecache_key(uint64_t offset);
+    Status _get_header(size_t allowed_page_size, uint8_t** page_buf, bool* peek_mode, IOBuffer* buffer);
+
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
 
     uint64_t _offset = 0;
     uint64_t _next_header_pos = 0;
+    uint32_t _header_length = 0;
     const uint64_t _finish_offset = 0;
+
+    BlockCache* _cache = nullptr;
+    std::string _pagecache_key;
+    PageBuffer _local_page_buffer;
+    PageBuffer _remote_page_buffer;
+    std::vector<uint8_t> _buffer;
 
     uint64_t _num_values_read = 0;
     const uint64_t _num_values_total = 0;
-    HdfsScanStats* _stats;
+
+    const ColumnReaderOptions& _opts;
+    WriteCacheOptions _write_options;
+    ReadCacheOptions _read_options;
 };
 
 } // namespace starrocks::parquet

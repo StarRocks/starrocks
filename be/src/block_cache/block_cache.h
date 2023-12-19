@@ -37,6 +37,8 @@ public:
     Status write_buffer(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
                         WriteCacheOptions* options = nullptr);
 
+    Status write_buffer(const CacheKey& cache_key, const IOBuffer& buffer, WriteCacheOptions* options = nullptr);
+
     // Write object to cache, the `ptr` is the object pointer.
     Status write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
                         CacheHandle* handle, WriteCacheOptions* options = nullptr);
@@ -48,6 +50,8 @@ public:
 
     StatusOr<size_t> read_buffer(const CacheKey& cache_key, off_t offset, size_t size, char* data,
                                  ReadCacheOptions* options = nullptr);
+
+    Status read_buffer(const CacheKey& cache_key, IOBuffer* buffer, ReadCacheOptions* options = nullptr);
 
     // Read object from cache, the `handle` wraps the object pointer.
     // As long as the handle object is not destroyed and the user does not manully call the `handle->release()`

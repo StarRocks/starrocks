@@ -48,7 +48,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     int64_t size = metadata().total_compressed_size;
     int64_t num_values = metadata().num_values;
     _stream = _opts.file->stream().get();
-    _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts.stats);
+    _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -139,6 +139,14 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     std::vector<uint8_t>& read_buffer = is_compressed ? _compressed_buf : _uncompressed_buf;
     _opts.stats->request_bytes_read += read_size;
     _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
+    _opts.stats->page_read_bytes += read_size;
+    _opts.stats->page_read_bytes_uncompressed += uncompressed_size;
+    _opts.stats->page_read_count++;
+
+    size_t page_size = is_compressed ? uncompressed_size : read_size;
+    if (_page_reader->get_page_buffer(page_size, &_data).ok()) {
+        return Status::OK();
+    }
 
     // check if we can zero copy read.
     Slice read_data;
@@ -157,12 +165,15 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     // if it's compressed, we have to uncompress page
     // otherwise we just assign slice.
     if (is_compressed) {
+        SCOPED_RAW_TIMER(&_opts.stats->page_decompress_ns);
         _uncompressed_buf.reserve(uncompressed_size);
         _data = Slice(_uncompressed_buf.data(), uncompressed_size);
         RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_data));
     } else {
         _data = read_data;
     }
+
+    _page_reader->set_page_buffer(&_data);
     return Status::OK();
 }
 
