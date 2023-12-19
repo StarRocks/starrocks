@@ -73,7 +73,7 @@ QueryContext::~QueryContext() noexcept {
 void QueryContext::count_down_fragments() {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
-    bool all_fragments_finished = old == 1;
+    bool all_fragments_finished = (_num_fragments == _total_fragments) && (old == 1);
     if (!all_fragments_finished) {
         return;
     }
