@@ -110,7 +110,7 @@ class DecodeContext {
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = createNewDictColumn(stringRef);
             stringRefToDictRefMap.put(stringRef, dictRef);
-            ScalarOperator defineExpr = new DictMappingOperator(dictRef, stringRef.clone(), dictRef.getType());
+            ScalarOperator defineExpr = new DictMappingOperator(dictRef, stringRef.clone(), stringRef.getType());
             stringExprToDictExprMap.put(stringRef, defineExpr);
         }
 
@@ -120,8 +120,9 @@ class DecodeContext {
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = stringRefToDictRefMap.get(stringRef);
 
-            if (stringDefineExpr.isColumnRef()) {
-                dictRefToDefineExprMap.put(dictRef, stringExprToDictExprMap.get(stringDefineExpr));
+            // may be a: b (just rename in projection)
+            if (stringDefineExpr.isColumnRef() && stringRef.equals(stringDefineExpr)) {
+                dictRefToDefineExprMap.put(dictRef, new DictMappingOperator(dictRef, stringRef.clone(), dictRef.getType()));
             } else {
                 List<ColumnRefOperator> useStringRefs = stringDefineExpr.getColumnRefs();
                 if (useStringRefs.stream().distinct().count() != 1) {

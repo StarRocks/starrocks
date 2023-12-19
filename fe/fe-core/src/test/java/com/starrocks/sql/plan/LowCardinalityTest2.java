@@ -2040,4 +2040,13 @@ public class LowCardinalityTest2 extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testDateDiff() throws Exception {
+        String sql = "select date_diff(S_COMMENT, '2017-02-28', S_ADDRESS), S_COMMENT, S_ADDRESS " +
+                "from supplier order by S_COMMENT, S_ADDRESS";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "date_diff(DictExpr(11: S_COMMENT,[<place-holder>]), " +
+                "'2017-02-28 00:00:00', " +
+                "DictExpr(10: S_ADDRESS,[CAST(<place-holder> AS DATETIME)]))");
+    }
 }
