@@ -32,9 +32,9 @@ public class HintFactory {
         // remove /*+ */
         text = text.substring(3, text.length() - 2);
         text = trimWithSpace(text);
-        if (SetVarHint.PREFIX.length() < text.length() - 1
-                && SetVarHint.PREFIX.equalsIgnoreCase(text.substring(0, SetVarHint.PREFIX.length()))
-                && SetVarHint.SUFFIX.equalsIgnoreCase(text.substring(text.length() - 1))) {
+        if (SetVarHint.LEAST_LEN < text.length()
+                && SetVarHint.SET_VAR.equalsIgnoreCase(text.substring(0, SetVarHint.SET_VAR.length()))) {
+            text = text.substring(SetVarHint.SET_VAR.length() + 1);
             return buildSetVarHint(text, token);
 
         } else {
@@ -60,11 +60,14 @@ public class HintFactory {
 
     private static SetVarHint buildSetVarHint(String text, Token token) {
         int length = text.length();
-        int idx = SetVarHint.PREFIX.length();
+        int idx = 0;
         List<String> splitRes = Lists.newArrayList();
         char inStringStart = '-';
         StringBuilder sb = new StringBuilder();
+
         boolean expectSplitSymbol = false;
+        boolean hasStart = false;
+        boolean hasStop = false;
         while (idx < length - 1) {
             char character = text.charAt(idx);
             if (character == '\"' || character == '\'') {
@@ -77,6 +80,10 @@ public class HintFactory {
                 expectSplitSymbol = true;
             } else if (isWhiteSpace(character)) {
                 // do nothing just skip
+            } else if (character == '(' && !hasStart) {
+                hasStart = true;
+            } else if (character == '(' && !hasStop) {
+                hasStop = true;
             } else if (character == '=' || character == ',') {
                 if (sb.length() != 0) {
                     splitRes.add(sb.toString());
@@ -85,7 +92,7 @@ public class HintFactory {
                 } else {
                     return null;
                 }
-            } else if (expectSplitSymbol) {
+            } else if (expectSplitSymbol || character == '(' || character == ')') {
                 return null;
             } else {
                 sb.append(character);

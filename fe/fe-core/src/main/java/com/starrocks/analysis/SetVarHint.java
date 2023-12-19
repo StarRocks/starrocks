@@ -23,9 +23,13 @@ import java.util.StringJoiner;
 
 public class SetVarHint extends HintNode {
 
-    public static final String PREFIX = "SET_VAR(";
+    public static final String SET_VAR = "SET_VAR";
+
+    public static final String PREFIX = "(";
 
     public static final String SUFFIX = ")";
+
+    public static final int LEAST_LEN = 9;
 
     public SetVarHint(NodePosition pos, Map<String, String> value, int startIndex, int stopIndex) {
         super(pos, value, startIndex, stopIndex);
@@ -47,7 +51,7 @@ public class SetVarHint extends HintNode {
     public String toSql() {
         StringJoiner joiner = new StringJoiner(", ", "(", ")");
         value.entrySet().forEach( e -> joiner.add(e.getKey() + "=" + e.getValue()));
-        return PREFIX + joiner + SUFFIX;
+        return SET_VAR + PREFIX + joiner + SUFFIX ;
     }
 
 

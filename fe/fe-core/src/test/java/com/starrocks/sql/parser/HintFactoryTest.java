@@ -49,21 +49,24 @@ class HintFactoryTest {
         List<Arguments> arguments = Lists.newArrayList();
         arguments.add(Arguments.of("/*+ invalid_test */", ImmutableMap.of()));
         arguments.add(Arguments.of("/*+ set _VAR() */", ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR(abc=abc,, abc = abc) */",
+        arguments.add(Arguments.of("/*+ set _VAR((abc = abc)) */", ImmutableMap.of()));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (abc=abc,, abc = abc) */",
                 ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \n\r \n \u3000 set_VAR(abc==abc) */",
+        arguments.add(Arguments.of("/*+     \n\r \n \u3000 set_VAR  (abc==abc) */",
                 ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR('abc'='abc')) */",
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (('abc'='abc')) */",
                 ImmutableMap.of()));
         arguments.add(Arguments.of("/*+ set_VAR('abc'='abc', \r\n 'ab' ='ab')) */",
                 ImmutableMap.of()));
 
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR(abc=abc) */",
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR (abc=abc) */",
                 ImmutableMap.of("abc", "abc")));
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR('abc'=abc)) */",
-                ImmutableMap.of("abc", "abc)")));
+        arguments.add(Arguments.of("/*+  set_VAR \r \n \u3000 (abc=abc) */",
+                ImmutableMap.of("abc", "abc")));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR ('abc'=abc) */",
+                ImmutableMap.of("abc", "abc")));
 
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR('abc'=abc,  ab     = '\r\na   b') */",
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR ('abc'=abc,  ab     = '\r\na   b') */",
                 ImmutableMap.of("abc", "abc", "ab", "\r\na   b")));
 
 
