@@ -91,7 +91,7 @@ static void BM_DictDecoder(benchmark::State& state) {
         state.ResumeTiming();
         Status st = dict_decoder.get_dict_values(dict_codes, *nulls, column.get());
         if (debug && !st.ok()) {
-            std::cout << "Fail to call `get_dict_values`: " << st.get_error_msg() << "\n";
+            std::cout << "Fail to call `get_dict_values`: " << st.message() << "\n";
         }
     }
 }

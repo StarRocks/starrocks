@@ -52,7 +52,7 @@ public class QueryDetailQueueTest {
         startQueryDetail.setReturnRows(1);
         startQueryDetail.setCpuCostNs(1002);
         startQueryDetail.setMemCostBytes(100003);
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(startQueryDetail);
+        QueryDetailQueue.addQueryDetail(startQueryDetail);
 
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(1, queryDetails.size());
@@ -83,15 +83,8 @@ public class QueryDetailQueueTest {
         QueryDetail endQueryDetail = startQueryDetail.copy();
         endQueryDetail.setLatency(1);
         endQueryDetail.setState(QueryDetail.QueryMemState.FINISHED);
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(endQueryDetail);
+        QueryDetailQueue.addQueryDetail(endQueryDetail);
 
-        queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
-        Assert.assertEquals(2, queryDetails.size());
-
-        //set first element eventTime to 1min ago to simulate queryDetail timeout
-        startQueryDetail.setEventTime(startQueryDetail.getEventTime() - 60000000000L);
-        //add new queryDetail, this will trigger delete
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(new QueryDetail());
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(2, queryDetails.size());
     }

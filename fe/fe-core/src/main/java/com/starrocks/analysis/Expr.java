@@ -50,6 +50,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -791,7 +792,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
-    public String toJDBCSQL(boolean isMySQL) {
+    public String toJDBCSQL() {
         return toSql();
     }
 
@@ -826,8 +827,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
         TExprNode msg = new TExprNode();
 
-        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
-        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
+        Preconditions.checkState(java.util.Objects.equals(type, AnalyzerUtils.replaceNullType2Boolean(type)),
+                "NULL_TYPE is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
@@ -1229,6 +1230,15 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public static Function getBuiltinFunction(String name, Type[] argTypes, Function.CompareMode mode) {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
+    }
+
+    public static Function getBuiltinFunction(String name, Type[] argTypes, String[] argNames, Function.CompareMode mode) {
+        if (argNames == null) {
+            return getBuiltinFunction(name, argTypes, mode);
+        }
+        FunctionName fnName = new FunctionName(name);
+        Function searchDesc = new Function(fnName, argTypes, argNames, Type.INVALID, false);
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 

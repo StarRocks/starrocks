@@ -18,7 +18,6 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -32,25 +31,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
-    // Comparator to normalize predicates, only use scalar operators' string to compare.
-    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR = new Comparator<ScalarOperator>() {
-        @Override
-        public int compare(ScalarOperator o1, ScalarOperator o2) {
-            if (o1 == null && o2 == null) {
-                return 0;
-            } else if (o1 == null) {
-                return -1;
-            } else if (o2 == null) {
-                return 1;
-            } else {
-                return o1.toString().compareTo(o2.toString());
-            }
-        }
-    };
 
     // Comparator to normalize predicates, only use scalar operators' string to compare.
     private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
@@ -65,14 +48,14 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     if (o1.isColumnRef() && o2.isColumnRef()) {
                         ColumnRefOperator c1 = (ColumnRefOperator) o1;
                         ColumnRefOperator c2 = (ColumnRefOperator) o2;
-                        int ret = c1.getName().compareTo(c2.getName());
+                        int ret = c1.getName().toLowerCase().compareTo(c2.getName().toLowerCase());
                         if (ret != 0) {
                             return ret;
                         }
                         return Integer.compare(c1.getId(), c2.getId());
                     } else {
-                        String s1 = o1.toString();
-                        String s2 = o2.toString();
+                        String s1 = o1.toString().toLowerCase();
+                        String s2 = o2.toString().toLowerCase();
                         String n1 = s1.replaceAll("\\d+: ", "");
                         String n2 = s2.replaceAll("\\d+: ", "");
                         int ret = n1.compareTo(n2);
@@ -87,21 +70,23 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR);
+        Map<String, ScalarOperator> sorted = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
-            after.addAll(before);
-            if (Lists.newArrayList(after).equals(before)) {
+            before.forEach(x -> sorted.put(x.toString(), x));
+            List<ScalarOperator> after = Lists.newArrayList(sorted.values());
+            if ((after).equals(before)) {
                 return predicate;
             }
-            return Utils.compoundAnd(Lists.newArrayList(after));
+            return Utils.compoundAnd((after));
         } else if (predicate.isOr()) {
             List<ScalarOperator> before = Utils.extractDisjunctive(predicate);
-            after.addAll(before);
-            if (Lists.newArrayList(after).equals(before)) {
+            before.forEach(x -> sorted.put(x.toString(), x));
+            List<ScalarOperator> after = Lists.newArrayList(sorted.values());
+            if ((after).equals(before)) {
                 return predicate;
             }
-            return Utils.compoundOr(Lists.newArrayList(after));
+            return Utils.compoundOr((after));
         } else {
             // for not
             return predicate;

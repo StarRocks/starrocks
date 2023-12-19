@@ -45,15 +45,19 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -387,7 +391,12 @@ public class TransactionState implements Writable {
     }
 
     public boolean isRunning() {
-        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
+        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
+                transactionStatus == TransactionStatus.COMMITTED;
+    }
+
+    public Set<TabletCommitInfo> getTabletCommitInfos() {
+        return tabletCommitInfos;
     }
 
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
@@ -395,14 +404,24 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+        if (this.tabletCommitInfos == null) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
+            LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
+                    tabletId, backend != null ? backend.toString() : "", transactionId);
             return true;
-        } else {
-            return false;
         }
+        if (state != ReplicaState.NORMAL) {
+            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
+            // We handle version missing in finishTask when change state to NORMAL
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+            LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                    tabletId, backend != null ? backend.toString() : "", state);
+            return true;
+        }
+        return this.tabletCommitInfos.contains(info);
     }
 
     // Only for OlapTable
@@ -752,6 +771,9 @@ public class TransactionState implements Writable {
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
         }
+        if (tabletCommitInfos != null) {
+            sb.append(" tabletCommitInfos size: ").append(tabletCommitInfos.size());
+        }
         return sb.toString();
     }
 
@@ -1004,11 +1026,12 @@ public class TransactionState implements Writable {
                 // consider txn finished if db is dropped
                 return true;
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 prepareFinishChecker(db);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         if (finishState == null) {

@@ -262,13 +262,13 @@ public class LowCardinalityTest extends PlanTestBase {
 
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
-                "  |  <dict id 98> : <string id 66>\n" +
+                "  |  <dict id 50> : <string id 18>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: max[([97: L_COMMENT, INT, false]);" +
-                " args: INT; result: INT; args nullable: false; result nullable: true]\n" +
-                "  |  group by: [63: L_SHIPMODE, CHAR, false]\n" +
+                "  |  aggregate: max[([49: L_COMMENT, INT, false]); args: INT; result: INT; " +
+                "args nullable: false; result nullable: true]\n" +
+                "  |  group by: [15: L_SHIPMODE, CHAR, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode\n" +
@@ -280,7 +280,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "     actualRows=0, avgRowSize=54.0\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (63: L_SHIPMODE)\n"));
+                "     - filter_id = 0, probe_expr = (15: L_SHIPMODE)"));
     }
 
     @Test
@@ -1118,8 +1118,8 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("DictExpr(28: P_MFGR,[<place-holder> IN ('MFGR#1', 'MFGR#2')])"));
-        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
+        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL, " +
+                "is_binary_row:false)), partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                 "query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
@@ -1822,14 +1822,14 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "6:Project\n" +
-                "  |  <slot 22> : 22\n" +
-                "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', " +
-                "1035, 32: S_NATIONKEY) AS VARCHAR))\n" +
-                "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 4> : 4\n" +
+                "  |  <slot 19> : if(13: S_ADDRESS IN ('hz', 'bj'), 4, " +
+                "CAST(if(13: S_ADDRESS = 'hz', 1035, 14: S_NATIONKEY) AS VARCHAR))\n" +
+                "  |  <slot 20> : if(12: S_NAME = '', 13: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
                 "  5:Decode\n" +
-                "  |  <dict id 40> : <string id 22>");
+                "  |  <dict id 22> : <string id 4>");
     }
 
     @Test
@@ -1863,13 +1863,13 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "6:Project\n" +
-                "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, " +
-                "32: S_NATIONKEY) AS VARCHAR))\n" +
-                "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 19> : if(13: S_ADDRESS IN ('hz', 'bj'), 4, " +
+                "CAST(if(13: S_ADDRESS = 'hz', 1035, 14: S_NATIONKEY) AS VARCHAR))\n" +
+                "  |  <slot 20> : if(12: S_NAME = '', 13: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
                 "  5:Decode\n" +
-                "  |  <dict id 40> : <string id 22>");
+                "  |  <dict id 22> : <string id 4>");
     }
 
     @Test
@@ -1891,5 +1891,17 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  9:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(24: fee_zb)\n" +
                 "  |  group by: 55: c_mr");
+    }
+
+    @Test
+    public void testInformationFunc() throws Exception {
+        String sql = "select if(current_role = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
     }
 }

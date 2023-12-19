@@ -51,7 +51,7 @@ class EngineStorageMigrationTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
 
-    static void TearDownTestCase() {}
+    static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
     static TabletSharedPtr create_pk_tablet(int64_t tablet_id, int32_t schema_hash) {
         TCreateTabletReq request;
@@ -131,6 +131,7 @@ public:
     }
 
     static void init() {
+        config::enable_event_based_compaction_framework = false;
         /*
             create duplicated key tablet
         */
@@ -586,11 +587,9 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    auto st = global_env->init();
-    st.permit_unchecked_error();
+    (void)global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    st = exec_env->init(paths);
-    st.permit_unchecked_error();
+    (void)exec_env->init(paths);
     int r = RUN_ALL_TESTS();
 
     sleep(10);

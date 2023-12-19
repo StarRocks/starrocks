@@ -54,7 +54,7 @@ private:
 class UpdateManager {
 public:
     UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
-    ~UpdateManager() {}
+    ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
@@ -118,6 +118,7 @@ public:
 
     bool TEST_check_update_state_cache_absent(uint32_t tablet_id, int64_t txn_id);
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
+    void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
         int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
@@ -136,7 +137,7 @@ public:
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
 
     // release index entry if it isn't nullptr
-    void release_primary_index(IndexEntry* index_entry);
+    void release_primary_index_cache(IndexEntry* index_entry);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 

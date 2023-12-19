@@ -64,6 +64,7 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DictionaryMgr;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
@@ -95,6 +96,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
@@ -142,6 +144,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -182,6 +185,8 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -480,6 +485,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
@@ -556,6 +562,9 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
 
+    private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
+    private RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -582,7 +591,7 @@ public class GlobalStateMgr {
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
@@ -648,6 +657,10 @@ public class GlobalStateMgr {
         return configRefreshDaemon;
     }
 
+    public RefreshDictionaryCacheTaskDaemon getRefreshDictionaryCacheTaskDaemon() {
+        return refreshDictionaryCacheTaskDaemon;
+    }
+
     private static class SingletonHolder {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
@@ -662,7 +675,7 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.starOSAgent = new StarOSAgent();
         }
 
@@ -741,6 +754,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
@@ -768,6 +782,7 @@ public class GlobalStateMgr {
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.starMgrMetaSyncer = new StarMgrMetaSyncer();
+        this.refreshDictionaryCacheTaskDaemon = new RefreshDictionaryCacheTaskDaemon();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -775,7 +790,7 @@ public class GlobalStateMgr {
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
 
-        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
@@ -914,6 +929,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static StarMgrMetaSyncer getCurrentStarMgrMetaSyncer() {
+        return getCurrentState().getStarMgrMetaSyncer();
+    }
+
     public static WarehouseManager getCurrentWarehouseMgr() {
         return getCurrentState().getWarehouseMgr();
     }
@@ -971,6 +990,10 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public StarMgrMetaSyncer getStarMgrMetaSyncer() {
+        return starMgrMetaSyncer;
     }
 
     public CatalogMgr getCatalogMgr() {
@@ -1130,7 +1153,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
+        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -1336,7 +1359,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             // register service to starMgr
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
@@ -1407,7 +1430,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1435,12 +1458,16 @@ public class GlobalStateMgr {
 
         // domain resolver
         domainResolver.start();
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
 
         slotManager.start();
+
+        lockChecker.start();
+
+        refreshDictionaryCacheTaskDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1539,6 +1566,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                        .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1957,6 +1985,7 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
+                    dictionaryMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2768,10 +2797,10 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // show lightSchemaChange only when it is set true
-                if (olapTable.getUseLightSchemaChange()) {
-                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
-                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                // show fastSchemaEvolution only when it is set true
+                if (olapTable.getUseFastSchemaEvolution()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
+                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
                 // storage media
@@ -3817,15 +3846,16 @@ public class GlobalStateMgr {
         }
 
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -3855,6 +3885,7 @@ public class GlobalStateMgr {
         String dumpFilePath;
         Map<Long, Database> lockedDbMap = Maps.newTreeMap();
         tryLock(true);
+        Locker locker = new Locker();
         try {
             // sort all dbs
             for (long dbId : getDbIds()) {
@@ -3865,7 +3896,7 @@ public class GlobalStateMgr {
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -3881,7 +3912,7 @@ public class GlobalStateMgr {
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             unlock();
         }
@@ -4197,5 +4228,9 @@ public class GlobalStateMgr {
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
+    }
+
+    public DictionaryMgr getDictionaryMgr() {
+        return dictionaryMgr;
     }
 }

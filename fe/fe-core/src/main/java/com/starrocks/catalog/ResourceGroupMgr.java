@@ -381,6 +381,11 @@ public class ResourceGroupMgr implements Writable {
                     wg.setConcurrencyLimit(concurrentLimit);
                 }
 
+                Double spillMemLimitThreshold = changedProperties.getSpillMemLimitThreshold();
+                if (spillMemLimitThreshold != null) {
+                    wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);

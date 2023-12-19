@@ -38,6 +38,7 @@
 #include "types/bitmap_value_detail.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -862,9 +863,8 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        for (unsigned long ptr_value : *_bitmap) {
-            array->emplace_back(ptr_value);
-        }
+        raw::make_room(array, _bitmap->cardinality());
+        _bitmap->toUint64Array((uint64_t*)(*array).data());
         break;
     }
     case SET:
@@ -924,6 +924,61 @@ void BitmapValue::_from_bitmap_to_smaller_type() {
         _sv = min_value.value();
     }
     _bitmap.reset();
+}
+
+std::vector<BitmapValue> BitmapValue::split_bitmap(size_t batch_size) {
+    std::vector<BitmapValue> results;
+
+    if (batch_size == 0) {
+        return results;
+    }
+
+    size_t cardinary_size = cardinality();
+    size_t split_num = cardinary_size / batch_size + (cardinary_size % batch_size != 0);
+
+    if (split_num <= 1) {
+        results.emplace_back(*this);
+        return results;
+    }
+
+    switch (_type) {
+    case EMPTY:
+        results.emplace_back(BitmapValue());
+        break;
+    case SINGLE:
+        results.emplace_back(BitmapValue(*this));
+        break;
+    case SET: {
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+
+        for (size_t i = 0; i < split_num; i++) {
+            BitmapValue sub_bitmap;
+            size_t end = std::min((i + 1) * batch_size, cardinary_size);
+            for (size_t j = i * batch_size; j < end; j++) {
+                sub_bitmap.add(values[j]);
+            }
+            results.emplace_back(std::move(sub_bitmap));
+        }
+        break;
+    }
+    case BITMAP: {
+        auto iter = _bitmap->begin();
+        for (size_t i = 0; i < split_num; i++) {
+            BitmapValue sub_bitmap;
+            for (size_t j = 0; j < batch_size && iter != _bitmap->end(); j++, iter++) {
+                //TODO: add batch for performance
+                sub_bitmap.add(*iter);
+            }
+            results.emplace_back(std::move(sub_bitmap));
+        }
+        break;
+    }
+    default:
+        CHECK(false);
+    }
+
+    return results;
 }
 
 int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const {

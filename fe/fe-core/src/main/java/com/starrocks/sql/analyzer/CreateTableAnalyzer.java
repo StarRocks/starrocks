@@ -38,12 +38,15 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.elasticsearch.EsUtil;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DictionaryExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -149,13 +152,14 @@ public class CreateTableAnalyzer {
         Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
 
         // check if table exists in db
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
@@ -440,7 +444,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("Generated Column only support olap table");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
@@ -452,6 +456,14 @@ public class CreateTableAnalyzer {
 
                 if (column.isGeneratedColumn()) {
                     Expr expr = column.generatedColumnExpr();
+
+                    List<DictionaryExpr> dictionaryExprs = Lists.newArrayList();
+                    expr.collect(DictionaryExpr.class, dictionaryExprs);
+                    if (dictionaryExprs.size() != 0) {
+                        for (DictionaryExpr dictionaryExpr : dictionaryExprs) {
+                            dictionaryExpr.setSkipStateCheck(true);
+                        }
+                    }
 
                     ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(columns.stream().map(col -> new Field(
@@ -517,7 +529,8 @@ public class CreateTableAnalyzer {
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                        indexDef.getComment()));
+                        indexDef.getComment(), indexDef.getProperties()));
+
                 distinct.add(indexDef.getIndexName());
                 distinctCol.add(indexDef.getColumns().stream().map(String::toUpperCase).collect(Collectors.toList()));
             }

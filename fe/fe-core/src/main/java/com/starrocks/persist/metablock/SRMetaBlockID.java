@@ -90,6 +90,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
 
+    public static final SRMetaBlockID DICTIONARY_MGR = new SRMetaBlockID(29);
+
     @Override
     public String toString() {
         return String.valueOf(id);

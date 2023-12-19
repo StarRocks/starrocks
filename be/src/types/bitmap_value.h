@@ -197,13 +197,18 @@ public:
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                             BitmapValue* ret_bitmap) const;
 
+    std::vector<BitmapValue> split_bitmap(size_t batch_size);
+
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
 
 private:
     void _from_bitmap_to_smaller_type();
     void _from_set_to_bitmap();
-    inline void _copy_on_write() {
+
+    // The implementation of this function needs to place .h,
+    // otherwise it cannot be inlined and affects the performance of BitmapValue::add.
+    ALWAYS_INLINE void _copy_on_write() {
         if (UNLIKELY(_bitmap == nullptr)) {
             _bitmap = std::make_shared<detail::Roaring64Map>();
             return;

@@ -1,0 +1,10 @@
+-- name: test_blackhole_sink
+show backends;
+select connection_id();
+create database test_blackhole_ee2a58b4_64a9_11ed_9ab7_00163e0b9de0;
+use test_blackhole_ee2a58b4_64a9_11ed_9ab7_00163e0b9de0;
+create table t0(c0 INT, c1 array<int>)duplicate key(c0) partition by range(`c0`)(PARTITION `p100` VALUES LESS THAN ('100'),PARTITION `p1000` VALUES LESS THAN ('1000'),PARTITION `p10000` VALUES LESS THAN ('10000'))distributed by hash(c0) buckets 1 properties('replication_num'='1');
+insert into t0 values(99, [1,2,3]),(999, [4,5,6]),(9999, [7,8,9]);
+select * from t0;
+insert into blackhole() select * from t0;
+drop database test_blackhole_ee2a58b4_64a9_11ed_9ab7_00163e0b9de0;

@@ -1,0 +1,61 @@
+-- name: test_object_dependencies
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 int, c2 string);
+-- result:
+-- !result
+create materialized view mv1 refresh async as select * from t1;
+-- result:
+-- !result
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+-- !result
+create view v1 as select * from t1;
+-- result:
+-- !result
+create materialized view mv2 refresh async as select * from t1;
+-- result:
+-- !result
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+-- !result
+create materialized view mv3 refresh async as select * from mv2;
+-- result:
+-- !result
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+mv3	default_catalog	MATERIALIZED_VIEW	mv2	default_catalog	MATERIALIZED_VIEW
+mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

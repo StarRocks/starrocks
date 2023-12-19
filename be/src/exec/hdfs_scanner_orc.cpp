@@ -117,7 +117,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             column_index = orc_type->getColumnId();
         }
         if (column_index >= 0) {
-            auto row_idx_iter = rowIndexes.find(column_index);
+            const auto& row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
             if (row_idx_iter == rowIndexes.end()) {
                 return false;
@@ -129,6 +129,10 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
             Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
+                LOG(INFO) << strings::Substitute(
+                        "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
+                        "can't convert to orc file's column($1)",
+                        slot->debug_string(), orc_type->toString());
                 return false;
             }
         } else {
@@ -319,9 +323,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
-        if (errno == ENOENT) {
+        if (errno == ENOENT || s.find("404") != std::string::npos) {
             return Status::RemoteFileNotFound(s);
         }
+
         return Status::InternalError(s);
     }
 
@@ -500,7 +505,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.skip_read_rows += chunk_size_ori;
+            _app_stats.late_materialize_skip_rows += chunk_size_ori;
             continue;
         }
         {

@@ -128,6 +128,15 @@ public abstract class StarRocksHttpTestCase {
     @Mocked
     private static EditLog editLog;
 
+    public static int detectUsableSocketPort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            socket.setReuseAddress(true);
+            return socket.getLocalPort();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not find a free TCP/IP port");
+        }
+    }
+
     public static OlapTable newTable(String name) {
         GlobalStateMgr.getCurrentInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);

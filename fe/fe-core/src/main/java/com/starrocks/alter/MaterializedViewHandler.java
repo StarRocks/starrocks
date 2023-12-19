@@ -65,6 +65,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
@@ -342,6 +344,8 @@ public class MaterializedViewHandler extends AlterHandler {
         long dbId = db.getId();
         long tableId = olapTable.getId();
         int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        // mvSchemaVersion will keep same with the src MaterializedIndex
+        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         long mvIndexId = globalStateMgr.getNextId();
@@ -358,7 +362,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                baseIndexId, mvIndexId, baseIndexName, mvName,
+                baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion, 
                 mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
@@ -720,7 +724,7 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Base index[" + baseIndexName + "] does not exist");
         }
         // check state
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex baseIndex = partition.getIndex(baseIndexId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
@@ -730,7 +734,8 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             // check drop rollup index operation
             for (AlterClause alterClause : dropRollupClauses) {
@@ -757,13 +762,14 @@ public class MaterializedViewHandler extends AlterHandler {
             LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                     olapTable.getName());
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     public void processDropMaterializedView(DropMaterializedViewStmt dropMaterializedViewStmt, Database db,
                                             OlapTable olapTable) throws DdlException, MetaNotFoundException {
-        Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
+        Locker locker = new Locker();
+        Preconditions.checkState(locker.isWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
             // Step1: check drop mv index operation
@@ -806,7 +812,7 @@ public class MaterializedViewHandler extends AlterHandler {
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex materializedIndex = partition.getIndex(mvIndexId);
             Preconditions.checkNotNull(materializedIndex);
         }
@@ -822,7 +828,7 @@ public class MaterializedViewHandler extends AlterHandler {
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
             // delete rollup index
             partition.deleteRollupIndex(mvIndexId);
@@ -837,14 +843,15 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void replayDropRollup(DropInfo dropInfo, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(dropInfo.getDbId());
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             long tableId = dropInfo.getTableId();
             long rollupIndexId = dropInfo.getIndexId();
 
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexId);
 
                 if (!GlobalStateMgr.isCheckpointThread()) {
@@ -858,7 +865,7 @@ public class MaterializedViewHandler extends AlterHandler {
             String rollupIndexName = olapTable.getIndexNameById(rollupIndexId);
             olapTable.deleteIndexInfo(rollupIndexName);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         LOG.info("replay drop rollup {}", dropInfo.getIndexId());
     }
@@ -892,7 +899,8 @@ public class MaterializedViewHandler extends AlterHandler {
                     dbId, tableId);
             return;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null || tbl.getState() == olapTableState) {
@@ -900,7 +908,7 @@ public class MaterializedViewHandler extends AlterHandler {
             }
             tbl.setState(olapTableState);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -1053,7 +1061,8 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         List<AlterJobV2> rollupJobV2List = new ArrayList<>();
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -1085,7 +1094,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException("Table[" + tableName + "] is under ROLLUP but job does not exist.");
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -1114,7 +1123,8 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         AlterJobV2 materializedViewJob = null;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             for (Table table : db.getTables()) {
                 if (table instanceof OlapTable) {
@@ -1129,7 +1139,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         if (materializedViewJob == null) {

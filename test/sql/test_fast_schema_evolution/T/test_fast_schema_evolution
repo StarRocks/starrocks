@@ -1,0 +1,321 @@
+-- name: test_fast_schema_evolution
+create database test_fast_schema_evolution;
+use test_fast_schema_evolution;
+create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'fast_schema_evolution' = 'true');
+insert into t1 values(1, 1);
+select * from t1 order by k;
+
+alter table t1 add column (v1 int, v2 int, v3 int);
+function: wait_alter_table_finish()
+
+select * from t1 order by k;
+insert into t1 values(2, 2, 3, 4, 5);
+select * from t1 order by k;
+alter table t1 drop column v;
+function: wait_alter_table_finish()
+
+alter table t1 drop column v2;
+function: wait_alter_table_finish()
+insert into t1 values(2, 2, 3);
+select * from t1 order by k;
+
+alter table t1 add column k2 int key;
+function: wait_alter_table_finish()
+
+select * from t1 order by k;
+insert into t1 values(3, 2, 3, 4);
+select * from t1 order by k;
+
+
+delete from t1 where v3>4;
+select * from t1 order by k;
+
+
+
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+
+
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+insert into tab1 values (300, "k2_300", 300, 300, 300, "v4_300", "v5_300");
+insert into tab1 values (400, "k2_400", 400, 400, 400, "v4_400", "v5_400");
+insert into tab1 values (500, "k2_500", 500, 500, 500, "v4_500", "v5_500");
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
+select * from tab1;
+
+alter table tab1 add column v6 varchar(200) default "0" after v3;
+function: wait_alter_table_finish()
+select * from tab1;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
+sync;
+select * from tab1;
+
+
+alter table tab1 drop column v4;
+function: wait_alter_table_finish()
+update tab1 set v3 = 999;
+select * from tab1;
+
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,k2,v6,v3 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
+sync;
+select * from tab1;
+
+delete from tab1 where v3 > 400;
+select * from tab1;
+
+insert into tab1 values (100, "k2_100", 100, 100, 1000, "v6_100", "v5_100");
+insert into tab1 values (400, "k2_400", 400, 400, 600, "v6_400", "v5_400");
+insert into tab1 values (500, "k2_500", 500, 500, 900, "v6_500", "v5_500");
+insert into tab1 values (600, "k2_600", 600, 600, 700, "v6_600", "v5_600");
+select * from tab1;
+
+alter table tab1 order by (v3);
+function: wait_alter_table_finish()
+show create table tab1;
+select * from tab1;
+
+drop table t1;
+drop table tab1;
+drop database test_fast_schema_evolution;
+
+
+-- name: test_meta_scan
+create database meta_scan;
+use meta_scan;
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "fast_schema_evolution" = "true"
+);
+
+insert into reproducex4 values (1,2),(3,4),(5,6);
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+function: wait_alter_table_finish()
+
+show create table reproducex4;
+
+insert into reproducex4 values (7,8,9);
+function: manual_compact("meta_scan", "reproducex4")
+
+select dict_merge(v2) from reproducex4 [_META_];
+analyze full table reproducex4;
+
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+
+
+drop table reproducex4;
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "fast_schema_evolution" = "false"
+);
+
+insert into reproducex4 values (1,2),(3,4),(5,6);
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+function: wait_alter_table_finish()
+
+show create table reproducex4;
+
+insert into reproducex4 values (7,8,9);
+function: manual_compact("meta_scan", "reproducex4")
+
+select dict_merge(v2) from reproducex4 [_META_];
+analyze full table reproducex4;
+
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+
+
+drop database meta_scan;
+
+
+-- name: test_fast_schema_evolution_and_alter
+
+create database test_fast_schema_evolution_and_alter;
+use test_fast_schema_evolution_and_alter;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+insert into tab1 values (300, "k2_300", 300, 300, 300, "v4_300", "v5_300");
+insert into tab1 values (400, "k2_400", 400, 400, 400, "v4_400", "v5_400");
+insert into tab1 values (500, "k2_500", 500, 500, 500, "v4_500", "v5_500");
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
+
+alter table tab1 add column c1 bigint;
+function: wait_alter_table_finish()
+
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600", 111);
+
+alter table tab1 drop column c1;
+function: wait_alter_table_finish()
+
+alter table tab1 add column c1 bigint;
+function: wait_alter_table_finish()
+
+select * from tab1;
+
+alter table tab1 modify column c1 largeint;
+function: wait_alter_table_finish()
+
+select * from tab1;
+
+drop table tab1;
+drop database test_fast_schema_evolution_and_alter;
+
+
+-- name: test_fast_schema_evolution_and_mv
+create database test_fast_schema_evolution_and_mv;
+use test_fast_schema_evolution_and_mv;
+
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+insert into tab1 values (300, "k2_300", 300, 300, 300, "v4_300", "v5_300");
+insert into tab1 values (400, "k2_400", 400, 400, 400, "v4_400", "v5_400");
+insert into tab1 values (500, "k2_500", 500, 500, 500, "v4_500", "v5_500");
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
+select * from tab1;
+
+CREATE MATERIALIZED VIEW mv1
+    AS
+        SELECT
+            v5,
+            v4,
+            k1,
+            k2
+        FROM tab1;
+function: wait_alter_table_finish("ROLLUP", 8)
+
+ALTER TABLE tab1 DROP COLUMN v5;
+function: wait_alter_table_finish()
+
+ALTER TABLE tab1 ADD COLUMN v5 tinyint;
+function: wait_alter_table_finish()
+
+CREATE MATERIALIZED VIEW mv2
+    AS
+        SELECT
+            v5,
+            v4,
+            k1,
+            k2
+        FROM tab1;
+function: wait_alter_table_finish("ROLLUP", 8)
+
+select * from tab1;
+
+drop table tab1;
+drop database test_fast_schema_evolution_and_mv;
+
+-- name: test_fast_schema_evolution_add_column_with_expr
+create database test_fast_schema_evolution_add_column_with_expr;
+use test_fast_schema_evolution_add_column_with_expr;
+
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+insert into tab1 values (300, "k2_300", 300, 300, 300, "v4_300", "v5_300");
+insert into tab1 values (400, "k2_400", 400, 400, 400, "v4_400", "v5_400");
+insert into tab1 values (500, "k2_500", 500, 500, 500, "v4_500", "v5_500");
+insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
+select * from tab1;
+
+alter table tab1 add column c1 datetime default current_timestamp;
+function: wait_alter_table_finish()
+
+select count(*) from tab1 where c1 is NULL;
+
+
+alter table tab1 add column c2 datetime not null default current_timestamp;
+function: wait_alter_table_finish()
+
+select count(*) from tab1 where c2 is NULL;
+
+
+alter table tab1 add column c3 datetime;
+function: wait_alter_table_finish()
+
+select count(*) from tab1 where c3 is NULL;
+
+drop table tab1;
+drop database test_fast_schema_evolution_add_column_with_expr;

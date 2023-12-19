@@ -73,6 +73,7 @@ public class DateUtils {
             .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
+            .disableHtmlEscaping()
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATETIME_PRINTER)
             .create();
     /*
@@ -172,7 +173,11 @@ public class DateUtils {
         return convertedDatetime;
     }
 
-    public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+    public static String formatTimestampInSeconds(long timestampInSeconds) {
+        return formatTimestampInSeconds(timestampInSeconds, TimeUtils.getSystemTimeZone().toZoneId());
+    }
+
+    public static String formatTimestampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
         return formatTimeStampInMill(timestampInSeconds * 1000, timeZoneId);
     }
 

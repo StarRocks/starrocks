@@ -214,19 +214,6 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
-            return false;
-        }
-        FunctionCallExpr o = (FunctionCallExpr) obj;
-        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
-                && fnParams.isDistinct() == o.fnParams.isDistinct()
-                && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId)
-                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
-    }
-
     // TODO: process order by
     @Override
     public String toSqlImpl() {
@@ -472,8 +459,21 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
-        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
+        // @Note: fnParams is different with children Expr. use children plz.
+        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!super.equals(obj)) {
+            return false;
+        }
+        FunctionCallExpr o = (FunctionCallExpr) obj;
+        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
+                && fnParams.isDistinct() == o.fnParams.isDistinct()
+                && fnParams.isStar() == o.fnParams.isStar()
+                && nondeterministicId.equals(o.nondeterministicId)
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     /**

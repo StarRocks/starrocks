@@ -22,8 +22,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -77,11 +77,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
-        if (pipe.getCreatedTime() == -1) {
-            row.add(null);
-        } else {
-            row.add(TimeUtils.longToTimeString(pipe.getCreatedTime()));
-        }
+        row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
     }
 
     public static int findSlotIndex(String name) {

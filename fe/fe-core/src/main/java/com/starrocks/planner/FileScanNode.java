@@ -514,7 +514,7 @@ public class FileScanNode extends LoadScanNode {
         nodes = Lists.newArrayList();
 
         // TODO: need to refactor after be split into cn + dn
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
@@ -542,11 +542,10 @@ public class FileScanNode extends LoadScanNode {
                 return TFileFormatType.FORMAT_PARQUET;
             } else if (fileFormat.toLowerCase().equals("orc")) {
                 return TFileFormatType.FORMAT_ORC;
-            } else if (fileFormat.toLowerCase().equals("csv")) {
-                return TFileFormatType.FORMAT_CSV_PLAIN;
             } else if (fileFormat.toLowerCase().equals("json")) {
                 return TFileFormatType.FORMAT_JSON;
             }
+            // Attention: The compression type of csv format is from the suffix of filename.
         }
 
         String lowerCasePath = path.toLowerCase();

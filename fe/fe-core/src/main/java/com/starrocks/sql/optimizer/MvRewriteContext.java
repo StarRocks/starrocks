@@ -43,7 +43,7 @@ public class MvRewriteContext {
 
     private final List<ScalarOperator> onPredicates;
     private final Rule rule;
-    private List<ColumnRefOperator> enforcedColumns;
+    private List<ColumnRefOperator> enforcedNonExistedColumns;
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
@@ -115,12 +115,12 @@ public class MvRewriteContext {
         return joinDeriveContexts;
     }
 
-    public List<ColumnRefOperator> getEnforcedColumns() {
-        return enforcedColumns;
+    public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
+        return enforcedNonExistedColumns;
     }
 
-    public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
-        this.enforcedColumns = enforcedColumns;
+    public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
+        this.enforcedNonExistedColumns = enforcedNonExistedColumns;
     }
 
     public boolean isCompensatePartitionPredicate() {

@@ -30,6 +30,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -67,7 +69,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -80,7 +83,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return groupIds;
@@ -149,9 +152,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()
-                        .stream()
-                        .filter(x -> x.getGroupId() != 0L)
-                        .collect(Collectors.toList());
+                .stream()
+                .filter(x -> x.getGroupId() != 0L)
+                .collect(Collectors.toList());
 
         if (shardGroupsInfo.isEmpty()) {
             return;
@@ -233,71 +236,151 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         return cnt;
     }
 
-    @Override
-    protected void runAfterCatalogReady() {
-        deleteUnusedShardAndShardGroup();
-        deleteUnusedWorker();
-    }
-
-    // do a one time sync, delete all shards from this table that exist in starmgr but not in fe
-    public static void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            throw new DdlException(String.format("db %s does not exist.", dbName));
-        }
-
-        HashMap<Long, List<Long>> feGroupToShards = new HashMap<>();
-        db.readLock();
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                throw new DdlException(String.format("table %s does not exist.", tableName));
+    public void syncTableMetaAndColocationInfo() {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
             }
-            if (!table.isCloudNativeTableOrMaterializedView()) {
-                throw new DdlException("only support cloud table or cloud mv.");
+            if (db.isSystemDatabase()) {
+                continue;
             }
 
-            OlapTable olapTable = (OlapTable) table;
-            for (Partition partition : olapTable.getAllPartitions()) {
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    long groupId = physicalPartition.getShardGroupId();
-                    List<Long> feShardIds = new ArrayList<>();
-                    for (MaterializedIndex materializedIndex :
-                            physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                        for (Tablet tablet : materializedIndex.getTablets()) {
-                            feShardIds.add(tablet.getId());
-                        }
-                    }
-                    if (!feShardIds.isEmpty()) {
-                        feGroupToShards.put(groupId, feShardIds);
-                    }
+            List<Table> tables = db.getTables();
+            for (Table table : tables) {
+                if (!table.isCloudNativeTableOrMaterializedView()) {
+                    continue;
+                }
+                try {
+                    syncTableMetaAndColocationInfoInternal(db, (OlapTable) table, true /* forceDeleteData */);
+                } catch (Exception e) {
+                    LOG.info("fail to sync table {} meta, {}", table.getName(), e.getMessage());
                 }
             }
-        } catch (Exception e) {
-            throw new DdlException(e.getMessage());
+        }
+    }
+
+    // return true if starmgr shard meta changed
+    private boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+        HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
+        List<PhysicalPartition> physicalPartitions = new ArrayList<>();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            if (db.getTable(table.getId()) == null) {
+                return false; // table might be dropped
+            }
+            GlobalStateMgr.getCurrentState()
+                    .getAllPartitionsIncludeRecycleBin(table)
+                    .stream()
+                    .map(Partition::getSubPartitions)
+                    .forEach(physicalPartitions::addAll);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
-        // delete tablet meta and data, outside db lock
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+        for (PhysicalPartition physicalPartition : physicalPartitions) {
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                    return false; // table might be in schema change
+                }
+                // no need to check db/table/partition again, everything still works
+                long groupId = physicalPartition.getShardGroupId();
+                List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                for (MaterializedIndex materializedIndex :
+                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        starmgrShardIdsSet.remove(tablet.getId());
+                    }
+                }
+                // collect shard in starmgr but not in fe
+                redundantGroupToShards.put(groupId, starmgrShardIdsSet);
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+        }
+
+        // try to delete data, if fail, still delete redundant shard meta in starmgr
         Set<Long> shardToDelete = new HashSet<>();
-        for (Map.Entry<Long, List<Long>> entry : feGroupToShards.entrySet()) {
-            List<Long> starmgrShardIds = starOSAgent.listShard(entry.getKey());
-            starmgrShardIds.removeAll(entry.getValue());
+        for (Map.Entry<Long, Set<Long>> entry : redundantGroupToShards.entrySet()) {
             if (forceDeleteData) {
                 try {
-                    // delete shard in starmgr but not in fe
-                    dropTabletAndDeleteShard(starmgrShardIds, starOSAgent);
+                    List<Long> shardIds = new ArrayList<>();
+                    shardIds.addAll(entry.getValue());
+                    dropTabletAndDeleteShard(shardIds, starOSAgent);
                 } catch (Exception e) {
                     // ignore exception
                     LOG.info(e.getMessage());
                 }
             }
-            shardToDelete.addAll(starmgrShardIds);
+            shardToDelete.addAll(entry.getValue());
         }
 
         // do final meta delete, regardless whether above tablet deleted or not
-        starOSAgent.deleteShards(shardToDelete);
+        if (!shardToDelete.isEmpty()) {
+            starOSAgent.deleteShards(shardToDelete);
+        }
+        return !shardToDelete.isEmpty();
+    }
+
+    private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
+        // quick check
+        if (!GlobalStateMgr.getCurrentColocateIndex().isLakeColocateTable(table.getId())) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            // check db and table again
+            if (GlobalStateMgr.getCurrentState().getDb(db.getId()) == null) {
+                return;
+            }
+            if (db.getTable(table.getId()) == null) {
+                return;
+            }
+            GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
+                        null /* expectGroupId */);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+    // delete all shards from this table that exist in starmgr but not in fe(mostly from schema change),
+    // and update colocation info
+    private void syncTableMetaAndColocationInfoInternal(Database db, OlapTable table, boolean forceDeleteData)
+            throws DdlException {
+        boolean changed = syncTableMetaInternal(db, table, forceDeleteData);
+        // if meta is changed, need to sync colocation info
+        if (changed) {
+            syncTableColocationInfo(db, table);
+        }
+    }
+
+    @Override
+    protected void runAfterCatalogReady() {
+        deleteUnusedShardAndShardGroup();
+        deleteUnusedWorker();
+        syncTableMetaAndColocationInfo();
+    }
+
+    public void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            throw new DdlException(String.format("db %s does not exist.", dbName));
+        }
+
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException(String.format("table %s does not exist.", tableName));
+        }
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("only support cloud table or cloud mv.");
+        }
+
+        syncTableMetaAndColocationInfoInternal(db, (OlapTable) table, forceDeleteData);
     }
 }

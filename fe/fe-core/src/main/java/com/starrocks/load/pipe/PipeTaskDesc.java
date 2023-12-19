@@ -109,6 +109,16 @@ public class PipeTaskDesc {
         taskManager.killTask(uniqueTaskName, true);
     }
 
+    /**
+     * Is the task still running ?
+     */
+    public boolean isTaskRunning() {
+        if (isFinished()) {
+            return false;
+        }
+        return future != null && !future.isDone();
+    }
+
     public long getId() {
         return id;
     }

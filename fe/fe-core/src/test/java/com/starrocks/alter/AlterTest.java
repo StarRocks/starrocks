@@ -64,6 +64,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
@@ -399,7 +400,7 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+        Assert.assertEquals("insert overwrite `mv2` SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         ConnectContext.get().setCurrentUserIdentity(UserIdentity.ROOT);
         ConnectContext.get().setCurrentRoleIds(UserIdentity.ROOT);
@@ -2664,6 +2665,14 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         ColumnRenameClause clause = (ColumnRenameClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getNewColName(), "k3_new");
+    }
+
+    @Test
+    public void testCatalogRenameColumnReserved() throws Exception {
+        String stmt = "alter table test.tbl1 rename column __op TO __op";
+        Assert.assertThrows(UserException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        });
     }
 
     @Test

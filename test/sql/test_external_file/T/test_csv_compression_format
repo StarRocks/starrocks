@@ -19,6 +19,7 @@
 shell: ossutil64 mkdir ${snappy_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
 shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test1.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test_empty.csv.snappy ${snappy_prefix[1]} | grep -Pv "(average|elapsed)"
 
 
 CREATE EXTERNAL TABLE test_csv_snappy_format

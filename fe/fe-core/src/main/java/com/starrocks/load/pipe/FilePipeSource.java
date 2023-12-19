@@ -15,6 +15,7 @@
 package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.TableFunctionTable;
@@ -170,7 +171,11 @@ public class FilePipeSource implements GsonPostProcessable {
     }
 
     public void retryFailedFile(String fileName) {
-        throw new UnsupportedOperationException("retry file not supported");
+        PipeFileRecord record = fileListRepo.listFilesByPath(fileName);
+        if (record != null && record.getLoadState().equals(FileListRepo.PipeFileState.ERROR)) {
+            fileListRepo.updateFileState(Lists.newArrayList(record), FileListRepo.PipeFileState.UNLOADED, null);
+            LOG.info("pipe {} retry error files: {}", pipeId, record);
+        }
     }
 
     public void setAutoIngest(boolean autoIngest) {

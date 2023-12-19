@@ -14,10 +14,12 @@
 
 package com.starrocks.planner;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -26,16 +28,26 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Random;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
     private static final List<String> outerJoinTypes = ImmutableList.of("left", "right");
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         Config.default_replication_num = 1;
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("locations");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
+        starRocksAssert.useTable("emps_bigint");
+        starRocksAssert.useTable("emps_no_constraint");
+        starRocksAssert.useTable("dependents");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -544,7 +556,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where emps.locationid > 10");
-        // TODO: Query's left outer join will be converted to Inner Join.
+        // no locations.locationid in mv
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
@@ -2755,6 +2767,71 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testStrColumnCountDistinctToBitmapCount1() {
+        {
+            String mv = "select user_id, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(concat(user_name, \"|\")))) x from user_tags group by user_id;");
+            // rewrite count distinct to bitmap_count(bitmap_union(bitmap_hash(x)));
+            testRewriteOK(mv, "select user_id, count(distinct concat(user_name, \"|\")) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags where user_id > 10;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags  where user_id > 10 group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, count(user_name) from user_tags group by user_id;";
+            testRewriteFail(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteFail(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+    }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"a\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+        // FIXME: MV Rewrite should take care cte reuse node later.
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        testRewriteOK(mv, "select user_id, time, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
+    }
+
+    @Test
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2933,6 +3010,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
+            this.setTracLogModule("MV");
             String mv = "SELECT count(lo_linenumber)\n" +
                     "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
                     "WHERE `c_name` != 'name'; ";
@@ -2943,8 +3021,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
             Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
             PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+            // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+            connectContext.getSessionVariable()
+                    .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
+            connectContext.getSessionVariable()
+                    .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
         }
     }
 
@@ -3237,7 +3320,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("TABLE: mv0\n" +
+            checker.contains("0:OlapScanNode\n" +
+                    "     TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 30: c_custkey = 100, 31: c_name = 'name'\n" +
                     "     partitions=1/1");
@@ -4814,5 +4898,407 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.dropTable("table_d");
         starRocksAssert.dropTable("table_e");
         starRocksAssert.dropMaterializedView("mv_view_delta_1");
+    }
+
+    @Test
+    public void testJoinDeriveRewriteOnNestedMv() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_DIM_TRACEID` (\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_OBJ_STRATEGY` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_type` varchar(65533) DEFAULT NULL,\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(strategy_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_CUST_COMMON_DIM` (\n" +
+                "  `sales_new_cust` varchar(65533) DEFAULT NULL,\n" +
+                "  `payroll_flag` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(becif_no)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `page_name_gy` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv1`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`TRACE_ID`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                f.TRACE_ID AS TRACE_ID,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv1\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                f.TRACE_ID;");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv2`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv2\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv3`\n" +
+                "PARTITION BY dt \n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                                COUNT(f.PAGE_NAME_GY) AS cnt1\n" +
+                "            FROM\n" +
+                "                D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW `test_perf_mv_pv4`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(DT, SALES_NEW_CUST, PAYROLL_FLAG, STRATEGY_TYPE, CUST_GROUP_NAME)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT q.DT, f1.SALES_NEW_CUST AS SALES_NEW_CUST, f1.PAYROLL_FLAG AS PAYROLL_FLAG," +
+                " f7.STRATEGY_TYPE AS STRATEGY_TYPE, f7.CUST_GROUP_NAME AS CUST_GROUP_NAME\n" +
+                "        , SUM(q.cnt1) AS cnt1, SUM(q.pv1) AS pv1\n" +
+                "        , SUM(q.pv2) AS pv2\n" +
+                "FROM (\n" +
+                "        SELECT t0.pv1 AS pv1, t1.pv2 AS pv2, t2.cnt1 AS cnt1\n" +
+                "                , t0.DT AS DT\n" +
+                "                , COALESCE(t0.BECIF_NO, t1.BECIF_NO, t2.BECIF_NO) AS pk1\n" +
+                "                , COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL, t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "        FROM (\n" +
+                "                SELECT f.pv1, f.TRACE_ID, f.BECIF_NO, f.DT\n" +
+                "                FROM test_perf_mv_pv1 f\n" +
+                "        ) t0\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.BECIF_NO, f.pv2, f.DT\n" +
+                "                        FROM test_perf_mv_pv2 f\n" +
+                "                ) t1\n" +
+                "                ON t1.DT = t0.DT\n" +
+                "                        AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "                        AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.cnt1, f.BECIF_NO, f.DT\n" +
+                "                        FROM test_perf_mv_pv3 f\n" +
+                "                ) t2\n" +
+                "                ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "                        AND t2.BECIF_NO = COALESCE(t0.BECIF_NO, t1.BECIF_NO)\n" +
+                "                        AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL)\n" +
+                ") q\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST," +
+                " f.PAYROLL_FLAG AS PAYROLL_FLAG, f.BECIF_NO AS BECIF_NO, f.DT\n" +
+                "                FROM IDX_CUST_COMMON_DIM f\n" +
+                "        ) f1\n" +
+                "        ON f1.BECIF_NO = q.pk1\n" +
+                "                AND f1.DT = q.DT\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.STRATEGY_ID AS STRATEGY_ID, f.STRATEGY_TYPE AS STRATEGY_TYPE," +
+                " f.CUST_GROUP_NAME AS CUST_GROUP_NAME, f.DT\n" +
+                "                FROM IDX_BASE_OBJ_STRATEGY f\n" +
+                "        ) f7\n" +
+                "        ON f7.STRATEGY_ID = q.pk7\n" +
+                "                AND f7.DT = q.DT\n" +
+                "GROUP BY q.DT, f1.PAYROLL_FLAG, f7.CUST_GROUP_NAME, f7.STRATEGY_TYPE, f1.SALES_NEW_CUST;");
+        String query = "SELECT SUM(q.pv1) AS pv1,\n" +
+                "       f1.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "       SUM(q.cnt1) AS cnt1,\n" +
+                "       f1.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "       f7.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "       f7.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "       SUM(q.pv2) AS pv2\n" +
+                "FROM\n" +
+                "  ( SELECT t0.pv1 AS pv1,\n" +
+                "           t1.pv2 AS pv2,\n" +
+                "           t2.cnt1 AS cnt1,\n" +
+                "           t0.DT AS DT ,\n" +
+                "           COALESCE(t0.BECIF_NO , t1.BECIF_NO , t2.BECIF_NO) AS pk1 ,\n" +
+                "           COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL , t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "   FROM\n" +
+                "     ( SELECT SUM(f.PV) AS pv1,\n" +
+                "              f.TRACE_ID AS TRACE_ID,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               f.TRACE_ID) AS t0\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              SUM(f.PV) AS pv2,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t1 \n" +
+                "   ON t1.DT = t0.DT\n" +
+                "   AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "   AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              COUNT(f.PAGE_NAME_GY) AS cnt1,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t2\n" +
+                "   ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "   AND t2.BECIF_NO = COALESCE(t0.BECIF_NO , t1.BECIF_NO)\n" +
+                "   AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL)) AS q\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "           f.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "           f.BECIF_NO AS BECIF_NO,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_CUST_COMMON_DIM f) AS f1 ON f1.BECIF_NO = q.pk1\n" +
+                "AND f1.DT = q.DT\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.STRATEGY_ID AS STRATEGY_ID,\n" +
+                "           f.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "           f.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_BASE_OBJ_STRATEGY f) AS f7 ON f7.STRATEGY_ID = q.pk7\n" +
+                "AND f7.DT = q.DT\n" +
+                "WHERE q.DT IN ('20230924')\n" +
+                "  AND f1.PAYROLL_FLAG IN ('Y')\n" +
+                "GROUP BY f1.PAYROLL_FLAG,\n" +
+                "         f7.CUST_GROUP_NAME,\n" +
+                "         f7.STRATEGY_TYPE,\n" +
+                "         f1.SALES_NEW_CUST";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "test_perf_mv_pv4");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv1");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv2");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv3");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv4");
+        starRocksAssert.dropTable("IDX_BASE_DIM_TRACEID");
+        starRocksAssert.dropTable("IDX_BASE_OBJ_STRATEGY");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_CUST_COMMON_DIM");
+        starRocksAssert.dropTable("D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3");
+    }
+
+    @Test
+    public void testForceRewriteWithRandomInput() {
+        String mv = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                "WHERE `c_name` != 'name'; ";
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        {
+            testRewriteFail(mv, query);
+        }
+
+        // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        {
+            this.setTracLogModule("MV");
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
+
+        {
+            Random rand = new Random();
+            for (int i = 0; i < 10; i++) {
+                long rowCount1 = rand.nextLong();
+                long rowCount2 = rand.nextLong();
+
+                PlanTestBase.setTableStatistics((OlapTable) table1, rowCount1);
+                PlanTestBase.setTableStatistics((OlapTable) table2, rowCount2);
+                MVRewriteChecker checker = testRewriteOK(mv, query);
+                checker.contains("UNION");
+            }
+        }
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+    }
+
+    private void createMaterializedViewWithInput(String mvName, long mvRowCount) throws Exception {
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " DISTRIBUTED BY HASH(c1) " +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT count(lo_linenumber) as c1\n" +
+                " FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                " WHERE `c_name` != 'name'; ", mvName);
+        starRocksAssert.withMaterializedView(mv);
+        Table mvTable = getTable(MATERIALIZED_DB_NAME, mvName);
+        PlanTestBase.setTableStatistics((OlapTable) mvTable, mvRowCount);
+    }
+
+    @Test
+    public void testForceRewriteForBestCost() throws Exception {
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+
+        // prepare mvs
+        List<String> mvNames = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            long rowCount = 1000 * (i + 1);
+            String mvName = String.format("test_mv_%s", i);
+            createMaterializedViewWithInput(mvName, rowCount);
+            mvNames.add(mvName);
+        }
+        MVRewriteChecker checker = sql(query);
+        checker.contains("UNION");
+        // must contain the lowest cost mv.
+        checker.contains("test_mv_0");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+        mvNames.stream().forEach(x -> {
+            try {
+                starRocksAssert.dropMaterializedView(x);
+            } catch (Exception e) {
+                // ignore
+            }
+        });
     }
 }

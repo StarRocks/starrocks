@@ -7,9 +7,9 @@ Before contributing, please read this article carefully to quickly understand th
 ## Tips
 
 1. Language: Please use at least one language, Chinese or English. The bilingual version is highly preferred.
-2. Index: When you add a topic, you also need to add an entry for the topic in the table of contents(TOC) file, for example, `[introduction](/introduction/StarRocks_intro.md)`. **The path to your topic must be a relative path from the `docs` directory.** This TOC file will eventually be rendered as the side navigation bar for documentation on our official website.
+2. Index: When you add a topic, you also need to add an entry for the topic in the table of contents(TOC) file, for example, `[introduction](../docs/en/introduction/what_is_starrocks.md)`. **The path to your topic must be a relative path from the `docs` directory.** This TOC file will eventually be rendered as the side navigation bar for documentation on our official website.
 3. Images: Images must first be put into the **assets** folder. When inserting images into the documentation, please use the relative path, such as `![test image](../../assets/test.png)`.
-4. Links: For internal links (links to documentation on our official website), please use the relative path of the document, such as `[test md](../../sql-reference.md)`. For external links,  the format must be `[link text](link URL)`.
+4. Links: For internal links (links to documentation on our official website), please use the relative path of the document, such as `[test md](./data_source/catalog/hive_catalog.md)`. For external links,  the format must be `[link text](link URL)`.
 5. Code blocks: You must add a language identifier for code blocks, for example, `sql`.
 6. Currently, special symbols are not  supported.
 

@@ -25,6 +25,8 @@ public class JoinDeriveContext {
     private final JoinOperator mvJoinType;
     // join columns for left and right join tables
     private final List<List<ColumnRefOperator>> joinColumns;
+    // join columns for left and right join tables
+    private final List<List<ColumnRefOperator>> childOutputColumns;
 
     private final List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns;
 
@@ -32,11 +34,13 @@ public class JoinDeriveContext {
             JoinOperator queryJoinType,
             JoinOperator mvJoinType,
             List<List<ColumnRefOperator>> joinColumns,
-            List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns) {
+            List<Pair<ColumnRefOperator, ColumnRefOperator>> compensatedEquivalenceColumns,
+            List<List<ColumnRefOperator>> childOutputColumns) {
         this.queryJoinType = queryJoinType;
         this.mvJoinType = mvJoinType;
         this.joinColumns = joinColumns;
         this.compensatedEquivalenceColumns = compensatedEquivalenceColumns;
+        this.childOutputColumns = childOutputColumns;
     }
 
     public JoinOperator getQueryJoinType() {
@@ -57,5 +61,13 @@ public class JoinDeriveContext {
 
     public List<Pair<ColumnRefOperator, ColumnRefOperator>> getCompensatedEquivalenceColumns() {
         return compensatedEquivalenceColumns;
+    }
+
+    public List<ColumnRefOperator> getLeftChildOutputColumns() {
+        return childOutputColumns.get(0);
+    }
+
+    public List<ColumnRefOperator> getRightChildOutputColumns() {
+        return childOutputColumns.get(1);
     }
 }

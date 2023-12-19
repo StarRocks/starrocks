@@ -35,22 +35,33 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -152,5 +163,76 @@ public class OlapTableTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         Assert.assertNull(olapTable.getDefaultFilePathInfo());
         Assert.assertNull(olapTable.getPartitionFilePathInfo(10));
+    }
+
+    @Test
+    public void testMVPartitionDurationTimeUintMismatch1() throws AnalysisException {
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
+        List<Column> partitionColumns = new LinkedList<Column>();
+        partitionColumns.add(k1);
+
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
+
+        PartitionKey p1 = new PartitionKey();
+        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+                PrimitiveType.DATE);
+
+        PartitionKey p2 = new PartitionKey();
+        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
+        rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
+
+        OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+                (PartitionInfo) rangePartitionInfo, null);
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
+
+        Partition partition = new Partition(1, "p1", null, null);
+        Assert.assertTrue(olapTable.isEnableFillDataCache(partition));
+
+        new MockUp<Range<PartitionKey>>() {
+            @Mock
+            boolean isConnected(Range<PartitionKey> range) throws Exception {
+                throw new Exception("Error");
+            }
+        };
+
+        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+    }
+
+    @Test
+    public void testMVPartitionDurationTimeUintMismatch2() throws AnalysisException {
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
+        List<Column> partitionColumns = new LinkedList<Column>();
+        partitionColumns.add(k1);
+
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("4 day");
+        PeriodDuration duration2 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
+
+        PartitionKey p1 = new PartitionKey();
+        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+                PrimitiveType.DATE);
+
+        PartitionKey p2 = new PartitionKey();
+        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), Type.DATE),
+                PrimitiveType.DATE);
+        rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
+
+        OlapTable olapTable = new OlapTable(1, "test", new ArrayList<>(), KeysType.AGG_KEYS,
+                (PartitionInfo) rangePartitionInfo, null);
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("25 hour"));
+
+        Partition partition = new Partition(1, "p1", null, null);
+        Assert.assertFalse(olapTable.isEnableFillDataCache(partition));
+    }
+
+    @Test
+    public void testNullDataCachePartitionDuration() {
+        OlapTable olapTable = new OlapTable();
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        Assert.assertNull(olapTable.getTableProperty() == null ? null :
+                olapTable.getTableProperty().getDataCachePartitionDuration());
     }
 }

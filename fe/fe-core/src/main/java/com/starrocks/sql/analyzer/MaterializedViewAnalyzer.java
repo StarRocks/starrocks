@@ -612,7 +612,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
                                                Map<Column, Expr> columnExprMap,
-                                               ConnectContext connectContext) {
+                                               ConnectContext connectContext) throws SemanticException {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
 
@@ -622,7 +622,8 @@ public class MaterializedViewAnalyzer {
                 partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext, statement.getQueryStatement());
             } catch (Exception e) {
                 LOG.warn("resolve partition column failed", e);
-                throw new SemanticException("resolve partition column failed", statement.getPartitionExpDesc().getPos());
+                throw new SemanticException("Resolve partition column failed:" + e.getMessage(),
+                        statement.getPartitionExpDesc().getPos());
             }
 
             if (expressionPartitionDesc.isFunction()) {
@@ -640,8 +641,6 @@ public class MaterializedViewAnalyzer {
                             functionCallExpr.getFnName().getFunction() +
                             " must related with column", functionCallExpr.getPos());
                 }
-                SlotRef slotRef = getSlotRef(functionCallExpr);
-                slotRef.setType(partitionColumn.getType());
                 // copy function and set it into partitionRefTableExpr
                 Expr partitionRefTableExpr = functionCallExpr.clone();
                 List<Expr> children = partitionRefTableExpr.getChildren();
@@ -672,7 +671,11 @@ public class MaterializedViewAnalyzer {
         private Expr resolvePartitionExpr(Expr partitionColumnExpr,
                                           ConnectContext connectContext,
                                           QueryStatement queryStatement) {
-            Expr expr = AnalyzerUtils.resolveExpr(partitionColumnExpr, queryStatement);
+            Expr expr = SlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
+            if (expr == null) {
+                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                        partitionColumnExpr.toSql());
+            }
             SlotRef slot;
             if (expr instanceof SlotRef) {
                 slot = (SlotRef) expr;
@@ -709,11 +712,11 @@ public class MaterializedViewAnalyzer {
                         MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " is not support", functionCallExpr.getPos());
+                            functionName + " is not support: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
                 }
                 if (!checkPartitionFunction.check(functionCallExpr)) {
                     throw new SemanticException("Materialized view partition function " +
-                            functionName + " check failed", functionCallExpr.getPos());
+                            functionName + " check failed: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
                 }
             }
         }
@@ -808,6 +811,7 @@ public class MaterializedViewAnalyzer {
             SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
             // should analyze the partition expr to get type info
             PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
+            // FIXME: Only consider query statement's output list for now, consider subquery or cte relation later.
             for (Expr columnExpr : columnExprMap.values()) {
                 if (columnExpr instanceof AnalyticExpr) {
                     AnalyticExpr analyticExpr = columnExpr.cast();

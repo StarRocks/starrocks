@@ -44,6 +44,7 @@ import java.io.IOException;
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     private static HttpServer beServer;
+    private static int TEST_HTTP_PORT = 0;
 
     @Override
     @Before
@@ -51,7 +52,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         Backend backend4 = new Backend(1234, "localhost", 8040);
         backend4.setBePort(9300);
         backend4.setAlive(true);
-        backend4.setHttpPort(9737);
+        backend4.setHttpPort(TEST_HTTP_PORT);
         backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
         new MockUp<GlobalStateMgr>() {
@@ -73,7 +74,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @BeforeClass
     public static void initBeServer() throws IllegalArgException, InterruptedException {
-        beServer = new HttpServer(9737);
+        TEST_HTTP_PORT = detectUsableSocketPort();
+
+        beServer = new HttpServer(TEST_HTTP_PORT);
         BaseAction ac = new BaseAction(beServer.getController()) {
 
             @Override

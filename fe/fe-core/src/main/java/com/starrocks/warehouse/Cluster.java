@@ -71,7 +71,7 @@ public class Cluster implements Writable {
 
     public List<Long> getComputeNodeIds() {
         List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (RunMode.isSharedNothingMode()) {
             return nodeIds;
         }
         try {

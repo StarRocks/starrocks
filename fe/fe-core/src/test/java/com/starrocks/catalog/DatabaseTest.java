@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -96,18 +98,19 @@ public class DatabaseTest {
 
     @Test
     public void lockTest() {
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Assert.assertFalse(db.tryWriteLock(0, TimeUnit.SECONDS));
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             Assert.assertTrue(db.tryWriteLock(0, TimeUnit.SECONDS));
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

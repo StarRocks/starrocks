@@ -593,6 +593,7 @@ public abstract class FileSystem extends Configured
             }
         }
 
+        HadoopExt.getInstance().rewriteConfiguration(conf);
         UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
         FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> {
             String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
@@ -602,7 +603,8 @@ public abstract class FileSystem extends Configured
             }
             return CACHE.get(uri, conf);
         });
-        return fs;
+        FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
+        return fs2;
     }
 
     /**
@@ -3731,7 +3733,6 @@ public abstract class FileSystem extends Configured
      */
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
-        HadoopExt.getInstance().rewriteConfiguration(conf);
         LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");

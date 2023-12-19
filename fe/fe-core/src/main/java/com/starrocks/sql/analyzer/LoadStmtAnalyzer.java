@@ -26,6 +26,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -126,7 +128,8 @@ public class LoadStmtAnalyzer {
                         if (db == null) {
                             continue;
                         }
-                        db.readLock();
+                        Locker locker = new Locker();
+                        locker.lockDatabase(db, LockType.READ);
                         try {
                             Table table = db.getTable(tableName);
                             if (table == null) {
@@ -140,7 +143,7 @@ public class LoadStmtAnalyzer {
                                 }
                             }
                         } finally {
-                            db.readUnlock();
+                            locker.unLockDatabase(db, LockType.READ);
                         }
                     }
                 }

@@ -25,8 +25,8 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -34,6 +34,8 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -140,7 +142,8 @@ public class InformationSchemaDataSource {
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
@@ -167,7 +170,7 @@ public class InformationSchemaDataSource {
                         tList.add(tableConfigInfo);
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         }
@@ -322,7 +325,8 @@ public class InformationSchemaDataSource {
             Database db = metadataMgr.getDb(catalogName, dbName);
 
             if (db != null) {
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                     for (String tableName : tableNames) {
@@ -383,7 +387,7 @@ public class InformationSchemaDataSource {
                         infos.add(info);
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         }
@@ -394,11 +398,11 @@ public class InformationSchemaDataSource {
     public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
         long lastUpdateTime = 0L;
         long totalRowsOfTable = 0L;
         long totalBytesOfTable = 0L;
-        for (Partition partition : partitions) {
+        for (PhysicalPartition partition : partitions) {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }

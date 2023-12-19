@@ -68,21 +68,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
-    private final String catalogType;
-    private final String metastoreUris;
-    private final String warehousePath;
     private final String catalogName;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
 
-    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
-                          String catalogType, String metastoreUris, String warehousePath) {
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog) {
         this.paimonNativeCatalog = paimonNativeCatalog;
         this.hdfsEnvironment = hdfsEnvironment;
-        this.catalogType = catalogType;
-        this.metastoreUris = metastoreUris;
-        this.warehousePath = warehousePath;
         this.catalogName = catalogName;
     }
 
@@ -176,8 +169,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         } catch (Exception e) {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         }
-        PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
-                catalogType, metastoreUris, warehousePath, paimonNativeTable, createTime);
+        PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
         tables.put(identifier, table);
         return table;
     }

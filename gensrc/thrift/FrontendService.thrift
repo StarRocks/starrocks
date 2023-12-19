@@ -907,6 +907,7 @@ struct TStreamLoadPutResult {
 
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
+    2: optional map<i32,i64> partitionCmtOffsetTimestamp
 }
 
 struct TPulsarRLTaskProgress {
@@ -1527,6 +1528,47 @@ struct TGetRoleEdgesResponse {
     1: optional list<TGetRoleEdgesItem> role_edges
 }
 
+struct TObjectDependencyItem {
+    1: optional i64 object_id
+    2: optional string object_name
+    3: optional string database
+    4: optional string catalog
+    5: optional string object_type
+    
+    11: optional i64 ref_object_id
+    12: optional string ref_object_name
+    13: optional string ref_database
+    14: optional string ref_catalog
+    15: optional string ref_object_type
+}
+
+struct TObjectDependencyReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TObjectDependencyRes {
+    1: optional list<TObjectDependencyItem> items
+}
+
+struct TFeLocksItem {
+    1: optional string lock_type
+    2: optional string lock_object
+    3: optional string lock_mode
+    4: optional i64 lock_start_time
+    
+    11: optional string thread_info
+    12: optional bool granted
+    14: optional string waiter_list
+}
+
+struct TFeLocksReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeLocksRes {
+    1: optional list<TFeLocksItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1652,6 +1694,12 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+
+    // sys.object_dependencies
+    TObjectDependencyRes listObjectDependencies(1: TObjectDependencyReq request)
+
+    // sys.fe_locks
+    TFeLocksRes listFeLocks(1: TFeLocksReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

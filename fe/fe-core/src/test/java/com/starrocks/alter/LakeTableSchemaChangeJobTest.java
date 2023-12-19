@@ -146,7 +146,7 @@ public class LakeTableSchemaChangeJobTest {
         table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
         table.setBaseIndexId(index.getId());
-        table.setUseLightSchemaChange(false);
+        table.setUseFastSchemaEvolution(false);
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();

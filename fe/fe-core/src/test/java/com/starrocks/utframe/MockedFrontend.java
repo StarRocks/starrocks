@@ -37,7 +37,6 @@ package com.starrocks.utframe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
@@ -223,11 +222,6 @@ public class MockedFrontend {
             try {
                 // init config
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
-
-                // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
-                if (!JdkUtils.checkJavaVersion()) {
-                // throw new IllegalArgumentException("Java version doesn't match");
-                }
 
                 // set dns cache ttl
                 java.security.Security.setProperty("networkaddress.cache.ttl", "60");

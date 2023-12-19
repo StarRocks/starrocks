@@ -23,13 +23,11 @@ public class MvRewriteJDBCTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
     }
 
     @Test
     public void testJDBCSingleTableEqualPredicateRewrite() throws Exception {
-        createAndRefreshMv("test", "jdbc_mv_1",
-                "create materialized view jdbc_mv_1 distributed by hash(a) " +
+        createAndRefreshMv("create materialized view jdbc_mv_1 distributed by hash(a) " +
                         "PROPERTIES (\n" +
                         "\"query_rewrite_consistency\" = \"loose\"\n" +
                         ") " +
@@ -58,8 +56,7 @@ public class MvRewriteJDBCTest extends MvRewriteTestBase {
 
     @Test
     public void testJDBCSingleTableEqualPredicateRewriteUseStr2DateWithVARCHAR() throws Exception {
-        createAndRefreshMv("test", "jdbc_mv_varchar",
-                "create materialized view jdbc_mv_varchar " +
+        createAndRefreshMv("create materialized view jdbc_mv_varchar " +
                         "partition by str2date(d, '%Y%m%d') " +
                         "distributed by hash(a) " +
                         "PROPERTIES (\n" +
@@ -75,8 +72,7 @@ public class MvRewriteJDBCTest extends MvRewriteTestBase {
 
     @Test
     public void testJDBCSingleTableEqualPredicateRewriteUseStr2DateWithVARCHAR2() throws Exception {
-        createAndRefreshMv("test", "jdbc_mv_varchar2",
-                "create materialized view jdbc_mv_varchar2 " +
+        createAndRefreshMv("create materialized view jdbc_mv_varchar2 " +
                         "partition by ss " +
                         "distributed by hash(a) " +
                         "PROPERTIES (\n" +
@@ -93,8 +89,7 @@ public class MvRewriteJDBCTest extends MvRewriteTestBase {
     @Test
     public void testJDBCSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-        createAndRefreshMv("test", "jdbc_mv_2",
-                "create materialized view jdbc_mv_2 distributed by hash(a) " +
+        createAndRefreshMv("create materialized view jdbc_mv_2 distributed by hash(a) " +
                         "PROPERTIES (\n" +
                         "\"query_rewrite_consistency\" = \"loose\"\n" +
                         ") " +

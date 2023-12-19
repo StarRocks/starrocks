@@ -20,6 +20,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
@@ -91,6 +92,9 @@ public class TaskBuilder {
         } else {
             stmt = "";
         }
+        if (FeConstants.runningUnitTest) {
+            stmt = "";
+        }
         return stmt;
     }
 
@@ -114,8 +118,7 @@ public class TaskBuilder {
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
-        task.setDefinition(
-                "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
