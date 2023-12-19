@@ -219,13 +219,16 @@ struct SpillTestContext {
 };
 
 StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState* runtime_state,
-                                                 std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
+                                                 const std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
     auto context = pool->add(new SpillTestContext());
     context->partition_nums = 1;
     //
-    RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-    RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
-    RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    if (!order_bys.empty()) {
+        RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    }
+
     //
     std::vector<bool> ascs(order_bys.size());
     std::fill_n(ascs.begin(), order_bys.size(), true);
@@ -495,20 +498,18 @@ TEST_F(SpillTest, partition_process) {
     ObjectPool pool;
 
     // order by id_int
-    TExprBuilder order_by_slots_builder;
-    order_by_slots_builder << TYPE_INT;
-    auto order_by_slots = order_by_slots_builder.get_res();
     // full data id_int, id_smallint
     std::vector<bool> nullables = {false, false};
     TExprBuilder tuple_slots_builder;
-    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    tuple_slots_builder << TYPE_INT;
     auto tuple_slots = tuple_slots_builder.get_res();
 
-    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
     ASSERT_OK(ctx_st.status());
     auto ctx = ctx_st.value();
 
-    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;
@@ -540,7 +541,9 @@ TEST_F(SpillTest, partition_process) {
     {
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk = chunk_builder.gen(tuple, nullables);
-            ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
