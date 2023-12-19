@@ -988,13 +988,10 @@ TEST_P(CSVScannerTest, test_empty) {
 
 // 21431,"Rowdy" Roddy Piper, Superstar,,,,1,-999
 TEST_P(CSVScannerTest, test_enclose_fanatics) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
-                                      TypeDescriptor(TYPE_VARCHAR),
-                                      TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
