@@ -102,6 +102,11 @@ struct DirEntry {
     std::optional<bool> is_dir;
 };
 
+struct FileInfo {
+    std::string path;
+    std::optional<int64_t> size;
+};
+
 struct FileWriteStat {
     int64_t open_time{0};
     int64_t close_time{0};
@@ -161,8 +166,18 @@ public:
         return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const FileInfo& file_info) {
+        return new_random_access_file(RandomAccessFileOptions(), file_info);
+    }
+
     virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                const std::string& fname) = 0;
+
+    // Implementations may make use of the file info to make some optimizations, such as getting the file size directly.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const FileInfo& file_info) {
+        return new_random_access_file(opts, file_info.path);
+    }
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
