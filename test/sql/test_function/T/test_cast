@@ -1,16 +1,15 @@
 -- name: test_cast_string_to_varbinary
 
-create table t1(c1 int, c2 string);
-create table t2(c1 int, c2 binary);
-create table t3(c1 int, c2 varbinary);
+create table t1(c1 int, c2 string, c3 string);
+create table t2(c1 int, c2 binary, c3 varbinary);
 
-insert into t1 values (1, "1,2,3,4,5");
-insert into t1 values (2, null);
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+insert into t1 values (2, null, null);
 insert into t2 select * from t1;
-insert into t3 select * from t1;
 
 select * from t2 order by c1;
-select * from t3 order by c1;
+select c1, cast(c2 as binary), cast(c2 as varbinary) order by c1;
+select cast("1,2,3,4,5" as binary), cast("6,7,8,9.10" as varbinary);
 
 -- name: test_cast_varbinary_to_string
 create table t1(c1 int, c2 binary, c3 varbinary);
@@ -21,3 +20,4 @@ insert into t1 values (2, null, null);
 insert into t2 select * from t1;
 
 select * from t2 order by c1;
+select c1, cast(c2 as string), cast(c3 as string) order by c1;
