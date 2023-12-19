@@ -337,6 +337,13 @@ public:
     DEFINE_VECTORIZED_FN(regexp_replace);
 
     /**
+     * @param: [string_value, pattern_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(regexp_instr);
+
+    /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
@@ -344,14 +351,6 @@ public:
     DEFINE_VECTORIZED_FN(replace);
     static Status replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
-    /**
-     * @param: [string_value, pattern_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: BinaryColumn
-     */
-    DEFINE_VECTORIZED_FN(regexp_instr);
-    static Status instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, from_value, to_value]

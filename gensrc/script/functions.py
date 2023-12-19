@@ -302,7 +302,7 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
-    [30331, 'regexp_instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_instr',
+    [30341, 'regexp_instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_instr',
      'StringFunctions::regexp_instr_prepare', 'StringFunctions::regexp_close'],
 
     # @Deprecated: 'replace_old' will be deleted in the future version, keep it just for compatible
