@@ -21,19 +21,11 @@ import java.util.Objects;
 
 public class HashCachedScalarOperator extends ScalarOperator {
     public ScalarOperator operator;
-    private int hashValue = 0;
+    private transient Integer hashValue = null;
 
     public HashCachedScalarOperator(ScalarOperator operator) {
         super(operator.getOpType(), operator.getType());
         this.operator = operator;
-    }
-
-    public int getHashValue() {
-        return hashValue;
-    }
-
-    public void setHashValue(int hashValue) {
-        this.hashValue = hashValue;
     }
 
     public ScalarOperator getOperator() {
@@ -42,13 +34,10 @@ public class HashCachedScalarOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        if (this.getHashValue() != 0) {
-            return this.getHashValue();
+        if (hashValue == null) {
+            hashValue = operator.hashCode();
         }
-
-        this.setHashValue(operator.hashCode());
-        return this.getHashValue();
-
+        return hashValue;
     }
 
     @Override
