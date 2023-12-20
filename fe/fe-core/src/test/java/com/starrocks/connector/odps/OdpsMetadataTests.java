@@ -19,10 +19,14 @@ import com.aliyun.odps.TableSchema;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.sql.ast.PartitionValue;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -119,12 +123,25 @@ public class OdpsMetadataTests extends MockedBase {
     }
 
     @Test
+    public void testGetRemoteFileInfos() throws AnalysisException, IOException {
+        Table odpsTable = odpsMetadata.getTable("project", "tableName");
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
+                        odpsTable.getPartitionColumns());
+        List<RemoteFileInfo> remoteFileInfos =
+                odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), -1, null,
+                        odpsTable.getPartitionColumnNames(), -1, mockTableReadSessionBuilder);
+        Assert.assertEquals(1, remoteFileInfos.size());
+    }
+
+    @Test
     public void testGetCloudConfiguration() {
         AliyunCloudConfiguration cloudConfiguration = (AliyunCloudConfiguration) odpsMetadata.getCloudConfiguration();
         Assert.assertEquals(CloudType.ALIYUN, cloudConfiguration.getCloudType());
         Assert.assertEquals("ak", cloudConfiguration.getAliyunCloudCredential().getAccessKey());
         Assert.assertEquals("sk", cloudConfiguration.getAliyunCloudCredential().getSecretKey());
         Assert.assertEquals("http://127.0.0.1", cloudConfiguration.getAliyunCloudCredential().getEndpoint());
+
     }
 }
 
