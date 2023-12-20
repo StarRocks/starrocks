@@ -89,7 +89,7 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
                                                                decimal_logical_type->scale());
         } else {
-            *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
         break;
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
@@ -103,8 +103,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         break;
     }
     default:
-        // Treat unsupported types as VARCHAR.
-        *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        // Treat unsupported types as varbinary type.
+        *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     }
 
     return Status::OK();
