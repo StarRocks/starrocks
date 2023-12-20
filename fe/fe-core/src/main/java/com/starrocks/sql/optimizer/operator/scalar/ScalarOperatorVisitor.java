@@ -119,7 +119,7 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(operator, context);
     }
 
-    public R visitDictionaryExprOperator(DictionaryExprOperator operator, C context) {
+    public R visitDictionaryGetOperator(DictionaryGetOperator operator, C context) {
         return visit(operator, context);
     }
 }

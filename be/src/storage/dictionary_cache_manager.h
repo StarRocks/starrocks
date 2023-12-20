@@ -265,15 +265,15 @@ public:
     DictionaryCacheManager(const DictionaryCacheManager&) = delete;
     const DictionaryCacheManager& operator=(const DictionaryCacheManager&) = delete;
 
-    Status begin(DictionaryId dict_id, DictionaryCacheTxnId txn_id);
+    Status begin(const PProcessDictionaryCacheRequest* request);
 
-    Status refresh(const PRefreshDictionaryCacheRequest* request);
+    Status refresh(const PProcessDictionaryCacheRequest* request);
 
-    Status commit(DictionaryId dict_id, DictionaryCacheTxnId txn_id);
+    Status commit(const PProcessDictionaryCacheRequest* request);
 
     void clear(DictionaryId dict_id, bool is_cancel = false /* trigger cancel */);
 
-    void get_info(DictionaryId dict_id, PGetDictionaryStatisticResult& response);
+    void get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response);
 
     SchemaPtr get_dictionary_schema_by_id(const DictionaryId& dict_id);
     StatusOr<DictionaryCachePtr> get_dictionary_by_version(const DictionaryId& dict_id,

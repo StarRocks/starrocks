@@ -93,7 +93,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -1852,7 +1852,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitDictionaryExpr(DictionaryExpr node, Scope context) {
+        public Void visitDictionaryGetExpr(DictionaryGetExpr node, Scope context) {
             List<Expr> params = node.getChildren();
             if (params.size() < 2) {
                 throw new SemanticException("dictionary_get function get illegal param list");

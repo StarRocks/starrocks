@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/dictionary_expr.h"
+#include "exprs/dictionary_get_expr.h"
 
 #include <fmt/format.h>
 
@@ -23,9 +23,10 @@
 
 namespace starrocks {
 
-DictionaryExpr::DictionaryExpr(const TExprNode& node) : Expr(node), _dictionary_expr(node.dictionary_expr) {}
+DictionaryGetExpr::DictionaryGetExpr(const TExprNode& node)
+        : Expr(node), _dictionary_get_expr(node.dictionary_get_expr) {}
 
-StatusOr<ColumnPtr> DictionaryExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
     // calculate all child expression which used to construct keys
     size_t size = ptr != nullptr ? ptr->num_rows() : 1;
@@ -51,7 +52,7 @@ StatusOr<ColumnPtr> DictionaryExpr::evaluate_checked(ExprContext* context, Chunk
 
     key_chunk->set_num_rows(size);
     // assign the key chunk
-    for (int i = 0; i < _dictionary_expr.key_size; ++i) {
+    for (int i = 0; i < _dictionary_get_expr.key_size; ++i) {
         ColumnPtr key_column = columns[1 + i];
         key_chunk->update_column_by_index(key_column, i);
     }
@@ -70,23 +71,19 @@ StatusOr<ColumnPtr> DictionaryExpr::evaluate_checked(ExprContext* context, Chunk
     return struct_column;
 }
 
-Status DictionaryExpr::prepare(RuntimeState* state, ExprContext* context) {
+Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
     _runtime_state = state;
-    return Status::OK();
-}
 
-Status DictionaryExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    // init parent open
-    RETURN_IF_ERROR(Expr::open(state, context, scope));
     _schema = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_schema_by_id(
-            _dictionary_expr.dict_id);
+            _dictionary_get_expr.dict_id);
     if (_schema == nullptr) {
-        return Status::InternalError(fmt::format(
-                "open dictionary expression failed, there is no cache for dictionary: {}", _dictionary_expr.dict_id));
+        return Status::InternalError(
+                fmt::format("open dictionary expression failed, there is no cache for dictionary: {}",
+                            _dictionary_get_expr.dict_id));
     }
     auto res = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_by_version(
-            _dictionary_expr.dict_id, _dictionary_expr.txn_id);
+            _dictionary_get_expr.dict_id, _dictionary_get_expr.txn_id);
     if (!res.ok()) {
         return Status::InternalError(fmt::format("open dictionary expression failed {}", res.status().message()));
     }
@@ -94,15 +91,13 @@ Status DictionaryExpr::open(RuntimeState* state, ExprContext* context, FunctionC
     DCHECK(_dictionary != nullptr);
 
     // init key / value chunk and struct column template for evaluation
-    std::vector<ColumnId> key_cids(_dictionary_expr.key_size);
+    std::vector<ColumnId> key_cids(_dictionary_get_expr.key_size);
     std::iota(key_cids.begin(), key_cids.end(), 0);
     _key_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), key_cids), 0);
-    _key_chunk->reset();
 
-    std::vector<ColumnId> value_cids(_schema->fields().size() - _dictionary_expr.key_size);
-    std::iota(value_cids.begin(), value_cids.end(), _dictionary_expr.key_size);
+    std::vector<ColumnId> value_cids(_schema->fields().size() - _dictionary_get_expr.key_size);
+    std::iota(value_cids.begin(), value_cids.end(), _dictionary_get_expr.key_size);
     _value_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), value_cids), 0);
-    _value_chunk->reset();
 
     DCHECK(_key_chunk != nullptr);
     DCHECK(_value_chunk != nullptr);
@@ -125,10 +120,6 @@ Status DictionaryExpr::open(RuntimeState* state, ExprContext* context, FunctionC
     DCHECK(_struct_column != nullptr);
 
     return Status::OK();
-}
-
-void DictionaryExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    Expr::close(state, context, scope);
 }
 
 } // namespace starrocks

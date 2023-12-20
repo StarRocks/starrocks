@@ -45,14 +45,9 @@ import com.starrocks.planner.DictionaryCacheSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.proto.PClearDictionaryCacheRequest;
-import com.starrocks.proto.PClearDictionaryCacheResult;
-import com.starrocks.proto.PGetDictionaryStatisticRequest;
-import com.starrocks.proto.PGetDictionaryStatisticResult;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheRequestType;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
@@ -149,6 +144,41 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
+    public static boolean processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request, String errMsg,
+                                                         List<TNetworkAddress> beNodes,
+                                                         List<PProcessDictionaryCacheResult> results) {
+        for (TNetworkAddress address : beNodes) {
+            PProcessDictionaryCacheResult result = null;
+            try {
+                Future<PProcessDictionaryCacheResult> future =
+                        BackendServiceClient.getInstance().processDictionaryCache(address, request);
+                result = future.get();
+            } catch (Exception e) {
+                LOG.warn(" processDictionaryCache failed in: " + address + " rpc error :" + e.getMessage());
+                if (errMsg != null) {
+                    errMsg = e.getMessage();
+                }
+                return true;
+            }
+
+            TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
+            if (code != TStatusCode.OK) {
+                LOG.warn(" processDictionaryCache failed in: " + address + " err msg " + result.status.errorMsgs);
+                if (errMsg != null) {
+                    errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
+                }
+                return true;
+            }
+
+            if (results != null) {
+                results.add(result);
+            }
+        }
+        LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
+                 request.dictId, request.txnId, request.type);
+        return false;
+    }
+
     public void createDictionary(CreateDictionaryStmt stmt, String dbName) throws DdlException {
         Dictionary dictionary = new Dictionary(getAndIncrementDictionaryId(), stmt.getDictionaryName(),
                                                stmt.getQueryableObject(), dbName, stmt.getDictionaryKeys(),
@@ -222,9 +252,10 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     }
 
     public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {     
-        PClearDictionaryCacheRequest request = new PClearDictionaryCacheRequest();
+        PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.isCancel = cancel;
+        request.type = PProcessDictionaryCacheRequestType.CLEAR;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
@@ -233,24 +264,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             beNodes.add(backend.getBrpcAddress());
         }
 
-        for (TNetworkAddress address : beNodes) {
-            PClearDictionaryCacheResult result = null;
-            try {
-                Future<PClearDictionaryCacheResult> future =
-                        BackendServiceClient.getInstance().clearDictionaryCache(address, request);
-                result = future.get();
-            } catch (Exception e) {
-                LOG.warn(" ClearDictionaryCache failed in: " + address + " rpc error :" + e.getMessage());
-                return;
-            }
-
-            TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-            if (code != TStatusCode.OK) {
-                LOG.warn(" ClearDictionaryCache failed in: " + address + " err msg " + result.status.errorMsgs);
-                return;
-            }
-        }
-        LOG.info("finish ClearDictionaryCache dictionary id: {}", request.dictId);
+        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, null);
     }
 
     public void addDictionary(Dictionary dictionary) {
@@ -361,9 +375,10 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         executor.submit(task);
     }
 
-    public Map<TNetworkAddress, PGetDictionaryStatisticResult> getDictionaryStatistic(Dictionary dictionary) {     
-        PGetDictionaryStatisticRequest request = new PGetDictionaryStatisticRequest();
+    public Map<TNetworkAddress, PProcessDictionaryCacheResult> getDictionaryStatistic(Dictionary dictionary) {
+        PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
+        request.type = PProcessDictionaryCacheRequestType.STATISTIC;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
@@ -372,28 +387,17 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             beNodes.add(backend.getBrpcAddress());
         }
 
-        Map<TNetworkAddress, PGetDictionaryStatisticResult> resultMap = new HashMap<>();
-        for (TNetworkAddress address : beNodes) {
-            PGetDictionaryStatisticResult result = null;
-            try {
-                Future<PGetDictionaryStatisticResult> future =
-                        BackendServiceClient.getInstance().getDictionaryStatistic(address, request);
-                result = future.get();
-            } catch (Exception e) {
-                LOG.warn(" getDictionaryStatistic failed in: " + address + " rpc error :" + e.getMessage());
-                resultMap.put(address, null);
-                continue;
-            }
-
-            TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-            if (code != TStatusCode.OK) {
-                LOG.warn(" getDictionaryStatistic failed in: " + address + " err msg " + result.status.errorMsgs);
-                resultMap.put(address, null);
-                continue;
-            }
-            resultMap.put(address, result);
+        List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
+        DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, results);
+        Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = new HashMap<>();
+        if (results.size() < beNodes.size()) {
+            return resultMap;
         }
-        LOG.info("finish getDictionaryStatistic dictionary id: {}", request.dictId);
+        Preconditions.checkState(results.size() == beNodes.size());
+
+        for (int i = 0; i < results.size(); i++) {
+            resultMap.put(beNodes.get(i), results.get(i));
+        }
         return resultMap;
     }
 
@@ -409,10 +413,10 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
                 allInfo.add(dictionary.getInfo());
 
-                Map<TNetworkAddress, PGetDictionaryStatisticResult> resultMap = getDictionaryStatistic(dictionary);
+                Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
                 
                 String memoryUsage = "";
-                for (Map.Entry<TNetworkAddress, PGetDictionaryStatisticResult> result : resultMap.entrySet()) {
+                for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
                     memoryUsage += address.getHostname() + ":" + String.valueOf(address.getPort()) + " : ";
 
@@ -618,32 +622,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
         private void begin() {
             Preconditions.checkState(!error);
-            PRefreshDictionaryCacheBeginRequest request = new PRefreshDictionaryCacheBeginRequest();
+            PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
             request.dictId = dictionary.getDictionaryId();
             request.txnId = txnId;
+            request.type = PProcessDictionaryCacheRequestType.BEGIN;
 
-            for (TNetworkAddress address : beNodes) {
-                PRefreshDictionaryCacheBeginResult result = null;
-                try {
-                    Future<PRefreshDictionaryCacheBeginResult> future =
-                            BackendServiceClient.getInstance().refreshDictionaryCacheBegin(address, request);
-                    result = future.get();
-                } catch (Exception e) {
-                    error = true;
-                    errMsg = e.getMessage();
-                    LOG.warn(" RefreshDictionaryCacheBegin failed in: " + address + " rpc error :" + e.getMessage());
-                    return;
-                }
-
-                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    LOG.warn(" RefreshDictionaryCacheBegin failed in: " + address + " err msg " + result.status.errorMsgs);
-                    errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
-                    error = true;
-                    return;
-                }
-            }
-            LOG.info("finish RefreshDictionaryCacheBegin dictionary id: {}, txn id: {}", request.dictId, request.txnId);
+            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
         }
 
         private void commit() {
@@ -652,32 +636,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
             dictionary.setCommitting();
 
-            PRefreshDictionaryCacheCommitRequest request = new PRefreshDictionaryCacheCommitRequest();
+            PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
             request.dictId = dictionary.getDictionaryId();
             request.txnId = txnId;
+            request.type = PProcessDictionaryCacheRequestType.COMMIT;
 
-            for (TNetworkAddress address : beNodes) {
-                PRefreshDictionaryCacheCommitResult result = null;
-                try {
-                    Future<PRefreshDictionaryCacheCommitResult> future =
-                            BackendServiceClient.getInstance().refreshDictionaryCacheCommit(address, request);
-                    result = future.get();
-                } catch (Exception e) {
-                    errMsg = e.getMessage();
-                    error = true;
-                    return;
-                }
-
-                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    LOG.warn(" RefreshDictionaryCacheCommit failed in: " + address + " err " + result.status.errorMsgs);
-                    errMsg = result.status.errorMsgs.size() == 0 ? "" : result.status.errorMsgs.get(0);
-                    error = true;
-                    return;
-                }
-            }
-
-            LOG.info("finish RefreshDictionaryCacheCommit dictionary id: {}, txn id: {}", request.dictId, request.txnId);
+            error = DictionaryMgr.processDictionaryCacheInteranl(request, errMsg, beNodes, null);
         }
 
         private void finish(long dictionaryId) {

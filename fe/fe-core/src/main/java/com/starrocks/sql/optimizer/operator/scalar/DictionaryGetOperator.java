@@ -25,13 +25,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class DictionaryExprOperator extends ScalarOperator {
+public class DictionaryGetOperator extends ScalarOperator {
     private List<ScalarOperator> arguments;
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
 
-    public DictionaryExprOperator(List<ScalarOperator> arguments, Type returnType, long dictionaryId, long dictionaryTxnId,
+    public DictionaryGetOperator(List<ScalarOperator> arguments, Type returnType, long dictionaryId, long dictionaryTxnId,
                                   int keySize) {
         super(OperatorType.DICTIONARY_GET, returnType);
         this.arguments = new ArrayList<>(arguments);
@@ -62,7 +62,7 @@ public class DictionaryExprOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return "DICTIONAR_GET";
+        return "DICTIONARY_GET";
     }
 
     @Override
@@ -78,8 +78,8 @@ public class DictionaryExprOperator extends ScalarOperator {
         if (this == other) {
             return true;
         }
-        if (other instanceof DictionaryExprOperator) {
-            final DictionaryExprOperator dictionaryOp = (DictionaryExprOperator) other;
+        if (other instanceof DictionaryGetOperator) {
+            final DictionaryGetOperator dictionaryOp = (DictionaryGetOperator) other;
             return Objects.equals(arguments, dictionaryOp.arguments) && dictionaryOp.getType().equals(getType()) &&
                    this.dictionaryId == dictionaryOp.getDictionaryId() &&
                    this.dictionaryTxnId == dictionaryOp.getDictionaryTxnId() &&
@@ -90,7 +90,7 @@ public class DictionaryExprOperator extends ScalarOperator {
 
     @Override
     public ScalarOperator clone() {
-        DictionaryExprOperator operator = (DictionaryExprOperator) super.clone();
+        DictionaryGetOperator operator = (DictionaryGetOperator) super.clone();
         // Deep copy here
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));
@@ -124,7 +124,7 @@ public class DictionaryExprOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictionaryExprOperator(this, context);
+        return visitor.visitDictionaryGetOperator(this, context);
     }
 
 }

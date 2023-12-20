@@ -55,7 +55,7 @@
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
 #include "exprs/dict_query_expr.h"
-#include "exprs/dictionary_expr.h"
+#include "exprs/dictionary_get_expr.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/in_predicate.h"
@@ -392,8 +392,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::DICT_QUERY_EXPR:
         *expr = pool->add(new DictQueryExpr(texpr_node));
         break;
-    case TExprNodeType::DICTIONARY_EXPR:
-        *expr = pool->add(new DictionaryExpr(texpr_node));
+    case TExprNodeType::DICTIONARY_GET_EXPR:
+        *expr = pool->add(new DictionaryGetExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
