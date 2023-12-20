@@ -274,7 +274,7 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
                 alterViewClause.getInlineViewDef(),
                 alterViewClause.getColumns(),
-                ctx.getSessionVariable().getSqlMode());
+                ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
