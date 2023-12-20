@@ -64,12 +64,8 @@ public class CachingMvPlanContextBuilder {
     }
 
     private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
-        try {
-            return MvPlanContextBuilder.getPlanContext(mv);
-        } catch (Throwable e) {
-            LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
-            return null;
-        }
+        MvPlanContextBuilder builder = new MvPlanContextBuilder();
+        return builder.getPlanContext(mv);
     }
 
     @VisibleForTesting
