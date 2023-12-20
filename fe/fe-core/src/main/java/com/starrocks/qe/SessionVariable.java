@@ -509,6 +509,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
+    public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
@@ -934,6 +935,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details in the comment above transmissionEncodeLevel
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
+    
+    @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
+    private boolean spillEnableDirectIO = false;
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
@@ -2994,6 +2998,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            tResult.setSpill_enable_direct_io(spillEnableDirectIO);
         }
 
         // Compression Type
