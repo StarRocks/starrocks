@@ -263,7 +263,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                     }
                 }
 
-                String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
                 TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
                 if (partialUpdateMode.equals("column")) {
                     mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
