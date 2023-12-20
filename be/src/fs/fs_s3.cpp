@@ -334,6 +334,9 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const FileInfo& file_info) override;
+
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& path) override;
 
@@ -403,6 +406,20 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     auto client = new_s3client(uri, _options);
     auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                                 const FileInfo& file_info) {
+    S3URI uri;
+    if (!uri.parse(file_info.path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
+    }
+    auto client = new_s3client(uri, _options);
+    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    if (file_info.size.has_value()) {
+        input_stream->set_size(file_info.size.value());
+    }
+    return std::make_unique<RandomAccessFile>(std::move(input_stream), file_info.path);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,

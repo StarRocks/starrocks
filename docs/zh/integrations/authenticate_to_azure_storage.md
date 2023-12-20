@@ -44,7 +44,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.blob.storage_account" = "<blob_storage_account_name>",
     "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
 );
@@ -99,7 +99,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.blob.storage_account" = "<blob_storage_account_name>",
     "azure.blob.container" = "<blob_container_name>",
     "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
@@ -168,7 +168,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.adls1.use_managed_service_identity" = "true"
 );
 ```
@@ -220,7 +220,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.adls1.oauth2_client_id" = "<application_client_id>",
     "azure.adls1.oauth2_credential" = "<application_client_credential>",
     "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -299,7 +299,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.adls2.oauth2_use_managed_identity" = "true",
     "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
     "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -357,7 +357,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.adls2.storage_account" = "<storage_account_name>",
     "azure.adls2.shared_key" = "<shared_key>"
 );
@@ -414,7 +414,7 @@ CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "azure.adls2.oauth2_client_id" = "<service_client_id>",
     "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
     "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"

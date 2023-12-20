@@ -23,6 +23,7 @@
 
 namespace starrocks::lake {
 
+// TODO refactor load from lake tablet, use same path with load from local tablet.
 Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
                                                        int64_t base_version, const MetaFileBuilder* builder) {
     if (!is_primary_key(metadata)) {
@@ -69,12 +70,12 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         // here just use version.major so that PersistentIndexMetaPB need't to be modified,
         // the minor is meaningless
         if (version.major() == base_version) {
-            // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
-            // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
             if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
-                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
-                LOG(WARNING) << "different format version, we need to rebuild persistent index";
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3 &&
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_4) {
+                LOG(WARNING) << "different format version, we need to rebuild persistent index, version: "
+                             << index_meta.format_version();
                 status = Status::InternalError("different format version");
             } else {
                 status = load(index_meta);
@@ -181,7 +182,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
     _version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
