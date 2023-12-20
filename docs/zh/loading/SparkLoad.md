@@ -357,7 +357,7 @@ WITH RESOURCE 'spark0'
 
 * **导入 binary 类型的数据**
 
-当数据源 Hive 表或 HDFS 文件中列的数据类型为 binary 类型， 而 StarRocks 表中相应的列是 bitmap 类型的聚合列时，您无需构建全局字典，只需在导入命令中指定相应的字段即可。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
+从 2.5.17 版本开始，Spark Load 支持在导入时使用 bitmap_from_binary 函数，可以将 binary 类型转为 bitmap 类型。当 Hive 表或 HDFS 文件中列的数据类型为 binary 类型， 而 StarRocks 表中相应的列是 bitmap 类型的聚合列时，您无需构建全局字典，只需在导入命令中指定相应的字段即可。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
 
 ### 查看导入任务
 
