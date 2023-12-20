@@ -77,7 +77,7 @@ public class EntityConvertUtilsTests {
     public void testConvertTypeCaseDecimalLessThanOrEqualMaxDecimal32Precision() {
         DecimalTypeInfo decimalTypeInfo = TypeInfoFactory.getDecimalTypeInfo(5, 2);
         Type result = EntityConvertUtils.convertType(decimalTypeInfo);
-        Type expectedType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2);
+        Type expectedType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 5, 2);
         assertEquals(expectedType, result);
     }
 
