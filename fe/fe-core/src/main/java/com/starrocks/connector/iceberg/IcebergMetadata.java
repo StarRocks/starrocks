@@ -304,6 +304,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     // last_updated_snapshot_id
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
+                        // Get the last updated time of the table according to the table schema
                         long lastUpdated = row.get(7, Long.class);
                         Partition partition = new Partition(lastUpdated);
                         return ImmutableList.of(partition);
@@ -330,6 +331,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     // last_updated_snapshot_id
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
+                        // Get the partition data/spec id/last updated time according to the table schema
                         StructProjection partitionData = row.get(0, StructProjection.class);
                         int specId = row.get(1, Integer.class);
                         long lastUpdated = row.get(9, Long.class);
