@@ -74,7 +74,7 @@ public class AlterViewInfoTest {
         Column column2 = new Column("col2", Type.DOUBLE);
 
         AlterViewInfo alterViewInfo =
-                new AlterViewInfo(dbId, tableId, inlineViewDef, Lists.newArrayList(column1, column2), sqlMode);
+                new AlterViewInfo(dbId, tableId, inlineViewDef, Lists.newArrayList(column1, column2), sqlMode, null);
         alterViewInfo.write(out);
         out.flush();
         out.close();

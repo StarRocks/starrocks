@@ -33,6 +33,7 @@ public class AlterViewStmt extends DdlStmt {
                 stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
         alterViewClause.setColumns(stmt.getColumns());
+        alterViewClause.setComment(stmt.getComment());
         return new AlterViewStmt(stmt.getTableName(), alterViewClause, NodePosition.ZERO);
     }
 
