@@ -969,19 +969,19 @@ cleanTabletSchedQClause
     ;
 
 decommissionDiskClause
-    : DECOMMISSION DISK string (',' string)*
+    : DECOMMISSION DISK string (',' string)* ON BACKEND string
     ;
 
 cancelDecommissionDiskClause
-    : CANCEL DECOMMISSION DISK string (',' string)*
+    : CANCEL DECOMMISSION DISK string (',' string)* ON BACKEND string
     ;
 
 disableDiskClause
-    : DISABLE DISK string (',' string)*
+    : DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 cancelDisableDiskClause
-    : CANCEL DISABLE DISK string (',' string)*
+    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------
