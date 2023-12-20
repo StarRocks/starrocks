@@ -525,14 +525,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
-#### fast_schema_evolution
+#### enable_fast_schema_evolution
 
-- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。
   > **NOTE**
   >
   > - StarRocks 存算分离集群不支持该参数。
   > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
-- 默认值：TRUE
+- 默认值：FALSE
 - 引入版本：3.2.0
 
 #### recover_with_empty_tablet
@@ -804,6 +804,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 #### enable_colocate_mv_index
 
 - 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
+- 默认值: TRUE
+
+#### enable_mv_automatic_active_check
+
+- 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
 - 默认值: TRUE
 
 ## 配置 FE 静态参数
