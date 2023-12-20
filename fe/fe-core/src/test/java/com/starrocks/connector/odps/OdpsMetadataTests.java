@@ -51,6 +51,7 @@ public class OdpsMetadataTests extends MockedBase {
         odpsMetadata = new OdpsMetadata(odps, "odps", aliyunCloudCredential, odpsProperties);
     }
 
+
     @Test
     public void testListDbNames() {
         List<String> expectedDbNames = Collections.singletonList("project");
