@@ -2055,15 +2055,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         return;
     }
 
-    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
-    // we should try to remove the index_entry from cache
-    // Otherwise index may be used for later commits, keep in cache
-    if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-        manager->index_cache().remove(index_entry);
-    } else {
-        manager->index_cache().release(index_entry);
-    }
-
     {
         // Update the stats of affected rowsets.
         std::lock_guard lg(_rowset_stats_lock);
