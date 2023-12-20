@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Load data from MinIO
 
+![MinIO access key](../assets/quick-start/MinIO-create.png)
+
 ```sql
 SELECT * FROM FILES
 (
@@ -14,7 +16,7 @@ SELECT * FROM FILES
     "aws.s3.enable_ssl" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true",
-    "aws.s3.access_key" = "w3GWeZIS0k1ecnvoKa6v",
+    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
     "aws.s3.secret_key" = "hBVjPlh4lw6lJzJwB99GNYpjWF6VIqMz8NSJFPaI"
 )
 LIMIT 3;
@@ -58,7 +60,7 @@ SELECT * FROM FILES
     "aws.s3.enable_ssl" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true",
-    "aws.s3.access_key" = "w3GWeZIS0k1ecnvoKa6v",
+    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
     "aws.s3.secret_key" = "hBVjPlh4lw6lJzJwB99GNYpjWF6VIqMz8NSJFPaI"
 );
 ```
@@ -116,7 +118,7 @@ LOAD LABEL userbehavior
     "aws.s3.enable_ssl" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true",
-    "aws.s3.access_key" = "w3GWeZIS0k1ecnvoKa6v",
+    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
     "aws.s3.secret_key" = "hBVjPlh4lw6lJzJwB99GNYpjWF6VIqMz8NSJFPaI"
  )
 PROPERTIES
@@ -175,7 +177,7 @@ SELECT * FROM FILES
     "aws.s3.enable_ssl" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true",
-    "aws.s3.access_key" = "w3GWeZIS0k1ecnvoKa6v",
+    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
     "aws.s3.secret_key" = "hBVjPlh4lw6lJzJwB99GNYpjWF6VIqMz8NSJFPaI"
 );
 ```
