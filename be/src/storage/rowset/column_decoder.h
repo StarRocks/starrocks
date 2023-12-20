@@ -56,9 +56,9 @@ public:
     int16_t* code_convert_data() { return _code_convert_map.has_value() ? _code_convert_map->data() + 1 : nullptr; }
 
 private:
-    Status encode_string_to_global_id(Column* datas, Column* codes);
+    Status _encode_string_to_global_id(Column* datas, Column* codes);
 
-    Status encode_array_to_global_id(Column* datas, Column* codes);
+    Status _encode_array_to_global_id(Column* datas, Column* codes);
 
 private:
     std::optional<std::vector<int16_t>> _code_convert_map;

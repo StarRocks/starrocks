@@ -39,7 +39,7 @@ Status ColumnDecoder::encode_to_global_id(Column* datas, Column* codes) {
     return Status::NotSupported("encode to global id not support type.");
 }
 
-Status ColumnDecoder::encode_string_to_global_id(Column* datas, Column* codes) {
+Status ColumnDecoder::_encode_string_to_global_id(Column* datas, Column* codes) {
     const auto ed = _global_dict->end();
     size_t num_rows = datas->size();
     codes->resize(num_rows);
@@ -83,7 +83,7 @@ Status ColumnDecoder::encode_string_to_global_id(Column* datas, Column* codes) {
     return Status::OK();
 }
 
-Status ColumnDecoder::encode_array_to_global_id(Column* datas, Column* codes) {
+Status ColumnDecoder::_encode_array_to_global_id(Column* datas, Column* codes) {
     if (datas->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(datas);
         auto* lowcard_nullcolumn = down_cast<NullableColumn*>(codes);
