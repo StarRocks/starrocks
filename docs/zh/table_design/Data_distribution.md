@@ -612,46 +612,6 @@ DISTRIBUTED BY HASH(site_id,city_code);
   DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
   ```
 
-<<<<<<< HEAD
-      > **说明**
-      >
-      > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
-
-      建表示例：
-
-      ```sql
-      CREATE TABLE site_access1 (
-          event_day DATE,
-          site_id INT DEFAULT '10', 
-          pv BIGINT DEFAULT '0' ,
-          city_code VARCHAR(100),
-          user_name VARCHAR(32) DEFAULT '')
-      DUPLICATE KEY (event_day,site_id,pv)
-      ;--无需手动设置分区中分桶数量，并且随机分桶，无需设置分桶键
-      ```
-
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
-
-    如果是随机分桶表，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示分区**当前**的分桶数量。
-    > **注意**
-    >
-    > 对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
-
-  - 方式二：手动设置分区中分桶数量
-
-    自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
-
-    如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
-
-    ```SQL
-    CREATE TABLE site_access (
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        pv BIGINT SUM DEFAULT '0')
-    AGGREGATE KEY(site_id, city_code, user_name)
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
-=======
   </TabItem>
   <TabItem value="example2" label="随机分桶表">
 
@@ -681,14 +641,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
   :::tip
 
-<<<<<<< HEAD
-       自 2.5.7 版本起，新增分区时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持**在创建新分区时**自动设置分区中分桶数量，还支持**在导入数据至分区过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高新增分区易用性的同时，还能提升大数据集的导入性能。
-       > **说明**
-       >
-       > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在新增分区时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
-=======
   如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。 
->>>>>>> 0be1783b9f ([Doc] illustrate the logic of dynamically adding buckets for randomly distributed table (#36537))
 
   :::
 
