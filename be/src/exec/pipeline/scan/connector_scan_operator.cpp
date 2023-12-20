@@ -74,7 +74,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     void update_chunk_source_mem_bytes(int64_t value) {
         if (value == 0) return;
 
-        std::unique_lock<std::mutex> L(lock);
+        std::lock_guard<std::mutex> L(lock);
         int64_t total =
                 chunk_source_mem_bytes.load(std::memory_order_relaxed) * chunk_source_mem_bytes_update_count + value;
         chunk_source_mem_bytes_update_count += 1;

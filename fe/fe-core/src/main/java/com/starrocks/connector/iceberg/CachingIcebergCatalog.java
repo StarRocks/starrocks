@@ -133,7 +133,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void refreshTable(String dbName, String tableName, ExecutorService executorService) {
+    public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
             partitionNames.remove(icebergTableName);
@@ -141,27 +141,27 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             BaseTable currentTable = (BaseTable) getTable(dbName, tableName);
             BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
             if (updateTable == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
             TableOperations currentOps = currentTable.operations();
             TableOperations updateOps = updateTable.operations();
             if (currentOps == null || updateOps == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
 
             TableMetadata currentPointer = currentOps.current();
             TableMetadata updatePointer = updateOps.current();
             if (currentPointer == null || updatePointer == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
 
             String currentLocation = currentOps.current().metadataFileLocation();
             String updateLocation = updateOps.current().metadataFileLocation();
             if (currentLocation == null || updateLocation == null) {
-                clearCache(icebergTableName);
+                invalidateCache(icebergTableName);
                 return;
             }
             if (!currentLocation.equals(updateLocation)) {
@@ -173,11 +173,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
-    private void clearCache(IcebergTableName icebergTableName) {
-        tables.invalidate(icebergTableName);
-        partitionNames.remove(icebergTableName);
-    }
-
     public void refreshCatalog() {
         List<IcebergTableName> identifiers = Lists.newArrayList(tables.asMap().keySet());
         for (IcebergTableName identifier : identifiers) {
@@ -185,11 +180,21 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
+                invalidateCache(identifier);
             }
         }
     }
 
-    private static class IcebergTableName {
+    public void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+        partitionNames.remove(icebergTableName);
+    }
+
+    public void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+        tables.invalidate(icebergTableName);
+        partitionNames.remove(icebergTableName);
+    }
+
+    static class IcebergTableName {
         private final String dbName;
         private final String tableName;
 

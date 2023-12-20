@@ -570,7 +570,6 @@ public class ConnectProcessor {
                 handleQuit();
                 break;
             case COM_QUERY:
-            case COM_STMT_PREPARE:
                 handleQuery();
                 ctx.setStartTime();
                 break;

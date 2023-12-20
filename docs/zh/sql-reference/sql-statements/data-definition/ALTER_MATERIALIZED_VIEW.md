@@ -27,6 +27,12 @@ displayed_sidebar: "Chinese"
   - `colocate_with`
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../../reference/System_variable.md)。
 
+:::tip
+
+该操作需要对应物化视图的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```SQL

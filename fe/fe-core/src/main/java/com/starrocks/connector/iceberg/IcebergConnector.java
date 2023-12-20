@@ -22,6 +22,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
@@ -53,6 +54,7 @@ public class IcebergConnector implements Connector {
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
+    private ExecutorService refreshOtherFeExecutor;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -78,6 +80,8 @@ public class IcebergConnector implements Connector {
                 return new IcebergGlueCatalog(catalogName, conf, properties);
             case REST_CATALOG:
                 return new IcebergRESTCatalog(catalogName, conf, properties);
+            case HADOOP_CATALOG:
+                return new IcebergHadoopCatalog(catalogName, conf, properties);
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
         }
@@ -97,7 +101,8 @@ public class IcebergConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(), buildIcebergJobPlanningExecutor());
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor());
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -128,6 +133,15 @@ public class IcebergConnector implements Connector {
         return icebergJobPlanningExecutor;
     }
 
+    public ExecutorService buildRefreshOtherFeExecutor() {
+        if (refreshOtherFeExecutor == null) {
+            int threadSize = Math.max(2, Integer.parseInt(
+                    properties.getOrDefault("refresh-other-fe-iceberg-cache-thread-num", "4")));
+            refreshOtherFeExecutor = newWorkerPool(catalogName + "-refresh-others-fe-iceberg-metadata-cache", threadSize);
+        }
+        return refreshOtherFeExecutor;
+    }
+
     private ExecutorService buildBackgroundJobPlanningExecutor() {
         int defaultPoolSize = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
         int backgroundIcebergJobPlanningThreadPoolSize = Integer.parseInt(properties.getOrDefault(
@@ -140,6 +154,9 @@ public class IcebergConnector implements Connector {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCachingIcebergCatalog(catalogName);
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
+        }
+        if (refreshOtherFeExecutor != null) {
+            refreshOtherFeExecutor.shutdown();
         }
     }
 }

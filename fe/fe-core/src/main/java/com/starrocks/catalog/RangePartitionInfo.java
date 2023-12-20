@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -320,6 +321,14 @@ public class RangePartitionInfo extends PartitionInfo {
         PrimitiveType type = column.getPrimitiveType();
         if (!type.isFixedPointType() && !type.isDateType()) {
             throw new AnalysisException("Column[" + column.getName() + "] type[" + type
+                    + "] cannot be a range partition key.");
+        }
+    }
+
+    public static void checkExpressionRangeColumnType(Column column, Expr expr) throws AnalysisException {
+        PrimitiveType type = column.getPrimitiveType();
+        if (!type.isFixedPointType() && !type.isDateType()) {
+            throw new AnalysisException("Expr[" + expr.toSql() + "] type[" + type
                     + "] cannot be a range partition key.");
         }
     }

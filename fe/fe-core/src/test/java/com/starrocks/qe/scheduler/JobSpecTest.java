@@ -219,7 +219,7 @@ public class JobSpecTest extends SchedulerTestBase {
         jobSpec = coordinator.getJobSpec();
         Assert.assertEquals(loadMemLimit, jobSpec.getQueryOptions().getLoad_mem_limit());
         Assert.assertTrue(jobSpec.getQueryOptions().isSetMem_limit());
-        Assert.assertFalse(jobSpec.getQueryOptions().isSetQuery_mem_limit());
+        Assert.assertTrue(jobSpec.getQueryOptions().isSetQuery_mem_limit());
     }
 
     @Test
@@ -289,7 +289,7 @@ public class JobSpecTest extends SchedulerTestBase {
         jobSpec = coordinator.getJobSpec();
         Assert.assertEquals(loadMemLimit, jobSpec.getQueryOptions().getLoad_mem_limit());
         Assert.assertTrue(jobSpec.getQueryOptions().isSetMem_limit());
-        Assert.assertFalse(jobSpec.getQueryOptions().isSetQuery_mem_limit());
+        Assert.assertTrue(jobSpec.getQueryOptions().isSetQuery_mem_limit());
     }
 
     @Test

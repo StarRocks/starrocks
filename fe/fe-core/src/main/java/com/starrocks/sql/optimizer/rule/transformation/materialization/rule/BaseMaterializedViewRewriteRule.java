@@ -175,6 +175,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         // only add valid predicates into query split predicate
         List<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
+                    queryPartitionPredicate);
             queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
         }
         ScalarOperator queryPredicate =

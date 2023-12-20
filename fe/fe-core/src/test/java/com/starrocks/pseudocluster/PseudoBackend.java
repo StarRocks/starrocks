@@ -45,10 +45,13 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -85,6 +88,7 @@ import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
@@ -1031,6 +1035,11 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
+            return null;
+        }
+
+        @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             ExecuteCommandResultPB result = new ExecuteCommandResultPB();
             StatusPB pStatus = new StatusPB();
@@ -1053,6 +1062,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
             return null;
         }
     }

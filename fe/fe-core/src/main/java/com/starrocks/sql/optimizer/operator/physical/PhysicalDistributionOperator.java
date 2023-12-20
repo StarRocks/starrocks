@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -23,9 +24,11 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class PhysicalDistributionOperator extends PhysicalOperator {
@@ -39,13 +42,22 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
+    private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
+
     public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
         return globalDicts;
     }
 
-    public void setGlobalDicts(
-            List<Pair<Integer, ColumnDict>> globalDicts) {
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
         this.globalDicts = globalDicts;
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return globalDictsExpr;
+    }
+
+    public void setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
+        this.globalDictsExpr = globalDictsExpr;
     }
 
     @Override

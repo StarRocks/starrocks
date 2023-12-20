@@ -25,6 +25,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
     public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
     public static final String AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
+    public static final String AWS_S3_STS_REGION = "aws.s3.sts.region";
+    public static final String AWS_S3_STS_ENDPOINT = "aws.s3.sts.endpoint";
     public static final String AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
     public static final String AWS_S3_REGION = "aws.s3.region";
     public static final String AWS_S3_ENDPOINT = "aws.s3.endpoint";
@@ -51,6 +53,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
     public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
     public static final String AWS_GLUE_IAM_ROLE_ARN = "aws.glue.iam_role_arn";
+    public static final String AWS_GLUE_STS_REGION = "aws.glue.sts.region";
+    public static final String AWS_GLUE_STS_ENDPOINT = "aws.glue.sts.endpoint";
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";

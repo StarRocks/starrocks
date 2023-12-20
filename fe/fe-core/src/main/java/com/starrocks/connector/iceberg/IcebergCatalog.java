@@ -87,4 +87,10 @@ public interface IcebergCatalog {
 
     default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
     }
+
+    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
 }

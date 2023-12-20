@@ -21,6 +21,7 @@
 #include "io/seekable_input_stream.h"
 #include "util/bit_util.h"
 #include "util/raw_container.h"
+#include "util/slice.h"
 
 namespace starrocks {
 class StreamCompression;

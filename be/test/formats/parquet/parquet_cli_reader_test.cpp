@@ -46,7 +46,7 @@ protected:
         if (status.ok()) {
             res = fmt::format("File path: {}, OK", filepath);
         } else {
-            res = fmt::format("File path: {}, FAILED: {}", filepath, status.get_error_msg());
+            res = fmt::format("File path: {}, FAILED: {}", filepath, status.message());
         }
         std::cout << res << std::endl;
     }
@@ -104,7 +104,7 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
             if (unsupported_paths_get_next.find(path) != unsupported_paths_get_next.end()) {
                 ASSERT_FALSE(res.ok());
             } else {
-                ASSERT_TRUE(res.ok()) << res.status().get_error_msg();
+                ASSERT_TRUE(res.ok()) << res.status().message();
             }
             st = res.status();
         }
