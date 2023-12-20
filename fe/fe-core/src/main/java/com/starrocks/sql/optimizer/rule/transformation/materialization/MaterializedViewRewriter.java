@@ -1859,7 +1859,7 @@ public class MaterializedViewRewriter {
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression,
-                materializationContext.getOptimizerContext().getViewPlanMap());
+                materializationContext.getOptimizerContext().getViewScans());
         if (queryExpression == null) {
             return null;
         }
@@ -2048,7 +2048,7 @@ public class MaterializedViewRewriter {
         partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
         // for view based mv rewrite, we should mapping the partition column to output column of view scan
         if (optimizerContext.getViewPlanMap() != null) {
-            for (LogicalViewScanOperator viewScanOperator : optimizerContext.getViewPlanMap().keySet()) {
+            for (LogicalViewScanOperator viewScanOperator : optimizerContext.getViewScans()) {
                 Projection projection = viewScanOperator.getProjection();
                 if (viewScanOperator.getProjection() != null) {
                     for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {

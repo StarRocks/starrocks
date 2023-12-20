@@ -147,7 +147,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final boolean keepView;
+    private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
@@ -166,7 +166,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.session = context.getSession();
         this.outer = context.getOuter();
         this.cteContext = context.getCteContext();
-        this.keepView = context.isKeepView();
+        this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
     }
 
@@ -251,7 +251,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, keepView).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, inlineView).plan(node, outer);
     }
 
     @Override
@@ -661,13 +661,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
-        List<ColumnRefOperator> newOutputColumns = keepView ? Lists.newArrayList() : null;
-        if (keepView) {
-            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
-            OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
-                    new ExpressionMapping(node.getScope(), newOutputColumns));
-            return new LogicalPlan(scanBuilder, newOutputColumns, null);
-        } else {
+        List<ColumnRefOperator> newOutputColumns = inlineView ? null : Lists.newArrayList();
+        if (inlineView) {
+            // expand views in logical plan
             OptExprBuilder builder = new OptExprBuilder(
                     logicalPlan.getRoot().getOp(),
                     logicalPlan.getRootBuilder().getInputs(),
@@ -677,6 +673,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        } else {
+            // do not expand views in logical plan
+            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
+            OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
+                    new ExpressionMapping(node.getScope(), newOutputColumns));
+            return new LogicalPlan(scanBuilder, newOutputColumns, null);
         }
     }
 
@@ -726,7 +728,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
                 new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping);
-        if (!keepView) {
+        if (inlineView) {
             // add a projection to make sure output columns keep the same,
             // because LogicalViewScanOperator should be logically equivalent to logicalPlan
             Projection projection = new Projection(projectionMap);

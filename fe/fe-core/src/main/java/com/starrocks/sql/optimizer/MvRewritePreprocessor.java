@@ -113,7 +113,7 @@ public class MvRewritePreprocessor {
                         getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
                 Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
                 prepareRelatedMVs(queryTables, validMVs);
-                if (!validMVs.isEmpty()) {
+                if (!validMVs.isEmpty() && connectContext.getSessionVariable().isEnableViewBasedMvRewrite()) {
                     // if related mvs is empty, no need to process plans with view
                     processPlanWithView(connectContext, logicalTree, queryColumnRefFactory, requiredColumns);
                 }
@@ -189,16 +189,15 @@ public class MvRewritePreprocessor {
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
         context.setLogicalTreeWithView(optimizedPlan);
 
-        Map<LogicalViewScanOperator, OptExpression> optimizedViewPlanMap = Maps.newHashMap();
         for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
             OptExpression viewLogicalTree = viewPlanMap.get(viewScanOperator);
             // optimize logical tree of view and keep them in OptimizerContext,
             // which will be used in union rewrite or only some views are rewritten
             OptExpression optimizedViewPlan = optimizeViewPlan(
                     viewLogicalTree, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            optimizedViewPlanMap.put(viewScanOperator, optimizedViewPlan);
+            viewScanOperator.setOriginalPlan(optimizedViewPlan);
         }
-        context.setViewPlanMap(optimizedViewPlanMap);
+        context.setViewScans(Lists.newArrayList(viewPlanMap.keySet()));
     }
 
     private OptExpression optimizeViewPlan(

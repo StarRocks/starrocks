@@ -389,7 +389,7 @@ public class MvUtils {
             ColumnRefFactory columnRefFactory,
             ConnectContext connectContext,
             OptimizerConfig optimizerConfig,
-            boolean keepView) {
+            boolean inlineView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -404,7 +404,7 @@ public class MvUtils {
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, keepView);
+                new TransformerContext(columnRefFactory, connectContext, inlineView);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -1573,13 +1573,13 @@ public class MvUtils {
     }
 
     public static OptExpression replaceLogicalViewScanOperator(
-            OptExpression queryExpression, Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
-        if (viewPlanMap == null) {
+            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+        if (viewScans == null) {
             return queryExpression;
         }
         // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewPlanMap);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
         if (!viewScanOperators.isEmpty()) {
@@ -1594,18 +1594,16 @@ public class MvUtils {
             OptExpression parent,
             int index,
             OptExpression queryExpression,
-            Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
+            List<LogicalViewScanOperator> viewScans) {
         LogicalOperator op = queryExpression.getOp().cast();
         if (op instanceof LogicalViewScanOperator) {
-            if (!viewPlanMap.containsKey(op)) {
-                return;
-            }
-            OptExpression viewPlan = viewPlanMap.get(op);
+            LogicalViewScanOperator viewScanOperator = op.cast();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
             parent.setChild(index, viewPlan);
             return;
         }
         for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewPlanMap);
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
         }
     }
 

@@ -491,16 +491,16 @@ public class Optimizer {
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
             List<Operator> viewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
-            if (viewScanOperators.size() < context.getViewPlanMap().size()) {
+            if (viewScanOperators.size() < context.getViewScans().size()) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
                 if (!viewScanOperators.isEmpty()) {
                     // if there are view scan operator left, we should replace it back to original plans
-                    MvUtils.replaceLogicalViewScanOperator(tree, context.getViewPlanMap());
+                    MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());
                 }
             }
         } catch (Exception e) {
-            LOG.warn("view based mv rule rewrite failed.", e);
+            OptimizerTraceUtil.logMVRewrite("VIEW_BASED_MV_REWRITE", "single table view based mv rule rewrite failed.", e);
         } finally {
             // reset logical tree with view
             // no need to try view base rewrite in cost phase again

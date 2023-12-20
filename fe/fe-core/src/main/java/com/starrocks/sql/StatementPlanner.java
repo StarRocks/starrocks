@@ -169,7 +169,8 @@ public class StatementPlanner {
         LogicalPlan logicalPlan;
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
-            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, false);
+            // get a logicalPlan without inlining views
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
@@ -222,7 +223,8 @@ public class StatementPlanner {
 
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
-                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, false);
+                // get a logicalPlan without inlining views
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
                 logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 

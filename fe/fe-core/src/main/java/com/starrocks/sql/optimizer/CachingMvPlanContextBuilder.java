@@ -40,6 +40,9 @@ public class CachingMvPlanContextBuilder {
         return INSTANCE;
     }
 
+    // After view based mv rewrite, one mv may has views as based tables.
+    // It can return logical plans with or without inline views.
+    // So here should return a List<MvPlanContext> for one mv
     private Cache<MaterializedView, List<MvPlanContext>> buildCache() {
         return Caffeine.newBuilder()
                 .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)

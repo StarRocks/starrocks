@@ -375,8 +375,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "baseTableInfos")
     private List<BaseTableInfo> baseTableInfos;
 
-    private transient List<TableType> baseTableTypes = Lists.newArrayList();
-
     @SerializedName(value = "active")
     private boolean active;
 
@@ -457,8 +455,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.baseTableInfos = Lists.newArrayList();
         this.baseTableInfos.add(
                 new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getName(), baseTable.getId()));
-        baseTableTypes = Lists.newArrayList();
-        baseTableTypes.add(baseTable.getType());
 
         Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -540,15 +536,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public List<TableType> getBaseTableTypes() {
-        if (baseTableTypes == null) {
-            baseTableTypes = Lists.newArrayList();
+        if (baseTableInfos == null) {
+            return Lists.newArrayList();
         }
-        if (baseTableTypes.isEmpty()) {
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Table table = baseTableInfo.getTable();
-                baseTableTypes.add(table.getType());
-            }
-        }
+        List<TableType> baseTableTypes = Lists.newArrayList();
+        baseTableInfos.forEach(tableInfo -> baseTableTypes.add(tableInfo.getTable().getType()));
         return baseTableTypes;
     }
 
@@ -810,9 +802,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (!queryOutputIndices.isEmpty()) {
             mv.setQueryOutputIndices(Lists.newArrayList(queryOutputIndices));
         }
-        if (baseTableTypes != null) {
-            mv.baseTableTypes = Lists.newArrayList(baseTableTypes);
-        }
     }
 
     @Override
@@ -895,7 +884,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         return false;
                     }
                     baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), tableId));
-                    baseTableTypes.add(table.getType());
                 }
             } else {
                 active = false;
@@ -906,7 +894,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (baseTableInfos.stream().anyMatch(t -> Strings.isNullOrEmpty(t.getTableName()))) {
                 // fill table name for base table info.
                 List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
-                List<TableType> newBaseTableTypes = Lists.newArrayList();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Table table = baseTableInfo.getTable();
                     if (table == null) {
@@ -915,10 +902,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         return false;
                     }
                     newBaseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), table.getId()));
-                    newBaseTableTypes.add(table.getType());
                 }
                 this.baseTableInfos = newBaseTableInfos;
-                this.baseTableTypes = newBaseTableTypes;
             }
         }
 

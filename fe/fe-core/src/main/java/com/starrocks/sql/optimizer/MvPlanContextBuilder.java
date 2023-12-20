@@ -37,7 +37,7 @@ public class MvPlanContextBuilder {
         List<MvPlanContext> results = Lists.newArrayList(contextWithoutView);
         List<TableType> baseTableTypes = mv.getBaseTableTypes();
         if (baseTableTypes.stream().anyMatch(type -> type == TableType.VIEW)) {
-            MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, true);
+            MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
             results.add(contextWithView);
         }
         return results;

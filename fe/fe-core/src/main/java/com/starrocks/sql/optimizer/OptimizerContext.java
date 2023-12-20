@@ -67,8 +67,8 @@ public class OptimizerContext {
     // used by view based mv rewrite
     // query's logical plan with view
     private OptExpression logicalTreeWithView;
-    // store every view's optimized logical plan
-    private Map<LogicalViewScanOperator, OptExpression> viewPlanMap;
+    // collect LogicalViewScanOperators
+    private List<LogicalViewScanOperator> viewScans;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -250,12 +250,16 @@ public class OptimizerContext {
         this.logicalTreeWithView = logicalTreeWithView;
     }
 
-    public void setViewPlanMap(Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
-        this.viewPlanMap = viewPlanMap;
+    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
+        this.viewScans = viewScans;
     }
 
-    public Map<LogicalViewScanOperator, OptExpression> getViewPlanMap() {
-        return viewPlanMap;
+    public List<LogicalViewScanOperator> getViewScans() {
+        return viewScans;
+    }
+
+    public List<LogicalViewScanOperator> getViewPlanMap() {
+        return viewScans;
     }
 
     public void addAppliedRule(Rule rule) {

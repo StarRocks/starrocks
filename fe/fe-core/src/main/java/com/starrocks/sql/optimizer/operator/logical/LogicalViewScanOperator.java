@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -33,6 +34,8 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
     private int relationId;
     private ColumnRefSet outputColumnSet;
     private Map<Expr, ColumnRefOperator> expressionToColumns;
+
+    private OptExpression originalPlan;
 
     // add output mapping from new column to original column
     // used to construct partition predicates
@@ -69,6 +72,14 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
 
     public int getRelationId() {
         return relationId;
+    }
+
+    public void setOriginalPlan(OptExpression originalPlan) {
+        this.originalPlan = originalPlan;
+    }
+
+    public OptExpression getOriginalPlan() {
+        return this.originalPlan;
     }
 
     @Override

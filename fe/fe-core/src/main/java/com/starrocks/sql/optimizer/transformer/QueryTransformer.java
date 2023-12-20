@@ -66,14 +66,14 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
-    private final boolean keepView;
+    private final boolean inlineView;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean keepView) {
+                            CTETransformerContext cteContext, boolean inlineView) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
-        this.keepView = keepView;
+        this.inlineView = inlineView;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -161,7 +161,7 @@ class QueryTransformer {
                 session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
                 newCteContext,
-                keepView);
+                inlineView);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
