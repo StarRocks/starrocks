@@ -32,9 +32,9 @@ Status ColumnDecoder::encode_to_global_id(Column* datas, Column* codes) {
         data = nullable_column->data_column().get();
     }
     if (data->is_binary()) {
-        return encode_string_to_global_id(datas, codes);
+        return _encode_string_to_global_id(datas, codes);
     } else if (data->is_array()) {
-        return encode_array_to_global_id(datas, codes);
+        return _encode_array_to_global_id(datas, codes);
     }
     return Status::NotSupported("encode to global id not support type.");
 }
