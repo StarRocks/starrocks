@@ -134,7 +134,6 @@ public class MockedBase {
 
         InputSplit split0 = new IndexedInputSplit("session", 0);
         InputSplit split1 = new IndexedInputSplit("session", 1);
-
         when(inputSplitAssigner.getAllSplits()).thenReturn(new InputSplit[] {split0, split1});
         when(inputSplitAssigner.getSplit(0)).thenReturn(split0);
         when(inputSplitAssigner.getSplit(1)).thenReturn(split1);
