@@ -154,7 +154,7 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer, bool on_close) {
 
     bool ok = _io_executor->try_offer([&, req = std::move(req), buffer = std::move(buffer)] {
         LOG(INFO) << "Uploading s3://" << _bucket << "/" << _object << " via multipart upload"
-                      << " part = " << req.GetPartNumber() << " length = " << req.GetContentLength();
+                  << " part = " << req.GetPartNumber() << " length = " << req.GetContentLength();
         auto outcome = _client->UploadPart(req);
         std::unique_lock<std::mutex> lock(_mutex);
         if (outcome.IsSuccess()) {

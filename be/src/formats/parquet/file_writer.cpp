@@ -442,8 +442,7 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
-          _parent_profile(parent_profile) {
-}
+          _parent_profile(parent_profile) {}
 
 Status AsyncFileWriter::_flush_row_group() {
     if (_chunk_writer != nullptr) {
