@@ -52,4 +52,22 @@ public class IcebergPartitionUtilsTest {
         Set<IcebergPartitionUtils.IcebergPartition> set = ImmutableSet.of(partition1, partition2, partition3);
         Assert.assertEquals(2, set.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testIcebergGetAllPartition() {
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+
+        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().
+                getTable("iceberg0", "partitioned_db", "t1");
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-03");
+        Set<IcebergPartitionUtils.IcebergPartition> partitions = IcebergPartitionUtils.
+                getAllPartition(icebergTable.getNativeTable());
+        Assert.assertEquals(2, partitions.size());
+    }
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
 }

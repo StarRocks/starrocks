@@ -45,21 +45,17 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
-
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * Abstract the partition-related interfaces for different connectors, including Iceberg/Hive/....
@@ -416,8 +412,9 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Optional<Long> maxPartitionRefreshTs() {
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
             IcebergTable icebergTable = (IcebergTable) table;
+<<<<<<< HEAD
             return Optional.of(icebergTable.getRefreshSnapshotTime());
         }
 
@@ -462,6 +459,16 @@ public abstract class ConnectorPartitionTraits {
                 }
             }
             return result;
+=======
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(icebergTable.getCatalogName(), table, partitionNames);
+        }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            IcebergTable icebergTable = (IcebergTable) table;
+            return icebergTable.getSnapshot().map(Snapshot::timestampMillis);
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
         }
     }
 
