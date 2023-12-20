@@ -15,14 +15,14 @@ Release date: December 18, 2023
 - Supports obtaining heap profiles by using a command line tool, making troubleshooting easier.[#35322](https://github.com/StarRocks/starrocks/pull/35322)
 - Supports creating asynchronous materialized views with common table expressions (CTEs). [#36142](https://github.com/StarRocks/starrocks/pull/36142)
 - Added the following bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/). [#35817](https://github.com/StarRocks/starrocks/pull/35817) [#35621](https://github.com/StarRocks/starrocks/pull/35621)
+- Optimized the logic used to compute compaction scores for Primary Key tables, thereby aligning the compaction scores for Primary Key tables within a more consistent range with the other three table types. [#36534](https://github.com/StarRocks/starrocks/pull/36534)
 
 ### Parameter Changes
 
-- The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 - The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
-- A new [FE configuration item](https://docs.starrocks.io/zh/docs/administration/Configuration/#配置-fe-动态参数) `routine_load_unstable_threshold_second` is added. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - A new BE configuration item `enable_lazy_delta_column_compaction` is added. The default value is `true`, indicating that StarRocks does not perform frequent compaction operations on delta columns. [#36654](https://github.com/StarRocks/starrocks/pull/36654)
+- A new FE configuration item `enable_mv_automatic_active_check` is added to control whether the system automatically checks and re-activates the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. The default value is `true`. [#36463](https://github.com/StarRocks/starrocks/pull/36463)
 
 ### Improvements
 
@@ -49,6 +49,8 @@ Fixed the following issues:
 - After the DISTINCT window operator pushdown feature is enabled, errors are reported if SELECT DISTINCT operations are performed on the complex expressions of the columns computed by window functions. [#36357](https://github.com/StarRocks/starrocks/pull/36357)
 - The BEs crash if the source data file is in ORC format and contains nested arrays. [#36127](https://github.com/StarRocks/starrocks/pull/36127)
 - Some S3-compatible object storage returns duplicate files, causing the BEs to crash. [#36103](https://github.com/StarRocks/starrocks/pull/36103)
+- The [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- Global Runtime Filter may cause BEs to crash in certain scenarios. [#35776](https://github.com/StarRocks/starrocks/pull/35776)
 
 ## 3.1.5
 
