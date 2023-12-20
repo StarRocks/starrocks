@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -306,6 +307,10 @@ public class JoinPredicatePushdown {
     private void deriveIsNotNullPredicate(
             List<BinaryPredicateOperator> onEQPredicates, OptExpression join,
             List<ScalarOperator> leftPushDown, List<ScalarOperator> rightPushDown) {
+        if (!ConnectContext.get().getSessionVariable().isCboDeriveJoinIsNullPredicate()) {
+            return;
+        }
+
         List<ScalarOperator> leftEQ = Lists.newArrayList();
         List<ScalarOperator> rightEQ = Lists.newArrayList();
 
@@ -324,6 +329,7 @@ public class JoinPredicatePushdown {
         }
 
         LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
+
         JoinOperator joinType = joinOp.getJoinType();
         if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
             leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(leftPushDown::add);
