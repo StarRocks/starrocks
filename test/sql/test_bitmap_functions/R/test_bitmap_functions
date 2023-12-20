@@ -753,3 +753,53 @@ select c1, bitmap_min(subdivide_bitmap) as min_value, bitmap_to_string(subdivide
 6	8589934592	8589934592,8589934593,8589934594,8589934595,8589934596,8589934597,8589934598,8589934599,8589934600,8589934601
 6	8589934602	8589934602,8589934603,8589934604,8589934605,8589934606,8589934607,8589934608,8589934609,8589934610
 -- !result
+-- name: test_bitmap_to_array
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 select 1, bitmap_empty();
+-- result:
+-- !result
+select bitmap_to_array(c2) from t1;
+-- result:
+[]
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 select 1, to_bitmap(1);
+-- result:
+-- !result
+select bitmap_to_array(c2) from t1;
+-- result:
+[1]
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 10));
+-- result:
+-- !result
+select bitmap_to_array(c2) from t1;
+-- result:
+[1,2,3,4,5,6,7,8,9,10]
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 40));
+-- result:
+-- !result
+select bitmap_to_array(c2) from t1;
+-- result:
+[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+-- !result
