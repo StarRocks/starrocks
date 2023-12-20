@@ -1862,6 +1862,10 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     if (!_compaction_state) {
         _compaction_state = std::make_unique<CompactionState>();
     }
+    auto failure_handler = [&](const std::string& msg) {
+        LOG(ERROR) << msg;
+        _set_error(msg);
+    };
     int64_t t_start = MonotonicMillis();
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
