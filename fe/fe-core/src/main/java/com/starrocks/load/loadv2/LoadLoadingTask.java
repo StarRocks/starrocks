@@ -132,6 +132,7 @@ public class LoadLoadingTask extends LoadTask {
         this.partialUpdateMode = partialUpdateMode;
     }
 
+<<<<<<< HEAD
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         if (!Config.enable_pipeline_load) {
@@ -147,6 +148,15 @@ public class LoadLoadingTask extends LoadTask {
             loadPlanner.setPartialUpdateMode(partialUpdateMode);
             loadPlanner.plan();
         }
+=======
+    public void prepare() throws UserException {
+        loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusList, fileNum);
+        loadPlanner.setPartialUpdateMode(partialUpdateMode);
+        loadPlanner.setMergeConditionStr(mergeConditionStr);
+        loadPlanner.plan();
+>>>>>>> ad770562e9 ([Feature] support condition update in broker load (#37400))
     }
 
     public TUniqueId getLoadId() {
