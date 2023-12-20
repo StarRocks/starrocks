@@ -47,6 +47,10 @@ public:
     int64_t data_version() const { return _data_version; }
     void update_data_version(int64_t version) { _data_version = version; }
 
+    void lock() { _mutex.lock(); }
+
+    void unlock() { _mutex.unlock(); }
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
@@ -54,6 +58,8 @@ private:
 private:
     // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
     int64_t _data_version = 0;
+    // make sure at most 1 thread is read or write primary index
+    std::mutex _mutex;
 };
 
 } // namespace lake

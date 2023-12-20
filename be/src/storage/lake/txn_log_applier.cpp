@@ -49,6 +49,8 @@ public:
     ~PrimaryKeyTxnLogApplier() override {
         // must release primary index before `handle_failure`, otherwise `handle_failure` will fail
         _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+        auto& index = _index_entry->value();
+        index.unlock();
         _index_entry = nullptr;
         // handle failure first, then release lock
         _builder.handle_failure();

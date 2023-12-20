@@ -68,8 +68,14 @@ public:
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids);
+    Status get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
+                                          const std::vector<ColumnUniquePtr>& upserts,
+                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
                                    std::vector<std::vector<uint64_t>>* rss_rowids);
+    Status get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
+                                          const std::vector<ColumnUniquePtr>& upserts,
+                                          std::vector<std::vector<uint64_t>>* rss_rowids);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,

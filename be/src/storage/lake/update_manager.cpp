@@ -79,6 +79,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
+    index.lock();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -132,7 +133,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true, false));
     TRACE_COUNTER_INCREMENT("state_bytes", state.memory_usage());
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // 2. rewrite segment file if it is partial update
@@ -340,6 +341,22 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
     Status st;
     st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
+        std::lock_guard<LakePrimaryIndex> lk(index);
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            st.update(index.get(pks, (*rss_rowids)[i]));
+        }
+    }));
+    return st;
+}
+
+Status UpdateManager::get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
+                                                     const std::vector<ColumnUniquePtr>& upserts,
+                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    Status st;
+    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+        // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
             auto& pks = *upserts[i];
@@ -352,6 +369,22 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
                                               const std::vector<ColumnUniquePtr>& upserts,
                                               std::vector<std::vector<uint64_t>>* rss_rowids) {
+    Status st;
+    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+        std::lock_guard<LakePrimaryIndex> lk(index);
+        // get rss_rowids for each segment of rowset
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            st.update(index.get(pks, &((*rss_rowids)[i])));
+        }
+    }));
+    return st;
+}
+
+Status UpdateManager::get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
+                                                     const std::vector<ColumnUniquePtr>& upserts,
+                                                     std::vector<std::vector<uint64_t>>* rss_rowids) {
     Status st;
     st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
@@ -716,7 +749,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
     if (metadata_ptr != nullptr) {
-        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false);
+        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false, true);
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
             if (!st.is_uninitialized()) {
