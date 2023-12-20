@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
@@ -51,12 +50,10 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
-    private   JDBCAsyncCache<String, List<String>> dbNamesCache;
-    private  JDBCAsyncCache<String, List<String>> tableNamesCache;
-    private  JDBCAsyncCache<String, List<String>> partitionNamesCache;
-    private  JDBCAsyncCache<String, Integer> tableIdCache;
-    private  JDBCAsyncCache<String, Table> tableInstanceCache;
-    private  JDBCAsyncCache<String, List<Partition>> partitionInfoCache;
+    private JDBCAsyncCache<JDBCTableName, List<String>> partitionNamesCache;
+    private JDBCAsyncCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCAsyncCache<JDBCTableName, Table> tableInstanceCache;
+    private JDBCAsyncCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -80,8 +77,6 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
-        dbNamesCache = new JDBCAsyncCache<>(properties, false);
-        tableNamesCache = new JDBCAsyncCache<>(properties, false);
         partitionNamesCache = new JDBCAsyncCache<>(properties, false);
         tableIdCache = new JDBCAsyncCache<>(properties, true);
         tableInstanceCache = new JDBCAsyncCache<>(properties, false);
@@ -104,13 +99,11 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return dbNamesCache.get("listDbNames", k -> {
-            try (Connection connection = getConnection()) {
-                return Lists.newArrayList(schemaResolver.listSchemas(connection));
-            } catch (SQLException e) {
-                throw new StarRocksConnectorException("refresh db names cache for JDBC catalog fail!", e);
-            }
-        });
+        try (Connection connection = getConnection()) {
+            return Lists.newArrayList(schemaResolver.listSchemas(connection));
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException("refresh db names cache for JDBC catalog fail!", e);
+        }
     }
 
     @Override
@@ -128,28 +121,24 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        return tableNamesCache.get(dbName,
-                k -> {
-                    try (Connection connection = getConnection()) {
-                        try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
-                            ImmutableList.Builder<String> list = ImmutableList.builder();
-                            while (resultSet.next()) {
-                                String tableName = resultSet.getString("TABLE_NAME");
-                                list.add(tableName);
-                            }
-                            return list.build();
-                        }
-                    } catch (SQLException e) {
-                        throw new StarRocksConnectorException("refresh table names cache for JDBC catalog fail!", e);
-                    }
+        try (Connection connection = getConnection()) {
+            try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
+                ImmutableList.Builder<String> list = ImmutableList.builder();
+                while (resultSet.next()) {
+                    String tableName = resultSet.getString("TABLE_NAME");
+                    list.add(tableName);
                 }
-        );
+                return list.build();
+            }
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException("refresh table names cache for JDBC catalog fail!", e);
+        }
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        StringBuilder key = new StringBuilder();
-        return tableInstanceCache.get(key.append(dbName).append("-").append(tblName).toString(),
+        JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
+        return tableInstanceCache.get(jdbcTable,
                 k -> {
                     try (Connection connection = getConnection()) {
                         ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
@@ -161,9 +150,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                         if (fullSchema.isEmpty()) {
                             return null;
                         }
-                        StringBuilder tableIdKey = new StringBuilder();
-                        Integer tableId = tableIdCache.getPersistentCache(
-                                tableIdKey.append(dbName).append("-").append(tblName).toString(),
+
+                        Integer tableId = tableIdCache.getPersistentCache(jdbcTable,
                                 j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
                         return schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
@@ -176,13 +164,13 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
-        StringBuilder key = new StringBuilder();
-        return partitionNamesCache.get(key.append(databaseName).append("-").append(tableName).toString(),
+        return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {
                         return schemaResolver.listPartitionNames(connection, databaseName, tableName);
                     } catch (SQLException e) {
-                        throw new StarRocksConnectorException("refresh partition names cache for JDBC catalog fail!", e);
+                        throw new StarRocksConnectorException("refresh partition names cache for JDBC catalog fail!",
+                                e);
                     }
                 });
     }
@@ -192,7 +180,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
                     .stream().map(String::toLowerCase).collect(Collectors.toSet());
             if (!partitionColumnNames.isEmpty()) {
-                return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
+                return fullSchema.stream()
+                        .filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
                         .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
@@ -205,10 +194,9 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        StringBuilder key = new StringBuilder();
         JDBCTable jdbcTable = (JDBCTable) table;
-        List<Partition> partitions = partitionInfoCache.get(key.append(
-                        jdbcTable.getDbName()).append("-").append(jdbcTable.getName()).toString(),
+        List<Partition> partitions = partitionInfoCache.get(
+                new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName()),
                 k -> {
                     try (Connection connection = getConnection()) {
                         List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
@@ -247,13 +235,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        StringBuilder keyBuilder = new StringBuilder();
-        String key = keyBuilder.append(jdbcTable.getDbName()).append("-").append(jdbcTable.getName()).toString();
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName());
         if (!onlyCachedPartitions) {
-            tableInstanceCache.invalidate(key);
+            tableInstanceCache.invalidate(jdbcTableName);
         }
-        partitionNamesCache.invalidate(key);
-        partitionInfoCache.invalidate(key);
+        partitionNamesCache.invalidate(jdbcTableName);
+        partitionInfoCache.invalidate(jdbcTableName);
     }
 
     public void refreshCache(Map<String, String> properties) {
