@@ -191,7 +191,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     PROPERTIES (
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
