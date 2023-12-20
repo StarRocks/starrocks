@@ -2603,7 +2603,7 @@ public class Config extends ConfigBase {
      * The refresh partition number when refreshing materialized view at once by default.
      */
     @ConfField(mutable = true)
-    public static int default_mv_partition_refresh_number = 1;
+    public static int default_mv_partition_refresh_number = -1;
 
     /**
      * Whether analyze the mv after refresh in async mode.
