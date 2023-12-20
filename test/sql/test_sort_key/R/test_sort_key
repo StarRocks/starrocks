@@ -24,7 +24,7 @@ PROPERTIES (
     "enable_persistent_index" = "false"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must include all key columns and cannot have any columns other than key columns..')
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must be same with key columns.')
 -- !result
 CREATE TABLE `agg_test` (
     `k1` int(11) NOT NULL COMMENT "",
@@ -44,7 +44,7 @@ PROPERTIES (
     "enable_persistent_index" = "false"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must include all key columns and cannot have any columns other than key columns..')
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must be same with key columns.')
 -- !result
 CREATE TABLE `agg_test` (
     `k1` int(11) NOT NULL COMMENT "",
@@ -101,11 +101,11 @@ select * from agg_test;
 -- !result
 alter table agg_test order by (k2,v1);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must include all key columns and cannot have any other columns')
+E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must be same with key columns.')
 -- !result
 alter table agg_test order by (k2);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must include all key columns and cannot have any other columns')
+E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must be same with key columns.')
 -- !result
 alter table agg_test order by (k1,k2);
 -- result:
@@ -203,7 +203,7 @@ PROPERTIES (
     "storage_format" = "DEFAULT"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must include all key columns and cannot have any columns other than key columns..')
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must be same with key columns.')
 -- !result
 CREATE TABLE `uni_test` (
     `k1` int(11) NOT NULL COMMENT "",
@@ -222,7 +222,7 @@ PROPERTIES (
     "storage_format" = "DEFAULT"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must include all key columns and cannot have any columns other than key columns..')
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must be same with key columns.')
 -- !result
 CREATE TABLE `uni_test` (
     `k1` int(11) NOT NULL COMMENT "",
@@ -278,11 +278,11 @@ select * from uni_test;
 -- !result
 alter table uni_test order by (k2,v1);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must include all key columns and cannot have any other columns')
+E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must be same with key columns.')
 -- !result
 alter table uni_test order by (k2);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must include all key columns and cannot have any other columns')
+E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must be same with key columns.')
 -- !result
 alter table uni_test order by (k1,k2);
 -- result:
