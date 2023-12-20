@@ -61,6 +61,7 @@ struct AcquireBlockOptions {
     TUniqueId query_id;
     int32_t plan_node_id;
     std::string name;
+    bool direct_io = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

@@ -67,6 +67,7 @@ public:
     virtual Status done() = 0;
     // flush all data to callback, then release the memory in memory table
     // flush will be called in IO threads
+    // flush needs to be designed to be reentrant. Because callbacks can return Status::Yield.
     virtual Status flush(FlushCallBack callback) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
@@ -98,6 +99,7 @@ public:
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
 private:
+    size_t _processed_index{};
     std::vector<ChunkPtr> _chunks;
 };
 

@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include "common/config.h"
+#include "gen_cpp/StatusCode_types.h"
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
@@ -252,6 +253,8 @@ std::string Status::code_as_string() const {
         return "Transaction not exist";
     case TStatusCode::TXN_IN_PROCESSING:
         return "Transaction in processing";
+    case TStatusCode::YIELD:
+        return "Task yield";
     }
     return {};
 }

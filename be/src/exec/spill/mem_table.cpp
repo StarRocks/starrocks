@@ -55,9 +55,10 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 }
 
 Status UnorderedMemTable::flush(FlushCallBack callback) {
-    for (const auto& chunk : _chunks) {
-        RETURN_IF_ERROR(callback(chunk));
+    while (_processed_index < _chunks.size()) {
+        RETURN_IF_ERROR(callback(_chunks[_processed_index++]));
     }
+    _processed_index = {};
     int64_t consumption = _tracker->consumption();
     _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);

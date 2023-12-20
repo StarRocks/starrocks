@@ -28,7 +28,39 @@ enum class SerdeType {
     BY_COLUMN,
 };
 
+struct AlignedBuffer {
+    AlignedBuffer() = default;
+
+    ~AlignedBuffer() noexcept {
+        if (_data) {
+            free(_data);
+            _data = nullptr;
+        }
+    }
+
+    uint8_t* data() const { return (uint8_t*)_data; }
+
+    void resize(size_t size) {
+        const size_t BLOCKSIZE = 4096;
+        if (_capacity < size) {
+            if (UNLIKELY(posix_memalign(&_data, BLOCKSIZE, size) != 0)) {
+                throw ::std::bad_alloc();
+            }
+            _capacity = size;
+        }
+        _size = size;
+    }
+
+    size_t size() const { return _size; }
+
+private:
+    void* _data = nullptr;
+    size_t _capacity{};
+    size_t _size{};
+};
+
 struct SerdeContext {
+    AlignedBuffer aligned_buffer;
     std::string serialize_buffer;
 };
 class Spiller;
@@ -42,7 +74,7 @@ public:
 
     virtual Status prepare() = 0;
     // serialize chunk and append the serialized data into block
-    virtual Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
+    virtual Status serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
     // deserialize data from block, return the chunk after deserialized
     virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) = 0;
 

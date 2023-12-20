@@ -346,6 +346,9 @@ public:
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
     int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    bool spill_enable_direct_io() const {
+        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+    }
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
