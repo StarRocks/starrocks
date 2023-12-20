@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -99,7 +100,8 @@ public class AlterViewInfo implements Writable {
         AlterViewInfo otherInfo = (AlterViewInfo) other;
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
-                newFullSchema.equals(otherInfo.getNewFullSchema()) && comment.equalsIgnoreCase(otherInfo.getComment());
+                newFullSchema.equals(otherInfo.getNewFullSchema())
+                && StringUtils.equalsIgnoreCase(comment, otherInfo.getComment());
     }
 
     @Override

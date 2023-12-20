@@ -1179,7 +1179,8 @@ public class AlterJobMgr {
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
-            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode, comment);
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema,
+                    sqlMode, comment);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
             LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
