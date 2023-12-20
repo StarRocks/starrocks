@@ -185,6 +185,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 } else {
                     this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
                 }
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
+                }
                 this.traceLog = planAndTrace.second;
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);

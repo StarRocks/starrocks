@@ -24,27 +24,21 @@ import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PClearDictionaryCacheRequest;
-import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
-import com.starrocks.proto.PGetDictionaryStatisticRequest;
-import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
@@ -154,7 +148,7 @@ public class MockedBackend {
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
-        ((MockGenericPool<?>) ClientPool.heartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
@@ -468,26 +462,7 @@ public class MockedBackend {
             return null;
         }
 
-        public Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(
-                PRefreshDictionaryCacheBeginRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(
-                PRefreshDictionaryCacheCommitRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PClearDictionaryCacheResult> clearDictionaryCache(
-                PClearDictionaryCacheRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PGetDictionaryStatisticResult> getDictionaryStatistic(
-                PGetDictionaryStatisticRequest request) {
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
         }
     }

@@ -18,31 +18,31 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TDictionaryExpr;
+import com.starrocks.thrift.TDictionaryGetExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
-public class DictionaryExpr extends Expr {
+public class DictionaryGetExpr extends Expr {
 
-    private TDictionaryExpr dictionaryExpr;
+    private TDictionaryGetExpr dictionaryGetExpr;
     private boolean skipStateCheck;
     private long dictionaryId;
     private long dictionaryTxnId;
     private int keySize;
 
-    public DictionaryExpr(List<Expr> params) {
+    public DictionaryGetExpr(List<Expr> params) {
         this(params, NodePosition.ZERO);
     }
 
-    public DictionaryExpr(List<Expr> params, NodePosition pos) {
+    public DictionaryGetExpr(List<Expr> params, NodePosition pos) {
         super(pos);
         this.children.addAll(params);
         this.skipStateCheck = false;
     }
 
-    protected DictionaryExpr(DictionaryExpr other) {
+    protected DictionaryGetExpr(DictionaryGetExpr other) {
         List<Expr> newChildren = Lists.newArrayList();
         for (Expr child : other.getChildren()) {
             newChildren.add(child.clone());
@@ -70,27 +70,27 @@ public class DictionaryExpr extends Expr {
 
     @Override
     protected void toThrift(TExprNode msg) {
-        TDictionaryExpr dictionaryExpr = new TDictionaryExpr();
-        dictionaryExpr.setDict_id(dictionaryId);
-        dictionaryExpr.setTxn_id(dictionaryTxnId);
-        dictionaryExpr.setKey_size(keySize);
-        setDictionaryExpr(dictionaryExpr);
+        TDictionaryGetExpr dictionaryGetExpr = new TDictionaryGetExpr();
+        dictionaryGetExpr.setDict_id(dictionaryId);
+        dictionaryGetExpr.setTxn_id(dictionaryTxnId);
+        dictionaryGetExpr.setKey_size(keySize);
+        setDictionaryGetExpr(dictionaryGetExpr);
 
-        msg.setNode_type(TExprNodeType.DICTIONARY_EXPR);
-        msg.setDictionary_expr(dictionaryExpr);
+        msg.setNode_type(TExprNodeType.DICTIONARY_GET_EXPR);
+        msg.setDictionary_get_expr(dictionaryGetExpr);
     }
 
     @Override
     public Expr clone() {
-        return new DictionaryExpr(this);
+        return new DictionaryGetExpr(this);
     }
 
-    public TDictionaryExpr getDictionaryExpr() {
-        return dictionaryExpr;
+    public TDictionaryGetExpr getDictionaryGetExpr() {
+        return dictionaryGetExpr;
     }
 
-    public void setDictionaryExpr(TDictionaryExpr dictionaryExpr) {
-        this.dictionaryExpr = dictionaryExpr;
+    public void setDictionaryGetExpr(TDictionaryGetExpr dictionaryGetExpr) {
+        this.dictionaryGetExpr = dictionaryGetExpr;
     }
 
     public void setSkipStateCheck(boolean skipStateCheck) {
@@ -127,6 +127,6 @@ public class DictionaryExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDictionaryExpr(this, context);
+        return visitor.visitDictionaryGetExpr(this, context);
     }
 }

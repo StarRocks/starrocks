@@ -197,7 +197,7 @@ import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -6406,7 +6406,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDictionaryGetExpr(StarRocksParser.DictionaryGetExprContext context) {
         List<Expr> params = visit(context.expressionList().expression(), Expr.class);
-        return new DictionaryExpr(params);
+        return new DictionaryGetExpr(params);
     }
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------

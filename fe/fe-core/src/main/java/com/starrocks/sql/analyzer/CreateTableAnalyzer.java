@@ -46,7 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -457,11 +457,11 @@ public class CreateTableAnalyzer {
                 if (column.isGeneratedColumn()) {
                     Expr expr = column.generatedColumnExpr();
 
-                    List<DictionaryExpr> dictionaryExprs = Lists.newArrayList();
-                    expr.collect(DictionaryExpr.class, dictionaryExprs);
-                    if (dictionaryExprs.size() != 0) {
-                        for (DictionaryExpr dictionaryExpr : dictionaryExprs) {
-                            dictionaryExpr.setSkipStateCheck(true);
+                    List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
+                    expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
+                    if (dictionaryGetExprs.size() != 0) {
+                        for (DictionaryGetExpr dictionaryGetExpr : dictionaryGetExprs) {
+                            dictionaryGetExpr.setSkipStateCheck(true);
                         }
                     }
 
