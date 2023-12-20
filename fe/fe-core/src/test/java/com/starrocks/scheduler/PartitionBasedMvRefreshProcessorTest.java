@@ -714,7 +714,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MockIcebergMetadata mockIcebergMetadata =
                 (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02"));
         // refresh only one partition
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -737,7 +738,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                 ImmutableMap.copyOf(partitionVersionMap));
 
         // add new row and refresh again
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-01");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-01"));
         taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -1714,7 +1716,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
+<<<<<<< HEAD
                     olapTables.put(olapTable.getId(), Pair.create(baseTableInfo, copied));
+=======
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 }
 
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
@@ -1765,7 +1771,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
+<<<<<<< HEAD
                     olapTables.put(olapTable.getId(), Pair.create(baseTableInfo, olapTable));
+=======
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 }
 
                 try {
@@ -1824,7 +1834,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
+<<<<<<< HEAD
                     olapTables.put(olapTable.getId(), Pair.create(baseTableInfo, copied));
+=======
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 }
 
                 String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p99 VALUES [('9999-03-01'),('9999-04-01'))";
@@ -1919,7 +1933,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
+<<<<<<< HEAD
                     olapTables.put(olapTable.getId(), Pair.create(baseTableInfo, copied));
+=======
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 }
 
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p4";

@@ -43,8 +43,26 @@ public class TableTestBase {
     protected static final int BUCKETS_NUMBER = 16;
 
     // Partition spec used to create tables
+<<<<<<< HEAD
     protected static final PartitionSpec SPEC =
             PartitionSpec.builderFor(SCHEMA).bucket("data", BUCKETS_NUMBER).build();
+=======
+    protected static final PartitionSpec SPEC_A =
+            PartitionSpec.builderFor(SCHEMA_A).bucket("data", BUCKETS_NUMBER).build();
+    protected static final PartitionSpec SPEC_B =
+            PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+    protected static final PartitionSpec SPEC_B_1 = PartitionSpec.builderFor(SCHEMA_B).build();
+
+    protected static final PartitionSpec SPEC_D =
+            PartitionSpec.builderFor(SCHEMA_D).hour("ts").build();
+
+    protected static final PartitionSpec SPEC_D_1 =
+            PartitionSpec.builderFor(SCHEMA_D).identity("ts").build();
+
+    protected static final PartitionSpec SPEC_F =
+            PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
+
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
 
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC)
@@ -54,6 +72,85 @@ public class TableTestBase {
                     .withRecordCount(2)
                     .build();
 
+<<<<<<< HEAD
+=======
+    public static final DataFile FILE_A_1 =
+            DataFiles.builder(SPEC_A)
+                    .withPath("/path/to/data-a1.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0") // easy way to set partition data for now
+                    .withRecordCount(2)
+                    .build();
+
+    public static final DataFile FILE_A_2 =
+            DataFiles.builder(SPEC_A)
+                    .withPath("/path/to/data-a2.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=1") // easy way to set partition data for now
+                    .withRecordCount(2)
+                    .build();
+
+    public static final DataFile FILE_B_1 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b1.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=2")
+                    .withRecordCount(3)
+                    .build();
+
+    public static final DataFile FILE_B_2 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b2.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=3")
+                    .withRecordCount(4)
+                    .build();
+
+    public static final Metrics TABLE_B_METRICS =  new Metrics(
+            2L,
+            ImmutableMap.of(1, 50L, 2, 50L),
+            ImmutableMap.of(1, 2L, 2, 2L),
+            ImmutableMap.of(1, 0L, 2, 0L),
+            ImmutableMap.of(1, 0L, 2, 0L),
+            ImmutableMap.of(1, Conversions.toByteBuffer(Types.IntegerType.get(), 1),
+                    2, Conversions.toByteBuffer(Types.IntegerType.get(), 2)),
+            ImmutableMap.of(1, Conversions.toByteBuffer(Types.IntegerType.get(), 2),
+                    2, Conversions.toByteBuffer(Types.IntegerType.get(), 2))
+    );
+
+    public static final DataFile FILE_B_3 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b3.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=3")
+                    .withRecordCount(2)
+                    .withMetrics(TABLE_B_METRICS)
+                    .build();
+
+    public static final DataFile FILE_B_4 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b4.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=3")
+                    .withRecordCount(2)
+                    .withMetrics(TABLE_B_METRICS)
+                    .build();
+
+    public static final DataFile FILE_B_5 = DataFiles.builder(SPEC_B)
+            .withPath("/path/to/data-b5.parquet")
+            .withFileSizeInBytes(20)
+            .withRecordCount(4)
+            .build();
+
+    public static final DeleteFile FILE_C_1 = FileMetadata.deleteFileBuilder(SPEC_B).ofPositionDeletes()
+            .withPath("delete.orc")
+            .withFileSizeInBytes(1024)
+            .withRecordCount(1)
+            .withPartitionPath("k2=2")
+            .withFormat(FileFormat.ORC)
+            .build();
+
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
     static final FileIO FILE_IO = new TestTables.LocalFileIO();
 
     @Rule
@@ -61,7 +158,18 @@ public class TableTestBase {
 
     protected File tableDir = null;
     protected File metadataDir = null;
+<<<<<<< HEAD
     public TestTables.TestTable table = null;
+=======
+    public TestTables.TestTable mockedNativeTableA = null;
+    public TestTables.TestTable mockedNativeTableB = null;
+    public TestTables.TestTable mockedNativeTableC = null;
+    public TestTables.TestTable mockedNativeTableD = null;
+    public TestTables.TestTable mockedNativeTableE = null;
+    public TestTables.TestTable mockedNativeTableF = null;
+    public TestTables.TestTable mockedNativeTableG = null;
+
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
     protected final int formatVersion = 1;
 
     @Before
@@ -70,7 +178,17 @@ public class TableTestBase {
         tableDir.delete(); // created by table create
 
         this.metadataDir = new File(tableDir, "metadata");
+<<<<<<< HEAD
         this.table = create(SCHEMA, SPEC);
+=======
+        this.mockedNativeTableA = create(SCHEMA_A, SPEC_A, "ta", 1);
+        this.mockedNativeTableB = create(SCHEMA_B, SPEC_B, "tb", 1);
+        this.mockedNativeTableC = create(SCHEMA_B, SPEC_B, "tc", 2);
+        this.mockedNativeTableD = create(SCHEMA_D, SPEC_D, "td", 1);
+        this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
+        this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
+        this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
     }
 
     @After

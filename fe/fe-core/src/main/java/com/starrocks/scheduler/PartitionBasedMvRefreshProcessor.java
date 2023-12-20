@@ -36,8 +36,12 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
+=======
+import com.starrocks.catalog.ListPartitionInfo;
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -126,9 +130,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
 
     public static final String MV_ID = "mvId";
+<<<<<<< HEAD
 
     public static final String ICEBERG_ALL_PARTITION = "ALL";
 
+=======
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
     // session.enable_spill
     public static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
@@ -203,12 +210,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, Set<String>> refTablePartitionNames = null;
         long startRefreshTs = System.currentTimeMillis();
         while (!checked) {
+            // refresh external table meta cache before sync partitions
+            refreshExternalTable(context);
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions(context);
+<<<<<<< HEAD
             // refresh external table meta cache before check the partition changed
             refreshExternalTable(context);
             database.readLock();
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
             try {
                 // the following steps should be done in the same lock:
                 // 1. check base table partitions change
@@ -445,9 +459,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshExternalTable(TaskRunContext context) {
+<<<<<<< HEAD
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
+=======
+        List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Database db = baseTableInfo.getDb();
+            if (db == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getDbInfoStr(), materializedView.getName());
+                throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
+            }
+
+            Table table = baseTableInfo.getTable();
+            if (table == null) {
+                LOG.warn("table {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getTableInfoStr(), materializedView.getName());
+                throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
+            }
+
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
             if (!table.isNativeTableOrMaterializedView() && !table.isHiveView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
@@ -625,9 +658,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // remove partition info of not-exist partition for snapshot table from version map
             Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
+<<<<<<< HEAD
             // iceberg table use ALL as partition name, so we don't need to remove partition info
             currentTablePartitionInfo.keySet().removeIf(partitionName ->
                     (!partitionNames.contains(partitionName) && !partitionName.equals(ICEBERG_ALL_PARTITION)));
+=======
+            currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
         }
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
@@ -1311,15 +1348,25 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
+<<<<<<< HEAD
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
+=======
+                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 } else if (table.isCloudNativeTable()) {
                     LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake table: %s", table.getName());
                     }
+<<<<<<< HEAD
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else {
                     tables.put(table.getId(), Pair.create(baseTableInfo, table));
+=======
+                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                } else {
+                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, table));
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                 }
             } finally {
                 db.readUnlock();
@@ -1513,6 +1560,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
                 changedOlapTablePartitionInfos.put(olapTable.getId(), partitionInfos);
             }
+<<<<<<< HEAD
+=======
+            return partitionInfos;
+        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable()) {
+            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
+                    baseTableInfo);
+        } else {
+            // FIXME: base table does not support partition-level refresh and does not update the meta
+            //  in materialized view.
+            LOG.warn("Refresh materialized view {} with non-supported-partition-level refresh base table {}",
+                    materializedView.getName(), baseTable.getName());
+            return Maps.newHashMap();
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
         }
         return changedOlapTablePartitionInfos;
     }
@@ -1580,41 +1640,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * @param hiveTable                 : input hive table to collect refresh partition infos
-     * @param selectedPartitionNames    : input hive table refreshed partition names
-     * @param baseTableInfo             : input hive table's base table info
-     * @return                          : return the given hive table's refresh partition infos
+     * @param table                     : input table to collect refresh partition infos
+     * @param selectedPartitionNames    : input table refreshed partition names
+     * @param baseTableInfo             : input table's base table info
+     * @return                          : return the given table's refresh partition infos
      */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(HiveTable hiveTable,
+    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(Table table,
                                                                                       List<String> selectedPartitionNames,
                                                                                       BaseTableInfo baseTableInfo) {
         Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        List<com.starrocks.connector.PartitionInfo> hivePartitions = GlobalStateMgr.
-                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), hiveTable,
+        List<com.starrocks.connector.PartitionInfo> partitions = GlobalStateMgr.
+                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), table,
                         selectedPartitionNames);
         for (int index = 0; index < selectedPartitionNames.size(); ++index) {
-            long modifiedTime = hivePartitions.get(index).getModifiedTime();
-            partitionInfos.put(selectedPartitionNames.get(index),
-                    new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
-        }
-        return partitionInfos;
-    }
-
-    /**
-     * @param jdbcTable                 : input jdbc table to collect refresh partition infos
-     * @param selectedPartitionNames    : input jdbc table refreshed partition names
-     * @param baseTableInfo             : input jdbc table's base table info
-     * @return                          : return the given hive table's refresh partition infos
-     */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(JDBCTable jdbcTable,
-                                                                                      List<String> selectedPartitionNames,
-                                                                                      BaseTableInfo baseTableInfo) {
-        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        List<com.starrocks.connector.PartitionInfo> jdbcPartitions = GlobalStateMgr.
-                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), jdbcTable,
-                        selectedPartitionNames);
-        for (int index = 0; index < selectedPartitionNames.size(); ++index) {
-            long modifiedTime = jdbcPartitions.get(index).getModifiedTime();
+            long modifiedTime = partitions.get(index).getModifiedTime();
             partitionInfos.put(selectedPartitionNames.get(index),
                     new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
         }

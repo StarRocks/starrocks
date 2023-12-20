@@ -63,7 +63,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -550,6 +549,19 @@ public class SyncPartitionUtils {
         mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
     }
 
+<<<<<<< HEAD
+=======
+
+    private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
+            Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
+            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap) {
+        long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet().size();
+        long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
+                .stream().map(Set::size).reduce(0, Integer::sum);
+        return refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize;
+    }
+
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
     private static void dropRefBaseTableFromVersionMapForOlapTable(
             MaterializedView mv,
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap,
@@ -698,9 +710,13 @@ public class SyncPartitionUtils {
             if (baseTableVersionMap != null) {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
+<<<<<<< HEAD
                         if (partitionName.equals(ICEBERG_ALL_PARTITION)) {
                             return false;
                         }
+=======
+                        boolean isListPartition = mv.getPartitionInfo() instanceof ListPartitionInfo;
+>>>>>>> e4e9ffe6cc ([Enhancement] Support refresh iceberg mv by partition (#37273))
                         Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName), expr);
                         return partitionNames != null && partitionNames.size() == 1 &&
