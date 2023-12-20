@@ -27,8 +27,8 @@ public class InternalCatalog extends Catalog {
         super(id, DEFAULT_INTERNAL_CATALOG_NAME, config, comment);
     }
 
-    public static boolean isDefault(TableName name) {
-        return DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(name.getCatalog());
+    public static boolean isFromDefault(TableName name) {
+        return name != null && DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(name.getCatalog());
     }
 
 }

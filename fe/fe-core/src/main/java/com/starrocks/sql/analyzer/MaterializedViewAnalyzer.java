@@ -243,7 +243,7 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
 
-            if (!InternalCatalog.isDefault(statement.getTableName())) {
+            if (!InternalCatalog.isFromDefault(statement.getTableName())) {
                 throw new SemanticException("Materialized view can only be created in default_catalog. " +
                         "You could either create it with default_catalog.<database>.<mv>, or switch to " +
                         "default_catalog through `set catalog <default_catalog>` statement",
