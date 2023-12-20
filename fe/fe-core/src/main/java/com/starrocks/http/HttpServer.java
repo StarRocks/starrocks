@@ -69,6 +69,8 @@ import com.starrocks.http.rest.GetLogFileAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
 import com.starrocks.http.rest.HealthAction;
+import com.starrocks.http.rest.ListShardGroupsAction;
+import com.starrocks.http.rest.ListWorkerGroupsAction;
 import com.starrocks.http.rest.LoadAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
@@ -78,6 +80,8 @@ import com.starrocks.http.rest.QueryDetailAction;
 import com.starrocks.http.rest.QueryDumpAction;
 import com.starrocks.http.rest.RowCountAction;
 import com.starrocks.http.rest.SetConfigAction;
+import com.starrocks.http.rest.ShardAction;
+import com.starrocks.http.rest.ShardGroupAction;
 import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
@@ -90,6 +94,8 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.WorkerAction;
+import com.starrocks.http.rest.WorkerGroupAction;
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -207,6 +213,14 @@ public class HttpServer {
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
+
+        // starmanager usage
+        ShardAction.registerAction(controller);
+        ShardGroupAction.registerAction(controller);
+        ListShardGroupsAction.registerAction(controller);
+        WorkerAction.registerAction(controller);
+        WorkerGroupAction.registerAction(controller);
+        ListWorkerGroupsAction.registerAction(controller);
     }
 
     public void start() {

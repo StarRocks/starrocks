@@ -29,6 +29,7 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.S3FileStoreInfo;
+import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -46,6 +47,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -54,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -323,12 +326,22 @@ public class StarOSAgentTest {
 
     @Test
     public void testCreateAndListShardGroup() throws StarClientException, DdlException {
-        ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
-        ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ShardInfo shard1 =
+                ShardInfo.newBuilder().setServiceId("1").setShardId(10L).build();
+        ShardInfo shard2 =
+                ShardInfo.newBuilder().setServiceId("1").setShardId(11L).build();
         List<ShardInfo> shards = Lists.newArrayList(shard1, shard2);
+        ServiceInfo serviceInfo = ServiceInfo.newBuilder()
+                                          .setServiceName("starrocks")
+                                          .setServiceId("1")
+                                          .build();
 
         long groupId = 333;
-        ShardGroupInfo info = ShardGroupInfo.newBuilder().setGroupId(groupId).build();
+        ShardGroupInfo info = ShardGroupInfo.newBuilder()
+                                      .setServiceId("1")
+                                      .setGroupId(groupId)
+                                      .build();
         List<ShardGroupInfo> groups = new ArrayList<>(1);
         groups.add(info);
 
@@ -349,9 +362,35 @@ public class StarOSAgentTest {
             public List<ShardGroupInfo> listShardGroup(String serviceId) throws StarClientException {
                 return groups;
             }
+
+            @Mock
+            public List<ShardInfo> getShardInfo(String serviceId, List<Long> shardIds)
+                    throws StarClientException {
+                return Lists.newArrayList(shard1);
+            }
+
+            @Mock
+            public List<ShardGroupInfo> getShardGroup(String serviceId, List<Long> groupIds)
+                    throws StarClientException {
+                return Lists.newArrayList(groups);
+            }
+
+            @Mock
+            public Pair<List<ShardGroupInfo>, Long> listShardGroup(String serviceId, long startGroupId)
+                    throws StarClientException {
+                return Pair.of(Lists.newArrayList(groups), 444L);
+            }
+
+            @Mock
+            public ServiceInfo getServiceInfoByName(String serviceName) throws StarClientException {
+                if (serviceName.equals("starrocks")) {
+                    return serviceInfo;
+                } else {
+                    throw new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+                }
+            }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test create shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1));
         // test create shards
@@ -363,6 +402,25 @@ public class StarOSAgentTest {
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
         Assert.assertEquals(1, realGroupIds.size());
         Assert.assertEquals(groupId, realGroupIds.get(0).getGroupId());
+
+        // test get shard info by inputed service name or service id
+        ShardInfo getShard1 = starosAgent.getShardInfo("starrocks", 10L);
+        Assert.assertEquals(getShard1.getShardId(), 10L);
+        ShardInfo getShard2 = starosAgent.getShardInfo("1", 10L);
+        Assert.assertEquals(getShard2.getShardId(), 10L);
+
+        // test get shard group info by inputed service name or service id
+        ShardGroupInfo getShardGroup1 = starosAgent.getShardGroupInfo("starrocks", 333L);
+        Assert.assertEquals(getShardGroup1.getGroupId(), 333L);
+        ShardGroupInfo getShardGroup2 = starosAgent.getShardGroupInfo("1", 333L);
+        Assert.assertEquals(getShardGroup2.getGroupId(), 333L);
+
+        // test list shard groups info by inputed service name or service id
+        List<ShardGroupInfo> getShardGroupsList1 = starosAgent.listShardGroupInfo("starrocks");
+        Assert.assertEquals(getShardGroupsList1.get(0).getGroupId(), 333L);
+        List<ShardGroupInfo> getShardGroupsList2 =
+                starosAgent.listShardGroupInfo("1");
+        Assert.assertEquals(getShardGroupsList2.get(0).getGroupId(), 333L);
     }
 
     @Test
@@ -495,6 +553,7 @@ public class StarOSAgentTest {
         long groupId1 = 11L;
         WorkerGroupDetailInfo group1 = WorkerGroupDetailInfo.newBuilder().setGroupId(groupId1).addWorkersInfo(worker2)
                 .build();
+        ServiceInfo serviceInfo = ServiceInfo.newBuilder().setServiceName("starrocks").setServiceId("1").build();
 
         new Expectations() {
             {
@@ -509,11 +568,37 @@ public class StarOSAgentTest {
                 client.listWorkerGroup(serviceId, Lists.newArrayList(), true);
                 minTimes = 0;
                 result = Lists.newArrayList(group0, group1);
+
+                client.getServiceInfoByName("starrocks");
+                minTimes = 0;
+                result = serviceInfo;
+
+                client.getServiceInfoByName("1");
+                minTimes = 0;
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         List<Long> nodes = starosAgent.getWorkersByWorkerGroup(groupId0);
         Assert.assertEquals(2, nodes.size());
+
+        // test get worker info by inputed service name or service id
+        WorkerInfo getWorker0 = starosAgent.getWorkerInfo("starrocks", 10000L);
+        Assert.assertEquals(10000L, getWorker0.getWorkerId());
+        WorkerInfo getWorker1 = starosAgent.getWorkerInfo("1", 10000L);
+        Assert.assertEquals(10000L, getWorker1.getWorkerId());
+
+        // test get worker group info by inputed service name or service id
+        WorkerGroupDetailInfo workerGroup0 = starosAgent.getWorkerGroupInfo("starrocks", 10L);
+        Assert.assertEquals(10L, workerGroup0.getGroupId());
+        WorkerGroupDetailInfo workerGroup1 = starosAgent.getWorkerGroupInfo("1", 10L);
+        Assert.assertEquals(10L, workerGroup1.getGroupId());
+
+        // test list worker groups by inputed service name
+        List<WorkerGroupDetailInfo> workerGroupsList0 = starosAgent.listWorkerGroupInfo("starrocks");
+        Assert.assertEquals(10L, workerGroupsList0.get(0).getGroupId());
+        List<WorkerGroupDetailInfo> workerGroupsList1 = starosAgent.listWorkerGroupInfo("1");
+        Assert.assertEquals(10L, workerGroupsList1.get(0).getGroupId());
     }
 
     @Test
