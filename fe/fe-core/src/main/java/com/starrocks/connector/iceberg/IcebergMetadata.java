@@ -292,6 +292,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (icebergTable.isUnPartitioned()) {
             try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
                 for (FileScanTask task : tasks) {
+                    // partitionsTable Table schema :
+                    // record_count,
+                    // file_count,
+                    // total_data_file_size_in_bytes,
+                    // position_delete_record_count,
+                    // position_delete_file_count,
+                    // equality_delete_record_count,
+                    // equality_delete_file_count,
+                    // last_updated_at,
+                    // last_updated_snapshot_id
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         long lastUpdated = row.get(7, Long.class);
@@ -306,6 +316,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             // For partition table, we need to get all partitions from PartitionsTable.
             try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
                 for (FileScanTask task : tasks) {
+                    // partitionsTable Table schema :
+                    // partition,
+                    // spec_id,
+                    // record_count,
+                    // file_count,
+                    // total_data_file_size_in_bytes,
+                    // position_delete_record_count,
+                    // position_delete_file_count,
+                    // equality_delete_record_count,
+                    // equality_delete_file_count,
+                    // last_updated_at,
+                    // last_updated_snapshot_id
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         StructProjection partitionData = row.get(0, StructProjection.class);
