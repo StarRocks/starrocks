@@ -64,6 +64,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return map;
     }
 
+    @Override
     public Void visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         if (context.statement() != null) {
             return visit(context.statement());
@@ -71,6 +72,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
     public Void visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         extractHintToRight(context);
         if (context.createTableAsSelectStatement() != null) {
@@ -82,11 +84,13 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
     }
 
 
+    @Override
     public Void visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
         visit(context.queryStatement());
         return null;
     }
 
+    @Override
     public Void visitInsertStatement(StarRocksParser.InsertStatementContext context) {
         extractHintToRight(context);
         if (context.queryStatement() != null) {
@@ -95,6 +99,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
     public Void visitUpdateStatement(StarRocksParser.UpdateStatementContext context) {
         extractHintToRight(context);
         if (!(context.fromClause() instanceof StarRocksParser.DualContext)) {
@@ -106,6 +111,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
     public Void visitDeleteStatement(StarRocksParser.DeleteStatementContext context) {
         extractHintToRight(context);
         if (context.using != null) {
@@ -114,27 +120,31 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
     public Void visitLoadStatement(StarRocksParser.LoadStatementContext context) {
         extractHintToRight(context);
         return null;
     }
 
+    @Override
     public Void visitQueryStatement(StarRocksParser.QueryStatementContext context) {
         visit(context.queryRelation());
         return null;
     }
 
-
+    @Override
     public Void visitQueryRelation(StarRocksParser.QueryRelationContext context) {
         visit(context.queryNoWith());
         return null;
     }
 
+    @Override
     public Void visitQueryNoWith(StarRocksParser.QueryNoWithContext context) {
         visit(context.queryPrimary());
         return null;
     }
 
+    @Override
     public Void visitQuerySpecification(StarRocksParser.QuerySpecificationContext context) {
         extractHintToRight(context);
         if (!(context.fromClause() instanceof StarRocksParser.DualContext)) {
@@ -146,6 +156,7 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
     public Void visitSubquery(StarRocksParser.SubqueryContext context) {
         return visit(context.queryRelation());
     }
