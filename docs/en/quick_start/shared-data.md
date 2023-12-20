@@ -400,7 +400,7 @@ The `docker-compose.yml` file generates the FE configuration in the `command`.
       echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
       echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
       echo cloud_native_storage_type=S3 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_use_aws_sdk_default_behavior=true >> /opt/starrocks/fe/conf/fe.conf &&
+      echo aws_s3_use_aws_sdk_default_behavior=false >> /opt/starrocks/fe/conf/fe.conf &&
       sh /opt/starrocks/fe/bin/start_fe.sh"
 ```
 
@@ -428,7 +428,7 @@ aws_s3_path=starrocks
 aws_s3_endpoint=minio:9000
 aws_s3_use_instance_profile=false
 cloud_native_storage_type=S3
-aws_s3_use_aws_sdk_default_behavior=true
+aws_s3_use_aws_sdk_default_behavior=false
 # highlight-end
 ```
 
@@ -462,9 +462,9 @@ When using MinIO an access key is used, and so instance profiles are not used wi
 
 This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
 
-#### `aws_s3_use_aws_sdk_default_behavior=true`
+#### `aws_s3_use_aws_sdk_default_behavior=false`
 
-When using MinIO this parameter is always set to true.
+When using MinIO this parameter is always set to false.
 
 ---
 
