@@ -5,6 +5,9 @@ import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -88,7 +91,6 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunProcessor getProcessor() {
         return processor;
     }
-
     public void setProcessor(TaskRunProcessor processor) {
         this.processor = processor;
     }
@@ -99,6 +101,36 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public Constants.TaskType getType() {
         return this.type;
+    }
+
+    public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+        Map<String, String> newProperties = Maps.newHashMap();
+        if (task.getSource() != Constants.TaskSource.MV) {
+            return newProperties;
+        }
+
+        try {
+            // NOTE: mvId is set in Task's properties when creating
+            long mvId = Long.parseLong(properties.get(PartitionBasedMvRefreshProcessor.MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            if (database == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
+                return newProperties;
+            }
+
+            Table table = database.getTable(mvId);
+            if (table == null) {
+                LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
+                        ctx.getDatabase());
+                return newProperties;
+            }
+            MaterializedView materializedView = (MaterializedView) table;
+            Preconditions.checkState(materializedView != null);
+            newProperties = materializedView.getProperties();
+        } catch (Exception e) {
+            LOG.warn("refresh task properties failed:", e);
+        }
+        return newProperties;
     }
 
     public boolean executeTaskRun() throws Exception {
@@ -115,6 +147,9 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+
+        Map<String, String> newProperties = refreshTaskProperties(runCtx);
+        properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {

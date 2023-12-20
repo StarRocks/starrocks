@@ -99,4 +99,21 @@ public class AlterMaterializedViewTest {
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
+
+    @Test
+    public void testAlterMVProperties() throws Exception {
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            currentState.alterMaterializedView(stmt);
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+        }
+    }
 }
