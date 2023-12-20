@@ -52,9 +52,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -71,8 +73,10 @@ public class SimpleScheduler {
     private static Map<Long, Integer> blacklistBackends = Maps.newHashMap();
     private static Lock lock = new ReentrantLock();
     private static UpdateBlacklistThread updateBlacklistThread;
+    private static AtomicBoolean enableUpdateBlacklistThread;
 
     static {
+        enableUpdateBlacklistThread = new AtomicBoolean(true);
         updateBlacklistThread = new UpdateBlacklistThread();
         updateBlacklistThread.start();
     }
@@ -219,6 +223,71 @@ public class SimpleScheduler {
         }
     }
 
+    public static void updateBlacklist() {
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+
+        lock.lock();
+        Map<Long, Integer> blackListBackendsCopy = new HashMap<>(blacklistBackends);
+        lock.unlock();
+
+        List<Long> removedBackends = new ArrayList<>();
+        Map<Long, Integer> retryingBackends = new HashMap<>();
+
+        Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, Integer> entry = iterator.next();
+            Long backendId = entry.getKey();
+
+            // 1. If the backend is null, means that the backend has been removed.
+            // 2. check the all ports of the backend
+            // 3. retry Config.heartbeat_timeout_second + 1 times
+            // If both of the above conditions are met, the backend is removed from the blacklist
+            Backend backend = clusterInfoService.getBackend(backendId);
+            if (backend == null) {
+                removedBackends.add(backendId);
+                LOG.warn("remove backendID {} from blacklist", backendId);
+            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
+                String host = backend.getHost();
+                List<Integer> ports = new ArrayList<Integer>();
+                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
+                    removedBackends.add(backendId);
+                    LOG.warn("remove backendID {} from blacklist", backendId);
+                }
+            } else {
+                Integer retryTimes = entry.getValue();
+                retryTimes = retryTimes - 1;
+                if (retryTimes <= 0) {
+                    removedBackends.add(backendId);
+                    LOG.warn("remove backendID {} from blacklist", backendId);
+                } else {
+                    retryingBackends.put(backendId, retryTimes);
+                }
+            }
+        }
+
+        lock.lock();
+        try {
+            // remove backends.
+            for (Long backendId : removedBackends) {
+                blacklistBackends.remove(backendId);
+            }
+
+            // update the retry times.
+            for (Map.Entry<Long, Integer> entry : retryingBackends.entrySet()) {
+                if (blacklistBackends.containsKey(entry.getKey())) {
+                    blacklistBackends.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void disableUpdateBlacklistThread() {
+        enableUpdateBlacklistThread.set(false);
+    }
+
     private static class UpdateBlacklistThread implements Runnable {
         private static final Logger LOG = LogManager.getLogger(UpdateBlacklistThread.class);
         private static Thread thread;
@@ -235,49 +304,12 @@ public class SimpleScheduler {
         @Override
         public void run() {
             LOG.debug("UpdateBlacklistThread is start to run");
-            while (true) {
+            while (enableUpdateBlacklistThread.get()) {
                 try {
                     Thread.sleep(1000L);
-                    SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
                     LOG.debug("UpdateBlacklistThread retry begin");
-                    lock.lock();
-                    try {
-                        Iterator<Map.Entry<Long, Integer>> iterator = blacklistBackends.entrySet().iterator();
-                        while (iterator.hasNext()) {
-                            Map.Entry<Long, Integer> entry = iterator.next();
-                            Long backendId = entry.getKey();
-
-                            // 1. If the backend is null, means that the backend has been removed.
-                            // 2. check the all ports of the backend
-                            // 3. retry three times
-                            // If both of the above conditions are met, the backend is removed from the blacklist
-                            Backend backend = clusterInfoService.getBackend(backendId);
-                            if (backend == null) {
-                                iterator.remove();
-                                LOG.warn("remove backendID {} from blacklist", backendId);
-                            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
-                                String host = backend.getHost();
-                                List<Integer> ports = new ArrayList<Integer>();
-                                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
-                                if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                                    iterator.remove();
-                                    LOG.warn("remove backendID {} from blacklist", backendId);
-                                }
-                            } else {
-                                Integer retryTimes = entry.getValue();
-                                retryTimes = retryTimes - 1;
-                                if (retryTimes <= 0) {
-                                    iterator.remove();
-                                    LOG.warn("remove backendID {} from blacklist", backendId);
-                                } else {
-                                    entry.setValue(retryTimes);
-                                }
-                            }
-                        }
-                    } finally {
-                        lock.unlock();
-                        LOG.debug("UpdateBlacklistThread retry end");
-                    }
+                    updateBlacklist();
+                    LOG.debug("UpdateBlacklistThread retry end");
 
                 } catch (Throwable ex) {
                     LOG.warn("blacklist thread exception" + ex);
