@@ -353,6 +353,16 @@ public class TrinoTestBase {
         }
     }
 
+    protected void assertPlanContains(StatementBase stmt, String... explain) throws Exception {
+        ExecPlan execPlan = StatementPlanner.plan(stmt, connectContext);
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
     public void runFileUnitTest(String filename) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
