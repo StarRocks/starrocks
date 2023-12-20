@@ -92,14 +92,14 @@ Status ColumnDecoder::_encode_array_to_global_id(Column* datas, Column* codes) {
 
         lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
         lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
-        return encode_string_to_global_id(array_column->elements_column().get(),
-                                          lowcard_array_column->elements_column().get());
+        return _encode_string_to_global_id(array_column->elements_column().get(),
+                                           lowcard_array_column->elements_column().get());
     } else {
         auto* array_column = down_cast<ArrayColumn*>(datas);
         auto* lowcard_array_column = down_cast<ArrayColumn*>(codes);
         lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
-        return encode_string_to_global_id(array_column->elements_column().get(),
-                                          lowcard_array_column->elements_column().get());
+        return _encode_string_to_global_id(array_column->elements_column().get(),
+                                           lowcard_array_column->elements_column().get());
     }
 }
 
