@@ -52,3 +52,57 @@ CREATE TABLE partition_unixtime (
 PARTITION BY RANGE(cast(from_unixtime(create_time) as datetime))(
 START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 );
+-- name: test_partition_by_expr_unixtime_ms
+CREATE TABLE partition_unixtime_ms (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime_ms(create_time) as date))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
+select * from partition_unixtime_ms;
+select * from partition_unixtime_ms PARTITION(p20210105);
+drop table partition_unixtime_ms;
+CREATE TABLE partition_unixtime_ms (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime_ms(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
+select * from partition_unixtime_ms;
+drop table partition_unixtime_ms;
+CREATE TABLE partition_unixtime_ms (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime_ms(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+drop table partition_unixtime_ms;
+CREATE TABLE partition_unixtime_ms (
+        create_time date,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime_ms(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+CREATE TABLE partition_unixtime_ms (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(cast(from_unixtime_ms(create_time) as datetime))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);

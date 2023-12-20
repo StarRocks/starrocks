@@ -31,7 +31,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -114,11 +113,11 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
             try {
                 PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-            } catch (SemanticException ex) {
+                // The current expression partition only supports 1 column
+                slotRef.setType(sourcePartitionTypes.get(0));
+            } catch (Throwable ex) {
                 LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
             }
-            // The current expression partition only supports 1 column
-            slotRef.setType(sourcePartitionTypes.get(0));
         }
         serializedPartitionExprs = null;
     }
