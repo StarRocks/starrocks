@@ -68,7 +68,7 @@ SET @var_name = expr [, ...];
 **Example:** Declare variables.
 
 ```SQL
-SET @id1 = 1, , @id2 = 2;
+SET @id1 = 1, @id2 = 2;
 ```
 
 For more information, see [user-defined variables](../../reference/user_defined_variables.md).
