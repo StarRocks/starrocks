@@ -321,7 +321,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -538,7 +538,6 @@ public class GlobalStateMgr {
     private StorageVolumeMgr storageVolumeMgr;
 
     private AutovacuumDaemon autovacuumDaemon;
-
 
     private MVActiveChecker mvActiveChecker;
 
@@ -1338,7 +1337,7 @@ public class GlobalStateMgr {
                         false);
             }
             Config.enable_persistent_index_by_default = VariableMgr.getDefaultSessionVariable()
-                .getEnablePersistentIndexByDefault();
+                    .getEnablePersistentIndexByDefault();
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
@@ -1564,54 +1563,54 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                         .build();
+                Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
                 try {
                     loadHeaderV2(dis);
-
-                    Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
-                    Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
                     while (true) {
-                        SRMetaBlockID srMetaBlockID = entry.getKey();
                         SRMetaBlockReader reader = new SRMetaBlockReader(dis);
-                        if (!reader.getHeader().getSrMetaBlockID().equals(srMetaBlockID)) {
-                            /*
-                              The expected read module does not match the module stored in the image,
-                              and the json chunk is skipped directly. This usually occurs in several situations.
-                              1. When the obsolete image code is deleted.
-                              2. When the new version rolls back to the old version,
-                                 the old version ignores the functions of the new version
-                             */
-                            LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
-                                    "(expect %s actual %s)", srMetaBlockID, reader.getHeader().getSrMetaBlockID()));
-                            reader.close();
-                            continue;
-                        }
+                        SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
 
                         try {
-                            SRMetaBlockLoader imageLoader = entry.getValue();
+                            SRMetaBlockLoader imageLoader = loadImages.get(srMetaBlockID);
+                            if (imageLoader == null) {
+                                /*
+                                 * The expected read module does not match the module stored in the image,
+                                 * and the json chunk is skipped directly. This usually occurs in several situations.
+                                 * 1. When the obsolete image code is deleted.
+                                 * 2. When the new version rolls back to the old version,
+                                 *    the old version ignores the functions of the new version
+                                 */
+                                LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                        "(expect sr meta block id %s)", srMetaBlockID));
+                                continue;
+                            }
+
                             imageLoader.apply(reader);
+                            metaMgrMustExists.remove(srMetaBlockID);
                             LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
                         } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
                             /*
-                              The number of json expected to be read is more than the number of json actually stored
-                              in the image, which usually occurs when the module adds new functions.
+                             * The number of json expected to be read is more than the number of json actually stored in the image
                              */
+                            metaMgrMustExists.remove(srMetaBlockID);
                             LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
-                        } catch (SRMetaBlockException srMetaBlockException) {
-                            LOG.error("Load meta block failed ", srMetaBlockException);
-                            throw new IOException("Load meta block failed ", srMetaBlockException);
                         } finally {
                             reader.close();
                         }
-                        if (iterator.hasNext()) {
-                            entry = iterator.next();
-                        } else {
-                            break;
-                        }
+                    }
+                } catch (EOFException exception) {
+                    if (!metaMgrMustExists.isEmpty()) {
+                        LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
+                                "This may not be a fatal error. It may be because there are new features in the version " +
+                                "you upgraded this time, but there is no relevant metadata.");
+                    } else {
+                        LOG.info("Load meta-image EOF, successful loading all requires meta module");
                     }
                 } catch (SRMetaBlockException e) {
                     LOG.error("load meta block failed ", e);
                     throw new IOException("load meta block failed ", e);
                 }
+
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1718,7 +1717,6 @@ public class GlobalStateMgr {
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
-
 
     public long loadVersion(DataInputStream dis, long checksum) throws IOException {
         // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
@@ -3420,11 +3418,9 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
@@ -4100,6 +4096,7 @@ public class GlobalStateMgr {
     public MetaContext getMetaContext() {
         return metaContext;
     }
+
     public void createBuiltinStorageVolume() {
         try {
             String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
