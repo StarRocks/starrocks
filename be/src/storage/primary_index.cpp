@@ -1418,12 +1418,12 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     std::lock_guard<std::mutex> lg(_lock);
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
-    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
-    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
