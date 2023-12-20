@@ -124,6 +124,7 @@ public class HeartbeatMgr extends LeaderDaemon {
 
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
+        long startTime = System.currentTimeMillis();
         // send backend heartbeat
         for (Backend backend : idToBackendRef.values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
@@ -193,6 +194,16 @@ public class HeartbeatMgr extends LeaderDaemon {
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
+<<<<<<< HEAD
+=======
+
+        // set sleep time to (heartbeat_timeout - timeUsed),
+        // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
+        setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
+
+        ClientPool.beHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
+        ClientPool.brokerHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
+>>>>>>> 233d73a8ec ([Enhancement] Optimize heartbeat interval (#37187))
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
