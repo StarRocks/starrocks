@@ -56,14 +56,12 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.DeleteTxnLogRequest;
-import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -82,7 +80,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import javax.validation.constraints.NotNull;
 
@@ -593,36 +590,34 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch, Map<Long, List<Long>> dirtyPartitions) {
         try {
+            // submit may throw RejectedExecutionException if the task cannot be scheduled for execution
             getDeleteTxnLogExecutor().submit(() -> {
                 txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
                     long partitionId = entry.getKey();
                     List<Long> txnIds = dirtyPartitions.get(partitionId);
                     Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
 
-                    SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-                    List<Future<DeleteTxnLogResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
-                    try {
-                        for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
-                            // check whether the node is still alive
-                            ComputeNode node = entryItem.getKey();
-                            if (!node.isAlive()) {
-                                LOG.warn("Backend or computeNode {} been dropped or not alive " +
-                                                "while building publish version request",
-                                        entryItem.getKey());
-                                continue;
-                            }
+                    for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                        // check whether the node is still alive
+                        ComputeNode node = entryItem.getKey();
+                        if (!node.isAlive()) {
+                            LOG.warn("Backend or computeNode {} been dropped or not alive " +
+                                            "while building publish version request",
+                                    entryItem.getKey());
+                            continue;
+                        }
 
-                            DeleteTxnLogRequest request = new DeleteTxnLogRequest();
-                            request.tabletIds = new ArrayList<>(entryItem.getValue());
-                            request.txnIds = txnIds;
-
+                        DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                        request.tabletIds = new ArrayList<>(entryItem.getValue());
+                        request.txnIds = txnIds;
+                        try {
                             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                             // just ignore the response, for we don't care the result of delete txn log
                             // and vacuum will clan the txn log finally if it failed.
                             lakeService.deleteTxnLog(request);
+                        } catch (Exception e) {
+                            LOG.warn("delete txn log error: " + e.getMessage());
                         }
-                    } catch (Exception e) {
-                        LOG.warn("delete txn log error: " + e.getMessage());
                     }
                 });
             });
