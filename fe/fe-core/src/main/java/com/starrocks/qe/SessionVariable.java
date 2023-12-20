@@ -585,6 +585,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
+    public static final String CBO_DERIVE_JOIN_IS_NULL_PREDICATE = "cbo_derive_join_is_null_predicate";
+
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
@@ -1519,6 +1521,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
+    private boolean cboDeriveJoinIsNullPredicate = true;
 
     @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
     private boolean cboDecimalCastStringStrict = true;
@@ -2907,6 +2912,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
+    public boolean isCboDeriveJoinIsNullPredicate() {
+        return cboDeriveJoinIsNullPredicate;
     }
 
     public boolean isAuditExecuteStmt() {
