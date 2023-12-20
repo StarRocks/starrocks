@@ -589,8 +589,8 @@ DISTRIBUTED BY HASH(site_id,city_code);
   ;
   ```
 
- </TabItem>
- </Tabs>
+  </TabItem>
+  </Tabs>
 
 - 手动设置
 
@@ -616,7 +616,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
   </TabItem>
   <TabItem value="example2" label="随机分桶表">
 
-  ```sql
+    ```sql
   CREATE TABLE details (
       site_id INT DEFAULT '10', 
       city_code VARCHAR(100),
@@ -628,10 +628,10 @@ DISTRIBUTED BY HASH(site_id,city_code);
   PARTITION BY date_trunc('day', event_day)
   DISTRIBUTED BY RANDOM BUCKETS 30
   ; 
-  ```
+    ```
 
- </TabItem>
- </Tabs>
+    </TabItem>
+    </Tabs>
 
 #### 建表后
 
