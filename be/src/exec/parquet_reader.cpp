@@ -249,7 +249,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
                 tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
                                                            decimal_logical_type->scale());
             } else {
-                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+                tp = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             }
             break;
         case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
@@ -264,7 +264,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         }
         default:
             return Status::NotSupported(
-                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
+                    fmt::format("Unknown supported parquet physical type: {}, column name: {}", physical_type, name));
         }
         schema->emplace_back(i, name, tp);
     }
