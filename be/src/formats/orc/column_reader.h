@@ -145,7 +145,6 @@ public:
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 };
 
-template <LogicalType Type>
 class TimeColumnReader : public PrimitiveColumnReader {
 public:
     TimeColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)

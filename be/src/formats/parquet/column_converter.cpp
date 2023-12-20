@@ -48,7 +48,7 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
-class Int64ToTimeConverter : public ColumnConverter {
+class Int64ToTimeConverter final : public ColumnConverter {
 public:
     Int64ToTimeConverter() = default;
     ~Int64ToTimeConverter() override = default;
@@ -385,11 +385,6 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL128>>(field.scale,
                                                                                                  typeDescriptor.scale);
             break;
-        case LogicalType::TYPE_TIME: {
-            auto _converter = std::make_unique<Int64ToTimeConverter>();
-            *converter = std::move(_converter);
-            break;
-        }
         default:
             break;
         }

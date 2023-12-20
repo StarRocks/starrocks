@@ -247,10 +247,15 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                       ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     }
     case TYPE_DATE: {
+        LOG(INFO) << "rep_type: " << rep_type;
+        LOG(INFO) << "file_column_id.field_id: " << file_column_id.field_id;
+        LOG(INFO) << "name: " << name;
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Date(),
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
+        LOG(INFO) << "rep_type: " << rep_type;
+        LOG(INFO) << "file_column_id.field_id: " << file_column_id.field_id;
         // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime values
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type,
@@ -304,6 +309,15 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         auto key_value = ::parquet::schema::GroupNode::Make("key_value", ::parquet::Repetition::REPEATED, {key, value});
         return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(),
                                                   file_column_id.field_id);
+    }
+    case TYPE_TIME: {
+        LOG(INFO) << "rep_type: " << rep_type;
+        LOG(INFO) << "file_column_id.field_id: " << file_column_id.field_id;
+        LOG(INFO) << "name: " << name;
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type,
+                ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
@@ -487,6 +501,7 @@ Status AsyncFileWriter::_flush_row_group() {
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
+        LOG(INFO) << ">>>>: " << 0;
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);
@@ -497,7 +512,7 @@ Status AsyncFileWriter::close(RuntimeState* state,
             // set closed to true anyway
             _closed.store(true);
         });
-
+        LOG(INFO) << ">>>>: " << 1;
         try {
             _writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -505,8 +520,9 @@ Status AsyncFileWriter::close(RuntimeState* state,
             set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
         }
         _chunk_writer = nullptr;
-
+        LOG(INFO) << ">>>>: " << 2;
         _file_metadata = _writer->metadata();
+        LOG(INFO) << ">>>>: " << 3;
         auto st = _outstream->Close();
         if (!st.ok()) {
             LOG(WARNING) << "close output stream error: " << st.message();
