@@ -415,13 +415,6 @@ bool RuntimeState::enable_query_statistic() const {
     return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
 }
 
-std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    if (!enable_query_statistic()) {
-        return nullptr;
-    }
-    return _query_ctx->intermediate_query_statistic();
-}
-
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     if (!enable_query_statistic()) {
         return nullptr;
