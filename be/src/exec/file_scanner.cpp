@@ -419,8 +419,11 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
     }
 
     std::vector<std::vector<SlotDescriptor>> schemas;
-    // sample some files.
     size_t sample_file_count = 0;
+    // lowercase_name: <file_path, original_name>
+    std::map<std::string, std::pair<std::string, std::string>> unique_names;
+
+    // sample some files.
     for (size_t i = 0; i < scan_range.ranges.size(); i = std::round(i + step)) {
         // sample range only contains 1 file.
         auto sample_range = scan_range;
@@ -452,6 +455,31 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
 
         std::vector<SlotDescriptor> schema;
         RETURN_IF_ERROR_WITH_WARN(p_scanner->get_schema(&schema), "get schema failed: ");
+
+        // Column names are case insensitive.
+        // Check duplicated column names.
+        for (const auto& slot : schema) {
+            auto name = slot.col_name();
+            auto lowercase_name = boost::algorithm::to_lower_copy(name);
+
+            auto itr = unique_names.find(lowercase_name);
+            if (itr == unique_names.end()) {
+                unique_names.emplace(lowercase_name,
+                                     std::pair<std::string, std::string>(sample_range.ranges[0].path, name));
+            } else if (name != itr->second.second) {
+                std::string err_msg;
+                // Duplicated column name in the same file.
+                if (itr->second.first == sample_range.ranges[0].path) {
+                    err_msg = fmt::format("Identical names in upper/lower cases, file: [{}], column names: [{}] [{}]",
+                                          sample_range.ranges[0].path, itr->second.second, name);
+                } else {
+                    err_msg = fmt::format("Identical names in upper/lower cases, files: [{}] [{}], names: [{}] [{}]",
+                                          sample_range.ranges[0].path, itr->second.first, name, itr->second.second);
+                }
+                LOG(WARNING) << err_msg;
+                return Status::NotSupported(err_msg);
+            }
+        }
 
         schemas.emplace_back(std::move(schema));
 

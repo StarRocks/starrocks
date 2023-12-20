@@ -68,7 +68,7 @@ TEST_F(FileScannerTest, sample_schema) {
         scan_range.params.__set_schema_sample_file_count(1);
 
         std::vector<SlotDescriptor> schema;
-        FileScanner::sample_schema(&state, scan_range, &schema);
+        EXPECT_OK(FileScanner::sample_schema(&state, scan_range, &schema));
 
         EXPECT_EQ(schema.size(), expected_schema.size());
 
@@ -99,7 +99,7 @@ TEST_F(FileScannerTest, sample_schema) {
         scan_range.params.__set_schema_sample_file_count(2);
 
         std::vector<SlotDescriptor> schema;
-        FileScanner::sample_schema(&state, scan_range, &schema);
+        EXPECT_OK(FileScanner::sample_schema(&state, scan_range, &schema));
 
         EXPECT_EQ(schema.size(), expected_schema.size());
 
@@ -131,7 +131,7 @@ TEST_F(FileScannerTest, sample_schema) {
         scan_range.params.__set_schema_sample_file_count(3);
 
         std::vector<SlotDescriptor> schema;
-        FileScanner::sample_schema(&state, scan_range, &schema);
+        EXPECT_OK(FileScanner::sample_schema(&state, scan_range, &schema));
 
         EXPECT_EQ(schema.size(), expected_schema.size());
 
@@ -141,6 +141,38 @@ TEST_F(FileScannerTest, sample_schema) {
                     << schema[i].col_name() << " got: " << schema[i].type().debug_string()
                     << " expect: " << expected_schema[i].second.debug_string();
         }
+    }
+
+    {
+        // sample 1 file.
+        // file4: col1,int64; COL1,int64
+        // result: duplicated column name
+        RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema4.parquet"});
+
+        scan_range.params.__set_schema_sample_file_count(1);
+
+        std::vector<SlotDescriptor> schema;
+        auto st = FileScanner::sample_schema(&state, scan_range, &schema);
+        //Identical names in upper/lower cases, file: [/work/starrocks-main/be/test/exec/test_data/parquet_data/schema4.parquet], column names: [col1] [COL1]"
+        EXPECT_STATUS(Status::NotSupported(""), st);
+    }
+
+    {
+        // sample 1 file.
+        // file1: col1,int64
+        // file4: col1,int64; COL1,int64
+        // result: duplicated column name
+        RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+        auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
+                                             test_exec_dir + "/test_data/parquet_data/schema4.parquet"});
+
+        scan_range.params.__set_schema_sample_file_count(2);
+
+        std::vector<SlotDescriptor> schema;
+        auto st = FileScanner::sample_schema(&state, scan_range, &schema);
+        //Identical names in upper/lower cases, files: [/work/starrocks-main/be/test/exec/test_data/parquet_data/schema4.parquet] [/work/starrocks-main/be/test/exec/test_data/parquet_data/schema1.parquet], names: [COL1] [col1]"
+        EXPECT_TRUE(st.is_not_supported());
     }
 }
 

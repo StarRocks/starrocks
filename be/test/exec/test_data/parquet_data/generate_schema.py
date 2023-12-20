@@ -55,3 +55,16 @@ data = [
 
 table = pa.Table.from_arrays(data, columns)
 pq.write_table(table, "./schema3.parquet")
+
+# file 4 
+columns = [
+    "col1",
+    "COL1",
+]
+data = [
+    pa.array([22, 23, 24], type=pa.int32()),
+    pa.array([25, 26, 27], type=pa.int32()),
+]
+
+table = pa.Table.from_arrays(data, columns)
+pq.write_table(table, "./schema4.parquet")
