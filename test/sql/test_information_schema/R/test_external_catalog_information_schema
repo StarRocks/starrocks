@@ -13,22 +13,22 @@ properties (
 -- result:
 []
 -- !result
-create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_1;
+create database ice_hadoop${uuid0}.ice_hadoop_db1;
 -- result:
 []
 -- !result
-create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_1.test (
+create table ice_hadoop${uuid0}.ice_hadoop_db1.test (
     c0 int, 
     c1 string
 );
 -- result:
 []
 -- !result
-create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_2;
+create database ice_hadoop${uuid0}.ice_hadoop_db2;
 -- result:
 []
 -- !result
-create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_2.test (
+create table ice_hadoop${uuid0}.ice_hadoop_db2.test (
     c0 int, 
     c1 string
 );
@@ -37,14 +37,14 @@ create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_2.test (
 -- !result
 select SCHEMA_NAME from ice_hadoop${uuid0}.information_schema.schemata;
 -- result:
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_1
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_2
+ice_hadoop_db1
+ice_hadoop_db2
 information_schema
 -- !result
 select TABLE_SCHEMA, TABLE_NAME, ENGINE from ice_hadoop${uuid0}.information_schema.tables;
 -- result:
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_1	test	Iceberg
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_2	test	Iceberg
+ice_hadoop_db1	test	Iceberg
+ice_hadoop_db2	test	Iceberg
 information_schema	tables	MEMORY
 information_schema	table_privileges	MEMORY
 information_schema	referential_constraints	MEMORY
@@ -67,10 +67,10 @@ information_schema	column_privileges	MEMORY
 -- !result
 select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
 -- result:
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_1	test	c0	1
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_1	test	c1	2
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_2	test	c0	1
-ice_hadoop_dbe854b9be89b64fe886ae22e11263b7f9_2	test	c1	2
+ice_hadoop_db1	test	c0	1
+ice_hadoop_db1	test	c1	2
+ice_hadoop_db2	test	c0	1
+ice_hadoop_db2	test	c1	2
 information_schema	tables	TABLE_CATALOG	1
 information_schema	tables	TABLE_SCHEMA	2
 information_schema	tables	TABLE_NAME	3
@@ -308,7 +308,11 @@ information_schema	column_privileges	COLUMN_NAME	5
 information_schema	column_privileges	PRIVILEGE_TYPE	6
 information_schema	column_privileges	IS_GRANTABLE	7
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop catalog ice_hadoop${uuid0};
+-- result:
+[]
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
 

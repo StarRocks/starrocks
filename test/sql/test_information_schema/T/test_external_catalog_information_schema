@@ -8,16 +8,16 @@ properties (
 "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0}"
 );
 
-create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_1;
+create database ice_hadoop${uuid0}.ice_hadoop_db1;
 
-create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_1.test (
+create table ice_hadoop${uuid0}.ice_hadoop_db1.test (
     c0 int, 
     c1 string
 );
 
-create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_2;
+create database ice_hadoop${uuid0}.ice_hadoop_db2;
 
-create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}_2.test (
+create table ice_hadoop${uuid0}.ice_hadoop_db2.test (
     c0 int, 
     c1 string
 );
@@ -28,4 +28,6 @@ select TABLE_SCHEMA, TABLE_NAME, ENGINE from ice_hadoop${uuid0}.information_sche
 
 select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
 
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop catalog ice_hadoop${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
