@@ -565,7 +565,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
 
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(-1);
-    int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage() + avg_chunk_mem_bytes() * state->chunk_size();
+    uint64_t chunk_num = std::min<uint64_t>(state->chunk_size(), _chunk_rows_read);
+    int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage() + avg_chunk_mem_bytes() * chunk_num;
     limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
 
     [[maybe_unused]] auto build_debug_string = [&]() {
@@ -573,7 +574,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
         ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
            << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
            << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
-           << ", chunk source mem bytes = " << chunk_source_mem_bytes
+           << ", chunk source mem bytes = " << chunk_source_mem_bytes << ", chunk mem bytes = " << avg_chunk_mem_bytes()
+           << " * " << chunk_num << ", data source mem usage = " << _data_source->estimated_mem_usage()
            << ", peak mem bytes = " << _mem_tracker->peak_consumption();
         return ss.str();
     };
@@ -599,12 +601,21 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         return ss.str();
     };
 
-    *mem_alloc_failed = false;
     MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
-    if (mem_tracker->try_consume(_request_mem_tracker_bytes) != nullptr) {
-        _request_mem_tracker_bytes = 0;
-        VLOG_OPERATOR << build_debug_string("alloc failed");
+
+    int retry = 3;
+    while (retry > 0) {
+        retry--;
+        *mem_alloc_failed = false;
+        if (mem_tracker->try_consume(_request_mem_tracker_bytes) == nullptr) {
+            break;
+        }
         *mem_alloc_failed = true;
+        // VLOG_OPERATOR << build_debug_string("alloc failed");
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (*mem_alloc_failed) {
+        _request_mem_tracker_bytes = 0;
         return Status::OK();
     }
 

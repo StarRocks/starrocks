@@ -104,7 +104,7 @@ void QueryContext::cancel(const Status& status) {
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg) {
+                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg, RuntimeState* runtime_state) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -140,8 +140,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             if (wg != nullptr) {
                 connector_scan_parent = wg->connector_scan_mem_tracker();
             }
+            double connector_scan_use_query_mem_ratio = config::connector_scan_use_query_mem_ratio;
+            if (runtime_state != nullptr && runtime_state->query_options().__isset.connector_scan_use_query_mem_ratio) {
+                connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
+            }
             _connector_scan_mem_tracker = std::make_shared<MemTracker>(
-                    MemTracker::QUERY, _static_query_mem_limit * config::connector_scan_use_query_mem_ratio,
+                    MemTracker::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
                     _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
