@@ -99,6 +99,7 @@ set(EXPR_FILES
   substring_index.cpp
   dict_query_expr.cpp
   runtime_filter_layout.cpp
+  dictionary_get_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

@@ -546,14 +546,19 @@ public class StreamLoadMgr {
     }
 
     // return all of stream load task named label in all of db
+    // return all tasks if label is null
     public List<StreamLoadTask> getTaskByName(String label) {
         List<StreamLoadTask> result = Lists.newArrayList();
         readLock();
         try {
-            for (Map<String, StreamLoadTask> labelToStreamLoadTask : dbToLabelToStreamLoadTask.values()) {
-                if (labelToStreamLoadTask.containsKey(label)) {
-                    result.add(labelToStreamLoadTask.get(label));
+            if (label != null) {
+                StreamLoadTask task = idToStreamLoadTask.get(label);
+                if (task != null) {
+                    result.add(task);
                 }
+            } else {
+                // return all stream load tasks
+                result.addAll(idToStreamLoadTask.values());
             }
         } finally {
             readUnlock();

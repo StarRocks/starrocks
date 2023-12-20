@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 View all compute nodes in your StarRocks cluster.
 
+:::tip
+
+Only users with the SYSTEM-level OPERATE privilege or the `cluster_admin` role can perform this operation.
+
+:::
+
 ## Syntax
 
 ```SQL

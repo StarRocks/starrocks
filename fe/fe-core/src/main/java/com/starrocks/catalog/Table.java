@@ -292,12 +292,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -550,6 +554,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public Partition getPartition(String partitionName) {
+        return null;
+    }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
 

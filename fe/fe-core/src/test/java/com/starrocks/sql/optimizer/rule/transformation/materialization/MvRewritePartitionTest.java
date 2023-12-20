@@ -18,14 +18,17 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+        starRocksAssert.withTable(cluster, "table_with_day_partition");
         prepareDatas();
     }
 
@@ -161,8 +164,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
     public void testPartitionPrune1() throws Exception {
         Tracers.register(connectContext);
         Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
-        createAndRefreshMv("test", "test_partition_tbl_mv1",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         " PARTITION BY k1\n" +
                         " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         " REFRESH ASYNC\n" +
@@ -223,8 +225,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune2() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv1",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -286,8 +287,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune3() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -353,8 +353,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune4() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -417,8 +416,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
     @Test
     public void testPartitionPrune5() throws Exception {
         // join key is not null
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -481,8 +479,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
     @Test
     public void testPartitionPrune6() throws Exception {
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv2",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +

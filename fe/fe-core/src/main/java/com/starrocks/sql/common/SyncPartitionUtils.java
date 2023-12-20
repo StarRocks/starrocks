@@ -178,14 +178,9 @@ public class SyncPartitionUtils {
         List<PartitionRange> baseRanges = baseRangeMap.keySet().stream()
                 .map(name -> new PartitionRange(name, convertToDatePartitionRange(baseRangeMap.get(name))))
                 .collect(Collectors.toList());
-        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream()
-                .map(name -> new PartitionRange(name, mvRangeMap.get(name)))
-                .collect(Collectors.toList());
         Map<String, Set<String>> partitionRefMap = getIntersectedPartitions(rollupRanges, baseRanges);
-        RangePartitionDiff diff =
-                differ != null ?
-                        differ.diff(rollupRange, mvRangeMap) :
-                        PartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
+        RangePartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+                PartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
     }
@@ -278,8 +273,8 @@ public class SyncPartitionUtils {
     }
 
     // TODO: should support like to_date(ds) + 1 day ?
-    public static Range<PartitionKey> transferRange(Range<PartitionKey> baseRange, Expr partitionExpr)
-            throws AnalysisException {
+    public static Range<PartitionKey> transferRange(Range<PartitionKey> baseRange,
+                                                    Expr partitionExpr) throws AnalysisException {
         if (!(partitionExpr instanceof FunctionCallExpr)) {
             return baseRange;
         }
@@ -426,39 +421,49 @@ public class SyncPartitionUtils {
             Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
         // for each partition of base, find the corresponding partition of mv
-        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
-                mvRangeMap.get(name))).sorted(PartitionRange::compareTo).collect(Collectors.toList());
+        List<PartitionRange> mvRanges = mvRangeMap.keySet()
+                .stream()
+                .map(name -> new PartitionRange(name, mvRangeMap.get(name)))
+                .sorted(PartitionRange::compareTo)
+                .collect(Collectors.toList());
 
         for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
-            List<PartitionRange> baseRanges = entry.getValue().keySet().stream().map(name -> {
-                try {
-                    Range<PartitionKey> baseRange = transferRange(entry.getValue().get(name),
-                            basePartitionExprMap.get(entry.getKey()));
-                    return new PartitionRange(name, baseRange);
-                } catch (AnalysisException e) {
-                    throw new SemanticException("Convert to PartitionMapping failed:", e);
-                }
-            }).sorted(PartitionRange::compareTo).collect(Collectors.toList());
+            Table baseTable = entry.getKey();
+            Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
+            List<PartitionRange> baseRanges = refreshedPartitionsMap.keySet()
+                    .stream()
+                    .map(name -> {
+                        try {
+                            Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
+                            Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
+                            Range<PartitionKey> transferRanges = transferRange(
+                                    convertRanges, basePartitionExprMap.get(baseTable));
+                            return new PartitionRange(name, transferRanges);
+                        } catch (AnalysisException e) {
+                            throw new SemanticException("Convert to PartitionMapping failed:", e);
+                        }
+                    })
+                    .sorted(PartitionRange::compareTo).collect(Collectors.toList());
             for (PartitionRange baseRange : baseRanges) {
                 int mid = Collections.binarySearch(mvRanges, baseRange);
                 if (mid < 0) {
-                    initialBaseRefMap(result, entry.getKey(), baseRange);
+                    initialBaseRefMap(result, baseTable, baseRange);
                     continue;
                 }
                 PartitionRange mvRange = mvRanges.get(mid);
-                updateTableRefMap(result, entry.getKey(), baseRange.getPartitionName(), mvRange.getPartitionName());
+                updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRange.getPartitionName());
 
                 int lower = mid - 1;
                 while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
                     updateTableRefMap(
-                            result, entry.getKey(), baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
+                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
                     lower--;
                 }
 
                 int higher = mid + 1;
                 while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
                     updateTableRefMap(
-                            result, entry.getKey(), baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
+                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
                     higher++;
                 }
             }
@@ -479,15 +484,23 @@ public class SyncPartitionUtils {
         // if [date_trunc(min), date_trunc(max)), overlap with [mvMin, mvMax), then [min, max) is corresponding partition
         Map<Table, List<PartitionRange>> baseRangesMap = new HashMap<>();
         for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
-            List<PartitionRange> baseRanges = entry.getValue().keySet().stream().map(name -> {
-                try {
-                    Range<PartitionKey> baseRange = transferRange(entry.getValue().get(name),
-                            basePartitionExprMap.get(entry.getKey()));
-                    return new PartitionRange(name, baseRange);
-                } catch (AnalysisException e) {
-                    throw new SemanticException("Convert to PartitionMapping failed:", e);
-                }
-            }).sorted(PartitionRange::compareTo).collect(Collectors.toList());
+            Table baseTable = entry.getKey();
+            Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
+            List<PartitionRange> baseRanges = entry.getValue().keySet()
+                    .stream()
+                    .map(name -> {
+                        try {
+                            Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
+                            Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
+                            Range<PartitionKey> transferRanges = transferRange(
+                                    convertRanges, basePartitionExprMap.get(baseTable));
+                            return new PartitionRange(name, transferRanges);
+                        } catch (AnalysisException e) {
+                            throw new SemanticException("Convert to PartitionMapping failed:", e);
+                        }
+                    })
+                    .sorted(PartitionRange::compareTo)
+                    .collect(Collectors.toList());
             baseRangesMap.put(entry.getKey(), baseRanges);
         }
         Collections.sort(mvRanges, PartitionRange::compareTo);

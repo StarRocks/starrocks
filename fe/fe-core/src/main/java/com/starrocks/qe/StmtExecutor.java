@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -203,6 +204,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -477,7 +479,16 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
-                        execPlan = StatementPlanner.plan(parsedStmt, context);
+                        try {
+                            execPlan = StatementPlanner.plan(parsedStmt, context);
+                        } catch (SemanticException e) {
+                            if (e.getMessage().contains("Unknown partition")) {
+                                throw new SemanticException(e.getMessage() +
+                                        " maybe table partition changed after prepared statement creation");
+                            } else {
+                                throw e;
+                            }
+                        }
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
@@ -743,18 +754,7 @@ public class StmtExecutor {
         if (parsedStmt == null) {
             return;
         }
-        Map<String, String> optHints = null;
-        if (parsedStmt instanceof QueryStatement &&
-                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
-        } else if (parsedStmt instanceof DmlStmt) {
-            DmlStmt dml = (DmlStmt) parsedStmt;
-            optHints = dml.getOptHints();
-        } else if (parsedStmt instanceof DdlStmt) {
-            DdlStmt ddl = (DdlStmt) parsedStmt;
-            optHints = ddl.getOptHints();
-        }
+        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
 
         if (MapUtils.isNotEmpty(optHints)) {
             SessionVariable sessionVariable = (SessionVariable) variables.clone();
@@ -763,6 +763,71 @@ public class StmtExecutor {
                         new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
             }
             context.setSessionVariable(sessionVariable);
+        }
+    }
+
+    /**
+     * Visit all SELECT query blocks
+     * <p>
+     * NOTE: for duplicated variable, it would use the first one
+     */
+    public static class VarHintVisitor extends AstTraverser<Void, Void> {
+
+        private final Map<String, String> hints = new HashMap<>();
+
+        public Map<String, String> getHints() {
+            return hints;
+        }
+
+        public static Map<String, String> extractAllHints(StatementBase stmt) {
+            VarHintVisitor visitor = new VarHintVisitor();
+            stmt.accept(visitor, null);
+            return visitor.getHints();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null && MapUtils.isNotEmpty(node.getSelectList().getOptHints())) {
+                node.getSelectList().getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitSelect(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitInsertStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitUpdateStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDeleteStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDDLStatement(DdlStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDDLStatement(node, context);
+            return null;
         }
     }
 

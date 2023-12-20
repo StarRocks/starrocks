@@ -137,7 +137,7 @@ public:
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
 
     // release index entry if it isn't nullptr
-    void release_primary_index(IndexEntry* index_entry);
+    void release_primary_index_cache(IndexEntry* index_entry);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 

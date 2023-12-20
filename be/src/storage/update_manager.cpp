@@ -269,8 +269,7 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
         if (!st.ok()) {
             // continue if error
-            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
-                         << " st: " << st.get_error_msg();
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id << " st: " << st.message();
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));

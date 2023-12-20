@@ -46,6 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -443,7 +444,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("Generated Column only support olap table");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 
@@ -455,6 +456,14 @@ public class CreateTableAnalyzer {
 
                 if (column.isGeneratedColumn()) {
                     Expr expr = column.generatedColumnExpr();
+
+                    List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
+                    expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
+                    if (dictionaryGetExprs.size() != 0) {
+                        for (DictionaryGetExpr dictionaryGetExpr : dictionaryGetExprs) {
+                            dictionaryGetExpr.setSkipStateCheck(true);
+                        }
+                    }
 
                     ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(columns.stream().map(col -> new Field(

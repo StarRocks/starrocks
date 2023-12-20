@@ -60,14 +60,6 @@ public abstract class RunMode {
         return getCurrentRunMode().getName();
     }
 
-    public static boolean allowCreateOlapTable() {
-        return getCurrentRunMode().isAllowCreateOlapTable();
-    }
-
-    public static boolean allowCreateLakeTable() {
-        return getCurrentRunMode().isAllowCreateLakeTable();
-    }
-
     public static short defaultReplicationNum() {
         return getCurrentRunMode().getDefaultReplicationNum();
     }
@@ -75,10 +67,6 @@ public abstract class RunMode {
     public String getName() {
         return name;
     }
-
-    public abstract boolean isAllowCreateOlapTable();
-
-    public abstract boolean isAllowCreateLakeTable();
 
     public abstract short getDefaultReplicationNum();
 
@@ -101,16 +89,6 @@ public abstract class RunMode {
         }
 
         @Override
-        public boolean isAllowCreateOlapTable() {
-            return true;
-        }
-
-        @Override
-        public boolean isAllowCreateLakeTable() {
-            return false;
-        }
-
-        @Override
         public short getDefaultReplicationNum() {
             return Config.default_replication_num;
         }
@@ -119,16 +97,6 @@ public abstract class RunMode {
     private static class SharedData extends RunMode {
         private SharedData() {
             super("shared_data");
-        }
-
-        @Override
-        public boolean isAllowCreateOlapTable() {
-            return false;
-        }
-
-        @Override
-        public boolean isAllowCreateLakeTable() {
-            return true;
         }
 
         @Override

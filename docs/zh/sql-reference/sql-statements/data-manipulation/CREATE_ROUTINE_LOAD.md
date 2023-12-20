@@ -108,7 +108,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 | **参数**                  | **是否必选** | **说明**                                                     |
 | ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul> <li>`alive_be_number`：存活的 BE 节点数量。</li><li>`partition_number`：消费分区数量。</li><li>`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/Configuration.md)。</li></ul> |
+| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul> <li>`alive_be_number`：存活的 BE 节点数量。</li><li>`partition_number`：消费分区数量。</li><li>`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/FE_configuration.md)。</li></ul> |
 | max_batch_interval        | 否           | 任务的调度间隔，即任务多久执行一次。单位：秒。取值范围：`5`～`60`。默认值：`10`。建议取值为导入间隔 10s 以上，否则会因为导入频率过高可能会报错版本数过多。 |
 | max_batch_rows            | 否           | 该参数只用于定义错误检测窗口范围，错误检测窗口范围为单个 Routine Load 导入任务所消费的 `10 * max-batch-rows` 行数据，默认为 `10 * 200000 = 2000000`。导入任务时会检测窗口中数据是否存在错误。错误数据是指 StarRocks 无法解析的数据，比如非法的 JSON。 |
 | max_error_number          | 否           | 错误检测窗口范围内允许的错误数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW_ROUTINE_LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。错误行不包括通过 WHERE 子句过滤掉的数据。 |
@@ -123,8 +123,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
 | jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在衍生列，其列值通过表达式计算生成](#目标表存在衍生列其列值通过表达式计算生成)。|
 | json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
-| task_consume_second                 | 否           |单个 Routine Load 导入作业中每个 Routine Load 导入任务消费数据的最大时长，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_consume_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。 <ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和`routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li></ul>|
-| task_timeout_second                 | 否           | Routine Load 导入作业中每个 Routine Load 导入任务超时时间，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_timeout_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。<ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li></ul>|
+| task_consume_second                 | 否           |单个 Routine Load 导入作业中每个 Routine Load 导入任务消费数据的最大时长，单位为秒。相较于[FE 动态参数](../../../administration/FE_configuration.md) `routine_load_task_consume_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。 <ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和`routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li></ul>|
+| task_timeout_second                 | 否           | Routine Load 导入作业中每个 Routine Load 导入任务超时时间，单位为秒。相较于[FE 动态参数](../../../administration/FE_configuration.md) `routine_load_task_timeout_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。<ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li></ul>|
 
 ### `data_source`、`data_source_properties`
 
@@ -211,7 +211,7 @@ FROM <data_source>
 
 ### FE 和 BE 配置项
 
-Routine Load 相关配置项，请参见[配置参数](../../../administration/Configuration.md)。
+Routine Load 相关配置项，请参见[配置参数](../../../administration/FE_configuration.md)。
 
 ## 列映射和转换关系
 

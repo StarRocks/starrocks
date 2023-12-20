@@ -82,7 +82,7 @@ displayed_sidebar: "Chinese"
 | POST             | `/api/compact?tablet_id={}&compaction_type={base/cumulative}`     | 手动对指定 tablet 进行 compaction。                                                                                       |
 | GET              | `/api/compaction/show_repair`                                     |
 | PUT              | `/api/compaction/submit_repair`                                   |
-| POST             | `/api/update_config`                                              | 更新 BE 配置，详见 [更新 BE 配置](../administration/Configuration.md#be-配置项)。  |
+| POST             | `/api/update_config`                                              | 更新 BE 配置，详见 [更新 BE 配置](../administration/BE_configuration.md)。  |
 | GET/PUT          | `/api/runtime_filter_cache/{action}`                              |
 | POST             | `/api/compact_rocksdb_meta`                                       |
 | GET/PUT          | `/api/query_cache/{action}`                                       |

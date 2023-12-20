@@ -137,7 +137,8 @@ public class Utils {
             try {
                 PublishVersionResponse response = responseList.get(i).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    throw new RpcException("Fail to publish version for tablets " + response.failedTablets);
+                    throw new RpcException("Fail to publish version for tablets " + response.failedTablets + ": " +
+                            response.status.errorMsgs.get(0));
                 }
                 if (compactionScores != null && response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);

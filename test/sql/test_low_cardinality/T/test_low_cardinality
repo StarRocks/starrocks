@@ -951,7 +951,7 @@ FROM
     low_card_duplicate lcd
     INNER JOIN low_card_duplicate lcp ON lcd.c0 = lcp.c0
     right JOIN common_duplicate cd ON lcd.c0 = cd.c0
-    order by c0, upper_c1 limit 5;
+    order by c0, upper_c1, coalesce_c2 desc limit 5;
 
 -- cte
 WITH CTE1 AS (

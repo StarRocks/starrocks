@@ -100,7 +100,9 @@ public class StatisticsCalcUtils {
 
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
-            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+            StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
+            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
+            if (StatsConstants.AnalyzeType.FULL == analyzeType) {
 
                 // The basicStatsMeta.getUpdateRows() interface can get the number of
                 // loaded rows in the table since the last statistics update. But this number is at the table level.
@@ -109,42 +111,44 @@ public class StatisticsCalcUtils {
                 // The purpose of this is to make the statistics of the number of rows more accurate.
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
-                int partitionCountModifiedAfterLastAnalyze = 0;
-                for (Partition partition : table.getPartitions()) {
-                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                        partitionCountModifiedAfterLastAnalyze++;
-                    }
-                }
-
+                long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
                     TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
                             .getTableStatistic(table.getId(), partition.getId());
+                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
+                        if (updateDatetime.isAfter(lastWorkTimestamp)) {
+                            partitionRowCount += deltaRows;
+                        }
                     } else {
                         partitionRowCount = tableStatistic.getRowCount();
-                    }
-                    if (partitionCountModifiedAfterLastAnalyze > 0) {
-                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                         if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                            partitionRowCount +=
-                                    basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
+                            partitionRowCount += deltaRows;
                         }
                     }
+                    updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
                     rowCount += partitionRowCount;
-                    if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
-                        optimizerContext.getDumpInfo()
-                                .addPartitionRowCount(table, partition.getName(), partitionRowCount);
-                    }
                 }
-            } else {
-                for (Partition partition : selectedPartitions) {
-                    rowCount += partition.getRowCount();
-                    if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
-                        optimizerContext.getDumpInfo()
-                                .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
+                return Math.max(rowCount, 1);
+            }
+
+            for (Partition partition : selectedPartitions) {
+                rowCount += partition.getRowCount();
+                updateQueryDumpInfo(optimizerContext, table, partition.getName(), partition.getRowCount());
+            }
+
+            // attempt use updateRows from basicStatsMeta to adjust estimated row counts
+            if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
+                    && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
+                long statsRowCount = Math.max(basicStatsMeta.getUpdateRows() / table.getPartitions().size(), 1)
+                        * selectedPartitions.size();
+                if (statsRowCount > rowCount) {
+                    rowCount = statsRowCount;
+                    for (Partition partition : selectedPartitions) {
+                        updateQueryDumpInfo(optimizerContext, table, partition.getName(),
+                                rowCount / selectedPartitions.size());
                     }
                 }
             }
@@ -154,6 +158,37 @@ public class StatisticsCalcUtils {
         }
 
         return 1;
+    }
+
+    private static void updateQueryDumpInfo(OptimizerContext optimizerContext, Table table,
+                                            String partitionName, long rowCount) {
+        if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
+            try {
+                optimizerContext.getDumpInfo().addPartitionRowCount(table, partitionName, rowCount);
+            } catch (Exception e) {
+                optimizerContext.getDumpInfo().addException(e.getMessage());
+            }
+        }
+    }
+
+    private static long deltaRows(Table table, long totalRowCount) {
+        long tblRowCount = 0L;
+        for (Partition partition : table.getPartitions()) {
+            long partitionRowCount;
+            TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                    .getTableStatistic(table.getId(), partition.getId());
+            if (tableStatistic.equals(TableStatistic.unknown())) {
+                partitionRowCount = partition.getRowCount();
+            } else {
+                partitionRowCount = tableStatistic.getRowCount();
+            }
+            tblRowCount += partitionRowCount;
+        }
+        if (tblRowCount < totalRowCount) {
+            return Math.max(1, (totalRowCount - tblRowCount) / table.getPartitions().size());
+        } else {
+            return 0;
+        }
     }
 
 }

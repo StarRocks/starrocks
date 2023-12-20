@@ -2276,7 +2276,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2328,7 +2328,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2352,7 +2352,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv2 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2382,7 +2382,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv3 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2418,7 +2418,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv4 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2969,7 +2969,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv5 " +
                 "distributed by hash(k2)" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 SECOND) " +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 MINUTE) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +

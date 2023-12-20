@@ -25,7 +25,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 #### run_mode
 
-The running mode of the StarRocks cluster. Valid values: 
+The running mode of the StarRocks cluster. Valid values:
 
 - `shared_data`
 - `shared_nothing` (Default).
@@ -47,7 +47,7 @@ The cloud-native meta service RPC port.
 Whether to allow StarRocks to create the default storage volume by using the object storage-related properties specified in the FE configuration file. Valid values:
 
 - `true` (Default) If you specify this item as `true` when creating a new shared-data cluster, StarRocks creates the built-in storage volume `builtin_storage_volume` using the object storage-related properties in the FE configuration file, and sets it as the default storage volume. However, if you have not specified the object storage-related properties, StarRocks fails to start.
-- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#create-default-storage-volume).
+- `false` If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#use-your-shared-data-starrocks-cluster).
 
 Supported from v3.1.0.
 

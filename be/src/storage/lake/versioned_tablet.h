@@ -42,10 +42,17 @@ class VersionedTablet {
     using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
 
 public:
+    static RowsetList get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPB& metadata);
+
+    // Default constructor. After construction, valid() is false
+    VersionedTablet() : _tablet_mgr(nullptr), _metadata() {}
+
     // |tablet_mgr| cannot be nullptr and must outlive this VersionedTablet.
     // |metadata| cannot be nullptr.
     explicit VersionedTablet(TabletManager* tablet_mgr, TabletMetadataPtr metadata)
             : _tablet_mgr(tablet_mgr), _metadata(std::move(metadata)) {}
+
+    bool valid() const { return _metadata != nullptr; }
 
     // Same as metadata()->id()
     int64_t id() const;
@@ -57,7 +64,8 @@ public:
 
     TabletSchemaPtr get_schema() const;
 
-    StatusOr<RowsetList> get_rowsets() const;
+    // Prerequisite: valid() == true
+    RowsetList get_rowsets() const { return get_rowsets(_tablet_mgr, *_metadata); }
 
     // `segment_max_rows` is used in vertical writer
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
@@ -66,6 +74,8 @@ public:
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
+
+    bool has_delete_predicates() const;
 
 private:
     TabletManager* _tablet_mgr;

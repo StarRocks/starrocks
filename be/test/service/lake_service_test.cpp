@@ -243,6 +243,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get tablet metadata error"))
+                << response.status().error_msgs(0);
     }
     // Publish failed: get txn log failed
     {
@@ -259,12 +261,15 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get txn log error"))
+                << response.status().error_msgs(0);
     }
     // Publish txn success
     {
         lake::PublishVersionResponse response;
         _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     }
 
     // publish version request for the second transaction
@@ -291,6 +296,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &publish_request_1, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected put tablet metadata error"))
+                << response.status().error_msgs(0);
     }
 
     // Publish txn success
@@ -298,6 +305,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         lake::PublishVersionResponse response;
         _lake_service.publish_version(nullptr, &publish_request_1, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     }
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
     {
@@ -1408,11 +1416,18 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     auto* info = request.add_tablet_infos();
     info->set_tablet_id(_tablet_id);
     info->set_version(1);
+
+    // Prune metadata cache before getting tablet stats
+    _tablet_mgr->metacache()->prune();
+
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(1, response.tablet_stats_size());
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+    // get_tablet_stats() should not fill metadata cache
+    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();

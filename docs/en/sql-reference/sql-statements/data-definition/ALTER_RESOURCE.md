@@ -33,5 +33,5 @@ After you reference a resource to create an external table, if you modify the UR
 Modify the URI of the Hive metastore of Hive resource `hive0`.
 
 ```SQL
-ALTER RESOURCE 'hive0' SET PROPERTIES ("hive.metastore.uris" = "thrift://10.10.44.91:9083")
+ALTER RESOURCE 'hive0' SET PROPERTIES ("hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083")
 ```

@@ -267,6 +267,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testURLFnTransform() throws Exception {
+        String sql = "select url_extract_path('https://www.starrocks.io/showcase?query=1')";
+        assertPlanContains(sql, "parse_url('https://www.starrocks.io/showcase?query=1', 'PATH')");
+    }
+
+    @Test
     public void testJsonFnTransform() throws Exception {
         String sql = "select json_array_length('[1, 2, 3]')";
         assertPlanContains(sql, "json_length(CAST('[1, 2, 3]' AS JSON))");
@@ -275,10 +281,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
 
         sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
-        assertPlanContains(sql, "json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+        assertPlanContains(sql, "get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
 
         sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
-        assertPlanContains(sql, "json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b')");
+        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
 
         sql = "select json_format(JSON '[1, 2, 3]')";
         assertPlanContains(sql, "'[1, 2, 3]'");
