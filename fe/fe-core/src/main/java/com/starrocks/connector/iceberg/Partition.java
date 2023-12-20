@@ -24,7 +24,7 @@ public class Partition implements PartitionInfo {
         return modifiedTime;
     }
 
-    public Partition(long lastUpdatedAt) {
-        this.modifiedTime = lastUpdatedAt;
+    public Partition(long modifiedTime) {
+        this.modifiedTime = modifiedTime;
     }
 }
