@@ -788,7 +788,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MockIcebergMetadata mockIcebergMetadata =
                 (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02"));
         // refresh only one partition
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -810,7 +811,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                 ImmutableMap.copyOf(partitionVersionMap));
 
         // add new row and refresh again
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-01");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-01"));
         taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
         processor = (PartitionBasedMvRefreshProcessor)
@@ -1719,7 +1721,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
@@ -1771,7 +1773,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable));
                 }
 
                 try {
@@ -1831,7 +1833,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String addPartitionSql =
@@ -1930,7 +1932,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied, -1));
+                    olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 }
 
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p4";
