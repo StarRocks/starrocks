@@ -35,6 +35,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     std::atomic<int64_t> chunk_source_mem_bytes = 0;
     int64_t chunk_source_mem_bytes_update_count = 0;
     int64_t last_arb_chunk_source_mem_bytes = 0;
+    mutable int64_t debug_output_timestamp = 0;
 
     ConnectorScanOperatorIOTasksMemLimiter(int64_t dop) : dop(dop) {}
 
@@ -44,14 +45,12 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
 
         int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
-        int64_t avail_count = std::max(0L, max_count - running_count);
+        int64_t avail_count = max_count;
+        // int64_t avail_count = std::max(0L, max_count - running_count);
         int64_t per_count = avail_count / dop;
 
-        if (per_count == 0 && driver_sequence < avail_count) {
+        if (driver_sequence < (avail_count - per_count * dop)) {
             per_count += 1;
-        }
-        if (per_count < 0) {
-            per_count = 0;
         }
 
         [[maybe_unused]] auto build_debug_string = [&]() {
@@ -63,7 +62,14 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
             return ss.str();
         };
 
-        // VLOG_OPERATOR << build_debug_string();
+        if (VLOG_OPERATOR_IS_ON) {
+            int64_t now = GetCurrentTimeMicros();
+            // output every 1 second.
+            if (now - debug_output_timestamp > 1000000) {
+                VLOG_OPERATOR << build_debug_string();
+                debug_output_timestamp = now;
+            }
+        }
         return per_count;
     }
 
@@ -522,9 +528,14 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+
+    _mem_tracker = std::make_unique<MemTracker>(MemTracker::QUERY, std::numeric_limits<int64_t>::max(),
+                                                "connector_chunk_source", nullptr);
+    _mem_tracker->set_parent(CurrentThread::operator_mem_tracker());
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
+    _mem_tracker->set_parent(nullptr);
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }
@@ -562,7 +573,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
         ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
            << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
            << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
-           << ", chunk source mem bytes = " << chunk_source_mem_bytes;
+           << ", chunk source mem bytes = " << chunk_source_mem_bytes
+           << ", peak mem bytes = " << _mem_tracker->peak_consumption();
         return ss.str();
     };
     VLOG_OPERATOR << build_debug_string();
@@ -615,8 +627,12 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
     ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
+    _mem_tracker_attacher.attach(_mem_tracker.get());
 
-    DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
+    DeferOp defer_op([&]() {
+        P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros();
+        _mem_tracker_attacher.unattach();
+    });
 
     int64_t total_time_ns = 0;
     int64_t delta_io_time_ns = 0;

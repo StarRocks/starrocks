@@ -83,7 +83,8 @@
 #define VLOG_RPC_IS_ON VLOG_IS_ON(2)
 #define VLOG_QUERY_IS_ON VLOG_IS_ON(1)
 #define VLOG_FILE_IS_ON VLOG_IS_ON(2)
-#define VLOG_ROW_IS_ON VLOG_IS_ON(3)
+#define VLOG_OPERATOR_IS_ON VLOG_IS_ON(3)
+#define VLOG_ROW_IS_ON VLOG_IS_ON(10)
 #define VLOG_PROGRESS_IS_ON VLOG_IS_ON(2)
 
 namespace starrocks {

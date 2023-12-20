@@ -332,6 +332,9 @@ public:
 
     MemTracker* parent() const { return _parent; }
 
+    // set parent of this mem tracker, but don't add this mem tracker into parent's children.
+    void set_parent(MemTracker* parent) { _parent = parent;}
+
     Status check_mem_limit(const std::string& msg) const;
 
     std::string err_msg(const std::string& msg) const;
