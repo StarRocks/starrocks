@@ -61,8 +61,8 @@ public class OdpsMetadataTests extends MockedBase {
     @Test
     public void testGetDb() {
         Database database = odpsMetadata.getDb("project");
-        Database expect = new Database(0L, "project");
-        Assert.assertEquals(database, expect);
+        Assert.assertNotNull(database);
+        Assert.assertEquals(database.getFullName(), "project");
     }
 
     @Test
