@@ -22,7 +22,7 @@ displayed_sidebar: "Chinese"
 - 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
 - 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - 新增 BE 配置项 `enable_lazy_delta_column_compaction`，默认取值是 `true`，表示不启用频繁的进行 delta column 的 Compaction。[#36654](https://github.com/StarRocks/starrocks/pull/36654)
-新增 FE 配置项 `enable_mv_automatic_active_check`，用于指定是否允许系统自动检查和重新激活异步物化视图，默认取值是 `true`。[#36463](https://github.com/StarRocks/starrocks/pull/36463)
+- 新增 FE 配置项 `enable_mv_automatic_active_check`，用于指定是否允许系统自动检查和重新激活异步物化视图，默认取值是 `true`。[#36463](https://github.com/StarRocks/starrocks/pull/36463)
 
 ### 功能优化
 
