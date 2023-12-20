@@ -254,6 +254,25 @@ PROPERTIES
 );
 ```
 
+Display the schema so that you can compare it with the inferred schema produced by the `FILES()` table function:
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | datetime       | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
 :::tip
 
 Compare the schema you just created with the schema inferred earlier using the `FILES()` table function. Look at:
@@ -356,6 +375,35 @@ INSERT is a synchronous command. If an INSERT job is still running, you need to 
 
 :::
 
+## Compare the table sizes on disk
+
+This query compares the table with the inferred schema and the one where the schema
+is declared. Because the inferred schema has nullable columns and a varchar for the
+timestamp the data length is larger:
+
+```sql
+SELECT TABLE_NAME,
+       TABLE_ROWS,
+       AVG_ROW_LENGTH,
+       DATA_LENGTH
+FROM information_schema.tables
+WHERE TABLE_NAME like 'user_behavior%'\G
+```
+
+```plaintext
+*************************** 1. row ***************************
+    TABLE_NAME: user_behavior_declared
+    TABLE_ROWS: 10000000
+AVG_ROW_LENGTH: 10
+   DATA_LENGTH: 102562516
+*************************** 2. row ***************************
+    TABLE_NAME: user_behavior_inferred
+    TABLE_ROWS: 10000000
+AVG_ROW_LENGTH: 17
+   DATA_LENGTH: 176803880
+2 rows in set (0.04 sec)
+```
+
 ## Use Broker Load
 
 An asynchronous Broker Load process handles making the connection to MinIO, pulling the data, and storing the data in StarRocks.
@@ -415,7 +463,7 @@ PROPERTIES
 Run the following command to start a Broker Load job that loads data from the sample dataset `user_behavior_ten_million_rows.parquet` to the `user_behavior` table:
 
 ```sql
-LOAD LABEL userbehavior
+LOAD LABEL UserBehavior
 (
     -- highlight-start
     DATA INFILE("s3://starrocks/user_behavior_ten_million_rows.parquet")
@@ -463,7 +511,7 @@ If you have submitted multiple load jobs, you can filter on the `LABEL` associat
 
 ```sql
 SELECT * FROM information_schema.loads
-WHERE LABEL = 'userbehavior'\G
+WHERE LABEL = 'UserBehavior'\G
 ```
 
 ```plaintext
