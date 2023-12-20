@@ -321,7 +321,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
             Assert.assertFalse(mv.isActive());
             System.out.println(mv.getInactiveReason());
-            Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: op_id"));
+            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -346,7 +346,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
             Assert.assertFalse(mv.isActive());
             System.out.println(mv.getInactiveReason());
-            Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: error_code"));
+            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -371,7 +371,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
             Assert.assertFalse(mv.isActive());
             System.out.println(mv.getInactiveReason());
-            Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: error_code"));
+            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: error_code"));
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -396,7 +396,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
             Assert.assertFalse(mv.isActive());
             System.out.println(mv.getInactiveReason());
-            Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: op_id"));
+            Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: op_id"));
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();

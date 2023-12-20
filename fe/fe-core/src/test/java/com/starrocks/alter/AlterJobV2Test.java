@@ -321,7 +321,7 @@ public class AlterJobV2Test {
                         .getCurrentState().getDb("test").getTable("mv4");
                 Assert.assertFalse(mv.isActive());
                 System.out.println(mv.getInactiveReason());
-                Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: k2"));
+                Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {
             Assert.fail();

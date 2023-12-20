@@ -110,6 +110,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1501,14 +1502,16 @@ public class MvUtils {
                         Table table = scan.getTable();
                         return table.getId() == olapTable.getId();
                     });
-                    Set<String> usedColNames = usedColRefs.stream().map(x -> x.getName()).collect(Collectors.toSet());
+                    Set<String> usedColNames = usedColRefs.stream()
+                            .map(x -> x.getName())
+                            .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
                     for (String modifiedColumn : modifiedColumns) {
                         if (usedColNames.contains(modifiedColumn)) {
                             LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                             "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                     modifiedColumn, olapTable.getName());
                             mv.setInactiveAndReason(
-                                    "base-table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                    "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
                         }
                     }
                 }
@@ -1518,7 +1521,7 @@ public class MvUtils {
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
                 mv.setInactiveAndReason(
-                        "base-table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
@@ -1528,7 +1531,7 @@ public class MvUtils {
                                         "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                 mvColumn.getName(), olapTable.getName());
                         mv.setInactiveAndReason(
-                                "base-table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
                         break;
                     }
                 }
