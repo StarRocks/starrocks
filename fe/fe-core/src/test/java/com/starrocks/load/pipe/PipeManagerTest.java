@@ -131,6 +131,12 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
     }
 
+    private void alterPipe(String sql) throws Exception {
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        AlterPipeStmt createStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        pm.alterPipe(createStmt);
+    }
+
     private void dropPipe(String name) throws Exception {
         String sql = "drop pipe " + name;
         DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -171,6 +177,11 @@ public class PipeManagerTest {
         Pipe pipe = getPipe("p_warehouse");
         Assert.assertTrue(pipe.getTaskProperties().toString(),
                 pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+
+        // alter pipe
+        alterPipe("alter pipe p_warehouse set('warehouse' = 'w2') ");
+        Assert.assertEquals(pipe.getTaskProperties().toString(),
+                "w2", pipe.getTaskProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
     }
 
     @Test
