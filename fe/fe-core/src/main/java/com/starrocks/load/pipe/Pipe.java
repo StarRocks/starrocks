@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -162,6 +163,11 @@ public class Pipe implements GsonPostProcessable {
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_FILES: {
                     pipeSource.setBatchFiles(Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_BATCH_FILES)));
+                    break;
+                }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    // put the warehouse into variables, and it would be processed by TaskRun
+                    this.taskExecutionVariables.put(key, value);
                     break;
                 }
                 default: {
@@ -314,7 +320,7 @@ public class Pipe implements GsonPostProcessable {
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
             PipeTaskDesc taskDesc = new PipeTaskDesc(taskId, uniqueName, dbName, sqlTask, piece);
-            taskDesc.getProperties().putAll(taskExecutionVariables);
+            taskDesc.getVariables().putAll(taskExecutionVariables);
             taskDesc.setErrorLimit(FAILED_TASK_THRESHOLD);
 
             // Persist the loading state

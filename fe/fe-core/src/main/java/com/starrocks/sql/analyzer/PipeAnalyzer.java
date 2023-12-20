@@ -26,9 +26,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -62,6 +64,7 @@ public class PipeAnalyzer {
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
                     .add(PROPERTY_BATCH_FILES)
+                    .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
     public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -134,6 +137,14 @@ public class PipeAnalyzer {
                 }
                 case PROPERTY_AUTO_INGEST: {
                     VariableMgr.parseBooleanVariable(valueStr);
+                    break;
+                }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    boolean exists = GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(valueStr);
+                    if (!exists) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                "Warehouse not exists: " + valueStr);
+                    }
                     break;
                 }
                 default: {

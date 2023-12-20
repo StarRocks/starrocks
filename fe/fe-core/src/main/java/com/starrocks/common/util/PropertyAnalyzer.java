@@ -173,6 +173,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
+    public static final String PROPERTIES_WAREHOUSE = "warehouse";
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
+
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";

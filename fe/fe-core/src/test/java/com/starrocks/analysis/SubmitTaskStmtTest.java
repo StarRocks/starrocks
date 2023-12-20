@@ -15,15 +15,25 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -132,5 +142,33 @@ public class SubmitTaskStmtTest {
         SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
         Assert.assertNotNull(submitStmt.getDbName());
         Assert.assertNotNull(submitStmt.getSqlText());
+    }
+
+    @Test
+    public void testSubmitWithWarehouse() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // not exists
+        Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
+                        "insert into tbl1 select * from tbl1")
+        );
+        Assert.assertEquals("warehouse not exists: w1", e.getMessage());
+
+        // mock the warehouse
+        new MockUp<WarehouseManager>() {
+            @Mock
+            Warehouse getWarehouse(String name) {
+                return new LocalWarehouse(123, name);
+            }
+        };
+
+        starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
+                "insert into tbl1 select * from tbl1");
+        Task task = tm.getTask("t_warehouse");
+        Assert.assertFalse(task.getProperties().toString(),
+                task.getProperties().containsKey(SessionVariable.WAREHOUSE));
+        Assert.assertTrue(task.getProperties().toString(),
+                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID));
     }
 }

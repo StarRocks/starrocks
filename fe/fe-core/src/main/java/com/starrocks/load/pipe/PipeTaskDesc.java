@@ -29,7 +29,7 @@ public class PipeTaskDesc {
     private final String dbName;
     private final String sqlTask;
     private final FilePipePiece piece;
-    private final Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    private final Map<String, String> variables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private PipeTaskState state = PipeTaskState.RUNNABLE;
 
     // TODO: error code and category
@@ -143,8 +143,8 @@ public class PipeTaskDesc {
         return sqlTask;
     }
 
-    public Map<String, String> getProperties() {
-        return properties;
+    public Map<String, String> getVariables() {
+        return variables;
     }
 
     public PipeTaskState getState() {

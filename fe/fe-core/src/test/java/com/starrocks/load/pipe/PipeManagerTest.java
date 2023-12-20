@@ -17,7 +17,9 @@ package com.starrocks.load.pipe;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
@@ -35,6 +37,7 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -145,6 +148,29 @@ public class PipeManagerTest {
         String sql = "alter pipe " + name + " resume";
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
+    }
+
+    @Test
+    public void testPipeWithWarehouse() throws Exception {
+        // not exists
+        String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
+                "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
+        Assert.assertEquals("Getting analyzing error. Detail message: " +
+                "Invalid parameter Warehouse not exists: w1.", e.getMessage());
+
+        // mock the warehouse
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean warehouseExists(String warehouseName) {
+                return true;
+            }
+        };
+
+        createPipe(sql);
+        Pipe pipe = getPipe("p_warehouse");
+        Assert.assertTrue(pipe.getTaskProperties().toString(),
+                pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
     }
 
     @Test
