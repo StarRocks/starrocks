@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 
 class HintCollectorTest {
 
-    private String hintStr= "/*+ set_var(abc = abc) */";
+    private String hintStr = "/*+ set_var(abc = abc) */";
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("generateHint")
@@ -65,7 +65,7 @@ class HintCollectorTest {
         arguments.add(Arguments.of("LOAD /*+ set_var(abc = abc) */ LABEL test.testLabel " +
                 "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/file\") " +
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") " +
-                "PROPERTIES (\"strict_mode\"=\"true\")", 1 ));
+                "PROPERTIES (\"strict_mode\"=\"true\")", 1));
         return arguments.stream();
     }
 }
