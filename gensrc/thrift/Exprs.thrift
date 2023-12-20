@@ -85,7 +85,7 @@ enum TExprNodeType {
   DICT_QUERY_EXPR,
 
   // query DICTIONARY object
-  DICTIONARY_EXPR,
+  DICTIONARY_GET_EXPR,
   
   JIT_EXPR,
 }
