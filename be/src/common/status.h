@@ -193,6 +193,8 @@ public:
 
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
 
+    bool is_publish_timeout() const { return code() == TStatusCode::PUBLISH_TIMEOUT; }
+
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 
     bool is_yield() const { return code() == TStatusCode::YIELD; }

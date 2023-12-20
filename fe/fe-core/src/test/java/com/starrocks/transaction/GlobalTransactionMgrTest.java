@@ -57,6 +57,7 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -900,6 +901,18 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+            throws UserException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, null));
     }
 
     @Test

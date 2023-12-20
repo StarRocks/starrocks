@@ -359,14 +359,14 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
 
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
                                         const ExecFinishCallback& cb) {
-#define HANDLE_ERROR(stmt, err_msg)                                                        \
-    do {                                                                                   \
-        Status _status_ = (stmt);                                                          \
-        if (UNLIKELY(!_status_.ok() && _status_.code() != TStatusCode::PUBLISH_TIMEOUT)) { \
-            err_handler(ctx, _status_, err_msg);                                           \
-            cb(ctx);                                                                       \
-            return;                                                                        \
-        }                                                                                  \
+#define HANDLE_ERROR(stmt, err_msg)                                       \
+    do {                                                                  \
+        Status _status_ = (stmt);                                         \
+        if (UNLIKELY(!_status_.ok() && !_status_.is_publish_timeout())) { \
+            err_handler(ctx, _status_, err_msg);                          \
+            cb(ctx);                                                      \
+            return;                                                       \
+        }                                                                 \
     } while (false);
 
     LOG(INFO) << "begin to execute routine load task: " << ctx->brief();

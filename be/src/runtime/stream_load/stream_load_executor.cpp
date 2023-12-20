@@ -61,7 +61,8 @@ TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
 #endif
 
-static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms,
+                                  TLoadTxnCommitResult* result);
 static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
@@ -223,54 +224,50 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    auto st = commit_txn_internal(request, rpc_timeout_ms, ctx);
-    // service unavailable implies that the exception occurred in network transmission or Thrift RPC framework,
-    // rather than due to slow publish. Therefore, we can utilize the remaining timeout to retry.
-    if (st.is_service_unavailable()) {
-        auto remain_timeout_ms = ctx->load_deadline_sec > 0 ? (ctx->load_deadline_sec - UnixSeconds()) * 1000 : 0;
-        if (remain_timeout_ms > 0) {
-            return commit_txn_internal(request, remain_timeout_ms, ctx);
+    int retry = 0;
+    TLoadTxnCommitResult result;
+    while (true) {
+        RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
+        Status st(result.status);
+        if (st.ok()) {
+            ctx->need_rollback = false;
+            return st;
+        } else if (st.is_publish_timeout()) {
+            ctx->need_rollback = false;
+            bool visible =
+                    wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+            return visible ? Status::OK() : st;
+        } else if (st.is_eagain()) {
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                         << result.retry_interval_ms << "ms. errmsg=" << st.message();
+            std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        } else if (st.is_time_out()) {
+            if (++retry > 1) {
+                ctx->need_rollback = true;
+                return st;
+            }
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
+            if (ctx->load_deadline_sec > 0) {
+                rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
+            }
+        } else {
+            ctx->need_rollback = true;
+            return st;
         }
     }
-    return st;
 }
 
-Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
     TNetworkAddress master_addr = get_master_address();
-    TLoadTxnCommitResult result;
 #ifndef BE_TEST
-    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            rpc_timeout_ms);
-    if (st.is_thrift_rpc_error()) {
-        return Status::ServiceUnavailable(fmt::format(
-                "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
-                st.message()));
-    } else if (!st.ok()) {
-        return st;
-    }
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
+            rpc_timeout_ms));
 #else
-    result = k_stream_load_commit_result;
+    *result = k_stream_load_commit_result;
 #endif
-    Status status(result.status);
-    if (status.ok()) {
-        ctx->need_rollback = false;
-        return status;
-    } else if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
-        ctx->need_rollback = false;
-        bool visible =
-                wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
-        return visible ? Status::OK() : status;
-    } else if (status.code() == TStatusCode::SR_EAGAIN) {
-        LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
-                     << result.retry_interval_ms << "ms. errmsg=" << status.message();
-        std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
-        return commit_txn_internal(request, rpc_timeout_ms, ctx);
-    } else {
-        ctx->need_rollback = true;
-        return status;
-    }
+    return Status::OK();
 }
 
 StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,
