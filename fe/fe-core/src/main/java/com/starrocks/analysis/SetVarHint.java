@@ -19,7 +19,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
-import java.util.StringJoiner;
 
 public class SetVarHint extends HintNode {
 
@@ -31,8 +30,8 @@ public class SetVarHint extends HintNode {
 
     public static final int LEAST_LEN = 9;
 
-    public SetVarHint(NodePosition pos, Map<String, String> value, int startIndex, int stopIndex) {
-        super(pos, value, startIndex, stopIndex);
+    public SetVarHint(NodePosition pos, Map<String, String> value, String hintStr) {
+        super(pos, value, hintStr);
     }
 
     public long getSqlModeHintValue() {
@@ -49,9 +48,7 @@ public class SetVarHint extends HintNode {
 
     @Override
     public String toSql() {
-        StringJoiner joiner = new StringJoiner(", ", "(", ")");
-        value.entrySet().forEach( e -> joiner.add(e.getKey() + "=" + e.getValue()));
-        return SET_VAR + PREFIX + joiner + SUFFIX ;
+        return hintStr;
     }
 
 

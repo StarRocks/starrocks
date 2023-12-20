@@ -118,7 +118,7 @@ public class HintFactory {
         }
 
         return pos == size ?
-                new SetVarHint(new NodePosition(token), valueMap, token.getStartIndex(), token.getStopIndex()) : null;
+                new SetVarHint(new NodePosition(token), valueMap, token.getText()) : null;
     }
 
     private static boolean isWhiteSpace(char c) {

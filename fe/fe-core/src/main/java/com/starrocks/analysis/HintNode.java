@@ -26,13 +26,12 @@ public abstract class HintNode implements ParseNode {
 
     protected final NodePosition pos;
 
-    protected int startIndex;
+    protected String hintStr;
 
-    protected int endIndex;
-
-    protected HintNode(NodePosition pos, Map<String, String> value, int startIndex, int endIndex) {
+    protected HintNode(NodePosition pos, Map<String, String> value, String hintStr) {
         this.pos = pos;
         this.value = value;
+        this.hintStr = hintStr;
     }
 
     public Map<String, String> getValue() {
