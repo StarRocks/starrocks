@@ -207,7 +207,7 @@ Flink connector 提供以下指标来监控导入情况。
 
 [Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
 
-自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector]((https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html))。StarRocks Pipeline Connector 支持：
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector]((https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
 
 - 自动创建数据库/表
 - 同步 schema change
