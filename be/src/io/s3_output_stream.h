@@ -55,7 +55,7 @@ private:
     Status create_multipart_upload();
     Status complete_multipart_upload();
 
-    Status upload_part(std::vector<uint8_t> buffer);
+    Status upload_part(std::vector<uint8_t> buffer, bool on_close);
 
     std::shared_ptr<Aws::S3::S3Client> _client;
     const Aws::String _bucket;

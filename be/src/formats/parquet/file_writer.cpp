@@ -443,42 +443,17 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
-    _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
 
 Status AsyncFileWriter::_flush_row_group() {
-    {
-        auto lock = std::unique_lock(_m);
-        _rg_writer_closing = true;
-    }
-
-    bool ok = _executor_pool->try_offer([&]() {
-        SCOPED_TIMER(_io_timer);
-        if (_chunk_writer != nullptr) {
-            try {
-                _chunk_writer->close();
-            } catch (const ::parquet::ParquetStatusException& e) {
-                LOG(WARNING) << "flush row group error: " << e.what();
-                set_io_status(Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what())));
-            }
-            _chunk_writer = nullptr;
+    if (_chunk_writer != nullptr) {
+        try {
+            _chunk_writer->close(); // do not block since we use a buffered outputstream
+        } catch (const ::parquet::ParquetStatusException& e) {
+            LOG(WARNING) << "flush row group error: " << e.what();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what())));
         }
-        {
-            auto lock = std::unique_lock(_m);
-            _rg_writer_closing = false;
-        }
-        _cv.notify_one();
-    });
-
-    if (!ok) {
-        {
-            auto lock = std::unique_lock(_m);
-            _rg_writer_closing = false;
-        }
-        _cv.notify_one();
-        auto st = Status::ResourceBusy("submit flush row group task fails");
-        LOG(WARNING) << st;
-        return st;
+        _chunk_writer = nullptr;
     }
 
     return Status::OK();
@@ -486,28 +461,22 @@ Status AsyncFileWriter::_flush_row_group() {
 
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
-    bool ret = _executor_pool->try_offer([&, state, cb]() {
-        SCOPED_TIMER(_io_timer);
-        {
-            auto lock = std::unique_lock(_m);
-            _cv.wait(lock, [&] { return !_rg_writer_closing; });
-        }
+    try {
+        _writer->Close(); // do not block since we use a buffered outputstream
+    } catch (const ::parquet::ParquetStatusException& e) {
+        LOG(WARNING) << "close writer error: " << e.what();
+        set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
+    }
+    _chunk_writer = nullptr;
+    _file_metadata = _writer->metadata();
 
+    bool ret = _executor_pool->try_offer([&, state, cb]() {
         DeferOp defer([&]() {
             // set closed to true anyway
             _closed.store(true);
         });
 
-        try {
-            _writer->Close();
-        } catch (const ::parquet::ParquetStatusException& e) {
-            LOG(WARNING) << "close writer error: " << e.what();
-            set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
-        }
-        _chunk_writer = nullptr;
-
-        _file_metadata = _writer->metadata();
-        auto st = _outstream->Close();
+        auto st = _outstream->Close(); // block
         if (!st.ok()) {
             LOG(WARNING) << "close output stream error: " << st.message();
             set_io_status(Status::IOError(fmt::format("{}: {}", "close output stream error", st.message())));

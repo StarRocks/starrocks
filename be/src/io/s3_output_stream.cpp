@@ -62,7 +62,7 @@ Status S3OutputStream::write(const void* data, int64_t size) {
     }
 
     if (_buffer.size() > _min_upload_part_size) {
-        RETURN_IF_ERROR(upload_part(std::move(_buffer)));
+        RETURN_IF_ERROR(upload_part(std::move(_buffer), false));
     }
 
     return Status::OK();
@@ -95,7 +95,7 @@ Status S3OutputStream::close() {
 
     // upload remaining bytes if exists
     if (_buffer.size() > 0) {
-        RETURN_IF_ERROR(upload_part(std::move(_buffer)));
+        RETURN_IF_ERROR(upload_part(std::move(_buffer), true));
     }
 
     if (_io_status.ok()) {
@@ -122,9 +122,9 @@ Status S3OutputStream::create_multipart_upload() {
                                        outcome.GetError().GetMessage()));
 }
 
-Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
-    LOG(INFO) << "Uploading s3://" << _bucket << "/" << _object << " via multipart upload"
-              << " part = " << _part_id - 1;
+Status S3OutputStream::upload_part(std::vector<uint8_t> buffer, bool on_close) {
+    LOG(INFO) << "To upload s3://" << _bucket << "/" << _object << " via multipart upload"
+              << " part = " << _part_id;
     Aws::S3::Model::UploadPartRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
@@ -133,7 +133,7 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
     req.SetContentLength(static_cast<int64_t>(buffer.size()));
     req.SetBody(std::make_shared<StringViewStream>(buffer.data(), buffer.size()));
 
-    if (!_background_write) {
+    if (on_close || !_background_write) {
         auto outcome = _client->UploadPart(req);
         if (outcome.IsSuccess()) {
             LOG(INFO) << "Uploaded s3://" << _bucket << "/" << _object << " via multipart upload"
@@ -153,6 +153,8 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
     }
 
     bool ok = _io_executor->try_offer([&, req = std::move(req), buffer = std::move(buffer)] {
+        LOG(INFO) << "Uploading s3://" << _bucket << "/" << _object << " via multipart upload"
+                      << " part = " << req.GetPartNumber() << " length = " << req.GetContentLength();
         auto outcome = _client->UploadPart(req);
         std::unique_lock<std::mutex> lock(_mutex);
         if (outcome.IsSuccess()) {
@@ -164,6 +166,7 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
             }
             _etags[slot] = outcome.GetResult().GetETag();
             ++_completed_parts;
+            LOG(INFO) << "s3://" << _bucket << "/" << _object << "completed " << _completed_parts << " parts";
         } else {
             LOG(ERROR) << outcome.GetError();
             _io_status.update(Status::IOError(outcome.GetError().GetMessage()));
@@ -179,7 +182,7 @@ Status S3OutputStream::upload_part(std::vector<uint8_t> buffer) {
 }
 
 Status S3OutputStream::complete_multipart_upload() {
-    LOG(INFO) << "Completing multipart upload s3://" << _bucket << "/" << _object;
+    LOG(INFO) << "Completing multipart upload s3://" << _bucket << "/" << _object << "total parts = " << _part_id - 1;
 
     std::unique_lock<std::mutex> lock(_mutex);
     _cv.wait(lock, [&] { return _part_id - 1 == _completed_parts; });
