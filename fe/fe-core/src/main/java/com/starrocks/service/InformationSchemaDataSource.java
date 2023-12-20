@@ -313,7 +313,7 @@ public class InformationSchemaDataSource {
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }
@@ -348,7 +348,7 @@ public class InformationSchemaDataSource {
 
                         TTableInfo info = new TTableInfo();
 
-                        info.setTable_catalog(DEF);
+                        info.setTable_catalog(table.getCatalogName());
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
                         info.setTable_type(table.getMysqlType());
