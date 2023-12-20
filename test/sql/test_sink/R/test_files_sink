@@ -3,23 +3,20 @@ insert into files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
 	"format"="parquet", 
 	"compression" = "uncompressed"
-) 
+)
 select 1 as k1, "A" as k2;
 -- result:
-[]
 -- !result
 set pipeline_sink_dop = 1;
 -- result:
-[]
 -- !result
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
 	"format"="parquet", 
 	"compression" = "uncompressed"
-) 
+)
 select 2 as k1, "B" as k2;
 -- result:
-[]
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
@@ -28,6 +25,66 @@ select * from files (
 -- result:
 1	A
 2	B
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: test_read_write_parquet_file
+create table t1 (c1 int, c2 binary);
+-- result:
+-- !result
+insert into t1 select 1, bitmap_to_binary(bitmap_agg(generate_series)) from TABLE(generate_series(1,10));
+-- result:
+-- !result
+insert into files (
+	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
+	"format"="parquet",
+	"compression" = "uncompressed"
+) select * from t1;
+-- result:
+-- !result
+create table t2 (c1 int, c2 binary);
+-- result:
+-- !result
+insert into t2 select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t2;
+-- result:
+1	1,2,3,4,5,6,7,8,9,10
+-- !result
+create table t3 (c1 int, c2 string);
+-- result:
+-- !result
+insert into t3 select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t3;
+-- result:
+1	1,2,3,4,5,6,7,8,9,10
+-- !result
+create table t4 as select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t4;
+-- result:
+1	1,2,3,4,5,6,7,8,9,10
+-- !result
+desc t4;
+-- result:
+c1	int	YES	true	None	
+c2	varbinary	YES	false	None	
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
 -- result:
