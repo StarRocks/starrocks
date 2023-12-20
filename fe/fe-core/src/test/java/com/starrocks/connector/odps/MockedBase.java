@@ -145,13 +145,4 @@ public class MockedBase {
         when(inputSplitAssigner.getTotalRowCount()).thenReturn(10000L);
         when(inputSplitAssigner.getSplitByRowOffset(0, 10000L)).thenReturn(split2);
     }
-
-    @Test
-    public void test() {
-        Iterator<Table> iterator = odps.tables().iterator("project");
-        while (iterator.hasNext()) {
-            Table table = iterator.next();
-            System.out.println(table.getName());
-        }
-    }
 }
