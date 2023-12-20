@@ -56,6 +56,7 @@ import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -792,5 +793,9 @@ public class PartitionUtil {
 
     public static String getPathWithSlash(String path) {
         return path.endsWith("/") ? path : path + "/";
+    }
+
+    public static String getPartitionSourceName(Schema schema, PartitionField partition) {
+        return schema.findColumnName(partition.sourceId());
     }
 }
