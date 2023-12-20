@@ -223,7 +223,7 @@ public class MaterializedViewAnalyzer {
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             final TableName tableNameObject = statement.getTableName();
-            MetaUtils.normalizationTableName(context, tableNameObject);
+            MetaUtils.normalizeMVName(context, tableNameObject);
             final String tableName = tableNameObject.getTbl();
             FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
@@ -243,6 +243,12 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
 
+            if (!InternalCatalog.isFromDefault(statement.getTableName())) {
+                throw new SemanticException("Materialized view can only be created in default_catalog. " +
+                        "You could either create it with default_catalog.<database>.<mv>, or switch to " +
+                        "default_catalog through `set catalog <default_catalog>` statement",
+                        statement.getTableName().getPos());
+            }
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
