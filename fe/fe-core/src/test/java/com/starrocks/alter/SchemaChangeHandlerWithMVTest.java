@@ -38,7 +38,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
-import org.junit.Ignore;
 import org.junit.jupiter.api.Test;
 import org.junit.runners.MethodSorters;
 
@@ -154,8 +153,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithNoAggregateRollup1() {
-        // drop column without aggregate
-        // no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select error_code, error_msg, " +
@@ -170,8 +167,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithNoAggregateRollup2() {
-        // drop column without aggregate
-        // OK: associated column with drop column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select error_code, error_msg, timestamp from sc_dup3 ",
@@ -197,8 +192,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithNoAggregateRollup4() throws Exception {
-        // drop column without aggregate
-        // OK: associated column with modify column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select error_code, error_msg, timestamp from sc_dup3 " +
@@ -211,8 +204,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithNoAggregateRollup5() {
-        // drop column without aggregate
-        // OK: associated column with modify column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select error_code, error_msg, timestamp from sc_dup3 " +
@@ -243,7 +234,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithAggregateRollup2() {
-        // drop column with aggregate: no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select timestamp, count(error_code), sum(type) from sc_dup3 " +
@@ -290,7 +280,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithAggregateRollup5() {
-        // drop column with aggregate: no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 as select timestamp, count(error_code)  from sc_dup3 " +
@@ -322,7 +311,6 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
 
     @Test
     public void testModifyColumnsWithAMV1() {
-        // drop column with aggregate: no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 distributed by random refresh deferred manual " +
@@ -337,11 +325,17 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
         }
     }
+
     @Test
     public void testModifyColumnsWithAMV2() {
-        // drop column with aggregate: no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 distributed by random refresh deferred manual " +
@@ -356,13 +350,17 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
         }
     }
 
     @Test
-    @Ignore
     public void testModifyColumnsWithAMV3() {
-        // drop column with aggregate: no associated column
         try {
             checkModifyColumnsWithMaterializedViews(starRocksAssert,
                     "create materialized view mv1 distributed by random refresh deferred manual " +
@@ -377,6 +375,60 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
+
+    @Test
+    public void testModifyColumnsWithAMV4() {
+        try {
+            checkModifyColumnsWithMaterializedViews(starRocksAssert,
+                    "create materialized view mv1 distributed by random refresh deferred manual " +
+                            "as select timestamp, count(error_code) from sc_dup3 " +
+                            "where op_id * 2> 10 group by timestamp",
+                    "alter table sc_dup3 modify column op_id VARCHAR",
+                    false);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
+            Assert.assertFalse(mv.isActive());
+            System.out.println(mv.getInactiveReason());
+            Assert.assertTrue(mv.getInactiveReason().contains("base-table schema changed for columns: op_id"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
+
+    @Test
+    public void testModifyColumnsWithAMV5() {
+        try {
+            checkModifyColumnsWithMaterializedViews(starRocksAssert,
+                    "create materialized view mv1 distributed by random refresh deferred manual " +
+                            "as select timestamp, count(error_code) from sc_dup3 " +
+                            "where op_id * 2> 10 group by timestamp",
+                    "alter table sc_dup3 modify column error_msg VARCHAR(1025)",
+                    false);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", "mv1");
+            Assert.assertTrue(mv.isActive());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView("mv1");
+            } catch (Exception e) {
+                // ignore
+            }
         }
     }
 }
