@@ -136,13 +136,6 @@ public class MvRewritePreprocessor {
         // limit
         logMVPrepare(connectContext, "---------------------------------");
         logMVPrepare(connectContext, "Materialized View Limit Params: ");
-<<<<<<< HEAD
-=======
-        logMVPrepare(connectContext, "  optimizer_materialized_view_timelimit: {}",
-                sessionVariable.getOptimizerMaterializedViewTimeLimitMillis());
-        logMVPrepare(connectContext, "  materialized_view_join_same_table_permutation_limit: {}",
-                sessionVariable.getMaterializedViewJoinSameTablePermutationLimit());
->>>>>>> 11a66c259f ([Enhancement] Add default_mv_refresh_partition_num to set default partition_refresh_num (#36560))
         logMVPrepare(connectContext, "  skip_whole_phase_lock_mv_limit: {}",
                 Config.skip_whole_phase_lock_mv_limit);
 
