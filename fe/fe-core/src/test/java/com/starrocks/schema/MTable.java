@@ -15,7 +15,6 @@
 package com.starrocks.schema;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.parquet.Strings;
 
@@ -93,7 +92,7 @@ public class MTable {
 
     public MTable withValues(String value) {
         String[] arr = value.split(",");
-        return withValues(ImmutableList.of(arr));
+        return withValues(Lists.newArrayList(arr));
     }
 
     public MTable withValues(List<String> values) {
@@ -103,7 +102,7 @@ public class MTable {
 
     public MTable withProperties(String value) {
         String[] arr = value.split(",");
-        return withProperties(ImmutableList.of(arr));
+        return withProperties(Lists.newArrayList(arr));
     }
 
     public MTable withProperties(List<String> values) {
