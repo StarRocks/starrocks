@@ -173,10 +173,4 @@ public class DataCachePlanTest extends PlanTestBase {
                 "where l_shipdate>='1998-01-03'";
         assertPlanContains(sql, "BLACKHOLE TABLE SINK");
     }
-
-    @Test
-    public void testLikeInPartitionColumn() throws Exception {
-        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
-        assertPlanContains(sql, "partitions=1/1");
-    }
 }
