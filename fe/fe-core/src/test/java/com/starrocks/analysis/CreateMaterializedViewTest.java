@@ -20,6 +20,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -1287,7 +1288,8 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error from line 3, column 16 to line 3, column 28. " +
-                    "Detail message: Materialized view partition function sqrt is not support: sqrt(`k1`).", e.getMessage());
+                            "Detail message: Materialized view partition function sqrt is not support: sqrt(`k1`).",
+                    e.getMessage());
         }
     }
 
@@ -2247,8 +2249,9 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
 
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2407,8 +2410,9 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2426,8 +2430,9 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2445,8 +2450,9 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select k1, tbl1.k2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -2670,6 +2676,59 @@ public class CreateMaterializedViewTest {
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
     }
 
+    /**
+     * Create MV on external catalog should report the correct error message
+     */
+    @Test
+    public void testExternalCatalogException() throws Exception {
+        // 1. create mv with full database name
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW default_catalog.test.supplier_hive_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
+                "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
+                "from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;");
+        starRocksAssert.dropMaterializedView("default_catalog.test.supplier_hive_mv");
+
+        // create mv with database.table
+        starRocksAssert.useCatalog("hive0");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.supplier_hive_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
+                "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
+                "from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;");
+        starRocksAssert.dropMaterializedView("default_catalog.test.supplier_hive_mv");
+
+        // create mv with table name
+        AnalysisException ex = Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+                        "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
+                        "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
+                        "from hive0.tpch.supplier as supp " +
+                        "group by s_suppkey, s_nationkey order by s_suppkey;")
+        );
+        Assert.assertEquals("Getting analyzing error. Detail message: No database selected. " +
+                        "You could set the database name through `<database>.<table>` or `use <database>` statement.",
+                ex.getMessage());
+
+        // create mv with wrong catalog
+        ex = Assert.assertThrows(AnalysisException.class, () ->
+                starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW hive0.tpch.supplier_hive_mv " +
+                        "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS " +
+                        "select s_suppkey, s_nationkey, sum(s_acctbal) as total_s_acctbal " +
+                        "from hive0.tpch.supplier as supp " +
+                        "group by s_suppkey, s_nationkey order by s_suppkey;")
+        );
+        Assert.assertEquals("Getting analyzing error from line 1, column 25 to line 1, column 36. " +
+                        "Detail message: Materialized view can only be created in default_catalog. " +
+                        "You could either create it with default_catalog.<database>.<mv>, " +
+                        "or switch to default_catalog through `set catalog <default_catalog>` statement.",
+                ex.getMessage());
+
+        // reset state
+        starRocksAssert.useCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        starRocksAssert.useDatabase(testDb.getFullName());
+    }
+
     @Test
     public void testJdbcTable() throws Exception {
         starRocksAssert.withResource("create external resource jdbc0\n" +
@@ -2775,6 +2834,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
                     .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             newStarRocksAssert.dropDatabase("test_mv_different_db");
+            starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
         } catch (Exception e) {
             Assert.fail();
         }
@@ -3473,6 +3533,7 @@ public class CreateMaterializedViewTest {
                 "from tbl1 tb1;";
         starRocksAssert.withMaterializedView(sql);
     }
+
     @Test
     public void testCreateMaterializedViewWithTableAlias1() throws Exception {
         String sql = "create materialized view mv1 " +
