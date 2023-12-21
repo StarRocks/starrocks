@@ -92,6 +92,12 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String DATE = "date";
+    public static final String LAST_DAY = "last_day";
+    public static final String MAKEDATE = "makedate";
+    public static final String NEXT_DAY = "next_day";
+    public static final String PREVIOUS_DAY = "previous_day";
+    public static final String TO_TERA_DATE = "to_tera_date";
     public static final String TO_DAYS = "to_days";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
