@@ -37,7 +37,7 @@ public:
     // return latest applied (publish in cloud native) version
     StatusOr<EditVersion> applied_version() override;
     // Do some special setting if need
-    void setting() override{};
+    void setting() override {}
     // iterator all rowset and get their iterator and basic stat
     Status rowset_iterator(
             const Schema& pkey_schema,

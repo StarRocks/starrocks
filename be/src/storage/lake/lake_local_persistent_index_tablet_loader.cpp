@@ -55,14 +55,11 @@ Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
     OlapReaderStatistics stats;
     // scan all rowsets and segments to build primary index
     auto rowsets = Rowset::get_rowsets(_tablet_mgr, _metadata);
-    if (!rowsets.ok()) {
-        return rowsets.status();
-    }
-    _rowset_num = rowsets->size();
+    _rowset_num = rowsets.size();
 
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    for (auto& rowset : *rowsets) {
+    for (auto& rowset : rowsets) {
         _total_data_size += rowset->data_size();
         _total_segments += rowset->num_segments();
 

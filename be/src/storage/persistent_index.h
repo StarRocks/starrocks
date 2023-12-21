@@ -35,6 +35,7 @@ class Column;
 
 class TabletLoader {
 public:
+    virtual ~TabletLoader() = default;
     virtual starrocks::Schema generate_pkey_schema() = 0;
     virtual DataDir* data_dir() = 0;
     virtual TTabletId tablet_id() = 0;
