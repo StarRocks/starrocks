@@ -455,10 +455,10 @@ public abstract class ConnectorPartitionTraits {
                 }
 
                 long basePartitionVersion = basePartitionInfo.getVersion();
-                if (basePartitionVersion < currentVersion) {
+                if (basePartitionVersion != currentVersion) {
                     baseTable.setRefreshSnapshotTime(currentVersion);
                     result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
-                            basePartitionVersion));
+                            basePartitionVersion, snapshot));
                 }
             }
             return result;
