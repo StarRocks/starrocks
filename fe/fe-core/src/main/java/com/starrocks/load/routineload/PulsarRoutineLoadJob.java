@@ -128,6 +128,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    protected String getSourceProgressString() {
+        // empty implement.
+        return "";
+    }
+
+    @Override
     public void prepare() throws UserException {
         super.prepare();
         // should reset converted properties each time the job being prepared.
