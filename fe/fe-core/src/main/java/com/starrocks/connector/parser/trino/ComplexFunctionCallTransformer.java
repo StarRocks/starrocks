@@ -42,8 +42,8 @@ public class ComplexFunctionCallTransformer {
                 StringLiteral unit = (StringLiteral) args[0];
                 Expr interval = args[1];
                 Expr date = args[2];
-                return new TimestampArithmeticExpr(functionName, date, interval,
-                        unit.getStringValue());
+                return TrinoParserUtils.alignWithInputDatetimeType(new TimestampArithmeticExpr(functionName, date, interval,
+                        unit.getStringValue()));
             }
         } else if (functionName.equalsIgnoreCase("json_format")) {
             return new CastExpr(Type.VARCHAR, args[0]);
