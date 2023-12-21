@@ -166,7 +166,16 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
+<<<<<<< HEAD
                 checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+=======
+                // `privilegeType == null` meaning we don't check specified action, just any action
+                if (privilegeType == null) {
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
+                } else {
+                    checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
+                }
+>>>>>>> 3a3a016eb6 ([BugFix] Fix privilege warning of external catalog information schema (#37105))
                 break;
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
