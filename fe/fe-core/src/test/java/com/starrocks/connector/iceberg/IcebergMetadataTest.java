@@ -1107,11 +1107,11 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
 
         TableName tableName = new TableName("db", "tbl");
-        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), false);
+        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
         AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
 
-        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), false);
-        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), false);
+        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
         List<ColumnDef> cols = new ArrayList<>();
         cols.add(c2);
         cols.add(c3);
@@ -1122,6 +1122,14 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(addColumnsClause);
         AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
         metadata.alterTable(stmt);
+        clauses.clear();
+
+        // must be default null
+        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
+        clauses.add(addC4);
+        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(stmtC4));
         clauses.clear();
 
         // drop/rename/modify column

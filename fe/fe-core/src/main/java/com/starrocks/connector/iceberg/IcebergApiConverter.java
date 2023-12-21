@@ -46,7 +46,6 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -71,7 +70,6 @@ public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
     public static final String PARTITION_NULL_VALUE = "null";
     private static final int FAKE_FIELD_ID = -1;
-    private static final String ALLOW_INCOMPATIBLE_CHANGES = "allow_incompatible_changes";
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType) {
@@ -312,24 +310,15 @@ public class IcebergApiConverter {
                 AddColumnClause addColumnClause = (AddColumnClause) clause;
                 ColumnPosition pos = addColumnClause.getColPos();
                 Column column = addColumnClause.getColumnDef().toColumn();
-                Map<String, String> properties = Maps.newHashMap();
-                properties.putAll(addColumnClause.getProperties());
 
-                if (isAllowIncompatibleChanges(properties)) {
-                    updateSchema.allowIncompatibleChanges();
+                // All non-partition columns must use NULL as the default value.
+                if (!column.isAllowNull()) {
+                    throw new StarRocksConnectorException("added column must use NULL as the default value.");
                 }
-
-                if (column.isAllowNull()) {
-                    updateSchema.addColumn(
-                            column.getName(),
-                            toIcebergColumnType(column.getType()),
-                            column.getComment());
-                } else {
-                    updateSchema.addRequiredColumn(
-                            column.getName(),
-                            toIcebergColumnType(column.getType()),
-                            column.getComment());
-                }
+                updateSchema.addColumn(
+                        column.getName(),
+                        toIcebergColumnType(column.getType()),
+                        column.getComment());
 
                 // AFTER column / FIRST
                 if (pos != null) {
@@ -349,23 +338,14 @@ public class IcebergApiConverter {
                         .map(ColumnDef::toColumn)
                         .collect(Collectors.toList());
 
-                Map<String, String> properties = Maps.newHashMap(addColumnsClause.getProperties());
-                if (isAllowIncompatibleChanges(properties)) {
-                    updateSchema.allowIncompatibleChanges();
-                }
-
                 for (Column column : columns) {
-                    if (column.isAllowNull()) {
-                        updateSchema.addColumn(
-                                column.getName(),
-                                toIcebergColumnType(column.getType()),
-                                column.getComment());
-                    } else {
-                        updateSchema.addRequiredColumn(
-                                column.getName(),
-                                toIcebergColumnType(column.getType()),
-                                column.getComment());
+                    if (!column.isAllowNull()) {
+                        throw new StarRocksConnectorException("added column must be allowed null.");
                     }
+                    updateSchema.addColumn(
+                            column.getName(),
+                            toIcebergColumnType(column.getType()),
+                            column.getComment());
                 }
             } else if (clause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) clause;
@@ -416,10 +396,5 @@ public class IcebergApiConverter {
         }
 
         updateSchema.commit();
-    }
-
-    private static boolean isAllowIncompatibleChanges(Map<String, String> properties) {
-        return Boolean
-                .parseBoolean(properties.getOrDefault(ALLOW_INCOMPATIBLE_CHANGES, "false"));
     }
 }
