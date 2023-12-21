@@ -150,7 +150,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
+    reader_params.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
