@@ -123,6 +123,11 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        return hmsOps.tableExists(dbName, tblName);
+    }
+
+    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
