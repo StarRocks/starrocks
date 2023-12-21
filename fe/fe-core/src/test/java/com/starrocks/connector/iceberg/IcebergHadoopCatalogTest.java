@@ -22,6 +22,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +32,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergHadoopCatalogTest {
     @Test
@@ -58,5 +60,18 @@ public class IcebergHadoopCatalogTest {
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
         List<String> dbs = icebergHadoopCatalog.listAllDatabases();
         assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testTableExists(@Mocked HadoopCatalog hadoopCatalog) {
+        new Expectations() {
+            {
+                hadoopCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
+                "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
+        assertTrue(icebergHadoopCatalog.tableExists("db1", "tbl1"));
     }
 }

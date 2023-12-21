@@ -96,6 +96,13 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testTableExists() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        Assert.assertTrue(metastore.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
@@ -294,6 +301,10 @@ public class HiveMetastoreTest {
             }
 
             return msTable1;
+        }
+
+        public boolean tableExists(String dbName, String tblName) {
+            return getTable(dbName, tblName) != null;
         }
 
         public void alterTable(String dbName, String tableName, Table newTable) {

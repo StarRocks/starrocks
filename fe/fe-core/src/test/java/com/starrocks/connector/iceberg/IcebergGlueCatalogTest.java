@@ -22,6 +22,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -47,5 +48,19 @@ public class IcebergGlueCatalogTest {
                 "glue_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testTableExists(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
     }
 }

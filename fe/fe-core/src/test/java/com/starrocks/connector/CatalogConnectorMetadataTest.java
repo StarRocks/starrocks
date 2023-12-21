@@ -20,12 +20,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -122,6 +124,12 @@ public class CatalogConnectorMetadataTest {
 
         assertTrue(catalogConnectorMetadata.dbExists("test_db"));
         assertTrue(catalogConnectorMetadata.dbExists(InfoSchemaDb.DATABASE_NAME));
+    }
+
+    @Test
+    void testTableExists() {
+        MockedJDBCMetadata mockedJDBCMetadata = new MockedJDBCMetadata(new HashMap<>());
+        assertTrue(mockedJDBCMetadata.tableExists("db1", "tbl1"));
     }
 
     @Test

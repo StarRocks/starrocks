@@ -401,4 +401,17 @@ public class UnifiedMetadataTest {
         createTableStmt.setEngineName("deltalake");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
+
+    @Test
+    public void testTableExists(@Mocked HiveTable hiveTable) {
+        new Expectations() {
+            {
+                hiveMetadata.tableExists("test_db", "test_tbl");
+                result = true;
+                minTimes = 1;
+            }
+        };
+        boolean exists = unifiedMetadata.tableExists("test_db", "test_tbl");
+        Assert.assertTrue(exists);
+    }
 }
