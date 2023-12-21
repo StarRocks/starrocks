@@ -19,6 +19,12 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.rest.RESTCatalog;
+>>>>>>> 6df9a401e9 ([Enhancement] Fix CTAS failure caused by HMS getAllTable (#36456))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -43,5 +49,19 @@ public class IcebergRESTCatalogTest {
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testTableExists(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), new HashMap<>());
+        boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
+        Assert.assertTrue(exists);
     }
 }

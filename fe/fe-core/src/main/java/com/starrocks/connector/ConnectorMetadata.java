@@ -112,6 +112,10 @@ public interface ConnectorMetadata {
         return null;
     }
 
+    default boolean tableExists(String dbName, String tblName) {
+        return listTableNames(dbName).contains(tblName);
+    }
+
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *

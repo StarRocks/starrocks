@@ -99,6 +99,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(dbName, tableName);
+    }
+
+    @Override
     public boolean createTable(String dbName,
                                String tableName,
                                Schema schema,

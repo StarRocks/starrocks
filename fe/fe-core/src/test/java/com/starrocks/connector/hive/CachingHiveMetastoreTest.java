@@ -109,6 +109,13 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testTableExists() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertTrue(cachingHiveMetastore.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     public void testRefreshTable() {
         new Expectations(metastore) {
             {
