@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -24,11 +24,18 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
 
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -174,6 +181,80 @@ public class MaterializationContext {
         return this.refTableUpdatePartitionNames;
     }
 
+    /**
+     * Try to prune this MV during MV rewrite
+     *
+     * @return false if this MV is not applicable
+     */
+    public boolean prune(OptimizerContext ctx, OptExpression queryExpression) {
+        final String mvName = getMv().getName();
+        final OptExpression mvExpression = getMvExpression();
+        final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        final List<Table> mvTables = getBaseTables();
+        MaterializedViewRewriter.MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+
+        // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
+        // because optimizer will match MV's pattern which is subset of query opt tree
+        // from top-down iteration.
+        if (matchMode == MaterializedViewRewriter.MatchMode.COMPLETE) {
+            // Q  : A JOIN B JOIN C JOIN D
+            // MV : A JOIN B JOIN C
+            // To fast rewrite, only need to check `A JOIN B JOIN C` pattern rather than
+            // `A JOIN B JOIN C JOIN D`.
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode()) {
+                for (OptExpression child : queryExpression.getInputs()) {
+                    final List<Table> childTables = MvUtils.getAllTables(child);
+                    if (Sets.newHashSet(childTables).contains(mvTables)) {
+                        logMVRewrite(mvName, "MV is pruned since subjoin could be rewritten");
+                        return false;
+                    }
+                }
+            }
+        } else if (matchMode == MaterializedViewRewriter.MatchMode.VIEW_DELTA) {
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewViewDeltaRewrite()) {
+                return false;
+            }
+            // only consider query with most common tables to optimize performance
+            // To avoid join reorder producing plan bomb, record query's max tables to be only matched.
+            // But if query contains non inner/left outer joins which cannot be used to view delta join,
+            // not use `intersectingTables` anymore.
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() &&
+                    !new HashSet<>(queryTables).containsAll(getIntersectingTables())) {
+                return false;
+            }
+
+            if (!MvUtils.isSupportViewDelta(queryExpression)) {
+                logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
+                        "only support inner/left outer join type for now");
+                return false;
+            }
+
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            // there should be at least one same join type in mv scan descs for every query scan desc.
+            // to forbid rewrite for:
+            // query: a left outer join b
+            // mv: a inner join b inner join c
+            for (TableScanDesc queryScanDesc : queryTableScanDescs) {
+                if (queryScanDesc.getJoinOptExpression() != null
+                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                    logMVRewrite(mvName, "MV is not applicable in view delta mode: " +
+                            "at least one same join type should be existed");
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+
+        // If table lists do not intersect, can not be rewritten
+        if (Collections.disjoint(queryTables, mvTables)) {
+            logMVRewrite(mvName, "MV is not applicable: query tables are disjoint with mvs' tables");
+            return false;
+        }
+        return true;
+    }
+
     public static class RewriteOrdering implements Comparator<MaterializationContext> {
 
         private static int getOperatorOrdering(OperatorType op) {
@@ -195,6 +276,9 @@ public class MaterializationContext {
             return Math.abs(mvContext.getIntersectingTables().size() - mvContext.getBaseTables().size());
         }
 
+        /**
+         * Prefer small table to large table
+         */
         private static long orderingRowCount(MaterializationContext mvContext) {
             return mvContext.getMv().getRowCount();
         }

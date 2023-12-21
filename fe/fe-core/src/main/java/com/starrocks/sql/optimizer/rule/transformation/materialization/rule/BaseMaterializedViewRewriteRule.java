@@ -96,8 +96,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 }
             }
         } else {
-            mvCandidateContexts = context.getCandidateMvs();
+            mvCandidateContexts.addAll(context.getCandidateMvs());
         }
+        mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
         if (CollectionUtils.isEmpty(mvCandidateContexts)) {
             return Lists.newArrayList();
         }
