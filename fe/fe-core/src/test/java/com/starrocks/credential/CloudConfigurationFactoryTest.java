@@ -18,7 +18,8 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,10 +31,10 @@ public class CloudConfigurationFactoryTest {
     @Test
     public void testBuildCloudConfigurationForTabular() {
         Map<String, String> map = new HashMap<>();
-        map.put(AwsProperties.S3FILEIO_ACCESS_KEY_ID, "ak");
-        map.put(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, "sk");
-        map.put(AwsProperties.S3FILEIO_SESSION_TOKEN, "token");
-        map.put(AwsProperties.CLIENT_REGION, "region");
+        map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
+        map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
+        map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+        map.put(AwsClientProperties.CLIENT_REGION, "region");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
