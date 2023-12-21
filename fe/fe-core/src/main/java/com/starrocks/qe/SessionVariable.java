@@ -863,7 +863,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // enable global shuffle before sink fragments
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
-    private boolean enableConnectorSinkGlobalShuffle = false; // experimental
+    private boolean enableConnectorSinkGlobalShuffle = true;
 
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
