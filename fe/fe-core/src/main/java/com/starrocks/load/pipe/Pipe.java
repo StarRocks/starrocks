@@ -305,9 +305,7 @@ public class Pipe implements GsonPostProcessable {
             return;
         }
 
-        try {
-            lock.writeLock().lock();
-
+        try (CloseableLock l = takeWriteLock()) {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
@@ -328,8 +326,6 @@ public class Pipe implements GsonPostProcessable {
             LOG.debug("pipe {} build task: {}", name, taskDesc);
         } catch (Throwable e) {
             recordPipeError(e.getMessage());
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
@@ -352,9 +348,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
-        try {
-            lock.writeLock().lock();
-
+        try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
@@ -378,15 +372,13 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+        }
 
-            // Persist LoadStatus
-            // TODO: currently we cannot guarantee the consistency of LoadStatus and FileList
-            if (CollectionUtils.isNotEmpty(removeTaskId)) {
-                persistPipe();
-                LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
-            }
-        } finally {
-            lock.writeLock().unlock();
+        // Persist LoadStatus
+        // TODO: currently we cannot guarantee the consistency of LoadStatus and FileList
+        if (CollectionUtils.isNotEmpty(removeTaskId)) {
+            persistPipe();
+            LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
         }
     }
 
@@ -411,8 +403,8 @@ public class Pipe implements GsonPostProcessable {
 
     private void changeState(State state, boolean persist) {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        try (CloseableLock l = pm.writeLock()) {
-            lock.writeLock().lock();
+        try (CloseableLock l = pm.takeWriteLock();
+                CloseableLock r = this.takeWriteLock()) {
             if (this.state.equals(state)) {
                 return;
             }
@@ -422,20 +414,16 @@ public class Pipe implements GsonPostProcessable {
             }
         } catch (Throwable e) {
             LOG.error("update pipe state {} failed: {}", toString(), e.getMessage(), e);
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
     private void persistPipe() {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        try (CloseableLock l = pm.writeLock()) {
-            lock.writeLock().lock();
+        try (CloseableLock l = pm.takeWriteLock();
+                CloseableLock r = this.takeWriteLock()) {
             pm.updatePipe(this);
         } catch (Throwable e) {
             LOG.error("persist pipe {} state failed: {}", this, e.getMessage(), e);
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
@@ -496,9 +484,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public void suspend() {
-        try {
-            lock.writeLock().lock();
-
+        try (CloseableLock l = takeWriteLock()) {
             if (this.state == State.RUNNING) {
                 this.state = State.SUSPEND;
 
@@ -523,23 +509,16 @@ public class Pipe implements GsonPostProcessable {
                     repo.updateFileState(loadingFiles, FileListRepo.PipeFileState.UNLOADED, null);
                 }
             }
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
     public void resume() {
-        try {
-            lock.writeLock().lock();
-
+        try (CloseableLock l = takeWriteLock()) {
             if (this.state == State.SUSPEND || this.state == State.ERROR) {
                 this.state = State.RUNNING;
                 this.failedTaskExecutionCount = 0;
                 LOG.info("Resume pipe " + this);
             }
-
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
@@ -570,12 +549,17 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public List<PipeTaskDesc> getRunningTasks() {
-        try {
-            lock.readLock().lock();
+        try (CloseableLock l = takeReadLock()) {
             return new ArrayList<>(runningTasks.values());
-        } finally {
-            lock.readLock().unlock();
         }
+    }
+
+    public CloseableLock takeWriteLock() {
+        return CloseableLock.lock(lock.writeLock());
+    }
+
+    public CloseableLock takeReadLock() {
+        return CloseableLock.lock(lock.readLock());
     }
 
     public int getFailedTaskExecutionCount() {
@@ -583,11 +567,8 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public State getState() {
-        try {
-            lock.readLock().lock();
+        try (CloseableLock l = takeReadLock()) {
             return state;
-        } finally {
-            lock.readLock().unlock();
         }
     }
 
