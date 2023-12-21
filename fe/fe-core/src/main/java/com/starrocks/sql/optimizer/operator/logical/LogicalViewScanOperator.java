@@ -115,12 +115,18 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             return new LogicalViewScanOperator();
         }
 
+        public Builder setOriginalPlan(OptExpression originalPlan) {
+            builder.originalPlan = originalPlan;
+            return this;
+        }
+
         @Override
         public LogicalViewScanOperator.Builder withOperator(LogicalViewScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.relationId = scanOperator.relationId;
             builder.expressionToColumns = scanOperator.expressionToColumns;
             builder.outputColumnSet = scanOperator.outputColumnSet;
+            builder.originalPlan = scanOperator.originalPlan;
             return this;
         }
     }

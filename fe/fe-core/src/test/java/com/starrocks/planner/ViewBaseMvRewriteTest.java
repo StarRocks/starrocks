@@ -1,6 +1,8 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -9,8 +11,9 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.setUp();
-        //MaterializedViewTestBase.beforeClass();
+        PlanTestBase.beforeClass();
 
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         starRocksAssert.useDatabase("test");
         Config.default_replication_num = 1;
         String viewQ1 = "create view view_q1\n" +
@@ -273,7 +276,6 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             testRewriteFail(mv, query);
             starRocksAssert.dropView("view_6");
         }
-
         {
             // test extra LogicaiViewScanOperator of view_3 left
             starRocksAssert.withView("create view view_6 as " +

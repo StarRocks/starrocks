@@ -63,11 +63,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
         this.traceLogModule = "";
     }
 
-    @BeforeClass
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
 
+        connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
@@ -82,6 +83,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
+        starRocksAssert = new StarRocksAssert(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock

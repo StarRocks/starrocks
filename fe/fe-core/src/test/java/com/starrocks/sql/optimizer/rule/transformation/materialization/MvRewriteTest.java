@@ -2168,6 +2168,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testViewBasedPartitionedMvRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         starRocksAssert.withView("create view view_based_test_1 " +
                 "as " +
                 "select * from test_partition_tbl_for_view");
@@ -2186,5 +2187,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropView("view_based_test_1");
         starRocksAssert.dropMaterializedView("view_based_mv_1");
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }

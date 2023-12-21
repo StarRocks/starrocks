@@ -1618,6 +1618,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
 
     @Test
     public void testViewBasedRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         String view = "create view iceberg_table_view " +
                 " as select t1.a, t2.b, t1.d, count(t1.c) as cnt" +
                 " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1631,6 +1632,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as " +
@@ -1651,5 +1653,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "iceberg_mv_1");
         }
         starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }

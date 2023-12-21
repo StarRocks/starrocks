@@ -129,10 +129,10 @@ public class MvRewritePreprocessor {
                                      OptExpression logicOperatorTree,
                                      ColumnRefFactory columnRefFactory,
                                      ColumnRefSet requiredColumns) {
-        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
+        List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewPlanMap);
-        if (viewPlanMap.isEmpty()) {
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans, columnRefFactory);
+        if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;
         }
@@ -140,16 +140,7 @@ public class MvRewritePreprocessor {
         OptExpression optimizedPlan = optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
         context.setLogicalTreeWithView(optimizedPlan);
-
-        for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
-            OptExpression viewLogicalTree = viewPlanMap.get(viewScanOperator);
-            // optimize logical tree of view and keep them in OptimizerContext,
-            // which will be used in union rewrite or only some views are rewritten
-            OptExpression optimizedViewPlan = optimizeViewPlan(
-                    viewLogicalTree, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            viewScanOperator.setOriginalPlan(optimizedViewPlan);
-        }
-        context.setViewScans(Lists.newArrayList(viewPlanMap.keySet()));
+        context.setViewScans(viewScans);
     }
 
     private OptExpression optimizeViewPlan(
@@ -167,7 +158,9 @@ public class MvRewritePreprocessor {
     }
 
     private OptExpression extractLogicalPlanWithView(
-            OptExpression logicalTree, Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
+            OptExpression logicalTree,
+            List<LogicalViewScanOperator> viewScans,
+            ColumnRefFactory columnRefFactory) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
@@ -175,20 +168,23 @@ public class MvRewritePreprocessor {
             // which will be used in mv union rewrite
             // should use cloned plan because the following optimizeViewPlan will change the plan
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
-            viewPlanMap.put(viewScanOperator, clonePlan);
+            OptExpression optimizedViewPlan = optimizeViewPlan(
+                    clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
             Projection projection = viewScanOperator.getProjection();
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
+            builder.setOriginalPlan(optimizedViewPlan);
             LogicalViewScanOperator clone = builder.build();
             OptExpression viewScanExpr = OptExpression.create(clone);
+            viewScans.add(clone);
             // should add a projection to make predicate pushdown rules work right
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input, viewPlanMap);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewScans, columnRefFactory);
                 inputs.add(newInput);
             }
             Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());

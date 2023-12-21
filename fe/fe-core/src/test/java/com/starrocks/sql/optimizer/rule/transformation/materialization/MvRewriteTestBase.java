@@ -232,6 +232,25 @@ public class MvRewriteTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `table_with_datetime_partition` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NULL COMMENT \"\", \n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`,`id_datetime`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id_datetime`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
         starRocksAssert.withTable("create table test_base_part(c1 int, c2 bigint, c3 bigint, c4 bigint)" +
                 " partition by range(c3) (" +
                 " partition p1 values less than (\"100\")," +
@@ -287,6 +306,11 @@ public class MvRewriteTestBase {
                 "(\"varchar2\",'1992-02-01', 2, 1, 1), " +
                 "(\"varchar3\", '1993-02-01', 3, 1, 1)");
         cluster.runSql("test", "insert into table_with_day_partition values " +
+                "(\"varchar1\", '1991-03-30', 1, 1, 1)," +
+                "(\"varchar2\", '1991-03-31', 2, 1, 1), " +
+                "(\"varchar3\", '1991-04-01', 3, 1, 1)," +
+                "(\"varchar3\", '1991-04-02', 4, 1, 1)");
+        cluster.runSql("test", "insert into table_with_datetime_partition values " +
                 "(\"varchar1\", '1991-03-30', 1, 1, 1)," +
                 "(\"varchar2\", '1991-03-31', 2, 1, 1), " +
                 "(\"varchar3\", '1991-04-01', 3, 1, 1)," +

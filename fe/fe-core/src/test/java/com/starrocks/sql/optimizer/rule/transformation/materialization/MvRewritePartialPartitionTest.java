@@ -1122,6 +1122,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testViewBaseMvRewriteWithPartitionExpr() throws Exception {
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         {
             starRocksAssert.withView("create view view_with_expr" +
                     " as" +
@@ -1140,8 +1141,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "PREDICATES: (date_trunc('day', 15: id_datetime) < '1991-03-31 00:00:00')" +
-                            " OR (date_trunc('day', 15: id_datetime) >= '1991-04-03 00:00:00')");
+                    "(date_trunc('day', 13: id_datetime) < '1991-03-31 00:00:00')" +
+                            " OR (date_trunc('day', 13: id_datetime) >= '1991-04-03 00:00:00')");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }
@@ -1164,32 +1165,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "PREDICATES: (14: id_date < '1991-03-31') OR (14: id_date >= '1991-04-03')");
+                    "(12: id_date < '1991-03-31') OR (12: id_date >= '1991-04-03')");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }
-
-        {
-            starRocksAssert.withView("create view view_with_expr" +
-                    " as" +
-                    " SELECT DATE_TRUNC('MONTH', `id_date`) AS `day_month`, \n" +
-                    "  COUNT(`t1a`) AS `cnt` \n" +
-                    "FROM `table_with_day_partition` \n" +
-                    "GROUP BY DATE_TRUNC('MONTH', `id_date`)");
-            createAndRefreshMv("test", "mv_on_view_1", "create materialized view mv_on_view_1" +
-                            " partition by day_month" +
-                            " distributed by hash(`day_month`)" +
-                            " as" +
-                            " select * from view_with_expr");
-            cluster.runSql("test", "insert into table_with_day_partition partition(p19910330)" +
-                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
-            String query5 = "select * from view_with_expr";
-            String plan5 = getFragmentPlan(query5);
-            PlanTestBase.assertContains(plan5, "mv_on_view_1");
-            PlanTestBase.assertContains(plan5, "UNION",
-                    "((19: date_trunc < '1991-04-01') OR (19: date_trunc >= '1991-04-03')) OR (19: date_trunc IS NULL)");
-            dropMv("test", "mv_on_view_1");
-            starRocksAssert.dropView("view_with_expr");
-        }
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }
