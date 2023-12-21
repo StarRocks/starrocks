@@ -886,7 +886,7 @@ public class QueryAnalyzer {
             }
             if (namesArray != null) {
                 Preconditions.checkState(fn.hasNamedArg());
-                node.getFunctionParams().reorderNamedArg(fn.getArgNames());
+                node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
             }
 
             if (!(fn instanceof TableFunction)) {

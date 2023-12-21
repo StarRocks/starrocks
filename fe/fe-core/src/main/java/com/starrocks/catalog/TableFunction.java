@@ -18,7 +18,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -47,25 +50,28 @@ public class TableFunction extends Function {
     @SerializedName(value = "symbolName")
     private String symbolName = "";
     // only used for serialization
+
+
     protected TableFunction() {
     }
 
     public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
-                         List<Type> tableFnReturnTypes) {
-        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+                         List<Type> tableFnReturnTypes, Map<String, Expr> defaultArgExpr) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, defaultArgExpr, false);
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, null, false);
     }
 
     public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
-                         List<Type> argTypes, List<Type> tableFnReturnTypes, boolean varArgs) {
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, Map<String, Expr> defaultArgExpr, boolean varArgs) {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
         setArgNames(argNames);
+        setDefaultNamedArgs(defaultArgExpr);
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -100,17 +106,22 @@ public class TableFunction extends Function {
         }
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
-            // generate_series with default step size: 1
+            // generate_series
+            Map<String, Expr> defaultArgs = Maps.newHashMap();
+            try {
+                defaultArgs.put("step", LiteralExpr.create("1", type));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // for both named arguments and positional arguments
             TableFunction func = new TableFunction(new FunctionName("generate_series"),
-                    Lists.newArrayList("start", "end"),
+                    Lists.newArrayList("start", "end", "step"),
                     Lists.newArrayList("generate_series"),
-                    Lists.newArrayList(type, type),
-                    Lists.newArrayList(type));
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type), defaultArgs);
             functionSet.addBuiltin(func);
 
-            // generate_series with explicit step size
+            // only for positional arguments
             func = new TableFunction(new FunctionName("generate_series"),
-                    Lists.newArrayList("start", "end", "step"),
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type));

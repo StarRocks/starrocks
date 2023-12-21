@@ -39,6 +39,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -52,6 +53,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
@@ -145,6 +147,7 @@ public class Function implements Writable {
 
     private boolean isNullable = true;
 
+    private Map<String, Expr> defaultArgExprs;
     // Only used for serialization
     protected Function() {
     }
@@ -278,6 +281,17 @@ public class Function implements Writable {
         }
     }
 
+    public void setDefaultNamedArgs(Map<String, Expr> defaultArgExprs) {
+        this.defaultArgExprs = defaultArgExprs;
+    }
+
+    public Expr getDefaultNamedExpr(String argName) {
+        if (defaultArgExprs == null) {
+            return null;
+        }
+        return defaultArgExprs.get(argName);
+    }
+
     public boolean hasVarArgs() {
         return hasVarArgs;
     }
@@ -394,25 +408,28 @@ public class Function implements Writable {
         }
     }
 
-    private boolean compareNamedArguments(Function other, int start, BiFunction<Type, Type, Boolean> cmp) {
-        if (!this.hasNamedArg() || other.argNames.length != this.argNames.length ||
+    private boolean compareNamedArguments(Function other, int start, BiFunction<Type, Type, Boolean> notMatch) {
+        if (!this.hasNamedArg() || other.argNames.length > this.argNames.length ||
                 other.hasVarArgs || this.hasVarArgs) {
             return false;
         }
         boolean[] mask = new boolean[other.argTypes.length];
-        for (int j = start; j < other.argTypes.length; ++j) {
+        for (int i = start; i < this.argTypes.length; ++i) {
             boolean found = false;
-            for (int i = start; i < this.argTypes.length; ++i) {
-                if (!mask[i] && this.argNames[i].equals(other.argNames[j])) {
-                    if (cmp.apply(other.argTypes[j], argTypes[i])) {
+            for (int j = start; j < other.argTypes.length && !found; ++j) {
+                if (!mask[j] && this.argNames[i].equals(other.argNames[j])) {
+                    if (notMatch.apply(other.argTypes[j], argTypes[i])) {
                         return false;
                     }
                     found = true;
-                    mask[i] = true;
+                    mask[j] = true;
                 }
             }
             if (!found) {
-                return false;
+                // not default
+                if (this.getDefaultNamedExpr(this.argNames[i]) == null) {
+                    return false;
+                }
             }
         }
         return true;
