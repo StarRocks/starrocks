@@ -359,7 +359,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -379,9 +379,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         for (String fullName : dbNames) {
             try {
                 Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        fullName);
+                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
