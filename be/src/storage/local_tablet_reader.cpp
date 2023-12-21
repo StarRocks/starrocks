@@ -220,7 +220,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         found_pb->Add(f);
     }
     StatusOr<ChunkPB> values_pb;
-    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize(*values, nullptr));
+    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize_without_meta(*values, nullptr));
     if (!values_pb.ok()) {
         return values_pb.status();
     }

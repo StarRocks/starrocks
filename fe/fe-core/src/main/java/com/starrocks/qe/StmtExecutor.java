@@ -49,14 +49,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -127,6 +125,7 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -205,6 +204,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -479,7 +479,16 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
-                        execPlan = StatementPlanner.plan(parsedStmt, context);
+                        try {
+                            execPlan = StatementPlanner.plan(parsedStmt, context);
+                        } catch (SemanticException e) {
+                            if (e.getMessage().contains("Unknown partition")) {
+                                throw new SemanticException(e.getMessage() +
+                                        " maybe table partition changed after prepared statement creation");
+                            } else {
+                                throw e;
+                            }
+                        }
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
@@ -745,18 +754,7 @@ public class StmtExecutor {
         if (parsedStmt == null) {
             return;
         }
-        Map<String, String> optHints = null;
-        if (parsedStmt instanceof QueryStatement &&
-                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
-        } else if (parsedStmt instanceof DmlStmt) {
-            DmlStmt dml = (DmlStmt) parsedStmt;
-            optHints = dml.getOptHints();
-        } else if (parsedStmt instanceof DdlStmt) {
-            DdlStmt ddl = (DdlStmt) parsedStmt;
-            optHints = ddl.getOptHints();
-        }
+        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
 
         if (MapUtils.isNotEmpty(optHints)) {
             SessionVariable sessionVariable = (SessionVariable) variables.clone();
@@ -765,6 +763,71 @@ public class StmtExecutor {
                         new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
             }
             context.setSessionVariable(sessionVariable);
+        }
+    }
+
+    /**
+     * Visit all SELECT query blocks
+     * <p>
+     * NOTE: for duplicated variable, it would use the first one
+     */
+    public static class VarHintVisitor extends AstTraverser<Void, Void> {
+
+        private final Map<String, String> hints = new HashMap<>();
+
+        public Map<String, String> getHints() {
+            return hints;
+        }
+
+        public static Map<String, String> extractAllHints(StatementBase stmt) {
+            VarHintVisitor visitor = new VarHintVisitor();
+            stmt.accept(visitor, null);
+            return visitor.getHints();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.getSelectList() != null && MapUtils.isNotEmpty(node.getSelectList().getOptHints())) {
+                node.getSelectList().getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitSelect(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitInsertStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitUpdateStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDeleteStatement(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDDLStatement(DdlStmt node, Void context) {
+            if (MapUtils.isNotEmpty(node.getOptHints())) {
+                node.getOptHints().forEach(hints::putIfAbsent);
+            }
+            super.visitDDLStatement(node, context);
+            return null;
         }
     }
 
@@ -1867,7 +1930,8 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
-            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
+            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
+                    targetTable.isBlackHoleTable())) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
@@ -1966,7 +2030,8 @@ public class StmtExecutor {
                                         trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
-                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable()) {
+                            targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
+                            targetTable.isBlackHoleTable()) {
                         // schema table does not need txn
                     } else {
                         transactionMgr.abortTransaction(
@@ -1992,8 +2057,9 @@ public class StmtExecutor {
                 GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
-                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
-                            targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                    if (!(targetTable instanceof SystemTable || targetTable.isIcebergTable() ||
+                            targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
+                            targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
                         mgr.abortTransaction(database.getId(), transactionId, errorMsg);
                     }
@@ -2018,7 +2084,7 @@ public class StmtExecutor {
             } else if (targetTable instanceof SystemTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
-            } else if (targetTable instanceof IcebergTable) {
+            } else if (targetTable.isIcebergTable()) {
                 // TODO(stephen): support abort interface and delete data files when aborting.
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
                 if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
@@ -2030,7 +2096,7 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
-            } else if (targetTable instanceof HiveTable) {
+            } else if (targetTable.isHiveTable()) {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
                 HiveTableSink hiveTableSink = (HiveTableSink) execPlan.getFragments().get(0).getSink();
                 String stagingDir = hiveTableSink.getStagingDir();
@@ -2046,9 +2112,12 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_HIVE_SINK_LABEL";
-            } else if (targetTable instanceof TableFunctionTable) {
+            } else if (targetTable.isTableFunctionTable()) {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
+            } else if (targetTable.isBlackHoleTable()) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_BLACKHOLE_TABLE_SINK_LABEL";
             } else if (isExplainAnalyze) {
                 transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze");
                 txnStatus = TransactionStatus.ABORTED;

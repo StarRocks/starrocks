@@ -52,6 +52,7 @@
 #include "exec/schema_scanner/sys_object_dependencies.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
+
 namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;

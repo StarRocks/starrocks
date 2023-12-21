@@ -136,6 +136,7 @@ public class StatementPlanner {
             if (needWholePhaseLock) {
                 unLock(locker, dbs);
             }
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
         return null;
@@ -212,7 +213,7 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.currentTimeMillis();
+            long planStartTime = System.nanoTime();
             if (!isSchemaValid) {
                 colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
@@ -250,13 +251,12 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.currentTimeMillis();
+                long buildFragmentStartTime = System.nanoTime();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t ->
-                        t.lastSchemaUpdateTime.get() > planStartTime);
+                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
@@ -341,20 +341,27 @@ public class StatementPlanner {
 
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+        // not need begin transaction here
+        // 1. explain
+        // 2. insert into files
+        // 3. old delete
+        // 4. insert overwrite
+        if (stmt.isExplain()) {
+            return;
+        }
+        if (stmt instanceof InsertStmt) {
+            if (((InsertStmt) stmt).useTableFunctionAsTargetTable() ||
+                    ((InsertStmt) stmt).useBlackHoleTableAsTargetTable()) {
+                return;
+            }
+        }
+
         MetaUtils.normalizationTableName(session, stmt.getTableName());
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database db = MetaUtils.getDatabase(catalogName, dbName);
         Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
-
-        // not need begin transaction here
-        // 1. explain
-        // 2. old delete
-        // 3. insert overwrite
-        if (stmt.isExplain()) {
-            return;
-        }
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
             return;
@@ -393,7 +400,7 @@ public class StatementPlanner {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable()) {
+                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
         } else {
             long dbId = db.getId();

@@ -20,20 +20,21 @@
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                                   int64_t txn_id)
-        : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
+HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                                   std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->del_location(_tablet_id, name)));
     _files.emplace_back(std::move(name));
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
@@ -66,9 +67,10 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
     return Status::OK();
 }
 
-VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                               int64_t txn_id, uint32_t max_rows_per_segment)
-        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
+VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                               std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                               uint32_t max_rows_per_segment)
+        : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment) {}
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 

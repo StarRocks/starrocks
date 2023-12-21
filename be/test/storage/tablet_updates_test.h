@@ -669,13 +669,11 @@ public:
 
     void TearDown() override {
         if (_tablet2) {
-            auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
-            st.permit_unchecked_error();
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
             _tablet2.reset();
         }
         if (_tablet) {
-            auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
-            st.permit_unchecked_error();
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
     }

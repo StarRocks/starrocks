@@ -604,6 +604,10 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
+### statistic_collect_parallel
+
+Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
+
 ### storage_engine
 
 The types of engines supported by StarRocks:

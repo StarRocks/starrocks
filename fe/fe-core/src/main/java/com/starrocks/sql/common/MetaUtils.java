@@ -168,6 +168,27 @@ public class MetaUtils {
         }
     }
 
+    /**
+     * Materialized view name is a little bit different from a normal table
+     * 1. Use default catalog if not specified, actually it only support default catalog until now
+     */
+    public static void normalizeMVName(ConnectContext connectContext, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+        if (Strings.isNullOrEmpty(tableName.getDb())) {
+            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
+                throw new SemanticException("No database selected. " +
+                        "You could set the database name through `<database>.<table>` or `use <database>` statement");
+            }
+            tableName.setDb(connectContext.getDatabase());
+        }
+
+        if (Strings.isNullOrEmpty(tableName.getTbl())) {
+            throw new SemanticException("Table name cannot be empty");
+        }
+    }
+
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 

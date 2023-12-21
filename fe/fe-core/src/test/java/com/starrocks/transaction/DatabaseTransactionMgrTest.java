@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTransactionStatus;
 import mockit.Mock;
@@ -269,6 +270,17 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.PREPARE, masterDbTransMgr.getTxnStatus(txnId2.longValue()));
 
         assertEquals(TTransactionStatus.UNKNOWN, masterDbTransMgr.getTxnStatus(12134));
+    }
+
+    @Test
+    public void testAbortTransactionWithAttachment() throws UserException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        expectedEx.expect(UserException.class);
+        expectedEx.expectMessage("transaction not found");
+        TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+        masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
     }
 
     @Test

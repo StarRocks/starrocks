@@ -780,6 +780,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.active = this.active;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        mv.viewDefineSql = this.viewDefineSql;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
@@ -788,6 +789,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (this.partitionRefTableExprs != null) {
             mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
+        }
+        if (!queryOutputIndices.isEmpty()) {
+            mv.setQueryOutputIndices(Lists.newArrayList(queryOutputIndices));
         }
     }
 
@@ -1135,6 +1139,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(Joiner.on(", ").join(getCopiedBfColumns())).append("\"");
         }
 
+        // colocate_with
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -1338,7 +1350,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *
      * @return : partitioned materialized view's all need updated partition names.
      */
-    private boolean getPartitionedMVRefreshPartitions(Set<String> toRefreshedPartitioins,
+    private boolean getPartitionedMVRefreshPartitions(Set<String> toRefreshPartitions,
                                                       boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
         // If non-partition-by table has changed, should refresh all mv partitions
@@ -1361,7 +1373,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (!baseTable.isNativeTableOrMaterializedView()) {
                 if (tableProperty.getForceExternalTableQueryRewrite() ==
                         TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+                    toRefreshPartitions.addAll(getVisiblePartitionNames());
                     return false;
                 }
             }
@@ -1372,7 +1384,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Set<String> partitionNames =
                     getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite, partitionExpr);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
                 return true;
             }
         }
@@ -1391,7 +1403,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         PartitionUtil.getPartitionKeyRange(table, entry.getValue(), partitionExpr));
             } catch (UserException e) {
                 LOG.warn("Materialized view compute partition difference with base table failed.", e);
-                toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
                 return false;
             }
 
@@ -1399,7 +1411,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Set<String> baseChangedPartition =
                     getUpdatedPartitionNamesOfTable(table, true, isQueryRewrite, partitionExpr);
             if (baseChangedPartition == null) {
-                toRefreshedPartitioins.addAll(getVisiblePartitionNames());
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
                 return true;
             } else {
                 baseChangedPartitionNames.put(table, baseChangedPartition);
@@ -1437,7 +1449,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
         }
-        toRefreshedPartitioins.addAll(needRefreshMvPartitionNames);
+        toRefreshPartitions.addAll(needRefreshMvPartitionNames);
         return true;
     }
 
