@@ -528,14 +528,9 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
-
-    _mem_tracker = std::make_unique<MemTracker>(MemTracker::QUERY, std::numeric_limits<int64_t>::max(),
-                                                "connector_chunk_source", nullptr);
-    _mem_tracker->set_parent(CurrentThread::operator_mem_tracker());
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
-    _mem_tracker->set_parent(nullptr);
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }
@@ -575,8 +570,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
            << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
            << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
            << ", chunk source mem bytes = " << chunk_source_mem_bytes << ", chunk mem bytes = " << avg_chunk_mem_bytes()
-           << " * " << chunk_num << ", data source mem usage = " << _data_source->estimated_mem_usage()
-           << ", peak mem bytes = " << _mem_tracker->peak_consumption();
+           << " * " << chunk_num << ", data source mem usage = " << _data_source->estimated_mem_usage();
         return ss.str();
     };
     VLOG_OPERATOR << build_debug_string();
@@ -638,12 +632,8 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
     ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
-    _mem_tracker_attacher.attach(_mem_tracker.get());
 
-    DeferOp defer_op([&]() {
-        P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros();
-        _mem_tracker_attacher.unattach();
-    });
+    DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
 
     int64_t total_time_ns = 0;
     int64_t delta_io_time_ns = 0;

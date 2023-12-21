@@ -50,15 +50,6 @@ struct ConnectorScanOperatorMemShareArbitrator {
     }
 };
 
-struct ConnectorScanOperatorMemTrackerAttacher {
-    ConnectorScanOperatorMemTrackerAttacher() {}
-    void attach(MemTracker* mem_tracker) {
-        old_tracker = CurrentThread::current().set_operator_mem_tracker(mem_tracker);
-    }
-    void unattach() { CurrentThread::current().set_operator_mem_tracker(old_tracker); }
-    MemTracker* old_tracker = nullptr;
-};
-
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -174,8 +165,6 @@ private:
     uint64_t _chunk_rows_read = 0;
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    ConnectorScanOperatorMemTrackerAttacher _mem_tracker_attacher;
 };
 
 } // namespace pipeline
