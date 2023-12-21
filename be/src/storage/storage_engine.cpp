@@ -1567,7 +1567,7 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
             LOG(INFO) << "disk " << it.second->path << " is set to DECOMMISSIONED";
         } else {
             if (it.second->get_state() == DiskState::DECOMMISSIONED) {
-                it.second->set_state(DiskState::ONLINE); 
+                it.second->set_state(DiskState::ONLINE);
                 LOG(INFO) << "disk " << it.second->path << " is recovered to ONLINE, previous state is DECOMMISSIONED";
             }
         }
