@@ -22,6 +22,8 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
+
+#include "util/brpc_stub_cache.h"
 #ifdef USE_JEMALLOC
 #include "jemalloc/jemalloc.h"
 #else
@@ -195,6 +197,15 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
+        if (ExecEnv::GetInstance()->brpc_stub_cache()) {
+            auto& metrics = ExecEnv::GetInstance()->brpc_stub_cache()->metrics;
+            std::vector<int> snapshot;
+            snapshot.resize(20);
+            for (size_t i = 0; i < snapshot.size(); ++i) {
+                snapshot[i] = metrics.metrics[i];
+            }
+            LOG(INFO) << fmt::format("brpc connections:{}", fmt::join(snapshot.begin(), snapshot.end(), ","));
+        }
 
         sleep(15); // 15 seconds
     }

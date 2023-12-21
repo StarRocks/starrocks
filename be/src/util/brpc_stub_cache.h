@@ -30,6 +30,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/network_util.h"
+#include "util/observe_brpc_stub.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
 
@@ -38,7 +39,7 @@ namespace starrocks {
 // map used
 class BrpcStubCache {
 public:
-    BrpcStubCache() {
+    BrpcStubCache() : metrics(45) {
         _stub_map.init(239);
         REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
             std::lock_guard<SpinLock> l(_lock);
@@ -50,6 +51,8 @@ public:
             delete stub.second;
         }
     }
+
+    CallMetrics metrics;
 
     doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
@@ -67,7 +70,9 @@ public:
         if (channel->Init(endpoint, &options)) {
             return nullptr;
         }
-        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        auto stub = new ObservePBackendService_Stub(metrics, channel.release(),
+                                                    google::protobuf::Service::STUB_OWNS_CHANNEL);
+        // auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
         _stub_map.insert(endpoint, stub);
         return stub;
     }
