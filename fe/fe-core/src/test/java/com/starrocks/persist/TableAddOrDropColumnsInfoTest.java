@@ -34,6 +34,7 @@ public class TableAddOrDropColumnsInfoTest {
         Assert.assertEquals(1, info.getTxnId());
         Assert.assertEquals(0, info.getStartTime());
         Assert.assertEquals(0, info.getAddColumnsName().size());
+        Assert.assertEquals(0, info.getIndexToNewSchemaId().size());
 
         TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0, 1, 0,
