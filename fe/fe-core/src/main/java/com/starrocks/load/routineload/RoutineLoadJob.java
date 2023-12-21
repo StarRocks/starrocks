@@ -501,12 +501,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
+<<<<<<< HEAD
         database.readLock();
         try {
             return database.getFullName();
         } finally {
             database.readUnlock();
         }
+=======
+        return db.getFullName();
+>>>>>>> 7178177f83 ([Enhancement] remove lock for routineLoadJob getDbFullName (#37474))
     }
 
     public long getTableId() {
