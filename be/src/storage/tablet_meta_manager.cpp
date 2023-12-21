@@ -1711,6 +1711,13 @@ Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTa
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::remove_tablet_persistent_index_meta(DataDir* store, TTabletId tablet_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    RETURN_IF_ERROR(clear_persistent_index(store, &batch, tablet_id));
+    return meta->write_batch(&batch);
+}
+
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {
