@@ -146,6 +146,7 @@ set(EXEC_FILES
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
+    schema_scanner/sys_fe_locks.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
