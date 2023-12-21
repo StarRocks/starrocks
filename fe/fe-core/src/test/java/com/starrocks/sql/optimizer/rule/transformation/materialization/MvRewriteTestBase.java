@@ -92,6 +92,7 @@ public class MvRewriteTestBase {
         Config.enable_new_publish_mechanism = true;
         Config.alter_scheduler_interval_millisecond = 100;
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = true;
         startSuiteTime = Instant.now().getEpochSecond();
 
         // build a small cache for test

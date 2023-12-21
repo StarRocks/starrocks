@@ -1657,6 +1657,13 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
+    // Whether it's a partitioned table partition by columns, range or list.
+    public boolean isPartitionedTable() {
+        return partitionInfo != null && partitionInfo.isPartitioned();
+    }
+
+    // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
+    // partitions.
     @Override
     public boolean isPartitioned() {
         int numSegs = 0;

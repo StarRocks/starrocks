@@ -66,6 +66,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskType type;
 
+    private ExecuteOption executeOption;
+
     TaskRun() {
         future = new CompletableFuture<>();
     }
@@ -116,6 +118,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public Constants.TaskType getType() {
         return this.type;
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
@@ -186,6 +196,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
+        taskRunContext.setExecuteOption(executeOption);
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
