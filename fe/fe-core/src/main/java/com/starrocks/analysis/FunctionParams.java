@@ -151,6 +151,12 @@ public class FunctionParams implements Writable {
         return exprs;
     }
 
+    public void appendPositionalDefaultArgExprs(Function fn) {
+        List<Expr> lastDefaults = fn.getLastDefaultsFromN(exprs.size());
+        if (lastDefaults != null) {
+            exprs.addAll(lastDefaults);
+        }
+    }
     public void reorderNamedArgAndAppendDefaults(Function fn) {
         String[] names = fn.getArgNames();
         Preconditions.checkState(names != null && names.length >= exprsNames.size());

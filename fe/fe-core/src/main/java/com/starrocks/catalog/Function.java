@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
@@ -53,8 +54,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Vector;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.io.IOUtils.readOptionStringOrNull;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
@@ -147,7 +149,7 @@ public class Function implements Writable {
 
     private boolean isNullable = true;
 
-    private Map<String, Expr> defaultArgExprs;
+    private Vector<Pair<String, Expr>> defaultArgExprs;
     // Only used for serialization
     protected Function() {
     }
@@ -281,15 +283,32 @@ public class Function implements Writable {
         }
     }
 
-    public void setDefaultNamedArgs(Map<String, Expr> defaultArgExprs) {
+    public void setDefaultNamedArgs(Vector<Pair<String, Expr>> defaultArgExprs) {
         this.defaultArgExprs = defaultArgExprs;
+    }
+
+    public List<Expr> getLastDefaultsFromN(int n) {
+        if (defaultArgExprs == null || n >= argTypes.length || n < getRequiredArgNum()) {
+            return null;
+        }
+        return defaultArgExprs.subList(n - getRequiredArgNum(), defaultArgExprs.size()).
+                stream().map(x -> x.second).collect(Collectors.toList());
     }
 
     public Expr getDefaultNamedExpr(String argName) {
         if (defaultArgExprs == null) {
             return null;
         }
-        return defaultArgExprs.get(argName);
+        for (Pair<String, Expr> arg : defaultArgExprs) {
+            if (arg.first.equals(argName)) {
+                return arg.second;
+            }
+        }
+        return null;
+    }
+
+    public int getRequiredArgNum() {
+        return argTypes.length - (defaultArgExprs == null ? 0 : defaultArgExprs.size());
     }
 
     public boolean hasVarArgs() {
@@ -434,6 +453,19 @@ public class Function implements Writable {
         }
         return true;
     }
+
+    private boolean comparePositionalArguments(Function other, int start, BiFunction<Type, Type, Boolean> notMatch) {
+        if (other.argTypes.length > this.argTypes.length ||
+                other.hasVarArgs || this.hasVarArgs || other.argTypes.length < getRequiredArgNum()) {
+            return false;
+        }
+        for (int i = start; i < other.argTypes.length; ++i) {
+            if (notMatch.apply(other.argTypes[i], argTypes[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
     /**
      * Returns true if 'this' is a supertype of 'other'. Each argument in other must
      * be implicitly castable to the matching argument in this.
@@ -441,24 +473,26 @@ public class Function implements Writable {
      * for "most" compatible or maybe return an error if it is ambiguous?
      */
     private boolean isSubtype(Function other) {
-        if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
-            return false;
-        }
-        if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
-            return false;
-        }
-
         int startArgIndex = 0;
         String functionName = other.getFunctionName().getFunction();
         // If function first arg must be boolean, we don't check it.
         if (functionName.equalsIgnoreCase("if")) {
             startArgIndex = 1;
         }
-
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, startArgIndex,
                     (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+        } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
+            // positional args with defaults in table functions
+            return comparePositionalArguments(other, startArgIndex,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
         } else {
+            if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
+                return false;
+            }
+            if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
+                return false;
+            }
             for (int i = startArgIndex; i < this.argTypes.length; ++i) {
                 // Normally, if type A matches type B, then A and B must be implicitly castable,
                 // but if one of the types is pseudotype, this rule does not hold anymore, so here
@@ -489,16 +523,20 @@ public class Function implements Writable {
     // return true if 'this' is assign-compatible from 'other'.
     // Each argument in 'other' must be assign-compatible to the matching argument in 'this'.
     private boolean isAssignCompatible(Function other) {
-        if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
-            return false;
-        }
-        if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
-            return false;
-        }
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, 0,
                     (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+        } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
+            // positional args with defaults in table functions
+            return comparePositionalArguments(other, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
         } else {
+            if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
+                return false;
+            }
+            if (this.hasVarArgs && other.argTypes.length < this.argTypes.length) {
+                return false;
+            }
             for (int i = 0; i < this.argTypes.length; ++i) {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
                     continue;
@@ -532,8 +570,12 @@ public class Function implements Writable {
         if (o.hasVarArgs != this.hasVarArgs) {
             return false;
         }
+
         if (o.hasNamedArg()) {
             return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.matchesType(m));
+        } else if (this.defaultArgExprs != null && !o.hasVarArgs) { // positional args with defaults in table functions
+            return comparePositionalArguments(o, 0,
                     (Type ot, Type m) -> !ot.matchesType(m));
         } else {
             for (int i = 0; i < this.argTypes.length; ++i) {
@@ -553,6 +595,9 @@ public class Function implements Writable {
         // The first fully specified args must be identical.
         if (o.hasNamedArg()) {
             return compareNamedArguments(o, 0,
+                    (Type ot, Type m) -> !ot.isNull() && !m.isNull() && !ot.matchesType(m));
+        } else if (this.defaultArgExprs != null && !o.hasVarArgs) { // positional args with defaults in table functions
+            return comparePositionalArguments(o, 0,
                     (Type ot, Type m) -> !ot.isNull() && !m.isNull() && !ot.matchesType(m));
         } else {
             for (int i = 0; i < minArgs; ++i) {

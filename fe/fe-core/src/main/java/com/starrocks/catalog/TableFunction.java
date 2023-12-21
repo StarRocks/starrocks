@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -34,6 +35,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Vector;
 import java.util.stream.Collectors;
 
 /**
@@ -56,7 +58,7 @@ public class TableFunction extends Function {
     }
 
     public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
-                         List<Type> tableFnReturnTypes, Map<String, Expr> defaultArgExpr) {
+                         List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr) {
         this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, defaultArgExpr, false);
     }
 
@@ -66,7 +68,8 @@ public class TableFunction extends Function {
     }
 
     public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
-                         List<Type> argTypes, List<Type> tableFnReturnTypes, Map<String, Expr> defaultArgExpr, boolean varArgs) {
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr,
+                         boolean varArgs) {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
@@ -106,10 +109,10 @@ public class TableFunction extends Function {
         }
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
-            // generate_series
-            Map<String, Expr> defaultArgs = Maps.newHashMap();
+            // set default arguments' const expressions
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
             try {
-                defaultArgs.put("step", LiteralExpr.create("1", type));
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
             } catch (AnalysisException ex) { //ignored
             }
             // for both named arguments and positional arguments
@@ -118,13 +121,6 @@ public class TableFunction extends Function {
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type), defaultArgs);
-            functionSet.addBuiltin(func);
-
-            // only for positional arguments with 2 arguments
-            func = new TableFunction(new FunctionName("generate_series"),
-                    Lists.newArrayList("generate_series"),
-                    Lists.newArrayList(type, type),
-                    Lists.newArrayList(type));
             functionSet.addBuiltin(func);
         }
 
