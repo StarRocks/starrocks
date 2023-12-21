@@ -153,6 +153,11 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+<<<<<<< HEAD
+=======
+        ./io/shared_buffered_input_stream_test.cpp
+        ./io/spill_test.cpp
+>>>>>>> c90e6ce8ac ([BugFix]sharedbuffer inputstream release with aligned offset may mistake deletion (#37535))
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
