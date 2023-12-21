@@ -571,8 +571,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
 
-        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
-                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+        if (!tls_thread_status.try_mem_reserve(request_reserved)) {
             mem_resource_mgr.to_low_memory_mode();
         }
     }
