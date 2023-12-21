@@ -323,7 +323,7 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
-            if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(name)) {
+            if (ResourceGroup.isDefaultWgOrMvWg(name)) {
                 throw new DdlException(String.format("Default resource group %s does not support change.", name));
             }
             if (!resourceGroupMap.containsKey(name)) {
