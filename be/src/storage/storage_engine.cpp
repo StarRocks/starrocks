@@ -1547,11 +1547,11 @@ void StorageEngine::disable_disks(const std::vector<string>& disabled_disks) {
     for (auto& it : _store_map) {
         if (std::find(disabled_disks.begin(), disabled_disks.end(), it.second->path()) != disabled_disks.end()) {
             it.second->set_state(DiskState::DISABLED);
-            LOG(INFO) << "disk " << it.second->path << " is set to DISABLED";
+            LOG(INFO) << "disk " << it.second->path() << " is set to DISABLED";
         } else {
             if (it.second->get_state() == DiskState::DISABLED) {
                 it.second->set_state(DiskState::ONLINE);
-                LOG(INFO) << "disk " << it.second->path << " is recovered to ONLINE, previous state is DISABLED";
+                LOG(INFO) << "disk " << it.second->path() << " is recovered to ONLINE, previous state is DISABLED";
             }
         }
     }
@@ -1564,11 +1564,11 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
         if (std::find(decommission_disks.begin(), decommission_disks.end(), it.second->path()) !=
             decommission_disks.end()) {
             it.second->set_state(DiskState::DECOMMISSIONED);
-            LOG(INFO) << "disk " << it.second->path << " is set to DECOMMISSIONED";
+            LOG(INFO) << "disk " << it.second->path() << " is set to DECOMMISSIONED";
         } else {
             if (it.second->get_state() == DiskState::DECOMMISSIONED) {
                 it.second->set_state(DiskState::ONLINE);
-                LOG(INFO) << "disk " << it.second->path << " is recovered to ONLINE, previous state is DECOMMISSIONED";
+                LOG(INFO) << "disk " << it.second->path() << " is recovered to ONLINE, previous state is DECOMMISSIONED";
             }
         }
     }
