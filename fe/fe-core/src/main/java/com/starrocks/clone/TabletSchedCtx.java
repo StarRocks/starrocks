@@ -1115,7 +1115,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, partitionId, indexId,
                 tabletId, destBackendId, replica.getId(),
-                beVisibleVersion,
+                replica.getVersion(),
                 reportedTablet.getSchema_hash(),
                 reportedTablet.getData_size(),
                 reportedTablet.getRow_count(),
