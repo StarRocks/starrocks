@@ -42,9 +42,12 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
+    friend class HiveDataSource;
+
 protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class HiveDataSource final : public DataSource {
@@ -58,7 +61,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
-        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+        return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
