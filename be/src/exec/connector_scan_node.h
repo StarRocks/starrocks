@@ -136,8 +136,7 @@ private:
 
     void _estimate_scan_row_bytes();
     void _estimate_chunk_source_mem_bytes();
-    void _update_estimate_chunk_source_mem_bytes();
-    int _estimated_max_concurrent_chunks() const;
+    int _estimate_max_concurrent_chunks() const;
     int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_chunk_source_mem_bytes = 0;
