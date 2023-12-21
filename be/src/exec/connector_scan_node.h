@@ -96,6 +96,7 @@ private:
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
     std::atomic<int32_t> _closed_scanners = 0;
+
 private:
     template <typename T>
     class Stack {
@@ -135,6 +136,7 @@ private:
 
     void _estimate_scan_row_bytes();
     void _estimate_chunk_source_mem_bytes();
+    void _update_estimate_chunk_source_mem_bytes();
     int _estimated_max_concurrent_chunks() const;
     int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;

@@ -42,11 +42,15 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
+    void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
+
     friend class HiveDataSource;
 
 protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
+    int64_t _max_file_length = 0;
     std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 

@@ -30,7 +30,6 @@ namespace starrocks {
 
 static std::atomic<int32_t> connector_scan_node_open_limit;
 static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio;
-static constexpr int64_t ESTIMATED_MEMORY_USAGE_PER_FIELD = 4LL * 1024 * 1024;
 
 // ======================================================
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -165,7 +164,15 @@ void ConnectorScanNode::_estimate_scan_row_bytes() {
 void ConnectorScanNode::_estimate_chunk_source_mem_bytes() {
     const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
     const auto& slots = tuple_desc->slots();
-    _estimated_chunk_source_mem_bytes = slots.size() * ESTIMATED_MEMORY_USAGE_PER_FIELD;
+    _estimated_chunk_source_mem_bytes = slots.size() * _data_source_provider->PER_FIELD_MEM_BYTES;
+}
+
+void ConnectorScanNode::_update_estimate_chunk_source_mem_bytes() {
+    int64_t estimated_size = _estimated_chunk_source_mem_bytes;
+    int64_t min_value = 0, max_value = 0;
+    _data_source_provider->default_data_source_mem_bytes(&min_value, &max_value);
+    estimated_size = std::min(std::max(estimated_size, min_value), max_value);
+    _estimated_chunk_source_mem_bytes = estimated_size;
 }
 
 int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
@@ -198,6 +205,9 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                       : std::make_shared<pipeline::StreamScanOperatorFactory>(
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
                                 is_stream_pipeline);
+
+    // update estimated chunk source mem bytes. here we have peeked all scanges and gatherd more info.
+    _update_estimate_chunk_source_mem_bytes();
 
     scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes +
                                         _estimated_scan_row_bytes * runtime_state()->chunk_size());
@@ -671,6 +681,7 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
+    _data_source_provider->peek_scan_ranges(scan_ranges);
     return ScanNode::convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
                                                         enable_tablet_internal_parallel, tablet_internal_parallel_mode,
                                                         num_total_scan_ranges);
