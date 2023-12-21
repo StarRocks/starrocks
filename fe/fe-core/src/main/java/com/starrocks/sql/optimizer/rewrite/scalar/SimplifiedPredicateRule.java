@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
@@ -316,6 +317,35 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return arrayMap(call);
         }
         return call;
+    }
+
+    @Override
+    public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
+                                                     ScalarOperatorRewriteContext context) {
+        // make sure is like, not regexp
+        if (predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        ScalarOperator rightOp = predicate.getChild(1);
+
+        // make sure is constant column ref
+        if (!rightOp.isConstantRef()) {
+            return predicate;
+        }
+
+        // make sure is string literal
+        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+            return predicate;
+        }
+
+        // make sure it didn't contain '%' and '_' both
+        String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
+        if (likeString.contains("%") || likeString.contains("_")) {
+            return predicate;
+        }
+
+        return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, predicate.getChild(0), rightOp);
     }
 
     // Reduce array_map whose lambda functions is trivial
