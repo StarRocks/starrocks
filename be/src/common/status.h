@@ -145,6 +145,8 @@ public:
 
     static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
+    static Status Yield() { return {TStatusCode::YIELD, ""}; }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
@@ -190,6 +192,8 @@ public:
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
 
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
+
+    bool is_yield() const { return code() == TStatusCode::YIELD; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.

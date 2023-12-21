@@ -107,6 +107,7 @@ jobs:
 
       - name: Docusaurus build
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           DISABLE_VERSIONING: true
         working-directory: ./docs/docusaurus
         run: |

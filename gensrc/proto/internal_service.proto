@@ -267,19 +267,6 @@ message PTabletWriterAddSegmentResult {
     repeated PTabletInfo failed_tablet_vec = 4;
 };
 
-message PRefreshDictionaryCacheRequest {
-    optional ChunkPB chunk = 1;
-    optional int64 dictionary_id = 2;
-    optional int64 txn_id = 3;
-    optional POlapTableSchemaParam schema = 4;
-    optional int64 memory_limit = 5;
-    optional int32 key_size = 6;
-};
-
-message PRefreshDictionaryCacheResult {
-    optional StatusPB status = 1;
-};
-
 // Tablet writer cancel.
 message PTabletWriterCancelRequest {
     required PUniqueId id = 1;
@@ -595,41 +582,29 @@ message PExecShortCircuitResult {
 message PExecShortCircuitRequest {
 }
 
-message PRefreshDictionaryCacheBeginRequest {
-    optional int64 dict_id = 1;
-    optional int64 txn_id = 2;
-}
+enum PProcessDictionaryCacheRequestType {
+    BEGIN = 1;
+    REFRESH = 2;
+    COMMIT = 3;
+    CLEAR = 4;
+    STATISTIC = 5;
+};
 
-message PRefreshDictionaryCacheBeginResult {
-    optional StatusPB status = 1;
-}
+message PProcessDictionaryCacheRequest {
+    optional ChunkPB chunk = 1;
+    optional int64 dict_id = 2;
+    optional int64 txn_id = 3;
+    optional POlapTableSchemaParam schema = 4;
+    optional int64 memory_limit = 5;
+    optional int32 key_size = 6;
+    optional bool is_cancel = 7;
+    optional PProcessDictionaryCacheRequestType type = 8;
+};
 
-message PClearDictionaryCacheRequest {
-    optional int64 dict_id = 1;
-    optional bool is_cancel = 2;
-}
-
-message PClearDictionaryCacheResult {
-    optional StatusPB status = 1;
-}
-
-message PRefreshDictionaryCacheCommitRequest {
-    optional int64 dict_id = 1;
-    optional int64 txn_id = 2;
-}
-
-message PRefreshDictionaryCacheCommitResult {
-    optional StatusPB status = 1;
-}
-
-message PGetDictionaryStatisticRequest {
-    optional int64 dict_id = 1;
-}
-
-message PGetDictionaryStatisticResult {
+message PProcessDictionaryCacheResult {
     optional StatusPB status = 1;
     optional int64 dictionary_memory_usage = 2;
-}
+};
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -658,8 +633,6 @@ service PInternalService {
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
 
-    rpc refresh_dictionary_cache(starrocks.PRefreshDictionaryCacheRequest) returns (starrocks.PRefreshDictionaryCacheResult);
-
     // local tablet reader
     rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns (PTabletReaderOpenResult);
     rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns (PTabletReaderCloseResult);
@@ -674,9 +647,5 @@ service PInternalService {
 
     rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
 
-    rpc refresh_dictionary_cache_begin(PRefreshDictionaryCacheBeginRequest) returns (PRefreshDictionaryCacheBeginResult);
-    rpc refresh_dictionary_cache_commit(PRefreshDictionaryCacheCommitRequest) returns (PRefreshDictionaryCacheCommitResult);
-
-    rpc clear_dictionary_cache(starrocks.PClearDictionaryCacheRequest) returns (starrocks.PClearDictionaryCacheResult);
-    rpc get_dictionary_statistic(starrocks.PGetDictionaryStatisticRequest) returns (starrocks.PGetDictionaryStatisticResult);
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

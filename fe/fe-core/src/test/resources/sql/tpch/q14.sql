@@ -1,17 +1,3 @@
-[sql]
-select
-            100.00 * sum(case
-                             when p_type like 'PROMO%'
-                                 then l_extendedprice * (1 - l_discount)
-                             else 0
-            end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
-from
-    lineitem,
-    part
-where
-        l_partkey = p_partkey
-  and l_shipdate >= date '1997-02-01'
-  and l_shipdate < date '1997-03-01';
 [result]
 AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] group by [[]] having [null]
     EXCHANGE GATHER

@@ -1248,7 +1248,7 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitDictionaryExpr(DictionaryExpr node, C context) {
+    public R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
         return visitExpression(node, context);
     }
 

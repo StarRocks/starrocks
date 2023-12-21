@@ -509,6 +509,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
+    public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
@@ -581,6 +582,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+
+    public static final String CBO_DERIVE_JOIN_IS_NULL_PREDICATE = "cbo_derive_join_is_null_predicate";
 
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
@@ -932,6 +935,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details in the comment above transmissionEncodeLevel
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
+    
+    @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
+    private boolean spillEnableDirectIO = false;
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
@@ -1514,6 +1520,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
+    private boolean cboDeriveJoinIsNullPredicate = true;
 
     @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
     private boolean cboDecimalCastStringStrict = true;
@@ -2896,6 +2905,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
+    public boolean isCboDeriveJoinIsNullPredicate() {
+        return cboDeriveJoinIsNullPredicate;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -2985,6 +2998,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_encode_level(spillEncodeLevel);
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            tResult.setSpill_enable_direct_io(spillEnableDirectIO);
         }
 
         // Compression Type
