@@ -56,6 +56,7 @@ START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
 select * from partition_unixtime_ms;
 select * from partition_unixtime_ms PARTITION(p20210105);
+show create table partition_unixtime_ms;
 drop table partition_unixtime_ms;
 CREATE TABLE partition_unixtime_ms (
         create_time int,
