@@ -190,6 +190,8 @@ message ColumnMetaPB {
     optional uint64 total_mem_footprint = 31;
     // for json column only
     optional JsonMetaPB json_meta = 32;
+    // for json flat column only
+    optional bytes name = 33;
 }
 
 message SegmentFooterPB {
