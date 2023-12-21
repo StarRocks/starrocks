@@ -256,7 +256,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withTable(MTable mTable,
                                       ExceptionRunnable action) {
-        return withTables(List.of(mTable), action);
+        return withTables(ImmutableList.of(mTable), action);
     }
 
     public StarRocksAssert withTables(List<MTable> mTables,
