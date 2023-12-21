@@ -1,0 +1,56 @@
+diff --git a/src/brpc/socket.cpp b/src/brpc/socket.cpp
+index 210ba9e..be19c24 100644
+--- a/src/brpc/socket.cpp
++++ b/src/brpc/socket.cpp
+@@ -2047,6 +2047,7 @@ void Socket::DebugSocket(std::ostream& os, SocketId id) {
+     size_t npipelined = 0;
+     size_t idsizes[4];
+     size_t nidsize = 0;
++    size_t ridsize = 0;
+     {
+         BAIDU_SCOPED_LOCK(ptr->_pipeline_mutex);
+         if (ptr->_pipeline_q) {
+@@ -2060,6 +2061,10 @@ void Socket::DebugSocket(std::ostream& os, SocketId id) {
+                 &ptr->_id_wait_list, idsizes, arraysize(idsizes));
+         }
+     }
++    {
++        BAIDU_SCOPED_LOCK(ptr->_id_wait_list_mutex);
++        ridsize = bthread_id_list_real_size(&ptr->_id_wait_list);
++    }
+     const int preferred_index = ptr->preferred_index();
+     SharedPart* sp = ptr->GetSharedPart();
+     os << "version=" << VersionOfVRef(vref);
+diff --git a/src/bthread/id.cpp b/src/bthread/id.cpp
+index 23046b2..745b21d 100644
+--- a/src/bthread/id.cpp
++++ b/src/bthread/id.cpp
+@@ -665,6 +665,15 @@ int bthread_id_list_add(bthread_id_list_t* list, bthread_id_t id) {
+     return static_cast<bthread::IdList*>(list->impl)->add(id);
+ }
+ 
++int bthread_id_list_real_size(bthread_id_list_t* list) {
++    if (list->impl == NULL) {
++        return 0;
++    }
++    size_t cnt = 0;
++    static_cast<bthread::IdList*>(list->impl)->apply([&](bthread_id_t id) { cnt++; });
++    return cnt;
++}
++
+ int bthread_id_list_reset(bthread_id_list_t* list, int error_code) {
+     return bthread_id_list_reset2(list, error_code, std::string());
+ }
+diff --git a/src/bthread/id.h b/src/bthread/id.h
+index 5364ea5..91ce67b 100644
+--- a/src/bthread/id.h
++++ b/src/bthread/id.h
+@@ -137,6 +137,8 @@ void bthread_id_list_destroy(bthread_id_list_t* list);
+ // Add a bthread_id_t into the list.
+ int bthread_id_list_add(bthread_id_list_t* list, bthread_id_t id);
+ 
++int bthread_id_list_real_size(bthread_id_list_t* list);
++
+ // Swap internal fields of two lists.
+ void bthread_id_list_swap(bthread_id_list_t* dest, 
+                           bthread_id_list_t* src);
