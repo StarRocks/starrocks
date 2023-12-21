@@ -120,10 +120,10 @@ public class TableFunction extends Function {
                     Lists.newArrayList(type), defaultArgs);
             functionSet.addBuiltin(func);
 
-            // only for positional arguments
+            // only for positional arguments with 2 arguments
             func = new TableFunction(new FunctionName("generate_series"),
                     Lists.newArrayList("generate_series"),
-                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type, type),
                     Lists.newArrayList(type));
             functionSet.addBuiltin(func);
         }
