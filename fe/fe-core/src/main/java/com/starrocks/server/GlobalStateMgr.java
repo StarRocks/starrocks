@@ -1221,7 +1221,7 @@ public class GlobalStateMgr {
 
             if (System.currentTimeMillis() - waitStartTime > printHintTimeInterval * printHintCnt) {
                 printHintCnt++;
-                LOG.warn("It took too much time to get ready, there are some reasons: \n " +
+                LOG.warn("It took too much time to get ready, there are some reasons: \n" +
                         "1. There are too many BDB logs to replay, because the failure of checkpoint. \n" +
                         "2. More than half of the followers in the cluster are not started. \n" +
                         "3. There are multiple IPs on the machine, " +
