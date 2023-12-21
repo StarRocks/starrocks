@@ -100,7 +100,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
 
-在调度周期内，触发新的自动采集任务的满足下面的条件：
+在调度周期内，触发新的自动采集任务需要满足下面的条件：
 
 - `enable_statistic_collect`设置为true
 - 采集落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
