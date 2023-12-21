@@ -16,6 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -318,6 +319,31 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
+<<<<<<< HEAD
+=======
+        // add trace info if needed
+        Tracers.log(Tracers.Module.MV,
+                args -> "[TRACE QUERY] MV: " + materializedView.getName() +
+                        "\nMV PartitionsToRefresh: " + String.join(",", (Set<String>) args[0]) +
+                        "\nBase PartitionsToScan:" + refTablePartitionNames +
+                        "\nInsert Plan:\n" +
+                        ((ExecPlan) args[1]).getExplainString(StatementBase.ExplainLevel.VERBOSE),
+                mvToRefreshedPartitions, execPlan);
+        // log the final mv refresh plan for each refresh for better trace and debug
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("MV Refresh Final Plan" +
+                            "\nMV: {}" +
+                            "\nMV PartitionsToRefresh: {}" +
+                            "\nBase PartitionsToScan: {}" +
+                            "\nInsert Plan:\n{}",
+                    materializedView.getName(),
+                    String.join(",", mvToRefreshedPartitions), refTablePartitionNames,
+                    execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE));
+        } else {
+            LOG.info("MV Refresh Final Plan, mv: {}, MV PartitionsToRefresh: {}, Base PartitionsToScan: {}",
+                    materializedView.getName(), String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
+        }
+>>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
         mvContext.setExecPlan(execPlan);
 
         return insertStmt;
@@ -1026,6 +1052,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     .collect(Collectors.toList());
             insertStmt.setTargetColumnNames(targetColumnNames);
         }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Generate refresh materialized view {} insert-overwrite statement, " +
+                            "materialized view's target partition names:{}, " +
+                            "materialized view's target columns: {}, " +
+                            "definition:{}",
+                    materializedView.getName(),
+                    Joiner.on(",").join(materializedViewPartitions),
+                    insertStmt.getTargetColumnNames() == null ? "" : Joiner.on(",").join(insertStmt.getTargetColumnNames()),
+                    definition);
+        }
         return insertStmt;
     }
 
@@ -1047,7 +1083,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // set partition names for ref base table
                 Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
                 TableRelation tableRelation = nameTableRelationEntry.getValue();
+<<<<<<< HEAD
                 tableRelation.setPartitionNames(new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+=======
+                // external table doesn't support query with partitionNames
+                if (!tableRelation.getTable().isExternalTableWithFileSystem()) {
+                    LOG.info("Optimize materialized view {} refresh task, generate table relation {} target partition names:{} ",
+                            materializedView.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
+                    tableRelation.setPartitionNames(
+                            new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+                }
+>>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
 
                 // generate partition predicate for the select relation, so can generate partition predicates
                 // for non-ref base tables.
@@ -1069,6 +1115,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // try to push down into table relation
                     Scope tableRelationScope = tableRelation.getScope();
                     if (canResolveSlotsInTheScope(slots, tableRelationScope)) {
+                        LOG.info("Optimize materialized view {} refresh task, generate table relation {} " +
+                                        "partition predicate:{} ",
+                                materializedView.getName(), tableRelation.getName(), partitionPredicates.toSql());
                         tableRelation.setPartitionPredicate(partitionPredicates);
                     }
 
@@ -1079,9 +1128,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     QueryRelation queryRelation = queryStatement.getQueryRelation();
                     if (queryRelation instanceof SelectRelation) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-                        selectRelation.setWhereClause(
-                                Expr.compoundAnd(Lists.newArrayList(selectRelation.getWhereClause(),
-                                        partitionPredicates)));
+                        Expr finalExpr = Expr.compoundAnd(Lists.newArrayList(selectRelation.getWhereClause(),
+                                partitionPredicates));
+                        selectRelation.setWhereClause(finalExpr);
+                        LOG.info("Optimize materialized view {} refresh task, generate table relation {} " +
+                                        "final predicate:{} ",
+                                materializedView.getName(), tableRelation.getName(), finalExpr.toSql());
                     }
                 }
             }

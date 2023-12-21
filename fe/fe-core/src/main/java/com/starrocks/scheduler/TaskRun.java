@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -66,8 +67,16 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskType type;
 
+<<<<<<< HEAD
+=======
+    private ExecuteOption executeOption;
+
+    private final String uuid;
+
+>>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
     TaskRun() {
         future = new CompletableFuture<>();
+        uuid = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -279,6 +288,9 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (status.getDefinition() == null) {
+            return false;
+        }
         TaskRun taskRun = (TaskRun) o;
         return status.getDefinition().equals(taskRun.getStatus().getDefinition());
     }
@@ -292,13 +304,20 @@ public class TaskRun implements Comparable<TaskRun> {
     public String toString() {
         return "TaskRun{" +
                 "taskId=" + taskId +
+<<<<<<< HEAD
                 ", properties=" + properties +
                 ", future=" + future +
                 ", task=" + task +
                 ", runCtx=" + runCtx +
                 ", processor=" + processor +
                 ", status=" + status +
+=======
+>>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
                 ", type=" + type +
+                ", uuid=" + uuid +
+                ", task_state=" + status.getState() +
+                ", properties=" + properties +
+                ", extra_message =" + status.getExtraMessage() +
                 '}';
     }
 }
