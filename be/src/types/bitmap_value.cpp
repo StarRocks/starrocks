@@ -834,7 +834,7 @@ std::string BitmapValue::to_string() const {
     }
     case SET:
         int pos = 0;
-        int64_t values[_set->size()];
+        uint64_t values[_set->size()];
         for (auto value : *_set) {
             values[pos++] = value;
         }
