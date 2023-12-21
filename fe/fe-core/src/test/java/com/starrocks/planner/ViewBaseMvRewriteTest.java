@@ -8,7 +8,8 @@ import org.junit.Test;
 public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MaterializedViewTestBase.beforeClass();
+        MaterializedViewTestBase.setUp();
+        //MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase("test");
         Config.default_replication_num = 1;
@@ -159,6 +160,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.dropView("test_array_view");
         starRocksAssert.dropView("test_map_view");
         starRocksAssert.dropView("test_json_view");
+        MaterializedViewTestBase.afterClass();
     }
 
     @Test

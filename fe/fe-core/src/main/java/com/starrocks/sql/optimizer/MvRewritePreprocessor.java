@@ -248,31 +248,35 @@ public class MvRewritePreprocessor {
         // filter mvs which are active and have valid plans
         Set<Pair<MaterializedView, MvPlanContext>> filteredMVs = Sets.newHashSet();
         for (MaterializedView mv : relatedMVs) {
-            if (!mv.isActive()) {
-                logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
-                continue;
-            }
-
-            List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                    connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-            if (mvPlanContexts == null) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
-                        mv.getName());
-                continue;
-            }
-            for (MvPlanContext mvPlanContext : mvPlanContexts) {
-                if (!mvPlanContext.isValidMvPlan()) {
-                    if (mvPlanContext.getLogicalPlan() != null) {
-                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                                mv.getName(), mvPlanContext.getLogicalPlan());
-                    } else {
-                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                                mv.getName());
-                    }
+            try {
+                if (!mv.isActive()) {
+                    logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
                     continue;
                 }
 
-                filteredMVs.add(Pair.create(mv, mvPlanContext));
+                List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+                        connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                if (mvPlanContexts == null) {
+                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
+                            mv.getName());
+                    continue;
+                }
+                for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                    if (!mvPlanContext.isValidMvPlan()) {
+                        if (mvPlanContext.getLogicalPlan() != null) {
+                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
+                                    mv.getName(), mvPlanContext.getLogicalPlan());
+                        } else {
+                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
+                                    mv.getName());
+                        }
+                        continue;
+                    }
+
+                    filteredMVs.add(Pair.create(mv, mvPlanContext));
+                }
+            } catch (Exception e) {
+                LOG.warn("prepare mv:{} failed", mv.getName(), e);
             }
         }
         if (filteredMVs.isEmpty()) {
@@ -473,7 +477,7 @@ public class MvRewritePreprocessor {
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : copiedMV.getBaseSchema()) {
+        for (Column column : getMvOutputColumns(copiedMV)) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -491,6 +495,19 @@ public class MvRewritePreprocessor {
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
         logMVPrepare(connectContext, copiedMV, "Prepare MV {} success", copiedMV.getName());
+    }
+
+    public List<Column> getMvOutputColumns(MaterializedView mv) {
+        if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
+            return mv.getBaseSchema();
+        } else {
+            List<Column> schema = mv.getBaseSchema();
+            List<Column> outputColumns = Lists.newArrayList();
+            for (Integer index : mv.getQueryOutputIndices()) {
+                outputColumns.add(schema.get(index));
+            }
+            return outputColumns;
+        }
     }
 
     /**

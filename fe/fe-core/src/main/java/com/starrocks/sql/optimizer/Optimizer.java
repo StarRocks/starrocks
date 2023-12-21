@@ -131,7 +131,7 @@ public class Optimizer {
         prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
         if (optimizerConfig.isRuleBased()) {
-            return optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns);
+            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
             return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         }
@@ -147,7 +147,8 @@ public class Optimizer {
 
     // Optimize by rule will return logical plan.
     // Used by materialized view query rewrite optimization.
-    private OptExpression optimizeByRule(OptExpression logicOperatorTree,
+    private OptExpression optimizeByRule(ConnectContext connectContext,
+                                         OptExpression logicOperatorTree,
                                          PhysicalPropertySet requiredProperty,
                                          ColumnRefSet requiredColumns) {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
@@ -525,9 +526,10 @@ public class Optimizer {
     }
 
     private OptExpression rewriteAndValidatePlan(
+            ConnectContext connectContext,
             OptExpression tree,
             TaskContext rootTaskContext) {
-        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpression result = logicalRuleRewrite(connectContext, tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
         return result;

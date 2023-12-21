@@ -662,8 +662,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
             if (enableViewBasedMvRewrite) {
-                LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
-                builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                try {
+                    LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
+                    builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                } catch (Exception e) {
+                    LOG.warn("build view scan failed for view:{}", node.getView().getName(), e);
+                }
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         } else {
