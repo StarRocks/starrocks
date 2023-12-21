@@ -842,7 +842,7 @@ void HiveDataSourceProvider::peek_scan_ranges(const std::vector<TScanRangeParams
 void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
     DataSourceProvider::default_data_source_mem_bytes(min_value, max_value);
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
-    int64_t size = std::max(*min_value, std::min(_max_file_length, *max_value));
+    int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;
 }
 
