@@ -22,6 +22,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.iceberg.hadoop.IcebergHadoopCatalog;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
@@ -79,6 +80,8 @@ public class IcebergConnector implements Connector {
                 return new IcebergGlueCatalog(catalogName, conf, properties);
             case REST_CATALOG:
                 return new IcebergRESTCatalog(catalogName, conf, properties);
+            case HADOOP_CATALOG:
+                return new IcebergHadoopCatalog(catalogName, conf, properties);
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
         }
