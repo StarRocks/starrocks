@@ -32,18 +32,15 @@
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "types/bitmap_value_detail.h"
 #include "types/hll.h"
 #include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/mysql_global.h"
-#include "velocypack/Iterator.h"
 
 namespace starrocks {
 
@@ -1065,7 +1062,6 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
     virtual ~CLASS(){};                          \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
-// vectorized cast expr
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {
 public:
@@ -1120,6 +1116,8 @@ public:
                 return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
                         column, to_type.precision, to_type.scale);
             }
+        } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
+            result_column = column->clone();
         } else {
             result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
@@ -1279,6 +1277,10 @@ public:
             return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(column);
         }
 
+        if constexpr (Type == TYPE_VARBINARY) {
+            return column->clone();
+        }
+
         if constexpr (lt_is_decimal<Type>) {
             if (context != nullptr && context->error_if_overflow()) {
                 return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(
@@ -1390,27 +1392,28 @@ private:
         }                                                                   \
     }
 
-#define SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)                        \
-    switch (from_type) {                                                          \
-        CASE_FROM_TYPE(TYPE_BOOLEAN, TO_TYPE, ALLOWTHROWEXCEPTION);               \
-        CASE_FROM_TYPE(TYPE_TINYINT, TO_TYPE, ALLOWTHROWEXCEPTION);               \
-        CASE_FROM_TYPE(TYPE_SMALLINT, TO_TYPE, ALLOWTHROWEXCEPTION);              \
-        CASE_FROM_TYPE(TYPE_INT, TO_TYPE, ALLOWTHROWEXCEPTION);                   \
-        CASE_FROM_TYPE(TYPE_BIGINT, TO_TYPE, ALLOWTHROWEXCEPTION);                \
-        CASE_FROM_TYPE(TYPE_LARGEINT, TO_TYPE, ALLOWTHROWEXCEPTION);              \
-        CASE_FROM_TYPE(TYPE_FLOAT, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
-        CASE_FROM_TYPE(TYPE_DOUBLE, TO_TYPE, ALLOWTHROWEXCEPTION);                \
-        CASE_FROM_TYPE(TYPE_DECIMALV2, TO_TYPE, ALLOWTHROWEXCEPTION);             \
-        CASE_FROM_TYPE(TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
-        CASE_FROM_TYPE(TYPE_DATE, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
-        CASE_FROM_TYPE(TYPE_DATETIME, TO_TYPE, ALLOWTHROWEXCEPTION);              \
-        CASE_FROM_TYPE(TYPE_VARCHAR, TO_TYPE, ALLOWTHROWEXCEPTION);               \
-        CASE_FROM_TYPE(TYPE_DECIMAL32, TO_TYPE, ALLOWTHROWEXCEPTION);             \
-        CASE_FROM_TYPE(TYPE_DECIMAL64, TO_TYPE, ALLOWTHROWEXCEPTION);             \
-        CASE_FROM_TYPE(TYPE_DECIMAL128, TO_TYPE, ALLOWTHROWEXCEPTION);            \
-    default:                                                                      \
-        LOG(WARNING) << "vectorized engine not support from type: " << from_type; \
-        return nullptr;                                                           \
+#define SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)                          \
+    switch (from_type) {                                                            \
+        CASE_FROM_TYPE(TYPE_BOOLEAN, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
+        CASE_FROM_TYPE(TYPE_TINYINT, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
+        CASE_FROM_TYPE(TYPE_SMALLINT, TO_TYPE, ALLOWTHROWEXCEPTION);                \
+        CASE_FROM_TYPE(TYPE_INT, TO_TYPE, ALLOWTHROWEXCEPTION);                     \
+        CASE_FROM_TYPE(TYPE_BIGINT, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
+        CASE_FROM_TYPE(TYPE_LARGEINT, TO_TYPE, ALLOWTHROWEXCEPTION);                \
+        CASE_FROM_TYPE(TYPE_FLOAT, TO_TYPE, ALLOWTHROWEXCEPTION);                   \
+        CASE_FROM_TYPE(TYPE_DOUBLE, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
+        CASE_FROM_TYPE(TYPE_DECIMALV2, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION);                    \
+        CASE_FROM_TYPE(TYPE_DATE, TO_TYPE, ALLOWTHROWEXCEPTION);                    \
+        CASE_FROM_TYPE(TYPE_DATETIME, TO_TYPE, ALLOWTHROWEXCEPTION);                \
+        CASE_FROM_TYPE(TYPE_VARCHAR, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
+        CASE_FROM_TYPE(TYPE_DECIMAL32, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_DECIMAL64, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_DECIMAL128, TO_TYPE, ALLOWTHROWEXCEPTION);              \
+    default:                                                                        \
+        LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type) \
+                     << " to type: " << type_to_string(to_type);                    \
+        return nullptr;                                                             \
     }
 
 #define CASE_TO_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)          \
@@ -1551,8 +1554,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_STRING_FROM(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_VARBINARY, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
                          << ", to type: " << type_to_string(to_type);
             return nullptr;
         }
@@ -1570,7 +1574,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
                              << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
@@ -1594,15 +1598,23 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
                              << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
         }
-    } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
-        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
-                     << ", to type: " << type_to_string(to_type);
-        return nullptr;
+    } else if (is_binary_type(to_type)) {
+        if (is_string_type(from_type)) {
+            if (allow_throw_exception) {
+                return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, true>(node);
+            } else {
+                return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
+            }
+        } else {
+            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                         << ", to type: " << type_to_string(to_type);
+            return nullptr;
+        }
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
@@ -1621,7 +1633,8 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support cast to type: " << type_to_string(to_type);
+            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                         << ", to type: " << type_to_string(to_type);
             return nullptr;
         }
     }
@@ -1659,10 +1672,10 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
     }
     if (from_type.is_struct_type() && to_type.is_struct_type()) {
         if (from_type.children.size() != to_type.children.size()) {
-            return Status::NotSupported("vectorized engine not support cast struct with different number of children.");
+            return Status::NotSupported("Not support cast struct with different number of children.");
         }
         if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
-            return Status::NotSupported("vectorized engine not support cast struct with different field of children.");
+            return Status::NotSupported("Not support cast struct with different field of children.");
         }
         std::vector<std::unique_ptr<Expr>> field_casts{from_type.children.size()};
         for (int i = 0; i < from_type.children.size(); ++i) {
@@ -1679,8 +1692,8 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
     }
     auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
     if (res == nullptr) {
-        return Status::NotSupported(fmt::format("vectorized engine not support cast {} to {}.",
-                                                from_type.debug_string(), to_type.debug_string()));
+        return Status::NotSupported(
+                fmt::format("Not support cast {} to {}.", from_type.debug_string(), to_type.debug_string()));
     }
     std::unique_ptr<Expr> result(res);
     return std::move(result);
