@@ -966,7 +966,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private boolean unSupportRefreshByPartition(Table table) {
         return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable();
+                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable()
+                && !table.isPaimonTable();
     }
 
     /**
@@ -1867,7 +1868,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             return partitionInfos;
-        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable()) {
+        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable() ||
+                baseTable.isPaimonTable()) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
                     baseTableInfo);
         } else {
