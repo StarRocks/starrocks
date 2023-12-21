@@ -13,7 +13,12 @@
           "items": [
             {
               "type": "link",
-              "label": "Latest-v3.1",
+              "label": "Latest-v3.2",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-3.2.md"
+            },
+            {
+              "type": "link",
+              "label": "v3.1",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-3.1.md"
             },
             {
@@ -721,6 +726,11 @@
           "label": "StarRocks",
           "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
           "items": [
+            {
+              "type": "link",
+              "label": "v3.2",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-3.2.md"
+            },
             {
               "type": "link",
               "label": "v3.1",
