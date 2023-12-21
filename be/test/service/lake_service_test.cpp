@@ -816,6 +816,50 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_delete_txn_log) {
+    // missing tablet_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+
+    // missing txn_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+    }
+
+    // test normal
+    {
+        std::vector<lake::TxnLog> logs;
+
+        // TxnLog with 2 segments
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(logs.back().txn_id());
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     ASSERT_OK(fs::remove_all(kRootLocation));
     brpc::Controller cntl;
