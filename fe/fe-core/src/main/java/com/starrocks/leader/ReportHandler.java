@@ -889,6 +889,7 @@ public class ReportHandler extends Daemon {
         } // end for dbs
 
         if (deleteTablets.size() > 0) {
+            // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
             GlobalStateMgr.getCurrentState().getEditLog()
                     .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets));
         }

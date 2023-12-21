@@ -793,7 +793,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
 
         // 3. check disk decommission
-        if (replicas.size() > diskStableCnt) {
+        if (diskStableCnt < replicationNum) {
             return TabletStatus.DISK_MIGRATION;
         }
 
