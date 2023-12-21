@@ -1550,8 +1550,9 @@ public class GlobalStateMgr {
             loadHeader(dis);
             while (true) {
                 SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
+
                 try {
-                    SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
                     SRMetaBlockLoader imageLoader = loadImages.get(srMetaBlockID);
                     if (imageLoader == null) {
                         /*
@@ -1573,6 +1574,7 @@ public class GlobalStateMgr {
                     /*
                      * The number of json expected to be read is more than the number of json actually stored in the image
                      */
+                    metaMgrMustExists.remove(srMetaBlockID);
                     LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
                 } finally {
                     reader.close();
@@ -1580,8 +1582,9 @@ public class GlobalStateMgr {
             }
         } catch (EOFException exception) {
             if (!metaMgrMustExists.isEmpty()) {
-                throw new IOException("Load meta block failed, miss meta block [" +
-                        Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "]");
+                LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
+                        "This may not be a fatal error. It may be because there are new features in the version " +
+                        "you upgraded this time, but there is no relevant metadata.");
             } else {
                 LOG.info("Load meta-image EOF, successful loading all requires meta module");
             }
@@ -1591,8 +1594,7 @@ public class GlobalStateMgr {
         }
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn(
-                    "follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
             domainResolver = new DomainResolver(auth);
         }
