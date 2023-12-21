@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartiti
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -97,6 +98,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         } else {
             mvCandidateContexts = context.getCandidateMvs();
         }
+        if (CollectionUtils.isEmpty(mvCandidateContexts)) {
+            return Lists.newArrayList();
+        }
+        mvCandidateContexts.sort(new MaterializationContext.RewriteOrdering());
 
         List<OptExpression> results = Lists.newArrayList();
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.

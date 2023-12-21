@@ -19,10 +19,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,7 +60,7 @@ public class MaterializationContext {
 
     // group ids that are rewritten by this mv
     // used to reduce the rewrite times for the same group and mv
-    private List<Integer> matchedGroups;
+    private final List<Integer> matchedGroups;
 
     private final ScalarOperator mvPartialPartitionPredicate;
 
@@ -170,4 +173,54 @@ public class MaterializationContext {
     public Set<String> getRefTableUpdatePartitionNames() {
         return this.refTableUpdatePartitionNames;
     }
+
+    public static class RewriteOrdering implements Comparator<MaterializationContext> {
+
+        private static int getOperatorOrdering(OperatorType op) {
+            if (op == OperatorType.LOGICAL_AGGR) {
+                return 1;
+            } else if (op == OperatorType.LOGICAL_JOIN) {
+                return 2;
+            } else if (Pattern.isScanOperator(op)) {
+                return 3;
+            } else {
+                return 4;
+            }
+        }
+
+        /**
+         * Prefer exact-intersecting than partial-intersecting
+         */
+        private static int orderingIntersectTables(MaterializationContext mvContext) {
+            return Math.abs(mvContext.getIntersectingTables().size() - mvContext.getBaseTables().size());
+        }
+
+        private static long orderingRowCount(MaterializationContext mvContext) {
+            return mvContext.getMv().getRowCount();
+        }
+
+        @Override
+        public int compare(MaterializationContext o1, MaterializationContext o2) {
+            OperatorType o1Type = o1.getMvExpression().getOp().getOpType();
+            OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
+
+            if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
+                return Comparator.comparing(RewriteOrdering::orderingRowCount)
+                        .thenComparing(MaterializationContext::getMVUsedCount)
+                        .compare(o1, o2);
+            } else if (o1Type == o2Type && o1Type == OperatorType.LOGICAL_JOIN) {
+                return Comparator.comparing(RewriteOrdering::orderingIntersectTables)
+                        .thenComparing(RewriteOrdering::orderingRowCount)
+                        .thenComparing(MaterializationContext::getMVUsedCount)
+                        .compare(o1, o2);
+            } else {
+                return Comparator.comparing(((MaterializationContext x) ->
+                                getOperatorOrdering(x.getMvExpression().getOp().getOpType())))
+                        .thenComparing(RewriteOrdering::orderingRowCount)
+                        .thenComparing(MaterializationContext::getMVUsedCount)
+                        .compare(o1, o2);
+            }
+        }
+    }
+
 }
