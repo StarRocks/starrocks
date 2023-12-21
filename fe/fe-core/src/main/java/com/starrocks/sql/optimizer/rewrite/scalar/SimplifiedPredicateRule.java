@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
@@ -314,6 +315,96 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return ifNull(call);
         } else if (FunctionSet.ARRAY_MAP.equals(call.getFnName())) {
             return arrayMap(call);
+<<<<<<< HEAD
+=======
+        } else if (TIME_FN_NAMES.contains(call.getFnName())) {
+            return simplifiedTimeFns(call);
+        } else if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedDateTrunc(call);
+        }
+        return call;
+    }
+
+    @Override
+    public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
+                                                     ScalarOperatorRewriteContext context) {
+        // make sure is like, not regexp
+        if (predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        ScalarOperator rightOp = predicate.getChild(1);
+
+        // make sure is constant column ref
+        if (!rightOp.isConstantRef()) {
+            return predicate;
+        }
+
+        // make sure is string literal
+        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+            return predicate;
+        }
+
+        // make sure it didn't contain '%' and '_' both
+        String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
+        if (likeString.contains("%") || likeString.contains("_")) {
+            return predicate;
+        }
+
+        return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChild(0), rightOp);
+    }
+
+    // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`
+    private ScalarOperator simplifiedTimeFns(CallOperator call) {
+        String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
+                .findFirst().orElse("impossible");
+        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
+            return call;
+        }
+        if (!(call.getChild(0) instanceof CallOperator)) {
+            return call;
+        }
+
+        CallOperator child = call.getChild(0).cast();
+        if (!child.getFnName().contains(fn) || !TIME_FN_NAMES.contains(child.getFnName())) {
+            return call;
+        }
+        if (!child.getChild(1).isConstantRef() || !Type.INT.equals(child.getChild(1).getType())) {
+            return call;
+        }
+
+        ConstantOperator l1 = call.getChild(1).cast();
+        ConstantOperator l2 = call.getChild(0).getChild(1).cast();
+
+        if (l1.isNull() || l2.isNull()) {
+            return ConstantOperator.createNull(call.getType());
+        }
+
+        int i1 = call.getFnName().contains("add") ? l1.getInt() : l1.getInt() * -1;
+        int i2 = child.getFnName().contains("add") ? l2.getInt() : l2.getInt() * -1;
+
+        int result = i1 + i2;
+        ConstantOperator interval = ConstantOperator.createInt(Math.abs(result));
+
+        if (result != 0) {
+            String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
+                    Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
+            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
+                    Function.CompareMode.IS_SUPERTYPE_OF);
+            return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
+        } else {
+            return child.getChild(0);
+        }
+    }
+
+    private ScalarOperator simplifiedDateTrunc(CallOperator call) {
+        if (!call.getType().isDate() || !call.getChild(0).isConstantRef()) {
+            return call;
+        }
+        ConstantOperator child = call.getChild(0).cast();
+        if ("day".equalsIgnoreCase(child.toString())) {
+            return call.getChild(1);
+>>>>>>> 89fea41c9c ([Enhancement] Convert like predicate to binary predicate when it didn't contains any wildcard (#37515))
         }
         return call;
     }
