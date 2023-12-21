@@ -1092,7 +1092,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                         Maps.newHashMap());
         Table lineItemPar = new Table("single_partition_table", MOCKED_DATACACHE_DB, null, 0, 0, 0, sd,
-                ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
+                ImmutableList.of(new FieldSchema("l_shipdate", "string", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
         Column partitionColumn1 = new Column("l_shipdate", Type.DATE);
