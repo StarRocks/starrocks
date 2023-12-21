@@ -35,6 +35,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
@@ -339,14 +340,14 @@ public class StarRocksAssert {
      */
     public StarRocksAssert withTable(PseudoCluster cluster,
                                      String tableName) {
-        return withTables(cluster, List.of(tableName), null);
+        return withTables(cluster, ImmutableList.of(tableName), null);
     }
 
     /**
      * Create table only and no insert datas into the table and do actions.
      */
     public StarRocksAssert withTable(String table, ExceptionRunnable action) {
-        return withTables(null, List.of(table), action);
+        return withTables(null, ImmutableList.of(table), action);
     }
 
     /**
@@ -356,14 +357,14 @@ public class StarRocksAssert {
                                      String table,
                                      ExceptionRunnable action) {
 
-        return withTables(cluster, List.of(table), action);
+        return withTables(cluster, ImmutableList.of(table), action);
     }
 
     /**
      * To distinguish `withTable(sql)`, call it `useTable` to select existed table from MSchema.
      */
     public StarRocksAssert useTable(String table) {
-        return withTables(null, List.of(table), null);
+        return withTables(null, ImmutableList.of(table), null);
     }
 
     public Table getTable(String dbName, String tableName) {

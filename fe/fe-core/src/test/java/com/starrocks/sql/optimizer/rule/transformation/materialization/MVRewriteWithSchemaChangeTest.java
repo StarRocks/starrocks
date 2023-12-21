@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
@@ -25,8 +26,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
@@ -273,7 +272,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
 
 
         {
-            starRocksAssert.withTables(cluster, List.of("depts", "emps_par"),
+            starRocksAssert.withTables(cluster, ImmutableList.of("depts", "emps_par"),
                     () -> {
                         starRocksAssert.withView("create view view1 as " +
                                 " select deptno1, deptno2, empid, name " +
