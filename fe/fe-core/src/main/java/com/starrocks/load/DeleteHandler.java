@@ -208,6 +208,20 @@ public class DeleteHandler implements Writable {
             } else if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 // this is a unpartitioned table, use table name as partition name
                 partitionNames.add(olapTable.getName());
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/load/DeleteHandler.java
+=======
+            } else if (partitionInfo.getType() == PartitionType.LIST) {
+                // TODO: support list partition prune
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                if (partitionIds.isEmpty()) {
+                    return null;
+                }
+                for (Long partitionId : partitionIds) {
+                    Partition partition = olapTable.getPartition(partitionId);
+                    partitionNames.add(partition.getName());
+                }
+>>>>>>> 3127f5bda5 ([BugFix] Fix bug delete empty list partition report an error (#37461)):fe/fe-core/src/main/java/com/starrocks/load/DeleteMgr.java
             }
         }
 
