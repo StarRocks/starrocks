@@ -101,9 +101,25 @@ public class SqlParser {
         List<StarRocksParser.SingleStatementContext> singleStatementContexts =
                 parser.sqlStatements().singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
+<<<<<<< HEAD
             StatementBase statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
                     .visitSingleStatement(singleStatementContexts.get(idx));
             statement.setOrigStmt(new OriginStatement(sql, idx));
+=======
+            // collect hint info
+            HintCollector collector = new HintCollector((CommonTokenStream) parser.getTokenStream());
+            collector.collect(singleStatementContexts.get(idx));
+
+            AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+            StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
+            if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
+                    && !(statement instanceof PrepareStmt)) {
+                // for prepare stm1 from  '', here statement is inner statement
+                statement = new PrepareStmt("", statement, astBuilder.getParameters());
+            } else {
+                statement.setOrigStmt(new OriginStatement(sql, idx));
+            }
+>>>>>>> cce970f888 ([Enhancement] hint enhancement (#37356))
             statements.add(statement);
         }
         if (ConnectContext.get() != null) {

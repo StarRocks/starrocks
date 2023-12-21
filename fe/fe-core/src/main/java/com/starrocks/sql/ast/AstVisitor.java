@@ -30,6 +30,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
@@ -39,6 +40,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
@@ -1156,4 +1158,19 @@ public abstract class AstVisitor<R, C> {
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    public R visitDictQueryExpr(DictQueryExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitHintNode(HintNode node, C context) {
+        return visitNode(node, context);
+    }
+
+    public R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
+    }
+>>>>>>> cce970f888 ([Enhancement] hint enhancement (#37356))
 }
