@@ -204,19 +204,7 @@ Status DeltaWriter::_init() {
             }
             writer_context.referenced_column_ids.push_back(index);
         }
-<<<<<<< HEAD
-        int64_t average_row_size = _tablet->updates()->get_average_row_size();
-        if (average_row_size != 0) {
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
-        } else {
-            // If tablet is a new created tablet and has no historical data, average_row_size is 0
-            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
-            // we will consider it as 16 bytes.
-            average_row_size = _tablet->tablet_schema().estimate_row_size(16);
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
-=======
         if (_opt.partial_update_mode == PartialUpdateMode::ROW_MODE) {
-            // no need to control memtable row when using column mode, because we don't need to fill missing column
             int64_t average_row_size = _tablet->updates()->get_average_row_size();
             if (average_row_size != 0) {
                 _memtable_buffer_row = config::write_buffer_size / average_row_size;
@@ -224,10 +212,9 @@ Status DeltaWriter::_init() {
                 // If tablet is a new created tablet and has no historical data, average_row_size is 0
                 // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
                 // we will consider it as 16 bytes.
-                average_row_size = _tablet_schema->estimate_row_size(16);
+                average_row_size = _tablet->tablet_schema().estimate_row_size(16);
                 _memtable_buffer_row = config::write_buffer_size / average_row_size;
             }
->>>>>>> b26b382ca7 ([Enhancement] Improve the problem of generating too many small files for partial update column mode (#37523))
         }
 
         auto partial_update_schema =
