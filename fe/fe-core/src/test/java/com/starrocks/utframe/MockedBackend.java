@@ -132,8 +132,8 @@ public class MockedBackend {
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
-        ((MockGenericPool) ClientPool.heartbeatPool).register(this);
-        ((MockGenericPool) ClientPool.backendPool).register(this);
+        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
             @Mock
