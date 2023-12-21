@@ -153,7 +153,7 @@ public class IcebergTable extends Table {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
                     filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
             partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(PartitionUtil
-                    .getPartitionSourceName(this.nativeTable.schema(), partitionField))).collect(Collectors.toList());
+                    .getPartitionSourceName(this.getNativeTable().schema(), partitionField))).collect(Collectors.toList());
         }
         return partitionColumns;
     }
