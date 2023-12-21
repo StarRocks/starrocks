@@ -185,6 +185,11 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert useCatalog(String catalogName) throws DdlException {
+        ctx.getGlobalStateMgr().changeCatalog(ctx, catalogName);
+        return this;
+    }
+
     public StarRocksAssert withoutUseDatabase() {
         ctx.setDatabase("");
         return this;

@@ -15,6 +15,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.TableName;
+
 import java.util.Map;
 
 public class InternalCatalog extends Catalog {
@@ -23,6 +25,10 @@ public class InternalCatalog extends Catalog {
 
     public InternalCatalog(long id, String name, Map<String, String> config, String comment) {
         super(id, DEFAULT_INTERNAL_CATALOG_NAME, config, comment);
+    }
+
+    public static boolean isFromDefault(TableName name) {
+        return name != null && DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(name.getCatalog());
     }
 
 }
