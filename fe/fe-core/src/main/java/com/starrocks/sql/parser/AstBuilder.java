@@ -6457,9 +6457,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         NodePosition pos = createPos(context);
-        MaterializedView.RefreshMoment refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
+        MaterializedView.RefreshMoment refreshMoment =
+                Config.default_mv_refresh_immediate ?
+                        MaterializedView.RefreshMoment.IMMEDIATE : MaterializedView.RefreshMoment.DEFERRED;
         if (context.DEFERRED() != null) {
             refreshMoment = MaterializedView.RefreshMoment.DEFERRED;
+        } else if (context.IMMEDIATE() != null) {
+            refreshMoment = MaterializedView.RefreshMoment.IMMEDIATE;
         }
         if (context.ASYNC() != null) {
             boolean defineStartTime = false;
