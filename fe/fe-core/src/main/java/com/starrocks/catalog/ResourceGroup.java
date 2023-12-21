@@ -67,6 +67,9 @@ public class ResourceGroup {
         DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
         DEFAULT_MV_WG.setResourceGroupType(TWorkGroupType.WG_MV);
         DEFAULT_MV_WG.setConcurrencyLimit(0);
+        DEFAULT_MV_WG.setCpuCoreLimit(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        DEFAULT_MV_WG.setMaxCpuCores(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        DEFAULT_MV_WG.setMemLimit(0.8);
     }
 
     public static final ShowResultSetMetaData META_DATA =

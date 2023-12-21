@@ -218,7 +218,7 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-        String defaultWg = "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+        String defaultWg = "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
                 "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)";
         Assert.assertFalse(rows.isEmpty());
         Assert.assertEquals(2, rows.size());
@@ -1274,7 +1274,7 @@ public class ResourceGroupStmtTest {
                 "   'type' = 'normal'" +
                 "   );";
         String showResult =
-                "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
                         "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
                         "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
                         "rg2|32|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
@@ -1373,7 +1373,7 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         String expected =
-                "default_mv_wg|null|null|null|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
                         "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
                         "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
                         "rg2|16|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_cpu_cost_range=[21.0, 22.0))\n" +
@@ -1409,5 +1409,55 @@ public class ResourceGroupStmtTest {
                 "rg1|10|20.0%|8|0|0|0|null|100%|NORMAL|(weight=1.5, source_ip=192.168.2.1/32)");
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+    }
+
+    @Test
+    public void testCreateDefaultWg() {
+        String createDefaultWgSql = "create resource group default_wg\n" +
+                "to\n" +
+                "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', " +
+                "query_type in ('select'), source_ip='192" +
+                ".168.2.1/24')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'max_cpu_cores' = '8',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+
+        Assert.assertThrows("Can't create resource group named default_wg, as it's default.",
+                DdlException.class,
+                () -> starRocksAssert.executeResourceGroupDdlSql(createDefaultWgSql));
+
+    }
+
+    @Test
+    public void testCreateDefaultMvWg() {
+        String createDefaultMvWgSql = "create resource group default_mv_wg\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'max_cpu_cores' = '8',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'mv'\n" +
+                ");";
+
+        Assert.assertThrows("Can't create resource group named default_mv_wg, as it's default.",
+                DdlException.class,
+                () -> starRocksAssert.executeResourceGroupDdlSql(createDefaultMvWgSql));
+    }
+
+    @Test
+    public void testDropDefaultWg() {
+        String[] wgNames = new String[]{ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
+                ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME};
+        for (String wgName : wgNames) {
+            String createDefaultMvWgSql = String.format("DROP resource group %s", wgName);
+
+            Assert.assertThrows(String.format("Default resource group %s does not support drop.", wgName),
+                    DdlException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(createDefaultMvWgSql));
+        }
     }
 }
