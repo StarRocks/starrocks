@@ -345,7 +345,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -364,8 +364,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        fullName);
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
