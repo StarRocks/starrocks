@@ -62,6 +62,8 @@ public class TableTestBase {
             PartitionSpec.builderFor(SCHEMA_A).bucket("data", BUCKETS_NUMBER).build();
     protected static final PartitionSpec SPEC_B =
             PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+    protected static final PartitionSpec SPEC_B_1 = PartitionSpec.builderFor(SCHEMA_B).build();
+
     protected static final PartitionSpec SPEC_D =
             PartitionSpec.builderFor(SCHEMA_D).hour("ts").build();
 
@@ -142,6 +144,12 @@ public class TableTestBase {
                     .withMetrics(TABLE_B_METRICS)
                     .build();
 
+    public static final DataFile FILE_B_5 = DataFiles.builder(SPEC_B)
+            .withPath("/path/to/data-b5.parquet")
+            .withFileSizeInBytes(20)
+            .withRecordCount(4)
+            .build();
+
     public static final DeleteFile FILE_C_1 = FileMetadata.deleteFileBuilder(SPEC_B).ofPositionDeletes()
             .withPath("delete.orc")
             .withFileSizeInBytes(1024)
@@ -163,6 +171,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableD = null;
     public TestTables.TestTable mockedNativeTableE = null;
     public TestTables.TestTable mockedNativeTableF = null;
+    public TestTables.TestTable mockedNativeTableG = null;
 
     protected final int formatVersion = 1;
 
@@ -178,6 +187,7 @@ public class TableTestBase {
         this.mockedNativeTableD = create(SCHEMA_D, SPEC_D, "td", 1);
         this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
+        this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
     }
 
     @After
