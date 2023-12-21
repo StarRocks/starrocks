@@ -110,8 +110,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            context.checkTimeout();
-
             // 1. check whether to need compensate or not
             // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
             boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
@@ -146,6 +144,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                         MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
                 mvEntity.increaseQueryMatchedCount(1L);
             }
+
+            // Do not try to enumerate all plans, it would take a lot of time
+            int limit = context.getSessionVariable().getCboMaterializedViewRewriteLimit();
+            if (limit > 0 && results.size() >= limit) {
+                break;
+            }
+
+            // Give up rewrite if it exceeds the optimizer timeout
+            context.checkTimeout();
         }
 
         return results;

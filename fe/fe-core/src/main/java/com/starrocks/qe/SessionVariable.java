@@ -277,6 +277,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_LIMIT = "cbo_materialized_view_rewrite_candidate_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -1411,6 +1412,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = false;
+
+    /**
+     * Materialized view rewrite limit: how many MVScan plan would be generated when rewriting for a LogicalExpression
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteLimit = 3;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -2743,12 +2750,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableMaterializedViewPlanCache;
     }
 
+<<<<<<< HEAD
     public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
         this.enableViewBasedMvRewrite = enableViewBasedMvRewrite;
     }
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
+=======
+    public int getCboMaterializedViewRewriteLimit() {
+        return cboMaterializedViewRewriteLimit;
+>>>>>>> 6499526c43 (add switch: cbo_materialized_view_rewrite_limit)
     }
 
     public String getQueryExcludingMVNames() {
