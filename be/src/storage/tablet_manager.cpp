@@ -216,7 +216,18 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
             }
         }
     } else {
+        int64_t start_ts = MonotonicMillis();
+        VLOG(3) << strings::Substitute("begin to lock shard_lock, tablet_id:$0, tablets_shard_idx:$1", tablet_id,
+                                       _get_tablets_shard_idx(tablet_id));
         wlock.lock();
+
+        int64_t end_ts = MonotonicMillis();
+        VLOG(3) << strings::Substitute("shard_lock get locked, tablet_id:$0, tablets_shard_idx:$1, cost time:$2 ms",
+                                       tablet_id, _get_tablets_shard_idx(tablet_id), end_ts - start_ts);
+        if (end_ts - start_ts > 500) {
+            LOG(WARNING) << "get lock slow when creating tablet: " << tablet_id << ", costs:" << end_ts - start_ts
+                         << " ms";
+        }
     }
 
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, true, nullptr);
