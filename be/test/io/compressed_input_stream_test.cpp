@@ -19,11 +19,15 @@
 #include <memory>
 
 #include "io/string_input_stream.h"
+#include "io_test_base.h"
 #include "testutil/assert.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/stream_compression.h"
+<<<<<<< HEAD
 #include "util/random.h"
 
+=======
+>>>>>>> c90e6ce8ac ([BugFix]sharedbuffer inputstream release with aligned offset may mistake deletion (#37535))
 namespace starrocks::io {
 
 class CompressedInputStreamTest : public ::testing::Test {
@@ -33,16 +37,6 @@ protected:
         size_t read_buff_len;
         size_t compressed_buff_len;
     };
-
-    static std::string random_string(int len) {
-        static starrocks::Random rand(20200722);
-        std::string s;
-        s.reserve(len);
-        for (int i = 0; i < len; i++) {
-            s.push_back('a' + (rand.Next() % ('z' - 'a' + 1)));
-        }
-        return s;
-    }
 
     std::shared_ptr<InputStream> LZ4F_compress_to_file(const Slice& content) {
         const BlockCompressionCodec* codec = nullptr;
