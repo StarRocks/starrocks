@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;

@@ -34,7 +34,6 @@
 
 package com.starrocks.utframe;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
@@ -58,11 +57,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.pseudocluster.PseudoCluster;
->>>>>>> a2a4c2e80c ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (#36711))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
