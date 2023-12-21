@@ -95,7 +95,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --use-staros) USE_STAROS=ON; shift ;;
+        --use-staros) USE_STAROS=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
