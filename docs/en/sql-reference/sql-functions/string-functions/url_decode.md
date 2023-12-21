@@ -2,33 +2,35 @@
 displayed_sidebar: "English"
 ---
 
-# URL_DECODE
+# url_decode
 
 ## Description
 
-Converts an url to a decode string.
+Translates a string back from the [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) format. This function is an inverse of [url_encode](./url_encode.md).
+
+This functions is supported from v3.2.
 
 ## Syntax
 
 ```haskell
-url_decode(str)
+VARCAHR url_decode(VARCHAR str)
 ```
 
 ## Parameters
 
-- `str`: the string to decode. If `str` is not a string type, it will try implicit cast first.
+- `str`: the string to decode. If `str` is not a string, the system will try implicit cast first.
 
-## Return values
+## Return value
 
-Return an encode string.
+Returns a decoded string.
 
 ## Examples
 
 ```plaintext
-mysql> select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
-+---------------------------------------------------------------------------------------+
-| url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy') |
-+---------------------------------------------------------------------------------------+
-| https://docs.starrocks.io/en-us/latest/quick_start/Deploy                             |
-+---------------------------------------------------------------------------------------+
+mysql> select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fdocs%2Fintroduction%2FStarRocks_intro%2F');
++------------------------------------------------------------------------------------------+
+| url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fdocs%2Fintroduction%2FStarRocks_intro%2F') |
++------------------------------------------------------------------------------------------+
+| https://docs.starrocks.io/docs/introduction/StarRocks_intro/                             |
++------------------------------------------------------------------------------------------+
 ```

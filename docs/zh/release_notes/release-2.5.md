@@ -4,6 +4,44 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.17
+
+发布日期：2023 年 12 月 19 日
+
+### 新增特性
+
+- 新增了监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息 “too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
+- 新增如下 Bitmap 函数：[subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/)。 [#35817](https://github.com/StarRocks/starrocks/pull/35817)
+
+### 功能优化
+
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- 优化主键模型表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- 优化主键模型表 Compaction Score 的取值逻辑，使其和其他模型的表的取值范围看起来更一致。 [#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- Spark Load 增加了 bitmap_from_binary 函数，支持导入 Binary Bitmap。 [#36050](https://github.com/StarRocks/starrocks/pull/36050)
+- bRPC 的超时时间从 1 小时改为等于 Session 变量 `query_timeout` 所设置的时间，避免 RPC 超时过久引起查询失败。 [#36778](https://github.com/StarRocks/starrocks/pull/36778)
+
+### 兼容性变更
+
+#### 参数变更
+
+- 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- BE 配置项 `update_compaction_per_tablet_min_interval_seconds` 从静态参数改为动态参数。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询在 Hash Join 时失败了，会引起 BE Crash。[#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- 开启 FE 配置项 `enable_collect_query_detail_info` 后，FE 性能下降严重。[#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。 [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- 执行 `./agentctl.sh stop be` 时偶尔会出现 starrocks_be 进程未正常退出。 [#35108](https://github.com/StarRocks/starrocks/pull/35108)
+- ARRAY_DISTINCT 函数偶发 BE Crash。 [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- 某些情况下，物化视图刷新可能会出现死锁问题。[#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- 某些特殊场景中，动态分区出现异常会导致 FE 无法重启。 [#36846](https://github.com/StarRocks/starrocks/pull/36846)
+
 ## 2.5.16
 
 发布日期：2023 年 12 月 1 日
@@ -470,7 +508,7 @@ displayed_sidebar: "Chinese"
   - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键模型表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
-- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](../reference/information_schema/information_schema.md)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](../reference/overview-pages/information_schema.md)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - 优化备份恢复：
   - 支持数据库级别的备份恢复。相关文档，请参见[备份与恢复](../administration/Backup_and_restore.md)。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - 支持主键模型表的备份恢复。相关文档，请参见备份与恢复。[#11885](https://github.com/StarRocks/starrocks/pull/11885)

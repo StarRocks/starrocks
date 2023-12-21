@@ -52,8 +52,6 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
-static const size_t large_compaction_memory_threshold = 1000000000;
-
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
@@ -107,7 +105,8 @@ void CompactionState::release_segments(uint32_t segment_id) {
     }
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    // reset ptr to release memory immediately
+    pk_cols[segment_id].reset();
 }
 
 std::string CompactionState::to_string() const {

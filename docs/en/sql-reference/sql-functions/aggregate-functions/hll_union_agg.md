@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# HLL_UNION_AGG
+# hll_union_agg
 
 ## Description
 

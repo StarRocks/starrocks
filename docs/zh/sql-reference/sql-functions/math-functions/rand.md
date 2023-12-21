@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# RAND, RANDOM
+# rand, random
 
 ## 功能
 

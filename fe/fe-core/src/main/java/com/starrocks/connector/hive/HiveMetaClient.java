@@ -259,6 +259,13 @@ public class HiveMetaClient {
         }
     }
 
+    public boolean tableExists(String dbName, String tableName) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.tableExists")) {
+            return callRPC("tableExists", String.format("Failed to get table exists [%s.%s]", dbName, tableName),
+                    dbName, tableName);
+        }
+    }
+
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartition")) {
             return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),

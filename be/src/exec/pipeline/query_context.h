@@ -126,16 +126,13 @@ public:
         DCHECK(_desc_tbl != nullptr);
         return _desc_tbl;
     }
-    // If option_query_mem_limit > 0, use it directly.
-    // Otherwise, use per_instance_mem_limit * num_fragments * pipeline_dop.
-    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop,
-                                    int64_t option_query_mem_limit);
+
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
-                          workgroup::WorkGroup* wg = nullptr);
+                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
@@ -198,6 +195,8 @@ public:
 
     void mark_prepared() { _is_prepared = true; }
     bool is_prepared() { return _is_prepared; }
+
+    int64_t get_static_query_mem_limit() const { return _static_query_mem_limit; }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -263,6 +262,8 @@ private:
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
+
+    int64_t _static_query_mem_limit = 0;
 };
 
 class QueryContextManager {

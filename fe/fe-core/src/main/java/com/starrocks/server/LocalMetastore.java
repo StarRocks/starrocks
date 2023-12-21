@@ -82,6 +82,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvJoinFilter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -1447,8 +1448,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 // update partition info
                 updatePartitionInfo(partitionInfo, newPartitions, existPartitionNameSet, addPartitionClause, olapTable);
 
-                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
-                        null /* expectGroupId */);
+                try {
+                    colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                            null /* expectGroupId */);
+                } catch (DdlException e) {
+                    LOG.info("table {} update colocation info failed when add partition, {}", olapTable.getId(), e.getMessage());
+                }
 
                 // add partition log
                 addPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
@@ -2169,7 +2174,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn(errMsg);
 
                 String userErrorMsg = String.format(
-                        "Table creation timed out.\n You can increase the timeout by increasing the " +
+                        errMsg + "\n You can increase the timeout by increasing the " +
                                 "config \"tablet_create_timeout_second\" and try again.\n" +
                                 "To increase the config \"tablet_create_timeout_second\" (currently %d), " +
                                 "run the following command:\n" +
@@ -2548,7 +2553,7 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (replicationNum > 1) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException(
-                    String.format("Table replication num should be less than of equal to the number of available BE nodes. "
+                    String.format("Table replication num should be less than or equal to the number of available BE nodes. "
                             + "You can change this default by setting the replication_num table properties. "
                             + "Current alive backend is [%s]. ", Joiner.on(",").join(backendIds)));
         } else {
@@ -3114,11 +3119,26 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                asyncRefreshContext.setStep(
-                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
-                asyncRefreshContext.setTimeUnit(
-                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+                long intervalStep = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue();
+                String refreshTimeUnit = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+                asyncRefreshContext.setStep(intervalStep);
+                asyncRefreshContext.setTimeUnit(refreshTimeUnit);
+
+                // Check the interval time should not be less than the min allowed config time.
+                if (Config.materialized_view_min_refresh_interval > 0) {
+                    TimeUnit intervalTimeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(refreshTimeUnit);
+                    long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(intervalStep, intervalTimeUnit);
+                    if (periodSeconds < Config.materialized_view_min_refresh_interval) {
+                        throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
+                                        "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
+                                        "please config an interval larger than " +
+                                        "Config.min_allowed_materialized_view_schedule_time(%ss).",
+                                periodSeconds,
+                                Config.materialized_view_min_refresh_interval));
+                    }
+                }
             }
+
             // task which type is EVENT_TRIGGERED can not use external table as base table now.
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
@@ -3143,7 +3163,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;
-        if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+        if (RunMode.isSharedNothingMode()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 materializedView =
                         MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
@@ -3154,7 +3174,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 baseDistribution, mvRefreshScheme);
             }
         } else {
-            Preconditions.checkState(RunMode.getCurrentRunMode().isAllowCreateLakeTable());
+            Preconditions.checkState(RunMode.isSharedDataMode());
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 throw new DdlException("Incremental materialized view in shared_data mode is not supported");
             }
@@ -3181,7 +3201,10 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         // set partitionRefTableExprs
-        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        if (stmt.getPartitionRefTableExpr() != null) {
+            //avoid to get a list of null inside
+            materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        }
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);
@@ -3230,6 +3253,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
                 buildPartitions(db, materializedView, partition.getSubPartitions().stream().collect(Collectors.toList()));
                 materializedView.addPartition(partition);
+            } else {
+                Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
+                Map<Expr, SlotRef> partitionExprMaps = MvJoinFilter.getPartitionJoinMap(partitionExpr, stmt.getQueryStatement());
+                partitionExpr = stmt.getPartitionRefTableExpr();
+                if (!partitionExprMaps.containsKey(partitionExpr)) {
+                    LOG.warn("Failed to get partition expr from multiple base tables: " + stmt.getOrigStmt());
+                    partitionExprMaps.put(partitionExpr, MaterializedView.getMvPartitionSlotRef(partitionExpr));
+                }
+                materializedView.setPartitionExprMaps(partitionExprMaps);
             }
 
             MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
@@ -3595,9 +3627,13 @@ public class LocalMetastore implements ConnectorMetadata {
         new AlterMVJobExecutor().process(stmt, ConnectContext.get());
     }
 
-    private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
+    private String executeRefreshMvTask(String dbName, MaterializedView materializedView,
+                                        ExecuteOption executeOption)
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        LOG.info("Start to execute refresh materialized view task, mv: {}, refreshType: {}, executionOption:{}",
+                materializedView.getName(), refreshType, executeOption);
+
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
             MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
@@ -3653,9 +3689,7 @@ public class LocalMetastore implements ConnectorMetadata {
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
 
         ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
-        if (isManual) {
-            executeOption.setManual();
-        }
+        executeOption.setManual(isManual);
         executeOption.setSync(isSync);
         return executeRefreshMvTask(dbName, materializedView, executeOption);
     }
@@ -4860,7 +4894,12 @@ public class LocalMetastore implements ConnectorMetadata {
             // replace
             truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
-            colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */, null /* expectGroupId */);
+            try {
+                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                        null /* expectGroupId */);
+            } catch (DdlException e) {
+                LOG.info("table {} update colocation info failed when truncate table, {}", olapTable.getId(), e.getMessage());
+            }
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
@@ -5119,6 +5158,11 @@ public class LocalMetastore implements ConnectorMetadata {
             if (olapTable == null) {
                 return;
             }
+            if (replaceTempPartitionLog.isUnPartitionedTable()) {
+                olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
+                        replaceTempPartitionLog.getTempPartitions().get(0));
+                return;
+            } 
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),

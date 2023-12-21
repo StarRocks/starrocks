@@ -38,6 +38,7 @@
 #include "types/bitmap_value_detail.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -834,7 +835,7 @@ std::string BitmapValue::to_string() const {
     }
     case SET:
         int pos = 0;
-        int64_t values[_set->size()];
+        uint64_t values[_set->size()];
         for (auto value : *_set) {
             values[pos++] = value;
         }
@@ -862,9 +863,8 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        for (unsigned long ptr_value : *_bitmap) {
-            array->emplace_back(ptr_value);
-        }
+        raw::make_room(array, _bitmap->cardinality());
+        _bitmap->toUint64Array((uint64_t*)(*array).data());
         break;
     }
     case SET:

@@ -35,25 +35,17 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableIdentifier;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.parser.SqlParser;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,11 +54,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.StringJoiner;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
@@ -103,18 +90,8 @@ public class View extends Table {
     @SerializedName(value = "m")
     private long sqlMode = 0L;
 
-
-    // Record the alter view time
-    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
-
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
-
-    // store all refs tables and views in the def
-    private AtomicReference<Set<TableIdentifier>> tblIdCache = new AtomicReference<>();
-
-    // store the analyzed result
-    private AtomicReference<ViewCache> analyzedCache = new AtomicReference<>();
 
     // Used for read from image
     public View() {
@@ -125,43 +102,30 @@ public class View extends Table {
         super(id, name, TableType.VIEW, schema);
     }
 
-    /**
-     * Attention: if you want a new queryStatement when you want to set some special value different from
-     * its query definition, please set reuseViewDef to false.
-     * @return QueryStatement
-     */
-    public QueryStatement getQueryStatement() {
+    public QueryStatement getQueryStatement() throws StarRocksPlannerException {
         Preconditions.checkNotNull(inlineViewDef);
-
-        if (analyzedCache.get() == null || ConnectContext.get().cannotReuseViewDef()) {
-            QueryStatement stmt = parseAndAnalyzeDef();
-            if (ConnectContext.get().cannotReuseViewDef()) {
-                return stmt;
-            }
-            analyzedCache.compareAndSet(null, new ViewCache(createViewFingerprint(), stmt));
-            return analyzedCache.get().getAnalyzedDef();
+        ParseNode node;
+        try {
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
+        } catch (Exception e) {
+            LOG.warn("stmt is {}", inlineViewDef);
+            LOG.warn("exception because: ", e);
+            throw new StarRocksPlannerException(
+                    String.format("Failed to parse view-definition statement of view: %s", name),
+                    ErrorType.INTERNAL_ERROR);
+        }
+        // Make sure the view definition parses to a query statement.
+        if (!(node instanceof QueryStatement)) {
+            throw new StarRocksPlannerException(String.format("View definition of %s " +
+                    "is not a query statement", name), ErrorType.INTERNAL_ERROR);
         }
 
-        String latestFingerprint = createViewFingerprint();
-        ViewCache oldCache = analyzedCache.get();
-        if (latestFingerprint.isEmpty() || !StringUtils.equals(latestFingerprint, oldCache.getFingerprint())) {
-            QueryStatement stmt = parseAndAnalyzeDef();
-            analyzedCache.compareAndSet(oldCache, new ViewCache(latestFingerprint, stmt));
-        }
-        return analyzedCache.get().getAnalyzedDef();
+        return (QueryStatement) node;
     }
-
-    public boolean isAnalyzed() {
-        return analyzedCache.get() != null;
-    }
-
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
-        this.analyzedCache = new AtomicReference<>();
-        this.tblIdCache = new AtomicReference<>();
-        this.tableRefsCache = Lists.newArrayList();
     }
 
     public String getInlineViewDef() {
@@ -180,7 +144,7 @@ public class View extends Table {
         // populate a view definition.
         ParseNode node;
         try {
-            node = SqlParser.parse(inlineViewDef, sqlMode).get(0);
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
             LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
@@ -196,104 +160,15 @@ public class View extends Table {
         return (QueryStatement) node;
     }
 
-    public QueryStatement parseAndAnalyzeDef() {
-        ParseNode node;
-        node = SqlParser.parse(inlineViewDef, sqlMode).get(0);
-        // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStatement)) {
-            throw new StarRocksPlannerException(String.format("View %s without query statement. Its definition is:%n%s",
-                    name, inlineViewDef), ErrorType.INTERNAL_ERROR);
-        }
-
-        QueryStatement stmt = (QueryStatement) node;
-        Analyzer.analyze(stmt, ConnectContext.get());
-        return stmt;
-    }
-
     public synchronized List<TableName> getTableRefs() {
         if (this.tableRefsCache.isEmpty()) {
-            QueryStatement stmt = parseAndAnalyzeDef();
-            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(stmt);
+            QueryStatement qs = getQueryStatement();
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
             this.tableRefsCache = Lists.newArrayList(allTables.keySet());
         }
 
         return Lists.newArrayList(this.tableRefsCache);
     }
-
-    public Set<TableIdentifier> getTableIdentifiers() {
-        if (tblIdCache.get() == null) {
-            QueryStatement stmt = parseAndAnalyzeDef();
-            Set<TableIdentifier> tblIds = AnalyzerUtils.collectAllTableIdentifier(stmt);
-            tblIdCache.compareAndSet(null, tblIds);
-        }
-        return tblIdCache.get();
-    }
-
-    public String createViewFingerprint() {
-        StringJoiner joiner = new StringJoiner(", ", "[", "]");
-        Set<TableIdentifier> tblIds = getTableIdentifiers();
-        for (TableIdentifier tableId : tblIds) {
-            Optional<Table> table = resolveTable(tableId);
-            if (table.isPresent()) {
-                if (table.get().isView()) {
-                    joiner.add(table.get().getId() + "-" + ((View) table.get()).lastSchemaUpdateTime.get());
-                } else if (table.get().isNativeTableOrMaterializedView()) {
-                    OlapTable olapTable = (OlapTable) table.get();
-                    joiner.add(olapTable.getId() + "-" + olapTable.lastSchemaUpdateTime.get() + "-"
-                            + olapTable.lastVersionUpdateEndTime);
-                } else {
-                    // external table set a cache ttl of 180s
-                    long now = System.currentTimeMillis();
-                    now = now - now % (1000 * 60 * 3) + (1000 * 60 * 3);
-                    joiner.add(table.get().getId() + "-" + now);
-                }
-            } else {
-                return "";
-            }
-        }
-        return joiner.toString();
-    }
-
-    public Optional<Table> resolveTable(TableIdentifier identifier) {
-        TableName tableName = identifier.getTableName();
-        if (identifier.isSyncMv()) {
-            return Optional.empty();
-        }
-        MetaUtils.normalizationTableName(ConnectContext.get(), tableName);
-        String catalogName = tableName.getCatalog();
-        String dbName = tableName.getDb();
-        String tbName = tableName.getTbl();
-        if (Strings.isNullOrEmpty(dbName)) {
-            return Optional.empty();
-        }
-
-        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-            return Optional.empty();
-        }
-
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-
-        Database database = metadataMgr.getDb(catalogName, dbName);
-        if (database == null) {
-            return Optional.empty();
-        }
-
-        Table table = metadataMgr.getTable(catalogName, dbName, tbName);
-        if (table == null) {
-            return Optional.empty();
-        }
-
-        if (table.isNativeTableOrMaterializedView()) {
-            OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() == OlapTable.OlapTableState.RESTORE ||
-                    olapTable.getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD) {
-                return Optional.empty();
-            }
-        }
-
-        return Optional.of(table);
-    }
-
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -305,45 +180,9 @@ public class View extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         // just do not want to modify the meta version, so leave originalViewDef here but set it as empty
-        Text.readString(in);
+        originalViewDef = Text.readString(in);
         originalViewDef = "";
         inlineViewDef = Text.readString(in);
         inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
-    }
-
-    public static class ViewCache {
-        private final String fingerprint;
-
-        private final QueryStatement analyzedDef;
-
-        public ViewCache(String fingerprint, QueryStatement analyzedDef) {
-            this.fingerprint = fingerprint;
-            this.analyzedDef = analyzedDef;
-        }
-
-        public String getFingerprint() {
-            return fingerprint;
-        }
-
-        public QueryStatement getAnalyzedDef() {
-            return analyzedDef;
-        }
-
-        @Override
-        public int hashCode() {
-            return fingerprint.hashCode();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            return fingerprint.equals(((ViewCache) o).fingerprint);
-        }
     }
 }

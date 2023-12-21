@@ -145,8 +145,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -164,8 +164,8 @@ protected:
     }
 
     void get_key_list(int64_t version, std::vector<int>& key_list) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -626,17 +626,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     config::max_update_compaction_num_singleton_deltas = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
-    EXPECT_EQ(3, compaction_score(tablet_meta));
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
 
     config::max_update_compaction_num_singleton_deltas = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
     EXPECT_EQ(2, input_rowsets2.size());
-    EXPECT_EQ(2, compaction_score(tablet_meta));
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
 
     config::max_update_compaction_num_singleton_deltas = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
-    EXPECT_EQ(1, compaction_score(tablet_meta));
+    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), tablet_meta));
     config::max_update_compaction_num_singleton_deltas = 1000;
 }
 

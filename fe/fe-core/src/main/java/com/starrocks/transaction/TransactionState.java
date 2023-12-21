@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
@@ -403,13 +404,21 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
-    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
-            LOG.warn("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
+            LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
                     tabletId, backend != null ? backend.toString() : "", transactionId);
+            return true;
+        }
+        if (state != ReplicaState.NORMAL) {
+            // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
+            // We handle version missing in finishTask when change state to NORMAL
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+            LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                    tabletId, backend != null ? backend.toString() : "", state);
             return true;
         }
         return this.tabletCommitInfos.contains(info);

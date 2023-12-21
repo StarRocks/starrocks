@@ -14,16 +14,16 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.FeConstants;
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
-        PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
@@ -62,9 +62,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        FeConstants.isCanonizePredicateAfterMVRewrite = true;
-        runFileUnitTest("materialized-view/tpch-hive/q7");
-        FeConstants.isCanonizePredicateAfterMVRewrite = false;
+        runFileUnitTestWithNormalizedResult("materialized-view/tpch-hive/q7");
     }
 
     @Test

@@ -345,7 +345,7 @@ CREATE EXTERNAL RESOURCE hive0
 PROPERTIES
 ( 
     "type" = "hive",
-    "hive.metastore.uris" = "thrift://0.0.0.0:8080"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:8080"
 );
  ~~~
 
@@ -426,11 +426,9 @@ Currently, to use a Hive table in the import process, you need to create an exte
   
 In the load command, you can specify the required fields for building the global dictionary in the following format: `StarRocks field name=bitmap_dict(hive table field name)` Note that currently **the global dictionary is only supported when the upstream data source is a Hive table**.
 
-- **Import of bitmap binary type columns**
+- **Load binary type data**
 
-The data type applicable to the StarRocks table aggregate column is bitmap type, and the data type of the corresponding column in the data source Hive table or HDFS file type is binary (through com.starrocks.load.loadv2.dpp.BitmapValue in spark-dpp in FE class serialization) type.
-
-There is no need to build a global dictionary, just specify the corresponding fields in the load command. The format is: ```StarRocks field name=bitmap_from_binary(Hive table field name)```
+Since v2.5.17, Spark Load supports the bitmap_from_binary function, which can convert binary data into bitmap data. If the column type of the Hive table or HDFS file is binary and the corresponding column in the StarRocks table is a bitmap-type aggregate column, you can specify the fields in the load command in the following format, `StarRocks field name=bitmap_from_binary(Hive table field name)`. This eliminates the need for building a global dictionary.
 
 ## Viewing Import Jobs
 

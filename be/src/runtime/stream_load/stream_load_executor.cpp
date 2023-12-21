@@ -110,7 +110,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 } else {
                     LOG(WARNING) << "fragment execute failed"
                                  << ", query_id=" << UniqueId(ctx->put_result.params.params.query_id)
-                                 << ", err_msg=" << status.get_error_msg() << ", " << ctx->brief();
+                                 << ", err_msg=" << status.message() << ", " << ctx->brief();
                     // cancel body_sink, make sender known it
                     if (ctx->body_sink != nullptr) {
                         ctx->body_sink->cancel(status);
@@ -184,7 +184,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
 #endif
     Status status(result.status);
     if (!status.ok()) {
-        LOG(WARNING) << "begin transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+        LOG(WARNING) << "begin transaction failed, errmsg=" << status.message() << ctx->brief();
         if (result.__isset.job_status) {
             ctx->existing_job_status = result.job_status;
         }
@@ -246,7 +246,7 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
     if (st.is_thrift_rpc_error()) {
         return Status::ServiceUnavailable(fmt::format(
                 "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
-                st.get_error_msg()));
+                st.message()));
     } else if (!st.ok()) {
         return st;
     }
@@ -264,7 +264,7 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
         return visible ? Status::OK() : status;
     } else if (status.code() == TStatusCode::SR_EAGAIN) {
         LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
-                     << result.retry_interval_ms << "ms. errmsg=" << status.get_error_msg();
+                     << result.retry_interval_ms << "ms. errmsg=" << status.message();
         std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
         return commit_txn_internal(request, rpc_timeout_ms, ctx);
     } else {
@@ -353,7 +353,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     // to rollback this transaction.
     Status status(result.status);
     if (!status.ok()) {
-        LOG(WARNING) << "prepare transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+        LOG(WARNING) << "prepare transaction failed, errmsg=" << status.message() << ctx->brief();
         return status;
     }
     // commit success, set need_rollback to false
@@ -371,7 +371,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.failInfos = std::move(ctx->fail_infos);
-    request.__set_reason(ctx->status.get_error_msg());
+    request.__set_reason(std::string(ctx->status.message()));
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -386,7 +386,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnRollback(result, request); });
     if (!rpc_st.ok()) {
-        LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.get_error_msg() << ctx->brief();
+        LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.message() << ctx->brief();
         return rpc_st;
     }
     if (result.status.status_code != TStatusCode::TXN_NOT_EXISTS) {
@@ -460,6 +460,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
 
         TKafkaRLTaskProgress kafka_progress;
         kafka_progress.partitionCmtOffset = ctx->kafka_info->cmt_offset;
+        kafka_progress.partitionCmtOffsetTimestamp = ctx->kafka_info->cmt_offset_timestamp;
+        kafka_progress.__isset.partitionCmtOffsetTimestamp = true;
 
         rl_attach.kafkaRLTaskProgress = kafka_progress;
         rl_attach.__isset.kafkaRLTaskProgress = true;

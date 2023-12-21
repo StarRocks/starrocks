@@ -26,6 +26,7 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
 import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
@@ -69,8 +70,17 @@ public abstract class RangerAccessController extends ExternalAccessController {
         } else {
             LOG.info("Interacting with Ranger Admin Server using SIMPLE authentication");
         }
+        RangerPluginConfig rangerPluginContext = new RangerPluginConfig(serviceType, serviceName, serviceType,
+                null, null, null);
+        /*
+         * Because the jersey version currently used by ranger conflicts with the
+         * jersey version used by other packages in starrocks, we temporarily turn
+         * off the cookie authentication switch of Kerberos.
+         * starrocks access to ranger is a low-frequency operation.
+         * */
+        rangerPluginContext.setBoolean("ranger.plugin." + serviceType + ".policy.rest.client.cookie.enabled", false);
 
-        rangerPlugin = new RangerBasePlugin(serviceType, serviceName, serviceType);
+        rangerPlugin = new RangerBasePlugin(rangerPluginContext);
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
     }

@@ -76,6 +76,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -506,13 +507,10 @@ public class Database extends MetaObject implements Writable {
     }
 
     public List<MaterializedView> getMaterializedViews() {
-        List<MaterializedView> materializedViews = new ArrayList<>();
-        for (Table table : idToTable.values()) {
-            if (table.isMaterializedView()) {
-                materializedViews.add((MaterializedView) table);
-            }
-        }
-        return materializedViews;
+        return idToTable.values().stream()
+                .filter(Table::isMaterializedView)
+                .map(x -> (MaterializedView) x)
+                .collect(Collectors.toList());
     }
 
     public Set<String> getTableNamesViewWithLock() {
@@ -570,6 +568,10 @@ public class Database extends MetaObject implements Writable {
      */
     public Table getTable(long tableId) {
         return idToTable.get(tableId);
+    }
+
+    public Optional<Table> mayGetTable(long tableId) {
+        return Optional.ofNullable(getTable(tableId));
     }
 
     public static Database read(DataInput in) throws IOException {

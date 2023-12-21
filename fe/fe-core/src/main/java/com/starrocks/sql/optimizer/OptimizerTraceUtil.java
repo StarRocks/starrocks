@@ -46,8 +46,8 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
-            Object[] args = new Object[] {ctx.getQueryId(), mv == null ? "GLOBAL" : mv.getName(), str};
-            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}][{}] {}", args).getMessage();
+            Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
         });
     }
 
@@ -67,11 +67,10 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    optimizerContext.getQueryId(),
                     rule.type().name(),
-                    String.format(format, object)
+                    MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
         });
     }
 

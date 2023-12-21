@@ -36,7 +36,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    ASSIGN_OR_RETURN(auto tablet_schema, _tablet.get_schema());
+    auto tablet_schema = _tablet.get_schema();
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
@@ -47,7 +47,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    TabletReader reader(_tablet, _version, schema, _input_rowsets);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -105,10 +105,11 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    RETURN_IF_ERROR(_tablet.put_txn_log(txn_log));
+    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
-        _tablet.update_mgr()->preload_compaction_state(*txn_log, _tablet, tablet_schema);
+        Tablet t(_tablet.tablet_manager(), _tablet.id());
+        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
     }
     return Status::OK();
 }

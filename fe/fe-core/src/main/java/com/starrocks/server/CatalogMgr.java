@@ -41,6 +41,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -80,7 +81,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final Map<String, Catalog> catalogs = new HashMap<>();
+    private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -140,6 +141,9 @@ public class CatalogMgr {
             if (!isResourceMappingCatalog(catalogName)) {
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
             }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed. catalog [{}] ", catalogName, e);
+            throw new DdlException(String.format("connector create failed {}", e.getMessage()));
         } finally {
             writeUnLock();
         }
@@ -257,10 +261,15 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        if (catalogConnector == null) {
-            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
-            throw new DdlException("connector create failed");
+        try {
+            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+            if (catalogConnector == null) {
+                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+                throw new DdlException("connector create failed");
+            }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
         }
 
         Map<String, String> properties = catalog.getConfig();
@@ -439,12 +448,7 @@ public class CatalogMgr {
     }
 
     public long getCatalogCount() {
-        readLock();
-        try {
-            return catalogs.size();
-        } finally {
-            readUnlock();
-        }
+        return catalogs.size();
     }
 
     public class CatalogProcNode implements ProcDirInterface {

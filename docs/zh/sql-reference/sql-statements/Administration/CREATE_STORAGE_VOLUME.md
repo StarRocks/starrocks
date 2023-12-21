@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 为远程存储系统创建存储卷。该功能自 v3.1 起支持。
 
-存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md)中创建数据库和云原生表时引用存储卷。
+存储卷由远程存储系统的属性和认证信息组成。您可以在 [StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)中创建数据库和云原生表时引用存储卷。
 
 > **注意**
 >

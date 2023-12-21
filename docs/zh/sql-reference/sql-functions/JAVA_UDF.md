@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 1.8。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/Configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/FE_configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -352,7 +352,7 @@ mvn package
 mvn deploy 
 ```
 
-您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。详细步骤参考 [通过 Python 搭建简易 http 服务器](https://blog.csdn.net/whatday/article/details/106550650)。
+您可以通过 Python 创建一个简易的 HTTP 服务器，并将文件上传至该服务器中。
 
 > **说明**
 > 步骤六中， FE 会对 UDF 所在 Jar 包进行校验并计算校验值，BE 会下载 UDF 所在 Jar 包并执行。

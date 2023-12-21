@@ -57,6 +57,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -75,6 +76,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
@@ -230,7 +232,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
-            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -304,7 +306,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
 
     auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
-        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -514,7 +516,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
-            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -775,6 +777,64 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PProcessDictionaryCacheRequest* request,
+                                                           PProcessDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    PProcessDictionaryCacheRequestType request_type = request->type();
+    switch (request_type) {
+    case PProcessDictionaryCacheRequestType::BEGIN: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::REFRESH: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::COMMIT: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::CLEAR: {
+        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::STATISTIC: {
+        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    default: {
+        std::stringstream ss;
+        ss << "invalid request type for process_dictionary_cache";
+        LOG(WARNING) << ss.str();
+        Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
+        break;
+    }
+    }
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -855,7 +915,7 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
-        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;
@@ -1121,6 +1181,46 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
     });
 #endif
     Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+                                                        PExecShortCircuitResult* response) {
+    auto ser_request = cntl->request_attachment().to_string();
+    std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+    }
+    ShortCircuitExecutor executor{_exec_env};
+    RETURN_IF_ERROR(executor.prepare(*t_requests));
+    RETURN_IF_ERROR(executor.execute());
+    RETURN_IF_ERROR(executor.fetch_data(cntl, *response));
+    return Status::OK();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base,
+                                                     const PExecShortCircuitRequest* request,
+                                                     PExecShortCircuitResult* response,
+                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    MonotonicStopWatch watch;
+    watch.start();
+
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        return;
+    }
+
+    auto st = _exec_short_circuit(cntl, request, response);
+    st.to_protobuf(response->mutable_status());
+    uint64_t elapsed_time_ns = watch.elapsed_time();
+    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

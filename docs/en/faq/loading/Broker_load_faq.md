@@ -22,7 +22,7 @@ Broker Load is an asynchronous loading method. The load job may still fail even 
 
 ## 5. What do I do if the "failed to send batch" or "TabletWriter add batch with unknown id" error occurs?
 
-The amount of time taken to write the data exceeds the upper limit, causing a timeout error. To resolve this issue, modify the settings of the [session variable](../../reference/System_variable.md) `query_timeout` and the [BE configuration item](../../administration/Configuration.md#configure-be-static-parameters) `streaming_load_rpc_max_alive_time_sec` based on your business requirements.
+The amount of time taken to write the data exceeds the upper limit, causing a timeout error. To resolve this issue, modify the settings of the [session variable](../../reference/System_variable.md) `query_timeout` and the [BE configuration item](../../administration/BE_configuration.md#configure-be-static-parameters) `streaming_load_rpc_max_alive_time_sec` based on your business requirements.
 
 ## 6. What do I do if the "LOAD-RUN-FAIL; msg:OrcScannerAdapter::init_include_columns. col name = xxx not found" error occurs?
 

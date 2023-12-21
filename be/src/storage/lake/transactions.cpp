@@ -36,6 +36,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << JoinInts(txn_ids, ",")
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
+    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+    if (cached_new_metadata != nullptr) {
+        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                  << " base_version=" << base_version << " new_version=" << new_version
+                  << " txn_ids=" << JoinInts(txn_ids, ",");
+        return std::move(cached_new_metadata);
+    }
+
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
         if (res.ok()) return res;
@@ -152,6 +161,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
         auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
+            // For pk partial update, the segment file will be deleted if publish succeeds.
+            // If concurrent publish occurs, the later publish may return not found error
+            // because if the former pubilsh succeeded, the segment file has been deleted.
+            if (st.is_not_found()) {
+                return new_version_metadata_or_error(st);
+            }
             LOG(WARNING) << "Fail to apply " << log_path << ": " << st;
             return st;
         }

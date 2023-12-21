@@ -4,6 +4,44 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.17
+
+Release date: December 19, 2023
+
+### New Features
+
+- Added a new metric `max_tablet_rowset_num` for setting the maximum allowed number of rowsets. This metric helps detect possible compaction issues and thus reduces the occurrences of the error "too many versions". [#36539](https://github.com/StarRocks/starrocks/pull/36539)
+- Added the [subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/) function. [#35817](https://github.com/StarRocks/starrocks/pull/35817)
+
+### Improvements
+
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- Optimized the performance of persistent index update when compaction is performed on all rowsets of a Primary Key table, which reduces disk read I/O. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- Optimized the logic used to compute compaction scores for Primary Key tables, thereby aligning the compaction scores for Primary Key tables within a more consistent range with the other three table types. [#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- Added the bitmap_from_binary function to Spark Load to support loading Binary data. [#36050](https://github.com/StarRocks/starrocks/pull/36050)
+- The bRPC expiration time is shortened from 1 hour to the duration specified by the session variable [`query_timeout`](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#query_timeout).  This prevents query failures caused by RPC request expiration. [#36778](https://github.com/StarRocks/starrocks/pull/36778)
+
+### Compatibility Changes
+
+#### Parameters
+
+- A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- The BE static parameter `update_compaction_per_tablet_min_interval_seconds` becomes mutable. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Queries fail during hash joins, causing BEs to crash. [#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- The FE performance plunges after the FE configuration item `enable_collect_query_detail_info` is set to `true`. [#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- The starrocks_be process may exit unexpectedly when `./agentctl.sh stop be` is used to stop a BE. [#35108](https://github.com/StarRocks/starrocks/pull/35108)
+- The [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- Deadlocks may occur when users refresh materialized views. [#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- In some scenarios, dynamic partitioning may encounter an error, which causes FE start failures. [#36846](https://github.com/StarRocks/starrocks/pull/36846)
+
 ## 2.5.16
 
 Release date: December 1, 2023
@@ -469,7 +507,7 @@ Release date: January 22, 2023
   - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - Optimized the performance of Broker Load when a large number of small ORC files are loaded. [#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - Reduced the memory usage when you load data into Primary Key tables.
-- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../reference/information_schema/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../reference/overview-pages/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - Optimized data backup and restore:
   - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore data](../administration/Backup_and_restore.md). [#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - Supports backing up and restoring data from Primary Key tables. For more information, see Backup and restore. [#11885](https://github.com/StarRocks/starrocks/pull/11885)

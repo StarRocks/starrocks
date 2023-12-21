@@ -392,3 +392,39 @@ select substring_index(c1, ".", -3) from t2;
 -- result:
 com.mysql.com
 -- !result
+
+-- !result
+select crc32("starrocks");
+-- result:
+2312449062
+-- !result
+select crc32("STARROCKS");
+-- result:
+3440849609
+-- !result
+select crc32("中文");
+-- result:
+1510599991
+-- !result
+create table crc01(c0 varchar(20), c1 varchar(20), c2 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into crc01 values ('hello world', 'com.mysql.com', "镜舟科技");
+-- result:
+-- !result
+select crc32(c0) from crc01;
+-- result:
+222957957
+-- !result
+select crc32(c1) from crc01;
+-- result:
+2823441944
+-- !result
+select crc32(c2) from crc01;
+-- result:
+2291122336
+-- !result
