@@ -373,7 +373,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
-        // make sure didn't contain '%' and '_' both
+        // make sure it didn't contain '%' and '_' both
         String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
         if (likeString.contains("%") || likeString.contains("_")) {
             return predicate;
