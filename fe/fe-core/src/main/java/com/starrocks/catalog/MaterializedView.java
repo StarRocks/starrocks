@@ -765,6 +765,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (this.partitionRefTableExprs != null) {
             mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
         }
+        if (!queryOutputIndices.isEmpty()) {
+            mv.setQueryOutputIndices(Lists.newArrayList(queryOutputIndices));
+        }
     }
 
     @Override
