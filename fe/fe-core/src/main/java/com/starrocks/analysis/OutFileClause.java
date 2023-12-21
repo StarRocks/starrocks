@@ -68,6 +68,49 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
     }
 
+<<<<<<< HEAD
+=======
+    public static final Set<PrimitiveType> PARQUET_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
+        PrimitiveType.BOOLEAN,
+        PrimitiveType.TINYINT,
+        PrimitiveType.SMALLINT,
+        PrimitiveType.INT,
+        PrimitiveType.BIGINT,
+        PrimitiveType.FLOAT,
+        PrimitiveType.DOUBLE,
+        PrimitiveType.DATE,
+        PrimitiveType.DATETIME,
+        PrimitiveType.CHAR,
+        PrimitiveType.VARCHAR,
+        PrimitiveType.DECIMAL32,
+        PrimitiveType.DECIMAL64,
+        PrimitiveType.DECIMAL128,
+        PrimitiveType.VARBINARY
+    );
+
+    public static final Set<PrimitiveType> CSV_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
+        PrimitiveType.BOOLEAN,
+        PrimitiveType.TINYINT,
+        PrimitiveType.SMALLINT,
+        PrimitiveType.INT,
+        PrimitiveType.BIGINT,
+        PrimitiveType.LARGEINT,
+        PrimitiveType.FLOAT,
+        PrimitiveType.DOUBLE,
+        PrimitiveType.DATE,
+        PrimitiveType.DATETIME,
+        PrimitiveType.CHAR,
+        PrimitiveType.VARCHAR,
+        PrimitiveType.DECIMALV2,
+        PrimitiveType.DECIMAL32,
+        PrimitiveType.DECIMAL64,
+        PrimitiveType.DECIMAL128,
+        PrimitiveType.JSON,
+        PrimitiveType.VARBINARY
+    );
+
+
+>>>>>>> 4aeb54876a ([Enhancement] Select into outfile support binary type (#37449))
     // Old properties still use this prefix, new properties will not.
     private static final String OLD_BROKER_PROP_PREFIX = "broker.";
     private static final String PROP_BROKER_NAME = "broker.name";
