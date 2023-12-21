@@ -210,7 +210,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-staros) USE_STAROS=ON; shift ;;
+            --use-staros) USE_STAROS=OFF; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
