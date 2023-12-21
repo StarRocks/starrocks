@@ -28,8 +28,6 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
   ![JDBC connector of Flink](../assets/5.3.2-2.png)
 
-<<<<<<< HEAD
-=======
 ## Version requirements
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
@@ -38,7 +36,6 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 | 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
 
->>>>>>> 1c22202854 ([Doc] add 1.2.9 flink connector rn (#36925))
 ## Prerequisites
 
 Flink has been deployed. If Flink has not been deployed, follow these steps to deploy it:
@@ -181,7 +178,7 @@ The following examples assume you have created a database named `test` in your S
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`id`) BUCKETS 1
+   DISTRIBUTED BY HASH(`id`)
    PROPERTIES
    (
        "replication_num" = "3"
