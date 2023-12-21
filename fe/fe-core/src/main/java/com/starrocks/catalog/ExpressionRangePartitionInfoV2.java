@@ -42,8 +42,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static java.util.stream.Collectors.toList;
-
 /**
  * ExprRangePartitionInfo is an enhanced version of ExpressionRangePartitionInfo
  * because ExpressionRangePartitionInfo is not easily scalable
@@ -157,7 +155,17 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (!automaticPartition) {
             sb.append("RANGE(");
         }
-        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+        List<String> partitionExprDesc = Lists.newArrayList();
+        for (Expr partitionExpr : partitionExprs) {
+            if (partitionExpr instanceof CastExpr) {
+                if (canSimplifyCast(partitionExpr)) {
+                    partitionExprDesc.add(partitionExpr.getChild(0).toSql());
+                }
+            } else {
+                partitionExprDesc.add(partitionExpr.toSql());
+            }
+        }
+        sb.append(Joiner.on(", ").join(partitionExprDesc));
         if (!automaticPartition) {
             sb.append(")\n(");
             // sort range
@@ -201,6 +209,22 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             sb.append(")");
         }
         return sb.toString();
+    }
+
+    private boolean canSimplifyCast(Expr partitionExpr) {
+        if (partitionExpr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) partitionExpr;
+            if (!castExpr.getChildren().isEmpty()) {
+                Expr subExpr = castExpr.getChild(0);
+                if (subExpr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) subExpr;
+                    String functionName = functionCallExpr.getFnName().getFunction();
+                    return FunctionSet.FROM_UNIXTIME.equals(functionName)
+                            || FunctionSet.FROM_UNIXTIME_MS.equals(functionName);
+                }
+            }
+        }
+        return false;
     }
 
     public List<Expr> getPartitionExprs() {

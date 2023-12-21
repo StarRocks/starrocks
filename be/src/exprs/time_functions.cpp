@@ -1573,10 +1573,6 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* 
     return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_32(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime_ms<TYPE_INT>(context, columns);
-}
-
 std::string TimeFunctions::convert_format(const Slice& format) {
     switch (format.get_size()) {
     case 8:

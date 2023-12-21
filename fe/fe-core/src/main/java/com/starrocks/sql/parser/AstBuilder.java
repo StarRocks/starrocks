@@ -717,8 +717,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     partitionDescList.add(rangePartitionDesc);
                 }
             }
-            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression);
+            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression, false);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            if (primaryExpression instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) primaryExpression;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (FunctionSet.FROM_UNIXTIME.equals(functionName)
+                        || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
+                    primaryExpression = new CastExpr(TypeDef.create(PrimitiveType.DATE), primaryExpression);
+                }
+            }
             return new ExpressionPartitionDesc(rangePartitionDesc, primaryExpression);
         }
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -746,10 +754,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private List<String> checkAndExtractPartitionColForRange(Expr expr) {
+    private List<String> checkAndExtractPartitionColForRange(Expr expr, boolean hasCast) {
         if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
-            return checkAndExtractPartitionColForRange(castExpr.getChild(0));
+            return checkAndExtractPartitionColForRange(castExpr.getChild(0), true);
         }
         NodePosition pos = expr.getPos();
         List<String> columnList = new ArrayList<>();
@@ -768,7 +776,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else if (FunctionSet.FROM_UNIXTIME.equals(functionName)
                     || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
                 List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
-                if (paramsExpr.size() > 1) {
+                if (hasCast || paramsExpr.size() > 1) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             pos);
                 }

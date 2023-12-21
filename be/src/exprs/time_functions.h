@@ -704,7 +704,6 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_64);
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_ms_32);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
