@@ -10,6 +10,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
 
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
         starRocksAssert.useDatabase("test");
         Config.default_replication_num = 1;
         String viewQ1 = "create view view_q1\n" +

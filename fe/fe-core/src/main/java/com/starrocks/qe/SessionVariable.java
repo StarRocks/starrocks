@@ -1364,7 +1364,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewPlanCache = true;
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
-    private boolean enableViewBasedMvRewrite = true;
+    private boolean enableViewBasedMvRewrite = false;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";

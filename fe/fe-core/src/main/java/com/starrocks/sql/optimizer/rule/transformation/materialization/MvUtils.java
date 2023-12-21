@@ -1515,26 +1515,28 @@ public class MvUtils {
             }
             // TODO: support more types for base table's schema change.
             try {
-                MvPlanContext mvPlanContext = MvPlanContextBuilder.getPlanContext(mv);
-                if (mvPlanContext != null) {
-                    OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                    List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
-                        if (scan == null) {
-                            return false;
-                        }
-                        Table table = scan.getTable();
-                        return table.getId() == olapTable.getId();
-                    });
-                    Set<String> usedColNames = usedColRefs.stream()
-                            .map(x -> x.getName())
-                            .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
-                    for (String modifiedColumn : modifiedColumns) {
-                        if (usedColNames.contains(modifiedColumn)) {
-                            LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                    modifiedColumn, olapTable.getName());
-                            mv.setInactiveAndReason(
-                                    "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
+                for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                    if (mvPlanContext != null) {
+                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+                        List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                            if (scan == null) {
+                                return false;
+                            }
+                            Table table = scan.getTable();
+                            return table.getId() == olapTable.getId();
+                        });
+                        Set<String> usedColNames = usedColRefs.stream()
+                                .map(x -> x.getName())
+                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+                        for (String modifiedColumn : modifiedColumns) {
+                            if (usedColNames.contains(modifiedColumn)) {
+                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                        modifiedColumn, olapTable.getName());
+                                mv.setInactiveAndReason(
+                                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                            }
                         }
                     }
                 }

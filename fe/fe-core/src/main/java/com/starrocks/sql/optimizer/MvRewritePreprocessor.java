@@ -177,10 +177,10 @@ public class MvRewritePreprocessor {
                                      OptExpression logicOperatorTree,
                                      ColumnRefFactory columnRefFactory,
                                      ColumnRefSet requiredColumns) {
-        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
+        List<LogicalViewScanOperator> viewScans = Lists.newArrayList();
         // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewPlanMap);
-        if (viewPlanMap.isEmpty()) {
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewScans, columnRefFactory);
+        if (viewScans.isEmpty()) {
             // means there is no plan with view
             return;
         }
@@ -188,16 +188,7 @@ public class MvRewritePreprocessor {
         OptExpression optimizedPlan = optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
         context.setLogicalTreeWithView(optimizedPlan);
-
-        for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
-            OptExpression viewLogicalTree = viewPlanMap.get(viewScanOperator);
-            // optimize logical tree of view and keep them in OptimizerContext,
-            // which will be used in union rewrite or only some views are rewritten
-            OptExpression optimizedViewPlan = optimizeViewPlan(
-                    viewLogicalTree, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
-            viewScanOperator.setOriginalPlan(optimizedViewPlan);
-        }
-        context.setViewScans(Lists.newArrayList(viewPlanMap.keySet()));
+        context.setViewScans(viewScans);
     }
 
     private OptExpression optimizeViewPlan(
@@ -215,7 +206,9 @@ public class MvRewritePreprocessor {
     }
 
     private OptExpression extractLogicalPlanWithView(
-            OptExpression logicalTree, Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
+            OptExpression logicalTree,
+            List<LogicalViewScanOperator> viewScans,
+            ColumnRefFactory columnRefFactory) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
@@ -223,20 +216,23 @@ public class MvRewritePreprocessor {
             // which will be used in mv union rewrite
             // should use cloned plan because the following optimizeViewPlan will change the plan
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
-            viewPlanMap.put(viewScanOperator, clonePlan);
-            Projection projection = viewScanOperator.getProjection();
+            OptExpression optimizedViewPlan = optimizeViewPlan(
+                    clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
+            builder.setOriginalPlan(optimizedViewPlan);
             LogicalViewScanOperator clone = builder.build();
+            viewScans.add(clone);
             OptExpression viewScanExpr = OptExpression.create(clone);
             // should add a projection to make predicate pushdown rules work right
+            Projection projection = viewScanOperator.getProjection();
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input, viewPlanMap);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewScans, columnRefFactory);
                 inputs.add(newInput);
             }
             Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
@@ -295,31 +291,34 @@ public class MvRewritePreprocessor {
         // filter mvs which are active and have valid plans
         Set<Pair<MaterializedView, MvPlanContext>> filteredMVs = Sets.newHashSet();
         for (MaterializedView mv : relatedMVs) {
-            if (!mv.isActive()) {
-                logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
-                continue;
-            }
-
-            List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                    connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-            if (mvPlanContexts == null) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
-                        mv.getName());
-                continue;
-            }
-            for (MvPlanContext mvPlanContext : mvPlanContexts) {
-                if (!mvPlanContext.isValidMvPlan()) {
-                    if (mvPlanContext.getLogicalPlan() != null) {
-                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                                mv.getName(), mvPlanContext.getLogicalPlan().debugString());
-                    } else {
-                        logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                                mv.getName());
-                    }
+            try {
+                if (!mv.isActive()) {
+                    logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
                     continue;
                 }
 
-                filteredMVs.add(Pair.create(mv, mvPlanContext));
+                List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+                        connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                if (mvPlanContexts == null) {
+                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
+                            mv.getName());
+                    continue;
+                }
+                for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                    if (!mvPlanContext.isValidMvPlan()) {
+                        if (mvPlanContext.getLogicalPlan() != null) {
+                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
+                                    mv.getName(), mvPlanContext.getLogicalPlan().debugString());
+                        } else {
+                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
+                                    mv.getName());
+                        }
+                        continue;
+                    }
+                    filteredMVs.add(Pair.create(mv, mvPlanContext));
+                }
+            } catch (Exception e) {
+                LOG.warn("filter check failed mv:{}", mv.getName(), e);
             }
         }
         if (filteredMVs.isEmpty()) {
