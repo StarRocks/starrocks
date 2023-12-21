@@ -345,7 +345,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
-        return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChild(0), rightOp);
+        return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, predicate.getChild(0), rightOp);
     }
 
     // Reduce array_map whose lambda functions is trivial
