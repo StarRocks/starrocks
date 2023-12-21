@@ -19,17 +19,13 @@ import java.util.Objects;
 /**
  * Re-shuffle all date across all nodes in a round-robin way
  */
-public class RandomDistributionSpec extends DistributionSpec {
-    public RandomDistributionSpec() {
-        super(DistributionType.SHUFFLE);
+public class RoundRobinDistributionSpec extends DistributionSpec {
+    public RoundRobinDistributionSpec() {
+        super(DistributionType.ROUND_ROBIN);
     }
 
     public boolean isSatisfy(DistributionSpec spec) {
         if (spec.type.equals(DistributionType.ANY)) {
-            return true;
-        }
-
-        if (spec.type.equals(DistributionType.SHUFFLE)) { // TODO: check this
             return true;
         }
 
@@ -47,11 +43,11 @@ public class RandomDistributionSpec extends DistributionSpec {
             return true;
         }
 
-        return obj instanceof RandomDistributionSpec;
+        return obj instanceof RoundRobinDistributionSpec;
     }
 
     @Override
     public String toString() {
-        return "RANDOM SHUFFLE";
+        return "ROUND ROBIN";
     }
 }

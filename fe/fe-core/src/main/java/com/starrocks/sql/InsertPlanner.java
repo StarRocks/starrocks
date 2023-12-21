@@ -79,7 +79,7 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.base.RandomDistributionSpec;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -696,7 +696,7 @@ public class InsertPlanner {
                 // use random shuffle for unpartitioned table
                 if (table.getPartitionColumnNames().isEmpty()) {
                     return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(new RandomDistributionSpec()));
+                            .createProperty(new RoundRobinDistributionSpec()));
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
