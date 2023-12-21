@@ -29,7 +29,7 @@ public class RoundRobinDistributionSpec extends DistributionSpec {
             return true;
         }
 
-        return false;
+        return spec instanceof RoundRobinDistributionSpec;
     }
 
     @Override
