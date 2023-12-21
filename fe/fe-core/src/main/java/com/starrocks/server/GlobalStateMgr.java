@@ -1197,6 +1197,9 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        final long printHintTimeInterval = 60 * 1000L;
+        int printHintCnt = 1;
+        long waitStartTime = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1215,6 +1218,20 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - waitStartTime > printHintTimeInterval * printHintCnt) {
+                printHintCnt++;
+                LOG.warn("It took too much time to get ready, there are some reasons: \n " +
+                        "1. There are too many BDB logs to replay, because the failure of checkpoint. \n" +
+                        "2. More than half of the followers in the cluster are not started. \n" +
+                        "3. There are multiple IPs on the machine, " +
+                        "you should specify the priority_networks to use the IP from image/ROLE, " +
+                        "ignore this reason if you are using FQDN. \n" +
+                        "4. The time deviation between machines is greater than 5s, " +
+                        "please use ntp or other tools to synchronize clock. \n" +
+                        "5. The configuration of edit_log_port is changed, please reset to the original value. \n" +
+                        "6. The thread of replayer is blocked, please use jstack to find the details");
+            }
         }
     }
 
