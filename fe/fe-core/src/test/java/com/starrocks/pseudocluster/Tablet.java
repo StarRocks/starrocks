@@ -103,6 +103,7 @@ public class Tablet {
         info.setPath_hash(PseudoBackend.PATH_HASH);
         info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
+        info.setMax_readable_version(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
         info.setVersion_miss(!pendingRowsets.isEmpty());
         info.setRow_count(getRowCount());
@@ -337,6 +338,7 @@ public class Tablet {
 
     public TTabletInfo getTabletInfo() {
         TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), 0, getRowCount(), getDataSize());
+        info.setMax_readable_version(maxContinuousVersion());
         info.setMin_readable_version(minVersion());
         return info;
     }
