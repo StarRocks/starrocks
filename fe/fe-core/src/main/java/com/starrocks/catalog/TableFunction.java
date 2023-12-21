@@ -109,7 +109,7 @@ public class TableFunction extends Function {
         }
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
-            // set default arguments' const expressions
+            // set default arguments' const expressions in order
             Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
             try {
                 defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
