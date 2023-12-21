@@ -126,9 +126,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // 5. update the source table version map if refresh task completes successfully
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
+        prepare(context);
+
         ConnectContext connectContext = context.getCtx();
         try {
-            prepare(context);
             doMvRefresh(context);
             connectContext.getState().setOk();
         } catch (Throwable e) {
