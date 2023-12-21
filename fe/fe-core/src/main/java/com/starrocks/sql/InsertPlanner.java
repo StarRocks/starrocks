@@ -171,7 +171,8 @@ public class InsertPlanner {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
-        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert();
+        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
+                currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
