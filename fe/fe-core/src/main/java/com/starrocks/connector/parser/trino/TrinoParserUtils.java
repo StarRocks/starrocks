@@ -64,12 +64,12 @@ public class TrinoParserUtils {
      */
     private static Set<String> DATE_RETURNING_FUNCTIONS = new HashSet<>();
     static {
-        DATE_RETURNING_FUNCTIONS.add("date");
-        DATE_RETURNING_FUNCTIONS.add("last_day");
-        DATE_RETURNING_FUNCTIONS.add("makedate");
-        DATE_RETURNING_FUNCTIONS.add("next_day");
-        DATE_RETURNING_FUNCTIONS.add("previous_day");
-        DATE_RETURNING_FUNCTIONS.add("to_tera_date");
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.DATE);
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.LAST_DAY);
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.MAKEDATE);
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.NEXT_DAY);
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.PREVIOUS_DAY);
+        DATE_RETURNING_FUNCTIONS.add(FunctionSet.TO_TERA_DATE);
         DATE_RETURNING_FUNCTIONS.add(FunctionSet.TO_DATE);
         DATE_RETURNING_FUNCTIONS.add(FunctionSet.CURDATE);
         DATE_RETURNING_FUNCTIONS.add(FunctionSet.CURRENT_DATE);
