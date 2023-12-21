@@ -2393,9 +2393,10 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         if (info->inputs.size() > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
-        // Partial update generate empty rowset, compact them first.
-        // Or partial update by column will trigger too many useless compaction cost.
-        if (info->inputs.size() > 1 && has_partial_update_by_column) {
+        // When we enable lazy delta column compaction, which means that we don't want to merge
+        // delta column back to main segment file too soon, for save compaction IO cost.
+        // Separate delta column won't affect query performance.
+        if (info->inputs.size() > 1 && has_partial_update_by_column && config::enable_lazy_delta_column_compaction) {
             break;
         }
         info->inputs.push_back(e.rowsetid);
