@@ -1799,7 +1799,8 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
-            List<Type> actualTypes = params.stream()
+
+            List<Type> actualTypes = node.getChildren().stream()
                     .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();
