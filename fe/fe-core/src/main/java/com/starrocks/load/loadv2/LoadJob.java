@@ -1171,7 +1171,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.write(out);
         }
         Text.writeString(out, timezone);
-        jsonOptions.write(out);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -1268,7 +1267,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    public static class JSONOptions implements Writable {
+    public static class JSONOptions {
         @SerializedName("s")
         public boolean stripOuterArray;
 
@@ -1277,16 +1276,5 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
         @SerializedName("jr")
         public String jsonRoot;
-
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this);
-            Text.writeString(out, json);
-        }
-
-        public static JSONOptions read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, JSONOptions.class);
-        }
     }
 }
