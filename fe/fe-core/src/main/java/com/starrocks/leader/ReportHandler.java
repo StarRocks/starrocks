@@ -68,6 +68,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.GaugeMetric;
@@ -94,6 +95,7 @@ import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TPartitionVersionInfo;
@@ -130,7 +132,8 @@ public class ReportHandler extends Daemon {
         DISK_REPORT,
         TASK_REPORT,
         RESOURCE_GROUP_REPORT,
-        RESOURCE_USAGE_REPORT
+        RESOURCE_USAGE_REPORT,
+        DATACACHE_METRICS_REPORT
     }
 
     /**
@@ -172,6 +175,7 @@ public class ReportHandler extends Daemon {
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.RESOURCE_GROUP_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.RESOURCE_USAGE_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.DATACACHE_METRICS_REPORT, Maps.newHashMap());
     }
 
     public TMasterResult handleReport(TReportRequest request) throws TException {
@@ -210,6 +214,7 @@ public class ReportHandler extends Daemon {
         Map<Long, TTablet> tablets = null;
         List<TWorkGroup> activeWorkGroups = null;
         TResourceUsage resourceUsage = null;
+        TDataCacheMetrics dataCacheMetrics = null;
         long reportVersion = -1;
 
         ReportType reportType = ReportType.UNKNOWN_REPORT;
@@ -274,12 +279,25 @@ public class ReportHandler extends Daemon {
             reportType = ReportType.RESOURCE_USAGE_REPORT;
         }
 
+        if (request.isSetDatacache_metrics()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " +
+                                ReportType.DATACACHE_METRICS_REPORT);
+                return result;
+            }
+
+            dataCacheMetrics = request.getDatacache_metrics();
+            reportType = ReportType.DATACACHE_METRICS_REPORT;
+        }
+
         List<TWorkGroupOp> workGroupOps =
                 GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask =
-                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups, resourceUsage);
+                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups, resourceUsage,
+                        dataCacheMetrics);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -343,12 +361,13 @@ public class ReportHandler extends Daemon {
         private long reportVersion;
         private List<TWorkGroup> activeWorkGroups;
         private TResourceUsage resourceUsage;
+        private TDataCacheMetrics dataCacheMetrics;
 
         public ReportTask(long beId, ReportType type, Map<TTaskType, Set<Long>> tasks,
                           Map<String, TDisk> disks,
                           Map<Long, TTablet> tablets, long reportVersion,
                           List<TWorkGroup> activeWorkGroups,
-                          TResourceUsage resourceUsage) {
+                          TResourceUsage resourceUsage, TDataCacheMetrics dataCacheMetrics) {
             this.beId = beId;
             this.type = type;
             this.tasks = tasks;
@@ -357,6 +376,7 @@ public class ReportHandler extends Daemon {
             this.reportVersion = reportVersion;
             this.activeWorkGroups = activeWorkGroups;
             this.resourceUsage = resourceUsage;
+            this.dataCacheMetrics = dataCacheMetrics;
         }
 
         @Override
@@ -375,6 +395,9 @@ public class ReportHandler extends Daemon {
             }
             if (resourceUsage != null) {
                 ReportHandler.resourceUsageReport(beId, resourceUsage);
+            }
+            if (dataCacheMetrics != null) {
+                ReportHandler.datacacheMetricsReport(beId, dataCacheMetrics);
             }
         }
     }
@@ -563,6 +586,12 @@ public class ReportHandler extends Daemon {
                 usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
+    }
+
+    private static void datacacheMetricsReport(long backendId, TDataCacheMetrics metrics) {
+        LOG.debug("begin to handle datacache metrics report from backend {}", backendId);
+        GlobalStateMgr.getCurrentSystemInfo()
+                .updateDataCacheMetrics(backendId, DataCacheMetrics.buildFromThrift(metrics));
     }
 
     private static void sync(Map<Long, TTablet> backendTablets, ListMultimap<Long, Long> tabletSyncMap,
