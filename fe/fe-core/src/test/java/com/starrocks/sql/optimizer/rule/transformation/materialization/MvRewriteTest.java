@@ -27,6 +27,7 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -1919,5 +1920,30 @@ public class MvRewriteTest extends MvRewriteTestBase {
             Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
             Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
         }
+    }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
+                SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
     }
 }
