@@ -999,4 +999,6 @@ CONF_mBool(enable_stream_load_verbose_log, "false");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
+CONF_mBool(ignore_eovercrowded, "true");
+
 } // namespace starrocks::config

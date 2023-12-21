@@ -6,6 +6,7 @@
 
 #include <chrono>
 
+#include "common/config.h"
 #include "fmt/core.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -386,6 +387,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
         closure->cntl.Reset();
+        if (config::ignore_eovercrowded) {
+            closure->cntl.ignore_eovercrowded();
+        }
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
         Status st;
@@ -407,6 +411,8 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
                              const TransmitChunkInfo& request) {
     auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
     if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        LOG(INFO) << "use http stub content size:" << expected_iobuf_size << ", rpc_http_min_size"
+                  << _rpc_http_min_size;
         butil::IOBuf iobuf;
         butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
         request.params->SerializeToZeroCopyStream(&wrapper);

@@ -124,6 +124,7 @@ Status NodeChannel::init(RuntimeState* state) {
 
     if (state->query_options().__isset.load_dop) {
         _max_parallel_request_size = state->query_options().load_dop;
+        LOG(INFO) << "load dop:" << _max_parallel_request_size;
         if (_max_parallel_request_size > config::max_load_dop || _max_parallel_request_size < 1) {
             _err_st = Status::InternalError(fmt::format("load_dop should between [1-{}]", config::max_load_dop));
             return _err_st;
@@ -215,6 +216,8 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     open_closure->cntl.ignore_eovercrowded();
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
+        LOG(INFO) << "use http stub content size:" << request.ByteSizeLong() << ", rpc_http_min_size"
+                  << _parent->_rpc_http_min_size;
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
         brpc_addr.port = _node_info->brpc_port;
@@ -540,6 +543,8 @@ Status NodeChannel::_send_request(bool eos) {
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
         if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
+            LOG(INFO) << "use http stub content size:" << request.ByteSizeLong() << ", rpc_http_min_size"
+                      << _parent->_rpc_http_min_size;
             TNetworkAddress brpc_addr;
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
@@ -563,6 +568,8 @@ Status NodeChannel::_send_request(bool eos) {
             TNetworkAddress brpc_addr;
             brpc_addr.hostname = _node_info->host;
             brpc_addr.port = _node_info->brpc_port;
+            LOG(INFO) << "use http stub content size:" << request.ByteSizeLong() << ", rpc_http_min_size"
+                      << _parent->_rpc_http_min_size;
             _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
             auto res = BrpcStubCache::create_http_stub(brpc_addr);
             if (!res.ok()) {
