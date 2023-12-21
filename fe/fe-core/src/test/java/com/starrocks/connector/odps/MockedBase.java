@@ -38,7 +38,6 @@ import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.aliyun.odps.type.TypeInfoFactory;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
-import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 
