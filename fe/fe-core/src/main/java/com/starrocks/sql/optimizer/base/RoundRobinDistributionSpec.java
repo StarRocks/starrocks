@@ -17,7 +17,9 @@ package com.starrocks.sql.optimizer.base;
 import java.util.Objects;
 
 /**
- * Re-shuffle all date across all nodes in a round-robin way
+ * Re-shuffle all date across all nodes in a round-robin way.
+ * Currently, the round-robin distribution is used to shuffle data between the connector sink fragment (e.g. hive sink)
+ * and its child fragment.
  */
 public class RoundRobinDistributionSpec extends DistributionSpec {
     public RoundRobinDistributionSpec() {
