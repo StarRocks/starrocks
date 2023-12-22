@@ -1490,6 +1490,33 @@ public class PlanFragmentBuilder {
 
             outputTupleDesc.computeMemLayout();
 
+<<<<<<< HEAD
+=======
+            return new AggregateExprInfo(groupingExpressions, aggregateExprList, partitionExpressions,
+                    intermediateAggrExprs);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
+            PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
+            PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
+
+            PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
+            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
+
+            Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
+            List<ColumnRefOperator> groupBys = node.getGroupBys();
+            List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
+
+            TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
+            AggregateExprInfo aggExpr =
+                    buildAggregateTuple(aggregations, groupBys, partitionBys, outputTupleDesc, context);
+            ArrayList<Expr> groupingExpressions = aggExpr.groupExpr;
+            ArrayList<FunctionCallExpr> aggregateExprList = aggExpr.aggregateExpr;
+            ArrayList<Expr> partitionExpressions = aggExpr.partitionExpr;
+            ArrayList<Expr> intermediateAggrExprs = aggExpr.intermediateExpr;
+
+>>>>>>> a95215aa84 ([BugFix] Fix multi local shuffle aggregations on single BE (#37645))
             AggregationNode aggregationNode;
             if (node.getType().isLocal() && node.isSplit()) {
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1615,6 +1642,7 @@ public class PlanFragmentBuilder {
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
