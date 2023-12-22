@@ -172,7 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.base_ref != 'main' && github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.title, '(backport #' &&
+      contains(github.event.pull_request.title, '(backport #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync')
     env:
       LABEL: ${{ github.base_ref }}-merged
