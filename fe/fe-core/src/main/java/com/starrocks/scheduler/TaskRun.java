@@ -67,13 +67,10 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskType type;
 
-<<<<<<< HEAD
-=======
     private ExecuteOption executeOption;
 
     private final String uuid;
 
->>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
     TaskRun() {
         future = new CompletableFuture<>();
         uuid = UUIDUtil.genUUID().toString();
@@ -124,6 +121,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public Constants.TaskType getType() {
         return this.type;
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
     }
 
     public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
@@ -304,15 +309,6 @@ public class TaskRun implements Comparable<TaskRun> {
     public String toString() {
         return "TaskRun{" +
                 "taskId=" + taskId +
-<<<<<<< HEAD
-                ", properties=" + properties +
-                ", future=" + future +
-                ", task=" + task +
-                ", runCtx=" + runCtx +
-                ", processor=" + processor +
-                ", status=" + status +
-=======
->>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
                 ", type=" + type +
                 ", uuid=" + uuid +
                 ", task_state=" + status.getState() +

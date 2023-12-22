@@ -82,16 +82,11 @@ public class TaskRunManager {
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-<<<<<<< HEAD
-        arrangeTaskRun(taskRun, option.isMergeRedundant());
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
-=======
         if (!arrangeTaskRun(taskRun)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
->>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
 
     public boolean killTaskRun(Long taskId) {

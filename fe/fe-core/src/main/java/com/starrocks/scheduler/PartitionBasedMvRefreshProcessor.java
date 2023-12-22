@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
@@ -319,16 +320,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
-<<<<<<< HEAD
-=======
-        // add trace info if needed
-        Tracers.log(Tracers.Module.MV,
-                args -> "[TRACE QUERY] MV: " + materializedView.getName() +
-                        "\nMV PartitionsToRefresh: " + String.join(",", (Set<String>) args[0]) +
-                        "\nBase PartitionsToScan:" + refTablePartitionNames +
-                        "\nInsert Plan:\n" +
-                        ((ExecPlan) args[1]).getExplainString(StatementBase.ExplainLevel.VERBOSE),
-                mvToRefreshedPartitions, execPlan);
         // log the final mv refresh plan for each refresh for better trace and debug
         if (LOG.isDebugEnabled()) {
             LOG.debug("MV Refresh Final Plan" +
@@ -343,7 +334,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.info("MV Refresh Final Plan, mv: {}, MV PartitionsToRefresh: {}, Base PartitionsToScan: {}",
                     materializedView.getName(), String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
         }
->>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
         mvContext.setExecPlan(execPlan);
 
         return insertStmt;
@@ -1083,17 +1073,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // set partition names for ref base table
                 Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
                 TableRelation tableRelation = nameTableRelationEntry.getValue();
-<<<<<<< HEAD
                 tableRelation.setPartitionNames(new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
-=======
-                // external table doesn't support query with partitionNames
-                if (!tableRelation.getTable().isExternalTableWithFileSystem()) {
-                    LOG.info("Optimize materialized view {} refresh task, generate table relation {} target partition names:{} ",
-                            materializedView.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
-                    tableRelation.setPartitionNames(
-                            new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
-                }
->>>>>>> 7f8ca66656 ([BugFix] No merge redundant task runs if the task run is sync mode refresh (backport #36853) (#36980))
 
                 // generate partition predicate for the select relation, so can generate partition predicates
                 // for non-ref base tables.
