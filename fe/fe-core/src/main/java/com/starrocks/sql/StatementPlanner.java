@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -101,6 +102,7 @@ public class StatementPlanner {
             if (needWholePhaseLock) {
                 unLock(dbs);
             }
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
         return null;
