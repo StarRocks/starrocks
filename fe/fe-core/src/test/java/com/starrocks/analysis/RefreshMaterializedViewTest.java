@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -157,13 +158,13 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
     @Test
     public void testMaxMVRewriteStaleness1() throws Exception {
         starRocksAssert.withTable(new MTable("tbl_staleness1", "k2",
-                        List.of(
+                        ImmutableList.of(
                                 "k1 date",
                                 "k2 int",
                                 "v1 int"
                         ),
                         "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "PARTITION p1 values [('2022-02-01'),('2022-02-16'))",
                                 "PARTITION p2 values [('2022-02-16'),('2022-03-01'))"
                         )
@@ -226,13 +227,13 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
     @Test
     public void testMaxMVRewriteStaleness2() {
         starRocksAssert.withTable(new MTable("tbl_staleness2", "k2",
-                        List.of(
+                        ImmutableList.of(
                                 "k1 date",
                                 "k2 int",
                                 "v1 int"
                         ),
                         "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "PARTITION p1 values [('2022-02-01'),('2022-02-16'))",
                                 "PARTITION p2 values [('2022-02-16'),('2022-03-01'))"
                         )
@@ -299,13 +300,13 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
     @Test
     public void testMaxMVRewriteStaleness3() {
         starRocksAssert.withTable(new MTable("tbl_staleness3", "k2",
-                        List.of(
+                        ImmutableList.of(
                                 "k1 date",
                                 "k2 int",
                                 "v1 int"
                         ),
                         "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "PARTITION p1 values [('2022-02-01'),('2022-02-16'))",
                                 "PARTITION p2 values [('2022-02-16'),('2022-03-01'))"
                         )

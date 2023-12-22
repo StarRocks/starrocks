@@ -894,9 +894,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPkFk() throws SQLException {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withTables(ImmutableList.of(
                         new MTable("parent_table1", "k1",
-                                List.of(
+                                ImmutableList.of(
                                         "k1 INT",
                                         "k2 VARCHAR(20)",
                                         "k3 INT",
@@ -906,7 +906,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                                 "'unique_constraints' = 'k1,k2'"
                         ),
                         new MTable("parent_table2", "k1",
-                                List.of(
+                                ImmutableList.of(
                                         "k1 INT",
                                         "k2 VARCHAR(20)",
                                         "k3 INT",
@@ -917,7 +917,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                         ),
                         new MTable(
                                 "base_table1", "k1",
-                                List.of(
+                                ImmutableList.of(
                                         "k1 INT",
                                         "k2 VARCHAR(20)",
                                         "k3 INT",
