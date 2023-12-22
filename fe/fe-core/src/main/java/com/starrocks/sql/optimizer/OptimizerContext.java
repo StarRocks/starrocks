@@ -28,7 +28,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
-import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -252,10 +251,6 @@ public class OptimizerContext {
     }
 
     public List<LogicalViewScanOperator> getViewScans() {
-        return viewScans;
-    }
-
-    public List<LogicalViewScanOperator> getViewPlanMap() {
         return viewScans;
     }
 }

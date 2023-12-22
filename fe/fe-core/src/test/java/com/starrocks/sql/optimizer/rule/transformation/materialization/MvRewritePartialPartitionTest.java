@@ -1146,6 +1146,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             createAndRefreshMv("create materialized view mv_on_view_1" +
                             " partition by day_date" +
                             " distributed by hash(`day_date`)" +
+                            " refresh deferred manual" +
                             " as" +
                             " select * from view_with_expr");
             cluster.runSql("test", "insert into table_with_datetime_partition partition(p19910330)" +

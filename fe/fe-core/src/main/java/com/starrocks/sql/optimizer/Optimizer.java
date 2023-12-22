@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -496,6 +495,7 @@ public class Optimizer {
             if (viewScanOperators.size() < context.getViewScans().size()) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
+                deriveLogicalProperty(tree);
                 if (!viewScanOperators.isEmpty()) {
                     // if there are view scan operator left, we should replace it back to original plans
                     MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());

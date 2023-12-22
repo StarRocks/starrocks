@@ -1264,6 +1264,11 @@ public class MaterializedViewRewriter {
             if (!optimizerContext.getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
                 return null;
             }
+            List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());
+            if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
+                // TODO: support union rewrite for view based mv rewrite
+                return null;
+            }
             return tryUnionRewrite(rewriteContext, mvScanOptExpression);
         } else {
             // all predicates are now query based
@@ -2047,7 +2052,7 @@ public class MaterializedViewRewriter {
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
         // for view based mv rewrite, we should mapping the partition column to output column of view scan
-        if (optimizerContext.getViewPlanMap() != null) {
+        if (optimizerContext.getViewScans() != null) {
             for (LogicalViewScanOperator viewScanOperator : optimizerContext.getViewScans()) {
                 Projection projection = viewScanOperator.getProjection();
                 if (viewScanOperator.getProjection() != null) {

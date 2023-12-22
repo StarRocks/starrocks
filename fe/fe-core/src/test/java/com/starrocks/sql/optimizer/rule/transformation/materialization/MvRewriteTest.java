@@ -1946,33 +1946,4 @@ public class MvRewriteTest extends MvRewriteTestBase {
             Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
         }
     }
-
-    @Test
-    public void testViewBasedPartitionedMvRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
-        starRocksAssert.withView("create view view_based_test_1 " +
-                "as " +
-                "select * from test_partition_tbl_for_view");
-        starRocksAssert.withMaterializedView("create materialized view view_based_mv_1 " +
-                " partition by k1" +
-                " distributed by hash(v1)" +
-                " refresh deferred manual" +
-                " as " +
-                " SELECT k1, v1, v2 from view_based_test_1");
-        {
-            cluster.runSql("test", "refresh materialized view view_based_mv_1" +
-                    " partition start('2020-04-01') end ('2020-07-01') with sync mode;");
-            String query = "SELECT * from view_based_test_1";
-            String plan = getFragmentPlan(query);
-            System.out.println(plan);
-            PlanTestBase.assertContains(plan, "view_based_mv_1",
-                    "UNION", "(13: k1 < '2020-04-01') OR (13: k1 >= '2020-06-01')");
-
-        }
-        starRocksAssert.dropView("view_based_test_1");
-        starRocksAssert.dropMaterializedView("view_based_mv_1");
-        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
-        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
-    }
 }
