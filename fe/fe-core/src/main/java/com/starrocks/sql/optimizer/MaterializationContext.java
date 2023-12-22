@@ -181,6 +181,20 @@ public class MaterializationContext {
         return this.refTableUpdatePartitionNames;
     }
 
+    private boolean checkOperatorCompatible(OperatorType query) {
+        // Prune based on query operator
+        if (query == OperatorType.LOGICAL_AGGR) {
+            return MvUtils.isLogicalSPJG(mvExpression);
+        }
+        if (query == OperatorType.LOGICAL_JOIN) {
+            return MvUtils.isLogicalSPJ(mvExpression);
+        }
+        if (Pattern.isScanOperator(query)) {
+            return Pattern.isScanOperator(mvExpression.getOp().getOpType());
+        }
+        return MvUtils.isLogicalSPJ(mvExpression);
+    }
+
     /**
      * Try to prune this MV during MV rewrite
      *
@@ -191,8 +205,13 @@ public class MaterializationContext {
         final OptExpression mvExpression = getMvExpression();
         final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         final List<Table> mvTables = getBaseTables();
-        MaterializedViewRewriter.MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
+        final OperatorType queryOp = queryExpression.getOp().getOpType();
 
+        if (!checkOperatorCompatible(queryOp)) {
+            return false;
+        }
+
+        MaterializedViewRewriter.MatchMode matchMode = MaterializedViewRewriter.getMatchMode(queryTables, mvTables);
         // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.

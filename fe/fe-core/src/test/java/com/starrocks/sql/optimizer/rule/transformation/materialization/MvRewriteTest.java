@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -29,6 +30,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -43,6 +45,7 @@ import org.junit.runners.MethodSorters;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -1972,4 +1975,50 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
     }
+
+    /**
+     * With many Agg MV candidates, the rewrite should prefer the one with fewer data rows
+     */
+    @Test
+    public void testCandidateOrdering() throws Exception {
+        starRocksAssert.withTable(cluster, MSchema.T_METRICS.getTableName());
+
+        List<String> dimensions = Lists.newArrayList(
+                " c2",
+                " c2, c3",
+                " c2, c3, c4",
+                " c2, c3, c4, c5",
+                " c2, c3, c4, c5, c6"
+        );
+
+        Function<Integer, String> mvNameBuilder = (i) -> ("mv_agg_metric_" + i);
+        for (int i = 0; i < dimensions.size(); i++) {
+            String name = mvNameBuilder.apply(i);
+            starRocksAssert.withRefreshedMaterializedView("create materialized view " + name +
+                    " refresh async as " +
+                    " select sum(c1) from t_metrics group by " +
+                    dimensions.get(i));
+            MaterializedView mv = starRocksAssert.getMv("test", name);
+
+            int mockRows = i + 1;
+            mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+        }
+
+        for (int i = 0; i < dimensions.size(); i++) {
+            // Aggregate
+            {
+                String query = "select sum(c1) from t_metrics group by " + dimensions.get(i);
+                String target = mvNameBuilder.apply(i);
+
+                // With candidate limit
+                starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(i + 1);
+                starRocksAssert.query(query).explainContains(target);
+
+                // Without candidate limit
+                starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
+                starRocksAssert.query(query).explainContains(target);
+            }
+        }
+    }
+
 }

@@ -99,10 +99,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+        mvCandidateContexts.sort(new MaterializationContext.RewriteOrdering());
+        int numCandidates = context.getSessionVariable().getCboMaterializedViewRewriteCandidateLimit();
+        if (numCandidates > 0 && mvCandidateContexts.size() > numCandidates) {
+            logMVRewrite(context, this, "too many MV candidates, truncate them to " + numCandidates);
+            mvCandidateContexts = mvCandidateContexts.subList(0, numCandidates);
+        }
         if (CollectionUtils.isEmpty(mvCandidateContexts)) {
             return Lists.newArrayList();
         }
-        mvCandidateContexts.sort(new MaterializationContext.RewriteOrdering());
 
         List<OptExpression> results = Lists.newArrayList();
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
@@ -154,6 +159,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteLimit();
             if (limit > 0 && results.size() >= limit) {
+                logMVRewrite(context, this, "generated too many MV result {}, abort rewrite", limit);
                 break;
             }
 

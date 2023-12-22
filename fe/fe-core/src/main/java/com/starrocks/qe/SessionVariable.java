@@ -277,7 +277,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
-    public static final String CBO_MATERIALIZED_VIEW_REWRITE_LIMIT = "cbo_materialized_view_rewrite_candidate_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_LIMIT = "cbo_materialized_view_rewrite_output_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
+            "cbo_materialized_view_rewrite_candidate_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -1414,10 +1416,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableViewBasedMvRewrite = false;
 
     /**
-     * Materialized view rewrite limit: how many MVScan plan would be generated when rewriting for a LogicalExpression
+     * Materialized view rewrite limit: how many MVScan plan would be generated when rewriting a OptExpr
      */
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboMaterializedViewRewriteLimit = 3;
+
+    /**
+     * Materialized view rewrite candidate limit: how many MVScan plan would be considered  when rewriting a OptExpr
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteCandidateLimit = 12;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -2225,6 +2233,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDump;
     }
 
+    public void setEnableQueryDump(boolean enable) {
+        this.enableQueryDump = enable;
+    }
+
     public boolean getEnableGlobalRuntimeFilter() {
         return enableGlobalRuntimeFilter;
     }
@@ -2761,6 +2773,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getCboMaterializedViewRewriteLimit() {
         return cboMaterializedViewRewriteLimit;
+    }
+
+    public void setCboMaterializedViewRewriteLimit(int limit) {
+        this.cboMaterializedViewRewriteLimit = limit;
+    }
+
+    public int getCboMaterializedViewRewriteCandidateLimit() {
+        return cboMaterializedViewRewriteCandidateLimit;
+    }
+
+    public void setCboMaterializedViewRewriteCandidateLimit(int limit) {
+        this.cboMaterializedViewRewriteCandidateLimit = limit;
     }
 
     public String getQueryExcludingMVNames() {
