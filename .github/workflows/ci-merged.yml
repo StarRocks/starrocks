@@ -192,7 +192,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
-          gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${LABEL}"
+          gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label ${LABEL}
 
       - name: prepare version label
         id: prepare_version_label
