@@ -45,7 +45,8 @@ import static org.apache.iceberg.TableMetadata.newTableMetadata;
 import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
 
 public class TestTables {
-
+    private static final String TEST_METADATA_LOCATION =
+            "s3://bucket/test/location/metadata/v1.metadata.json";
     private TestTables() {}
 
     private static TestTable upgrade(File temp, String name, int newFormatVersion) {
@@ -275,7 +276,8 @@ public class TestTables {
                     }
                     Integer version = VERSIONS.get(tableName);
                     // remove changes from the committed metadata
-                    this.current = TableMetadata.buildFrom(updatedMetadata).discardChanges().build();
+                    this.current = TableMetadata.buildFrom(updatedMetadata).discardChanges()
+                            .withMetadataLocation(TEST_METADATA_LOCATION).build();
                     VERSIONS.put(tableName, version == null ? 0 : version + 1);
                     METADATA.put(tableName, current);
                 } else {

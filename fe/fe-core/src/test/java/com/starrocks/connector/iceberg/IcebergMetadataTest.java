@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -32,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -188,6 +190,33 @@ public class IcebergMetadataTest extends TableTestBase {
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
+    }
+
+    @Test
+    public void testIcebergHiveCatalogTableExists(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.tableExists("db", "tbl");
+                result = true;
+                minTimes = 0;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        Assert.assertTrue(metadata.tableExists("db", "tbl"));
+    }
+
+    @Test
+    public void testIcebergCatalogTableExists(@Mocked IcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable("db", "tbl");
+                result = null;
+                minTimes = 0;
+            }
+        };
+        MockIcebergCatalog mockIcebergCatalog = new MockIcebergCatalog();
+        Assert.assertTrue(mockIcebergCatalog.tableExists("db", "tbl"));
     }
 
     @Test
@@ -999,6 +1028,48 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
         List<String> partitionNames = metadata.listPartitionNames("db", "table");
         Assert.assertEquals(partitionNames, Lists.newArrayList("k2=2", "k2=3"));
+    }
+
+    @Test
+    public void testGetPartitions1() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitions.size());
+    }
+
+    @Test
+    public void testGetPartitions2() {
+        mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableG, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, Lists.newArrayList());
+        Assert.assertEquals(1, partitions.size());
     }
 
     @Test

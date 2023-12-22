@@ -187,6 +187,18 @@ public class MetadataMgrTest {
     }
 
     @Test
+    public void testTableExists() throws TException {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_tbl");
+                result = true;
+            }
+        };
+        Assert.assertTrue(metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_tbl"));
+    }
+
+    @Test
     public void testCreateIcebergTable() throws Exception {
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
@@ -226,8 +238,8 @@ public class MetadataMgrTest {
                 result = new com.starrocks.catalog.Database();
                 minTimes = 0;
 
-                metadataMgr.listTableNames("iceberg_catalog", "iceberg_db");
-                result = Lists.newArrayList("iceberg_table");
+                metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = true;
                 minTimes = 0;
             }
         };

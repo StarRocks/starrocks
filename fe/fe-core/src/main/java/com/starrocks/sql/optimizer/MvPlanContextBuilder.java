@@ -19,10 +19,15 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
 
 public class MvPlanContextBuilder {
-    public MvPlanContext getPlanContext(MaterializedView mv) {
+    public static MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
         ConnectContext connectContext = new ConnectContext();
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        if (ConnectContext.get() == null) {
+            connectContext.setThreadLocalInfo();
+        }
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(
                 ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
         return mvOptimizer.optimize(mv, connectContext);
