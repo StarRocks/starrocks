@@ -30,36 +30,6 @@ namespace starrocks {
 
 using strings::Substitute;
 
-// The maximum value of int32 is 2147483647, representing that a dictionary page can store
-// a maximum of 2147483648 elements. If a dictionary page stores 2147483648 elements, assuming
-// one element only occupies one byte, the size of the dictionary page will be 2GB, which is
-// impossible. Therefore, int32 is sufficient to store the index of the dictionary page,
-// and overflow will not occur.
-template <LogicalType field_type>
-struct DataTypeTraits {
-    static const LogicalType type = TYPE_INT;
-};
-
-template <>
-struct DataTypeTraits<TYPE_TINYINT> {
-    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
-};
-
-template <>
-struct DataTypeTraits<TYPE_UNSIGNED_TINYINT> {
-    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
-};
-
-template <>
-struct DataTypeTraits<TYPE_SMALLINT> {
-    static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
-};
-
-template <>
-struct DataTypeTraits<TYPE_UNSIGNED_SMALLINT> {
-    static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
-};
-
 template <LogicalType Type>
 DictPageBuilder<Type>::DictPageBuilder(const PageBuilderOptions& options)
         : _options(options),
@@ -89,9 +59,14 @@ uint32_t DictPageBuilder<Type>::add(const uint8_t* vals, uint32_t count) {
     if (_encoding_type == DICT_ENCODING) {
         DCHECK(!_finished);
         DCHECK_GT(count, 0);
-        uint32_t value_code = -1;
+        ValueCodeType value_code = -1;
         // Manually devirtualization.
         auto* code_page = down_cast<BitshufflePageBuilder<DataTypeTraits<Type>::type>*>(_data_page_builder.get());
+
+        if (_data_page_builder->count() == 0) {
+            memcpy(&_first_value, vals, sizeof(ValueType));
+        }
+
         for (int i = 0; i < count; ++i) {
             Slice s = Slice(vals + i * SIZE_OF_TYPE, SIZE_OF_TYPE);
             auto iter = _dictionary.find(s);
@@ -153,17 +128,41 @@ faststring* DictPageBuilder<Type>::get_dictionary_page() {
 
 template <LogicalType Type>
 Status DictPageBuilder<Type>::get_first_value(void* value) const {
+    DCHECK(_finished);
+    if (_data_page_builder->count() == 0) {
+        return Status::NotFound("page is empty");
+    }
+    if (_encoding_type != DICT_ENCODING) {
+        return _data_page_builder->get_first_value(value);
+    }
+    memcpy(value, &_first_value, SIZE_OF_TYPE);
     return Status::OK();
 }
 
 template <LogicalType Type>
 Status DictPageBuilder<Type>::get_last_value(void* value) const {
+    DCHECK(_finished);
+    if (_data_page_builder->count() == 0) {
+        return Status::NotFound("page is empty");
+    }
+    if (_encoding_type != DICT_ENCODING) {
+        return _data_page_builder->get_last_value(value);
+    }
+    ValueCodeType value_code;
+    RETURN_IF_ERROR(_data_page_builder->get_last_value(&value_code));
+    ValueType out = _dict_builder->cell(value_code);
+    memcpy(value, &out, SIZE_OF_TYPE);
     return Status::OK();
 }
 
 template <LogicalType Type>
 bool DictPageBuilder<Type>::is_valid_global_dict(const GlobalDictMap* global_dict) const {
-    return false;
+    for (const auto& it : _dictionary) {
+        if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 template <LogicalType Type>

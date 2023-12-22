@@ -61,20 +61,20 @@ inline bool enable_non_string_column_dict_encoding() {
 
 inline bool number_types_supports_dict_encoding(LogicalType type) {
     switch (type) {
-        case TYPE_TINYINT:
-        case TYPE_SMALLINT:
-        case TYPE_INT:
-        case TYPE_BIGINT:
-        case TYPE_LARGEINT:
-        case TYPE_FLOAT:
-        case TYPE_DOUBLE:
-        case TYPE_DATE:
-        case TYPE_DATETIME:
-        case TYPE_DECIMAL:
-        case TYPE_DECIMALV2:
-            return true;
-        default:
-            return false;
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_LARGEINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_DECIMAL:
+    case TYPE_DECIMALV2:
+        return true;
+    default:
+        return false;
     }
 }
 

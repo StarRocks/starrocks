@@ -50,8 +50,42 @@ namespace starrocks {
 // dictionary page, but instead store the data itself, data-page-builder needs to reserve a segment
 // of space in advance to store the encoding type, indicating whether this page stores the index of
 // the dictionary page or the data
+
+// The maximum value of int32 is 2147483647, representing that a dictionary page can store
+// a maximum of 2147483648 elements. If a dictionary page stores 2147483648 elements, assuming
+// one element only occupies one byte, the size of the dictionary page will be 2GB, which is
+// impossible. Therefore, int32 is sufficient to store the index of the dictionary page,
+// and overflow will not occur.
+template <LogicalType field_type>
+struct DataTypeTraits {
+    static const LogicalType type = TYPE_INT;
+};
+
+template <>
+struct DataTypeTraits<TYPE_TINYINT> {
+    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
+};
+
+template <>
+struct DataTypeTraits<TYPE_UNSIGNED_TINYINT> {
+    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
+};
+
+template <>
+struct DataTypeTraits<TYPE_SMALLINT> {
+    static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
+};
+
+template <>
+struct DataTypeTraits<TYPE_UNSIGNED_SMALLINT> {
+    static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
+};
+
 template <LogicalType Type>
 class DictPageBuilder final : public PageBuilder {
+    using ValueType = typename CppTypeTraits<Type>::CppType;
+    using ValueCodeType = typename CppTypeTraits<DataTypeTraits<Type>::type>::CppType;
+
 public:
     explicit DictPageBuilder(const PageBuilderOptions& options);
 
@@ -108,8 +142,8 @@ private:
 
     EncodingTypePB _encoding_type;
     // query for dict item -> dict id
-    phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
-    faststring _first_value;
+    phmap::flat_hash_map<std::string, ValueCodeType, HashOfSlice, Eq> _dictionary;
+    ValueType _first_value;
 };
 
 // DictPageDecoder initially holds a segment of memory, and from the header of this memory segment,

@@ -306,7 +306,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         str_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
-    } else if (enable_non_string_column_dict_encoding() && number_types_supports_dict_encoding(delegate_type(column->type()))) {
+    } else if (enable_non_string_column_dict_encoding() &&
+               number_types_supports_dict_encoding(delegate_type(column->type()))) {
         DCHECK(column->type() != TYPE_VARCHAR);
         DCHECK(column->type() != TYPE_CHAR);
         ColumnWriterOptions dict_opts = opts;

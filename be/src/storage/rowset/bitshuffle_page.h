@@ -99,6 +99,8 @@ std::string bitshuffle_error_msg(int64_t err);
 //
 template <LogicalType Type>
 class BitshufflePageBuilder final : public PageBuilder {
+    typedef typename TypeTraits<Type>::CppType CppType;
+
 public:
     explicit BitshufflePageBuilder(const PageBuilderOptions& options)
             : _max_count(options.data_page_size / SIZE_OF_TYPE) {
@@ -187,9 +189,14 @@ public:
         return Status::OK();
     }
 
-private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    CppType cell(int idx) const {
+        DCHECK_GE(idx, 0);
+        CppType ret;
+        memcpy(&ret, &_data[idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+        return ret;
+    }
 
+private:
     faststring* _finish() {
         // Do padding so that the input num of element is multiple of 8.
         int num_elems_after_padding = ALIGN_UP(_count, 8U);
@@ -217,13 +224,6 @@ private:
         // before build(), update buffer length to the actual compressed size
         _compressed_data.resize(_reserved_head_size + BITSHUFFLE_PAGE_HEADER_SIZE + bytes);
         return &_compressed_data;
-    }
-
-    CppType cell(int idx) const {
-        DCHECK_GE(idx, 0);
-        CppType ret;
-        memcpy(&ret, &_data[idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
-        return ret;
     }
 
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
