@@ -287,7 +287,7 @@ void LevelBuilder::_write_time_column_chunk(const LevelBuilderContext& ctx, cons
     auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
     auto values = new int64_t[col->size()];
-
+    DeferOp defer([&] { delete[] values; });
     for (size_t i = 0; i < col->size(); i++) {
         values[i] = data_col[i] * 1000000;
     }

@@ -13,14 +13,16 @@ create table ice_tbl_${uuid0} (
   col_str int,
   col_int time
 );
-insert into ice_tbl_${uuid0} values (1, '01-02-03'),
-  (2, '20-20-20');
+insert into ice_tbl_${uuid0} values (1, '01:02:03'),
+  (2, '20:20:20');
+  (3,null)
 -- result:
 -- !result
 select * from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0};
 -- result:
 1	01:02:03
 2	20:20:20
+3   None
 -- !result
 drop table ice_tbl_${uuid0} force;
 drop database ice_db_${uuid0};

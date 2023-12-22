@@ -3212,6 +3212,9 @@ TEST_F(FileReaderTest, TestTime) {
     chunk->check_or_die();
 
     EXPECT_EQ("[1, 3723]", chunk->debug_row(0));
+    EXPECT_EQ("[4, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[3, 11045]", chunk->debug_row(2));
+    EXPECT_EQ("[2, 7384]", chunk->debug_row(3));
 
     size_t total_row_nums = 0;
     total_row_nums += chunk->num_rows();
@@ -3225,7 +3228,7 @@ TEST_F(FileReaderTest, TestTime) {
         }
     }
 
-    EXPECT_EQ(1, total_row_nums);
+    EXPECT_EQ(4, total_row_nums);
 }
 
 } // namespace starrocks::parquet

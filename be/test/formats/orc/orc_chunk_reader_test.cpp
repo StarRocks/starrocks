@@ -2317,6 +2317,9 @@ Padding length: 0 bytes
 Padding ratio: 0%
 
 {"c1":1,"c2":3723456000}
+{"c1":4,"c2":null}
+{"c1":2,"c2":7384000000}
+{"c1":3,"c2":11045000000}
  */
 TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
     SlotDesc slot_descs[] = {
@@ -2344,10 +2347,13 @@ TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
-        EXPECT_EQ(result->num_rows(), 1);
+        EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
         ColumnPtr col = result->get_column_by_slot_id(1);
         EXPECT_EQ("[1, 3723]", result->debug_row(0));
+        EXPECT_EQ("[4, NULL]", result->debug_row(1));
+        EXPECT_EQ("[2, 7384]", result->debug_row(2));
+        EXPECT_EQ("[3, 11045]", result->debug_row(3));
     }
 }
 
