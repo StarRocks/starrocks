@@ -76,6 +76,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -124,6 +125,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -255,14 +257,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
 
                 checked = true;
-                mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties());
+                Set<String> mvPotentialPartitionNames = Sets.newHashSet();
+                mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties(),
+                        mvPotentialPartitionNames);
                 if (mvToRefreshedPartitions.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return RefreshJobStatus.EMPTY;
                 }
 
                 // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
-                filterPartitionByRefreshNumber(mvToRefreshedPartitions, materializedView);
+                filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, materializedView);
                 LOG.debug("materialized view partitions to refresh:{}", mvToRefreshedPartitions);
 
                 // Get to refreshed base table partition infos.
@@ -278,12 +282,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     LOG.debug("materialized view:{} source partitions :{}",
                             materializedView.getName(), refTableRefreshPartitions);
                 }
-                // add message into information_schema
-                if (this.getMVTaskRunExtraMessage() != null) {
-                    MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
-                    extraMessage.setMvPartitionsToRefresh(mvToRefreshedPartitions);
-                    extraMessage.setRefBasePartitionsToRefreshMap(refTablePartitionNames);
-                }
+
+                // add a message into information_schema
+                Set<String> finalMvToRefreshedPartitions = mvToRefreshedPartitions;
+                Map<String, Set<String>> finalRefTablePartitionNames = refTablePartitionNames;
+                updateTaskRunStatus(status -> {
+                    MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+                    extraMessage.setMvPartitionsToRefresh(finalMvToRefreshedPartitions);
+                    extraMessage.setRefBasePartitionsToRefreshMap(finalRefTablePartitionNames);
+                });
             } catch (Exception e) {
                 LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
                 throw e;
@@ -460,6 +467,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     @VisibleForTesting
     public void filterPartitionByRefreshNumber(Set<String> partitionsToRefresh,
+                                               Set<String> mvPotentialPartitionNames,
                                                MaterializedView materializedView) {
         // refresh all partition when it's a sync refresh, otherwise updated partitions may be lost.
         if (mvContext.executeOption != null && mvContext.executeOption.getIsSync()) {
@@ -478,6 +486,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber >= rangePartitionMap.size()) {
             return;
         }
+
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
         for (String partitionName : partitionsToRefresh) {
             mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
@@ -487,9 +496,33 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
         Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
+        String mvRefreshPartition = "";
         for (int i = 0; i < partitionRefreshNumber; i++) {
             if (partitionNameIter.hasNext()) {
-                partitionNameIter.next();
+                mvRefreshPartition = partitionNameIter.next();
+            }
+
+            // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
+            // avoid data lose.
+            // eg:
+            // ref table's partitions:
+            //  p0:   [2023-07-27, 2023-07-30)
+            //  p1:   [2023-07-30, 2023-08-02) X
+            //  p2:   [2023-08-02, 2023-08-05)
+            // materialized view's partition:
+            //  p0:   [2023-07-01, 2023-08-01)
+            //  p1:   [2023-08-01, 2023-09-01)
+            //  p2:   [2023-09-01, 2023-10-01)
+            //
+            // If partitionRefreshNumber is 1, ref table's p1 has been updated, then mv's partition [p0, p1]
+            // needs to be refreshed.
+            // Run1: mv's p0, refresh will update ref-table's p1 into version mapping(since incremental refresh)
+            // Run2: mv's p1, refresh check ref-table's p1 has been refreshed, skip to refresh.
+            // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
+            // more mv's partitions as more as possible.
+            // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
+            if (!mvPotentialPartitionNames.isEmpty() && mvPotentialPartitionNames.contains(mvRefreshPartition)) {
+                return;
             }
         }
         String nextPartitionStart = null;
@@ -531,6 +564,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
+        if (mvContext.getStatus() != null) {
+            newProperties.put(TaskRun.JOB_ID, mvContext.getStatus().getJobId());
+        }
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
+            extraMessage.setNextPartitionEnd(mvContext.getNextPartitionEnd());
+        });
+
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
@@ -618,18 +660,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 updateMetaForExternalTable(refreshContext, snapshotInfoSplits.get(false));
             }
 
-            // add message into information_schema
-            if (this.getMVTaskRunExtraMessage() != null) {
+            // update mv status message
+            updateTaskRunStatus(status -> {
                 try {
-                    MVTaskRunExtraMessage extraMessage = getMVTaskRunExtraMessage();
+                    MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
                     Map<String, Set<String>> baseTableRefreshedPartitionsByExecPlan =
                             getBaseTableRefreshedPartitionsByExecPlan(execPlan);
                     extraMessage.setBasePartitionsToRefreshMap(baseTableRefreshedPartitionsByExecPlan);
                 } catch (Exception e) {
-                    // just log warn and no throw exceptions for updating task runs message.
+                    // just log warn and no throw exceptions for an updating task runs message.
                     LOG.warn("update task run messages failed:", e);
                 }
-            }
+            });
         } catch (Exception e) {
             LOG.warn("update final meta failed after mv refreshed:", e);
             throw e;
@@ -786,6 +828,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // should keep up with the base tables, or it will return outdated result.
         oldTransactionVisibleWaitTimeout = context.ctx.getSessionVariable().getTransactionVisibleWaitTimeout();
         context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
+
+        // Initialize status's job id which is used to track a batch of task runs.
+        String jobId = properties.containsKey(TaskRun.JOB_ID) ? properties.get(TaskRun.JOB_ID) : context.getUUID();
+        if (context.status != null) {
+            context.status.setJobId(jobId);
+        }
+
         mvContext = new MvTaskRunContext(context);
     }
 
@@ -1012,22 +1061,36 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     @VisibleForTesting
-    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties)
+    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties,
+                                                                 Set<String> mvPotentialPartitionNames)
             throws AnalysisException {
         String start = properties.get(TaskRun.PARTITION_START);
         String end = properties.get(TaskRun.PARTITION_END);
         boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         Set<String> needRefreshMvPartitionNames = getPartitionsToRefreshForMaterializedView(partitionInfo,
-                start, end, force);
-        // update stats
-        if (this.getMVTaskRunExtraMessage() != null) {
-            MVTaskRunExtraMessage extraMessage = this.getMVTaskRunExtraMessage();
+                start, end, force, mvPotentialPartitionNames);
+
+        // update mv extra message
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setJobId(status.getJobId());
             extraMessage.setForceRefresh(force);
             extraMessage.setPartitionStart(start);
             extraMessage.setPartitionEnd(end);
-        }
+        });
+
         return needRefreshMvPartitionNames;
+    }
+
+    /**
+     * Update task run status's extra message to add more information for information_schema if possible.
+     * @param action
+     */
+    private void updateTaskRunStatus(Consumer<TaskRunStatus> action) {
+        if (this.mvContext.status != null) {
+            action.accept(this.mvContext.status);
+        }
     }
 
     /**
@@ -1038,10 +1101,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @return
      * @throws AnalysisException
      */
-    private Set<String> getPartitionsToRefreshForMaterializedView(PartitionInfo mvPartitionInfo,
-                                                                  String start,
-                                                                  String end,
-                                                                  boolean force) throws AnalysisException {
+    private Set<String> getPartitionsToRefreshForMaterializedView(
+            PartitionInfo mvPartitionInfo, String start,
+            String end, boolean force, Set<String> mvPotentialPartitionNames) throws AnalysisException {
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
 
         // Force refresh
@@ -1102,15 +1164,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 Map<Table, Set<String>> baseChangedPartitionNames =
                         getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
-                // because the relation of partitions between materialized view and base partition table is n : m,
-                // should calculate the candidate partitions recursively.
-                LOG.debug("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
-                SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                        mvContext.getRefBaseTableMVIntersectedPartitions(),
-                        mvContext.getMvRefBaseTableIntersectedPartitions());
-                LOG.debug("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+                if (baseChangedPartitionNames.isEmpty()) {
+                    return needRefreshMvPartitionNames;
+                }
+
+                List<TableWithPartitions> baseTableWithPartitions = baseChangedPartitionNames.keySet().stream()
+                        .map(x -> new TableWithPartitions(x, baseChangedPartitionNames.get(x)))
+                        .collect(Collectors.toList());
+                Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap =
+                        mvContext.getRefBaseTableRangePartitionMap();
+                if (materializedView.isCalcPotentialRefreshPartition(baseTableWithPartitions,
+                        refBaseTableRangePartitionMap, needRefreshMvPartitionNames)) {
+                    // because the relation of partitions between materialized view and base partition table is n : m,
+                    // should calculate the candidate partitions recursively.
+                    LOG.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                            " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+                    SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                            mvContext.getRefBaseTableMVIntersectedPartitions(),
+                            mvContext.getMvRefBaseTableIntersectedPartitions(),
+                            mvPotentialPartitionNames);
+                    LOG.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                            " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+                }
             }
         } else if (mvPartitionInfo instanceof ListPartitionInfo) {
             // list partitioned materialized view
