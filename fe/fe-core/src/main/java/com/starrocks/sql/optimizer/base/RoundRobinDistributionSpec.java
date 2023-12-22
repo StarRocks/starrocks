@@ -50,6 +50,6 @@ public class RoundRobinDistributionSpec extends DistributionSpec {
 
     @Override
     public String toString() {
-        return "ROUND ROBIN";
+        return "ROUND_ROBIN";
     }
 }
