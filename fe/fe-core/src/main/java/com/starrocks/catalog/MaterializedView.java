@@ -937,6 +937,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(colocateGroup).append("\"");
         }
 
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                        .append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -1208,5 +1215,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        // For materialized view, add into session variables into properties.
+        if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
+            for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {
+                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    properties.put(varKey, entry.getValue());
+                }
+            }
+        }
+        return properties;
     }
 }
