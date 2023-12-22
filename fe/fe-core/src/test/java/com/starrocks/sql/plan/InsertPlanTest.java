@@ -21,6 +21,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
@@ -371,6 +372,8 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
@@ -891,5 +894,39 @@ public class InsertPlanTest extends PlanTestBase {
         // parse it again
         List<StatementBase> stmts2 = SqlParser.parse(genSql, new SessionVariable());
         Assert.assertEquals(genSql, AstToSQLBuilder.toSQL(stmts2.get(0)));
+    }
+
+    @Test
+    public void testInsertNotExistTable() {
+        try {
+            getInsertExecPlan("insert into not_exist_table values (1)");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Table not_exist_table is not found"));
+        }
+    }
+
+    @Test
+    public void testInsertFiles() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\") " +
+                "select 1 as k1");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: []\n" +
+                "    SINGLE: false\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actual);
     }
 }

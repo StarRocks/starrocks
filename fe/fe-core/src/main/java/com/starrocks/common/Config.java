@@ -2648,9 +2648,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
 
-    @ConfField(mutable = true)
-    public static boolean replan_on_insert = false;
-
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.

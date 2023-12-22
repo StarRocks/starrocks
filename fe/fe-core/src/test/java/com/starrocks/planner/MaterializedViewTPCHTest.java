@@ -27,9 +27,9 @@ import org.junit.runners.MethodSorters;
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
