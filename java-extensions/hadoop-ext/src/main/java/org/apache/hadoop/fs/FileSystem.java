@@ -4033,10 +4033,7 @@ public abstract class FileSystem extends Configured
                         "" : StringUtils.toLowerCase(uri.getAuthority());
                 this.unique = unique;
 
-                HadoopExt.getInstance().rewriteConfiguration(conf);
-                this.ugi = HadoopExt.getInstance().getHDFSUGI(conf);
-
-                // this.ugi = UserGroupInformation.getCurrentUser();
+                this.ugi = UserGroupInformation.getCurrentUser();
 
                 this.cloudConf = HadoopExt.getInstance().getCloudConfString(conf);
             }
