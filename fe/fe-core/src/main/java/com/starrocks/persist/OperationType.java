@@ -842,6 +842,11 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_BROKER_V2 = 13032;
+    public static final short OP_DECOMMISSION_DISK = 13033;
+    public static final short OP_CANCEL_DECOMMISSION_DISK = 13034;
+    public static final short OP_DISABLE_DISK = 13035;
+    public static final short OP_CANCEL_DISABLE_DISK = 13036;
+    public static final short OP_BATCH_DELETE_REPLICA_BATCH = 13037;
 
     @IgnorableOnReplayFailed
     public static final short OP_DECOMMISSION_DISK = 13033;

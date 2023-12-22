@@ -189,6 +189,7 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -3153,6 +3154,10 @@ public class GlobalStateMgr {
 
     public void replayDeleteReplica(ReplicaPersistInfo info) {
         localMetastore.replayDeleteReplica(info);
+    }
+
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        localMetastore.replayBatchDeleteReplica(info);
     }
 
     public void replayAddFrontend(Frontend fe) {

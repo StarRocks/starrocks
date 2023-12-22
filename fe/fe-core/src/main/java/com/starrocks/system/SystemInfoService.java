@@ -58,6 +58,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.CancelDecommissionDiskInfo;
+import com.starrocks.persist.CancelDisableDiskInfo;
+import com.starrocks.persist.DecommissionDiskInfo;
+import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -432,6 +436,137 @@ public class SystemInfoService implements GsonPostProcessable {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
+    public void decommissionDisks(List<String> diskList) throws DdlException {
+        checkDisksParam(diskList);
+
+        Map<Long, String> diskMap = new HashMap<>();
+        for (String disk : diskList) {
+            String[] items = disk.split(":");
+            int port = Integer.parseInt(items[1]);
+            Backend backend = getBackendWithHeartbeatPort(items[0], port);
+            if (backend != null) {
+                backend.decommissionDisk(items[2]);
+                diskMap.put(backend.getId(), items[2]);
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog().logDecommissionDisk(new DecommissionDiskInfo(diskMap));
+    }
+
+    public void cancelDecommissionDisks(List<String> diskList) throws DdlException {
+        checkDisksParam(diskList);
+
+        Map<Long, String> diskMap = new HashMap<>();
+        for (String disk : diskList) {
+            String[] items = disk.split(":");
+            int port = Integer.parseInt(items[1]);
+            Backend backend = getBackendWithHeartbeatPort(items[0], port);
+            if (backend != null) {
+                backend.cancelDecommissionDisk(items[2]);
+                diskMap.put(backend.getId(), items[2]);
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog().logCancelDecommissionDisk(new CancelDecommissionDiskInfo(diskMap));
+    }
+
+    public void disableDisks(List<String> diskList) throws DdlException {
+        checkDisksParam(diskList);
+
+        Map<Long, String> diskMap = new HashMap<>();
+        for (String disk : diskList) {
+            String[] items = disk.split(":");
+            int port = Integer.parseInt(items[1]);
+            Backend backend = getBackendWithHeartbeatPort(items[0], port);
+            if (backend != null) {
+                backend.disableDisk(items[2]);
+                diskMap.put(backend.getId(), items[2]);
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(diskMap));
+    }
+
+    public void cancelDisableDisks(List<String> diskList) throws DdlException {
+        checkDisksParam(diskList);
+
+        Map<Long, String> diskMap = new HashMap<>();
+        for (String disk : diskList) {
+            String[] items = disk.split(":");
+            int port = Integer.parseInt(items[1]);
+            Backend backend = getBackendWithHeartbeatPort(items[0], port);
+            if (backend != null) {
+                backend.cancelDisableDisk(items[2]);
+                diskMap.put(backend.getId(), items[2]);
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog().logCancelDisableDisk(new CancelDisableDiskInfo(diskMap));
+    }
+
+    public void replayDecommissionDisks(DecommissionDiskInfo info) {
+        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
+            Backend backend = getBackend(entry.getKey());
+            if (backend != null) {
+                try {
+                    backend.decommissionDisk(entry.getValue());
+                } catch (DdlException e) {
+                    LOG.warn("replay decommission disk failed", e);
+                }
+            }
+        }
+    }
+
+    public void replayCancelDecommissionDisks(CancelDecommissionDiskInfo info) {
+        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
+            Backend backend = getBackend(entry.getKey());
+            if (backend != null) {
+                backend.cancelDecommissionDisk(entry.getValue());
+            }
+        }
+    }
+
+    public void replayDisableDisks(DisableDiskInfo info) {
+        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
+            Backend backend = getBackend(entry.getKey());
+            if (backend != null) {
+                try {
+                    backend.disableDisk(entry.getValue());
+                } catch (DdlException e) {
+                    LOG.warn("replay disable disk failed", e);
+                }
+            }
+        }
+    }
+
+    public void replayCancelDisableDisks(CancelDisableDiskInfo info) {
+        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
+            Backend backend = getBackend(entry.getKey());
+            if (backend != null) {
+                backend.cancelDisableDisk(entry.getValue());
+            }
+        }
+    }
+
+    private void checkDisksParam(List<String> diskList) throws DdlException {
+        for (String disk : diskList) {
+            String[] items = disk.split(":");
+            int port;
+            try {
+                port = Integer.parseInt(items[1]);
+            } catch (NumberFormatException e) {
+                throw new DdlException("invalid port format: " + items[1]);
+            }
+            Backend backend = getBackendWithHeartbeatPort(items[0], port);
+            if (backend == null) {
+                throw new DdlException("backend dose not exist: " + items[0] + ":" + items[1]);
+            }
+            if (!backend.getDisks().containsKey(items[2])) {
+                throw new DdlException("disk path dose not exits: " + items[2] + ", should be root path");
+            }
+        }
+    }
+
     // only for test
     public void dropAllBackend() {
         // update idToBackend
@@ -738,7 +873,7 @@ public class SystemInfoService implements GsonPostProcessable {
                                                          TStorageMedium storageMedium) {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate,
-                v -> !v.diskExceedLimitByStorageMedium(storageMedium));
+                v -> !v.checkDiskExceedLimitForCreate(storageMedium));
     }
 
     public Long seqChooseBackendOrComputeId() throws UserException {
@@ -758,7 +893,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
 
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
+        if (isCreate) {
+            return seqChooseBackendIds(backendNum, needAvailable, true, v -> !v.checkDiskExceedLimitForCreate());
+        } else {
+            return seqChooseBackendIds(backendNum, needAvailable, false, v -> !v.checkDiskExceedLimit());
+        }
     }
 
     public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
