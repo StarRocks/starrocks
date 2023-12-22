@@ -348,7 +348,9 @@ public class InformationSchemaDataSource {
 
                         TTableInfo info = new TTableInfo();
 
-                        info.setTable_catalog(table.getCatalogName());
+                        // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+                        // the catalog name is always `def`
+                        info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
                         info.setTable_type(table.getMysqlType());
