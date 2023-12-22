@@ -12,7 +12,7 @@ However, when it comes to building complex and efficient reports using data from
 
 ## Overview
 
-StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, and Hudi catalog. External catalog-based materialized views are particularly useful in the following scenarios:
+StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
 
 - **Transparent Acceleration of data lake reports**
 
