@@ -53,6 +53,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -78,6 +79,7 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -176,7 +178,8 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
+                    session.getSessionVariable());
 
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
@@ -648,7 +651,8 @@ public class InsertPlanner {
      * so that the same key will be sent to the same fragment instance
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
-                                                          List<ColumnRefOperator> outputColumns) {
+                                                          List<ColumnRefOperator> outputColumns,
+                                                          SessionVariable session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
             DistributionProperty distributionProperty = DistributionProperty
@@ -681,10 +685,30 @@ public class InsertPlanner {
         }
 
 
-        if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
-            DistributionProperty distributionProperty = DistributionProperty
-                    .createProperty(new GatherDistributionSpec());
-            return new PhysicalPropertySet(distributionProperty);
+        if (targetTable instanceof TableFunctionTable) {
+            TableFunctionTable table = (TableFunctionTable) targetTable;
+            if (table.isWriteSingleFile()) {
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(new GatherDistributionSpec()));
+            }
+
+            if (session.isEnableConnectorSinkGlobalShuffle()) {
+                // use random shuffle for unpartitioned table
+                if (table.getPartitionColumnNames().isEmpty()) {
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(new RoundRobinDistributionSpec()));
+                } else { // use hash shuffle for partitioned table
+                    List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
+
+            // no global shuffle
+            return PhysicalPropertySet.EMPTY;
         }
 
 
