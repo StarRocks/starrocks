@@ -173,7 +173,6 @@ jobs:
     if: >
       github.base_ref != 'main' && github.event.pull_request.merged == true
     env:
-      LABEL: ${{ github.base_ref }}-merged
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: prepare merge label
@@ -183,6 +182,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
 
       - name: add merge label
@@ -192,6 +192,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
           ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${LABEL}"
 
