@@ -46,7 +46,6 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
-import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -231,7 +230,7 @@ public class TabletScheduler extends FrontendDaemon {
                     continue;
                 }
                 List<Long> pathHashes = disks.values().stream()
-                        .filter(v -> v.getState() == DiskState.ONLINE)
+                        .filter(DiskInfo::canReadWrite)
                         .map(DiskInfo::getPathHash).collect(Collectors.toList());
                 backendsWorkingSlots.get(beId).updatePaths(pathHashes, currentSlotPerPathConfig);
             } else {
@@ -881,6 +880,8 @@ public class TabletScheduler extends FrontendDaemon {
                 case COLOCATE_REDUNDANT:
                     handleColocateRedundant(tabletCtx);
                     break;
+                case DISK_MIGRATION:
+                    handleDiskMigration(tabletCtx, batchTask);
                 default:
                     break;
             }
@@ -1360,6 +1361,114 @@ public class TabletScheduler extends FrontendDaemon {
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
     }
 
+<<<<<<< HEAD
+=======
+    private void handleDiskMigration(TabletSchedCtx tabletCtx, AgentBatchTask batchTask) throws SchedException {
+        Replica decommissionedReplica = null;
+        for (Replica replica : tabletCtx.getReplicas()) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend != null && backend.isDiskDecommissioned(replica.getPathHash())) {
+                decommissionedReplica = replica;
+                break;
+            }
+        }
+
+        if (decommissionedReplica == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "there is no replica need to migrate");
+        }
+
+        // set source path
+        PathSlot pathSlot = backendsWorkingSlots.get(decommissionedReplica.getBackendId());
+        if (pathSlot == null) {
+            throw new SchedException(SchedException.Status.UNRECOVERABLE,
+                    "working slots not exist for be: " + decommissionedReplica.getBackendId());
+        }
+        if (pathSlot.takeSlot(decommissionedReplica.getPathHash()) == -1) {
+            throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next rand");
+        }
+        tabletCtx.setSrc(decommissionedReplica);
+
+        // set dest path
+        BackendLoadStatistic beLoad = loadStatistic.getBackendLoadStatistic(decommissionedReplica.getBackendId());
+        List<RootPathLoadStatistic> pathLoadStatistics = beLoad.getPathStatistics(tabletCtx.getStorageMedium());
+        if (pathLoadStatistics.size() < 2) {
+            throw new SchedException(SchedException.Status.UNRECOVERABLE, "there is only one path on backend "
+                    + decommissionedReplica.getBackendId() + ", unable to migrate tablet");
+        }
+        long destPathHash = -1L;
+        double lowestUserPercent = 1;
+        for (RootPathLoadStatistic loadStatistic : pathLoadStatistics) {
+            if (loadStatistic.getPathHash() == decommissionedReplica.getPathHash()) {
+                continue;
+            }
+            if (lowestUserPercent > loadStatistic.getUsedPercent()) {
+                lowestUserPercent = loadStatistic.getUsedPercent();
+                destPathHash = loadStatistic.getPathHash();
+            }
+        }
+        if (pathSlot.takeSlot(destPathHash) == -1) {
+            throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next rand");
+        }
+        tabletCtx.setDest(decommissionedReplica.getBackendId(), destPathHash);
+
+        batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
+    }
+
+    /*
+     * The key idea for disk balance filter for primary key tablet is following:
+     * 1. Cross nodes balance is always schedulable.
+     * 2. Get the max last report tablets time of all backends.
+     * 3. For the primary key tablet, if the partition lastest visible version
+     *    time is larger than max last reported tablets, it means that the lastest
+     *    tablet info has not been reported, the tablet is unschedulable.
+     * 4. For the primary key tablet, get the max rowset creation time
+     *    of all replica which updated in tablets reported.
+     * 5. Check (now - maxRowsetCreationTime) is greater than Config.primary_key_disk_schedule_time
+     */
+    private List<TabletSchedCtx> filterUnschedulableTablets(List<TabletSchedCtx> alternativeTablets) {
+        List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
+        for (TabletSchedCtx schedCtx : alternativeTablets) {
+            long dbId = schedCtx.getDbId();
+            long physicalPartitionId = schedCtx.getPhysicalPartitionId();
+            long tableId = schedCtx.getTblId();
+            long tabletId = schedCtx.getTabletId();
+            long indexId = schedCtx.getIndexId();
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            Table tbl = null;
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                tbl = db.getTable(tableId);
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            if (!(tbl instanceof OlapTable)) {
+                newAlternativeTablets.add(schedCtx);
+                continue;
+            }
+
+            if (schedCtx.getSrcReplica().getBackendId() != schedCtx.getDestBackendId()) {
+                // schedulable if the dest node is different
+                newAlternativeTablets.add(schedCtx);
+                continue;
+            }
+
+            OlapTable olaptable = (OlapTable) tbl;
+            if (ReportHandler.migratableTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
+                newAlternativeTablets.add(schedCtx);
+            }
+        }
+
+        return newAlternativeTablets;
+    }
+
+>>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
     /**
      * Try to select some alternative tablets for balance. Add them to pendingTablets with priority LOW,
      * and waiting to be scheduled.

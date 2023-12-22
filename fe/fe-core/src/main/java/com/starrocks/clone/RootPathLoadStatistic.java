@@ -42,6 +42,7 @@ import com.starrocks.thrift.TStorageMedium;
 
 public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> {
 
+<<<<<<< HEAD
     private long beId;
     private String path;
     private Long pathHash;
@@ -49,6 +50,21 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
     private long capacityB;
     private long usedCapacityB;
     private DiskState diskState;
+=======
+    @SerializedName(value = "beId")
+    private final long beId;
+    @SerializedName(value = "path")
+    private final String path;
+    @SerializedName(value = "pathHash")
+    private final Long pathHash;
+    @SerializedName(value = "storageMedium")
+    private final TStorageMedium storageMedium;
+    @SerializedName(value = "total")
+    private final long capacityB;
+    @SerializedName(value = "used")
+    private final long usedCapacityB;
+    private final DiskState diskState;
+>>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
 
     private Classification clazz = Classification.INIT;
 
@@ -104,9 +120,9 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
     }
 
     public BalanceStatus isFit(long tabletSize) {
-        if (diskState == DiskState.OFFLINE) {
+        if (diskState != DiskState.ONLINE) {
             return new BalanceStatus(ErrCode.COMMON_ERROR,
-                    toString() + " does not fit tablet with size: " + tabletSize + ", offline");
+                    toString() + " does not fit tablet with size: " + tabletSize + ", disk state: " + diskState);
         }
 
         if (DiskInfo.exceedLimit(capacityB - usedCapacityB - tabletSize, capacityB, false)) {
