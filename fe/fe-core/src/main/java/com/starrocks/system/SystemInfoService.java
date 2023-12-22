@@ -57,6 +57,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
@@ -592,6 +593,15 @@ public class SystemInfoService implements GsonPostProcessable {
             backend = idToComputeNodeRef.get(nodeId);
         }
         return backend;
+    }
+
+    public void updateDataCacheMetrics(long backendId, DataCacheMetrics dataCacheMetrics) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateDataCacheMetrics receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+        node.updateDataCacheMetrics(dataCacheMetrics);
     }
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,

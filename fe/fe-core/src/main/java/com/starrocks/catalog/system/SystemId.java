@@ -109,7 +109,8 @@ public class SystemId {
     public static final long GRANTS_TO_USERS_ID = 103L;
     public static final long OBJECT_DEPENDENCIES = 104L;
     public static final long FE_LOCKS_ID = 105L;
-
     public static final long PIPE_FILES_ID = 120L;
     public static final long PIPES_ID = 121L;
+    public static final long BE_DATACACHE_METRICS = 130L;
+    // Remain for other datacache manage table
 }

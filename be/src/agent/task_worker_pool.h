@@ -39,7 +39,6 @@
 #include <memory>
 #include <mutex>
 #include <thread>
-#include <utility>
 #include <vector>
 
 #include "agent/agent_common.h"
@@ -47,10 +46,8 @@
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_usage_info.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -234,6 +231,20 @@ private:
 
 private:
     CpuUsageRecorder _cpu_usage_recorder;
+};
+
+class ReportDataCacheMetricsTaskWorkerPool final : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportDataCacheMetricsTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
 };
 
 } // namespace starrocks

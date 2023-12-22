@@ -1012,6 +1012,8 @@ CONF_Bool(datacache_block_buffer_enable, "true");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
+// The interval time (millisecond) for agent report datacache metrics to FE.
+CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with

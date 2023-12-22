@@ -150,6 +150,7 @@ set(EXEC_FILES
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
     schema_scanner/starrocks_policy_references_scanner.cpp
+    schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
     jdbc_scanner.cpp

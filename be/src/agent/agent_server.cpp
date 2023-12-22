@@ -68,6 +68,7 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
+const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
@@ -125,6 +126,7 @@ private:
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
+    std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
 
     // Compute node only need _report_resource_usage_workers.
     const bool _is_compute_node;
@@ -252,6 +254,8 @@ void AgentServer::Impl::init_or_die() {
     }
     CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
+                          REPORT_DATACACHE_METRICS_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
@@ -289,6 +293,7 @@ void AgentServer::Impl::stop() {
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
+    STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
 #undef STOP_POOL
 }
 

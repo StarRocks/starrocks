@@ -102,10 +102,8 @@ Status StarCacheWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
-    // TODO: fill some statistics information
-    std::unordered_map<std::string, double> stats;
-    return stats;
+const DataCacheMetrics StarCacheWrapper::cache_metrics() {
+    return _cache->metrics();
 }
 
 void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {

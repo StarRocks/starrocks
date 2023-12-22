@@ -41,6 +41,7 @@ include "Types.thrift"
 include "Status.thrift"
 include "WorkGroup.thrift"
 include "ResourceUsage.thrift"
+include "DataCache.thrift"
 
 struct TTabletInfo {
     1: required Types.TTabletId tablet_id
@@ -125,6 +126,7 @@ struct TReportRequest {
     // active workgroup on this backend
     9: optional list<WorkGroup.TWorkGroup> active_workgroups
     10: optional ResourceUsage.TResourceUsage resource_usage
+    11: optional DataCache.TDataCacheMetrics datacache_metrics
 }
 
 struct TMasterResult {

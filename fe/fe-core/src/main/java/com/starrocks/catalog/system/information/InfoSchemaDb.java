@@ -85,6 +85,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
             super.registerTableUnlocked(PipeFileSystemTable.create());
             super.registerTableUnlocked(PipesSystemTable.create());
+            super.registerTableUnlocked(BeDataCacheMetricsTable.create());
         }
     }
 
