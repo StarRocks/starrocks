@@ -58,17 +58,7 @@ import java.util.List;
 public class MvRewritePreprocessorTest extends MvRewriteTestBase {
     @BeforeClass
     public static void before() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
-                "  `v1` bigint NULL COMMENT \"\",\n" +
-                "  `v2` bigint NULL COMMENT \"\",\n" +
-                "  `v3` bigint NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
+        starRocksAssert.useTable("t0");
 
     }
 
