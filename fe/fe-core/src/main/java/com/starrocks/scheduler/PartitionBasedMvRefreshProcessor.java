@@ -123,7 +123,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -135,6 +135,7 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
+    private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
     public static final String MV_ID = "mvId";
     // session.enable_spill
@@ -190,11 +191,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(materializedView.getMvId());
         mvEntity.increaseRefreshJobStatus(RefreshJobStatus.TOTAL);
 
+        ConnectContext connectContext = context.getCtx();
         try {
             RefreshJobStatus status = doMvRefresh(context, mvEntity);
             mvEntity.increaseRefreshJobStatus(status);
+            connectContext.getState().setOk();
         } catch (Exception e) {
             mvEntity.increaseRefreshJobStatus(RefreshJobStatus.FAILED);
+            connectContext.getState().setError(e.getMessage());
             throw e;
         } finally {
             postProcess();
@@ -366,7 +370,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
-        ctx.setThreadLocalInfo();
 
         // 2. Prepare variables
         changeDefaultConnectContextIfNeeded(ctx);
@@ -1460,14 +1463,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
-        ctx.setStmtId(new AtomicInteger().incrementAndGet());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         ctx.getSessionVariable().setEnableInsertStrict(false);
+        LOG.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), materializedView.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
-            LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
+            LOG.warn("[QueryId:{}] refresh materialized view {} failed: {}", ctx.getQueryId(), materializedView.getName(), e);
             throw e;
         } finally {
+            LOG.info("[QueryId:{}] finished to refresh materialized view {}", ctx.getQueryId(),
+                    materializedView.getName());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
