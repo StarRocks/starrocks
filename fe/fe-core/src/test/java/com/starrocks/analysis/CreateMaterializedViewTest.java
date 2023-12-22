@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -4166,14 +4167,14 @@ public class CreateMaterializedViewTest {
     @Test
     public void testPartitionByWithOrderBy1() {
         starRocksAssert.withTable(new MTable("tt1", "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "k1 datetime",
                                 "k2 string",
                                 "v1 int"
                         ),
 
                         "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
                                 "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
                                 "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
