@@ -173,6 +173,122 @@ set(EXEC_FILES
         ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./runtime/buffer_control_block_test.cpp
+        ./runtime/data_stream_mgr_test.cpp
+        ./runtime/datetime_value_test.cpp
+        ./runtime/decimalv2_value_test.cpp
+        ./runtime/decimalv3_test.cpp
+        ./runtime/external_scan_context_mgr_test.cpp
+        ./runtime/fragment_mgr_test.cpp
+        ./runtime/int128_arithmetic_ops_test.cpp
+        ./runtime/kafka_consumer_pipe_test.cpp
+        ./runtime/lake_tablets_channel_test.cpp
+        ./runtime/large_int_value_test.cpp
+        ./runtime/load_channel_test.cpp
+        ./runtime/memory/mem_chunk_allocator_test.cpp
+        ./runtime/memory/system_allocator_test.cpp
+        ./runtime/memory/memory_resource_test.cpp
+        ./runtime/mem_pool_test.cpp
+        ./runtime/result_queue_mgr_test.cpp
+        #./runtime/routine_load_task_executor_test.cpp
+        ./runtime/small_file_mgr_test.cpp
+        ./runtime/snapshot_loader_test.cpp
+        ./runtime/stream_load_pipe_test.cpp
+        ./runtime/string_value_test.cpp
+        ./runtime/type_descriptor_test.cpp
+        ./runtime/type_descriptor_test.cpp
+        ./runtime/user_function_cache_test.cpp
+        ./runtime/sorted_chunks_merger_test.cpp
+        ./runtime/merge_cascade_test.cpp
+        ./runtime/memory_scratch_sink_test_issue_8676.cpp
+        ./runtime/memory_scratch_sink_test.cpp
+        ./runtime/command_executor_test.cpp
+        ./runtime/exec_env_test.cpp
+        ./serde/column_array_serde_test.cpp
+        ./serde/protobuf_serde_test.cpp
+        ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
+        ./simd/simd_test.cpp
+        ./simd/simd_selector_test.cpp
+        ./simd/simd_mulselector_test.cpp
+        ./util/phmap_test.cpp
+        ./util/aes_util_test.cpp
+        ./util/await_test.cpp
+        ./util/bitmap_test.cpp
+        ./util/bit_stream_utils_test.cpp
+        ./util/bit_util_test.cpp
+        ./util/block_compression_test.cpp
+        ./util/blocking_queue_test.cpp
+        ./util/brpc_stub_cache_test.cpp
+        ./util/bthreads/future_test.cpp
+        ./util/bthreads/promise_test.cpp
+        ./util/bthreads/semaphore_test.cpp
+        ./util/bthreads/shared_mutex_test.cpp
+        ./util/bthreads/shared_future_test.cpp
+        ./util/c_string_test.cpp
+        ./util/cidr_test.cpp
+        ./util/coding_test.cpp
+        ./util/core_local_test.cpp
+        ./util/countdown_latch_test.cpp
+        ./util/crc32c_test.cpp
+        ./util/dynamic_cache_test.cpp
+        ./util/exception_stack_test.cpp
+        ./util/fail_point_test.cpp
+        ./util/faststring_test.cpp
+        ./util/file_util_test.cpp
+        ./util/filesystem_util_test.cpp
+        ./util/frame_of_reference_coding_test.cpp
+        ./util/json_util_test.cpp
+        ./util/md5_test.cpp
+        ./util/monotime_test.cpp
+        ./util/mysql_row_buffer_test.cpp
+        ./util/new_metrics_test.cpp
+        ./util/parse_util_test.cpp
+        ./util/path_trie_test.cpp
+        ./util/path_util_test.cpp
+        ./util/priority_queue_test.cpp
+        ./util/rle_encoding_test.cpp
+        ./util/runtime_profile_test.cpp
+        ./util/scoped_cleanup_test.cpp
+        ./util/string_parser_test.cpp
+        ./util/string_util_test.cpp
+        ./util/tdigest_test.cpp
+        ./util/thread_test.cpp
+        ./util/trace_test.cpp
+        ./util/uid_util_test.cpp
+        ./util/utf8_check_test.cpp
+        ./util/int96_test.cpp
+        ./util/bit_packing_test.cpp
+        ./util/gc_helper_test.cpp
+        ./util/lru_cache_test.cpp
+        ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/starrocks_metrics_test.cpp
+        ./util/system_metrics_test.cpp
+        ./util/ratelimit_test.cpp
+        ./util/cpu_usage_info_test.cpp
+        ./util/timezone_utils_test.cpp
+        ./util/concurrent_limiter_test.cpp
+        ./util/stack_trace_mutex_test.cpp
+        ./gutil/cpu_test.cc
+        ./gutil/sysinfo-test.cc
+        ./service/lake_service_test.cpp
+        )
+
+if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
+endif ()
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
+endif ()
+
+if (USE_AVX2)
+    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
+endif ()
+
+set(STORAGE_EXEC_FILES
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
@@ -295,129 +411,21 @@ set(EXEC_FILES
         ./storage/get_use_pk_index_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
-        ./runtime/buffer_control_block_test.cpp
-        ./runtime/data_stream_mgr_test.cpp
-        ./runtime/datetime_value_test.cpp
-        ./runtime/decimalv2_value_test.cpp
-        ./runtime/decimalv3_test.cpp
-        ./runtime/external_scan_context_mgr_test.cpp
-        ./runtime/fragment_mgr_test.cpp
-        ./runtime/int128_arithmetic_ops_test.cpp
-        ./runtime/kafka_consumer_pipe_test.cpp
-        ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/large_int_value_test.cpp
-        ./runtime/load_channel_test.cpp
-        ./runtime/memory/mem_chunk_allocator_test.cpp
-        ./runtime/memory/system_allocator_test.cpp
-        ./runtime/memory/memory_resource_test.cpp
-        ./runtime/mem_pool_test.cpp
-        ./runtime/result_queue_mgr_test.cpp
-        #./runtime/routine_load_task_executor_test.cpp
-        ./runtime/small_file_mgr_test.cpp
-        ./runtime/snapshot_loader_test.cpp
-        ./runtime/stream_load_pipe_test.cpp
-        ./runtime/string_value_test.cpp
-        ./runtime/type_descriptor_test.cpp
-        ./runtime/type_descriptor_test.cpp
-        ./runtime/user_function_cache_test.cpp
-        ./runtime/sorted_chunks_merger_test.cpp
-        ./runtime/merge_cascade_test.cpp
-        ./runtime/memory_scratch_sink_test_issue_8676.cpp
-        ./runtime/memory_scratch_sink_test.cpp
-        ./runtime/command_executor_test.cpp
-        ./runtime/exec_env_test.cpp
-        ./serde/column_array_serde_test.cpp
-        ./serde/protobuf_serde_test.cpp
-        ./types/bitmap_value_test.cpp
-        ./simd/batch_run_counter_test.cpp
-        ./simd/simd_test.cpp
-        ./simd/simd_selector_test.cpp
-        ./simd/simd_mulselector_test.cpp
-        ./util/phmap_test.cpp
-        ./util/aes_util_test.cpp
-        ./util/await_test.cpp
-        ./util/bitmap_test.cpp
-        ./util/bit_stream_utils_test.cpp
-        ./util/bit_util_test.cpp
-        ./util/block_compression_test.cpp
-        ./util/blocking_queue_test.cpp
-        ./util/brpc_stub_cache_test.cpp
-        ./util/bthreads/future_test.cpp
-        ./util/bthreads/promise_test.cpp
-        ./util/bthreads/semaphore_test.cpp
-        ./util/bthreads/shared_mutex_test.cpp
-        ./util/bthreads/shared_future_test.cpp
-        ./util/c_string_test.cpp
-        ./util/cidr_test.cpp
-        ./util/coding_test.cpp
-        ./util/core_local_test.cpp
-        ./util/countdown_latch_test.cpp
-        ./util/crc32c_test.cpp
-        ./util/dynamic_cache_test.cpp
-        ./util/exception_stack_test.cpp
-        ./util/fail_point_test.cpp
-        ./util/faststring_test.cpp
-        ./util/file_util_test.cpp
-        ./util/filesystem_util_test.cpp
-        ./util/frame_of_reference_coding_test.cpp
-        ./util/json_util_test.cpp
-        ./util/md5_test.cpp
-        ./util/monotime_test.cpp
-        ./util/mysql_row_buffer_test.cpp
-        ./util/new_metrics_test.cpp
-        ./util/parse_util_test.cpp
-        ./util/path_trie_test.cpp
-        ./util/path_util_test.cpp
-        ./util/priority_queue_test.cpp
-        ./util/rle_encoding_test.cpp
-        ./util/runtime_profile_test.cpp
-        ./util/scoped_cleanup_test.cpp
-        ./util/string_parser_test.cpp
-        ./util/string_util_test.cpp
-        ./util/tdigest_test.cpp
-        ./util/thread_test.cpp
-        ./util/trace_test.cpp
-        ./util/uid_util_test.cpp
-        ./util/utf8_check_test.cpp
-        ./util/int96_test.cpp
-        ./util/bit_packing_test.cpp
-        ./util/gc_helper_test.cpp
-        ./util/lru_cache_test.cpp
-        ./util/arrow/starrocks_column_to_arrow_test.cpp
-        ./util/starrocks_metrics_test.cpp
-        ./util/system_metrics_test.cpp
-        ./util/ratelimit_test.cpp
-        ./util/cpu_usage_info_test.cpp
-        ./util/timezone_utils_test.cpp
-        ./util/concurrent_limiter_test.cpp
-        ./util/stack_trace_mutex_test.cpp
-        ./gutil/cpu_test.cc
-        ./gutil/sysinfo-test.cc
-        ./service/lake_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         )
 
-if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
-endif ()
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
-endif ()
-
-if (USE_AVX2)
-    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
-endif ()
-
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
+add_library(starrocks_storage_test_objs OBJECT ${STORAGE_EXEC_FILES})
+SET_TARGET_PROPERTIES(starrocks_storage_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(starrocks_storage_test test_main.cpp $<TARGET_OBJECTS:starrocks_storage_test_objs>)
+
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
+TARGET_LINK_LIBRARIES(starrocks_storage_test ${TEST_LINK_LIBS})
 
 # =================================================
 # test cases must be compiled as a standalone binary
