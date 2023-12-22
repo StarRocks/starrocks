@@ -117,3 +117,18 @@ jobs:
         run: |
           gh pr comment ${PR_NUMBER} -R ${{ github.repository }} -b "❌ BACKPORT ERROR! <details></br></br>[Workflow details](${ACTION_URL})</details>"
           exit 1
+
+  resolve-conflict-automerge:
+    name: resolve conflict automerge
+    runs-on: [ self-hosted, sync-normal ]
+    if: >
+      contains(github.base_ref, '-sync-pr-') && contains(github.event.comment.body, 'automerge')
+
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+
+    steps:
+      - name: merge directly
+        run: |
+          gh pr merge ${PR_NUMBER} -R ${GITHUB_REPOSITORY} -s --admin
