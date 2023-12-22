@@ -239,6 +239,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -v starrocks_test \
+    | grep -v starrocks_storage_test \
     | grep -v bench_test \
     | grep -e "$TEST_MODULE" `
 
