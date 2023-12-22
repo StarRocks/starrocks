@@ -41,6 +41,7 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -59,8 +60,9 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -76,6 +78,7 @@ import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
     @BeforeClass
@@ -154,9 +157,10 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withTable("CREATE TABLE test.tbl6\n" +
+
+                .withTable("CREATE TABLE test.tbl15\n" +
                         "(\n" +
-                        "    k1 date,\n" +
+                        "    k1 datetime,\n" +
                         "    k2 int,\n" +
                         "    v1 int sum\n" +
                         ")\n" +
@@ -167,6 +171,22 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
                         "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
                         "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl16\n" +
+                        "(\n" +
+                        "    k1 datetime,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p20220101 values [('2022-01-01 00:00:00'),('2022-01-02 00:00:00')),\n" +
+                        "    PARTITION p20220102 values [('2022-01-02 00:00:00'),('2022-01-03 00:00:00')),\n" +
+                        "    PARTITION p20220103 values [('2022-01-03 00:00:00'),('2022-01-04 00:00:00')),\n" +
+                        "    PARTITION p20220201 values [('2022-02-01 00:00:00'),('2022-02-02 00:00:00')),\n" +
+                        "    PARTITION p20220202 values [('2022-02-02 00:00:00'),('2022-02-03 00:00:00'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
@@ -528,39 +548,60 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals(3, materializedView.getPartition("p202204_202205").getVisibleVersion());
     }
 
-    @Test
-    public void testRefreshPriority() throws Exception {
-        String mvName = "mv_refresh_priority";
-        starRocksAssert.withMaterializedView("create materialized view test.mv_refresh_priority\n" +
-                "partition by date_trunc('month',k1) \n" +
-                "distributed by hash(k2) buckets 10\n" +
-                "refresh deferred manual\n" +
-                "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
-                "as select k1, k2 from tbl6;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
-        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-        TaskRunManager trm = tm.getTaskRunManager();
-
-        String insertSql = "insert into tbl6 partition(p1) values('2022-01-02',2,10);";
-        new StmtExecutor(connectContext, insertSql).execute();
-        insertSql = "insert into tbl6 partition(p2) values('2022-02-02',2,10);";
-        new StmtExecutor(connectContext, insertSql).execute();
-
-        HashMap<String, String> taskRunProperties = new HashMap<>();
-        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+    private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
+    }
 
-        long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-        TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
-        Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
+    @Test
+    public void testRefreshPriority() {
+        starRocksAssert.withTable(new MTable("tbl6", "k2",
+                        ImmutableList.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        ImmutableList.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    String mvName = "mv_refresh_priority";
+                    starRocksAssert.withMaterializedView("create materialized view test.mv_refresh_priority\n" +
+                            "partition by date_trunc('month',k1) \n" +
+                            "distributed by hash(k2) buckets 10\n" +
+                            "refresh deferred manual\n" +
+                            "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
+                            "as select k1, k2 from tbl6;");
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    TaskRunManager trm = tm.getTaskRunManager();
 
-        while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
-            Thread.sleep(100);
-        }
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+
+                    HashMap<String, String> taskRunProperties = new HashMap<>();
+                    taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
+                    Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                    TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                    initAndExecuteTaskRun(taskRun);
+
+                    long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
+                    TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
+
+                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                        Thread.sleep(100);
+                    }
+                    starRocksAssert.dropMaterializedView("mv_refresh_priority");
+                }
+        );
     }
 
     @Test
@@ -894,7 +935,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -905,7 +946,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/7");
+        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "t1",
                 ImmutableList.of("par_col=0"));
@@ -914,7 +955,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7", "partitions=3/3");
+        assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
     }
 
     @Test
@@ -1444,7 +1485,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertNotEquals(refreshBeforeVersionTime, refreshAfterVersionTime);
     }
 
-    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2Date() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -1607,13 +1647,12 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         starRocksAssert.dropMaterializedView(mvName);
     }
 
-    @Ignore
     @Test
     public void testRangePartitionWithJDBCTableUseStr2Date3() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
-        mockedJDBCMetadata.initPartitions();
+        mockedJDBCMetadata.addPartitions();
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
@@ -1629,8 +1668,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
 
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802"),
-                partitions);
+        Assert.assertEquals(ImmutableList.of("p20230801_20230802", "p20230802_20230803", "p20230803_20230804",
+                        "p20230804_20230805"), partitions);
     }
 
     @Test
@@ -2863,6 +2902,66 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
         Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
+
+    @Test
+    public void testTaskRun() {
+        starRocksAssert.withTable(new MTable("tbl6", "k2",
+                        ImmutableList.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        ImmutableList.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    starRocksAssert
+                            .withMaterializedView("create materialized view mv_refresh_priority\n" +
+                                    "partition by date_trunc('month',k1) \n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "refresh deferred manual\n" +
+                                    "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
+                                    "as select k1, k2 from tbl6;");
+                    String mvName = "mv_refresh_priority";
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
+                    MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    TaskRunManager trm = tm.getTaskRunManager();
+
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+
+                    // refresh materialized view
+                    HashMap<String, String> taskRunProperties = new HashMap<>();
+                    taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
+                    Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                    TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                    taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                    taskRun.executeTaskRun();
+
+                    // without db name
+                    Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
+                    Assert.assertFalse(tm.showTasks(null).isEmpty());
+                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
+
+                    // specific db
+                    Assert.assertFalse(tm.showTaskRunStatus(TEST_DB_NAME).isEmpty());
+                    Assert.assertFalse(tm.showTasks(TEST_DB_NAME).isEmpty());
+                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(TEST_DB_NAME).isEmpty());
+
+                    long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
+                    Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
+                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                        Thread.sleep(100);
+                    }
+                    starRocksAssert.dropMaterializedView("mv_refresh_priority");
+                }
+        );
+    }
 }
-
-
