@@ -1,4 +1,25 @@
-set(EXEC_FILES
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#[[
+Currently, the unit tests for be are divided into two executable files: 
+starrocks_test_part1 and starrocks_test_part2. 
+When we try to perform all the tests with one executable file, 
+the binary size of the code exceeds the limit, which leads to linkage errors.
+]]
+
+set(EXEC_FILES_PART1
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -269,10 +290,10 @@ set(EXEC_FILES
         )
 
 if (USE_AVX2)
-    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
+    set(EXEC_FILES ${EXEC_FILES_PART1} ./column/avx_numeric_column_test.cpp)
 endif ()
 
-set(STORAGE_EXEC_FILES
+set(EXEC_FILES_PART2
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -407,27 +428,27 @@ set(STORAGE_EXEC_FILES
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
-    list(APPEND STORAGE_EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND STORAGE_EXEC_FILES ./io/cache_input_stream_test.cpp)
+    list(APPEND EXEC_FILES_PART2 ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES_PART2 ./io/cache_input_stream_test.cpp)
 endif ()
 
 if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND STORAGE_EXEC_FILES ./fs/fs_starlet_test.cpp)
-    list(APPEND STORAGE_EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
+    list(APPEND EXEC_FILES_PART2 ./fs/fs_starlet_test.cpp)
+    list(APPEND EXEC_FILES_PART2 ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
-add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
-SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
+add_library(starrocks_test_objs_part1 OBJECT ${EXEC_FILES_PART1})
+SET_TARGET_PROPERTIES(starrocks_test_objs_part1 PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(starrocks_test_part1 test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs_part1>)
 
-add_library(starrocks_storage_test_objs OBJECT ${STORAGE_EXEC_FILES})
-SET_TARGET_PROPERTIES(starrocks_storage_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(starrocks_storage_test test_main.cpp $<TARGET_OBJECTS:starrocks_storage_test_objs>)
+add_library(starrocks_test_objs_part2 OBJECT ${EXEC_FILES_PART2})
+SET_TARGET_PROPERTIES(starrocks_test_objs_part2 PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(starrocks_test_part2 test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs_part2>)
 
-TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
-TARGET_LINK_LIBRARIES(starrocks_storage_test ${TEST_LINK_LIBS})
+TARGET_LINK_LIBRARIES(starrocks_test_part1 ${TEST_LINK_LIBS})
+TARGET_LINK_LIBRARIES(starrocks_test_part2 ${TEST_LINK_LIBS})
 
-add_dependencies(starrocks_storage_test starrocks_test)
+add_dependencies(starrocks_test_part2 starrocks_test_part1)
 
 # =================================================
 # test cases must be compiled as a standalone binary
