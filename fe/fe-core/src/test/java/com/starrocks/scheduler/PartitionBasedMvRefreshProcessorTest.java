@@ -382,11 +382,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         taskRun.executeTaskRun();
     }
 
-    private static void executeInsertSql(ConnectContext ctx, String insertSql) throws Exception {
-        ctx.setQueryId(UUIDUtil.genUUID());
-        new StmtExecutor(ctx, insertSql).execute();
-    }
-
     @Test
     public void testUnionAllMvWithPartition() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
