@@ -49,7 +49,7 @@ displayed_sidebar: "Chinese"
 
 - 数据损坏情况下，建立持久化索引会引起 BE Crash。[#30841](https://github.com/StarRocks/starrocks/pull/30841)
 - ARRAY_DISTINCT 函数偶发 BE Crash。[#36377](https://github.com/StarRocks/starrocks/pull/36377)
-- 启用 DISTINCT 下推窗口算子功能时,  对窗口函数的输出列的复杂表达式进行 SELECT DISTINCT 操作会报错。[#36357](https://github.com/StarRocks/starrocks/pull/36357)
+- 启用 DISTINCT 下推窗口算子功能时，对窗口函数的输出列的复杂表达式进行 SELECT DISTINCT 操作会报错。[#36357](https://github.com/StarRocks/starrocks/pull/36357)
 - 某些兼容 S3 协议的对象存储会返回重复的文件，导致 BE Crash。[#36103](https://github.com/StarRocks/starrocks/pull/36103)
 
 ## 3.2.0
@@ -65,7 +65,7 @@ displayed_sidebar: "Chinese"
 
 #### 物化视图
 
-**异步****物化视图**
+**异步物化视图**
 
 - 物化视图支持 Query Dump。
 - 物化视图的刷新默认开启中间结果落盘，降低刷新的内存消耗。
@@ -90,7 +90,7 @@ displayed_sidebar: "Chinese"
 #### 查询
 
 - 支持 [HTTP SQL API](../reference/HTTP_API/SQL.md)。用户可以通过 HTTP 方式访问 StarRocks 数据，执行 SELECT、SHOW、EXPLAIN 或 KILL 操作。
-- 新增 Runtime Profile，以及基于文本的 Profile 分析指令（SHOW PROFILELIST, ANALYZE PROFILE, EXPLAIN ANALYZE），用户可以通过 MySQL 客户端直接进行 Profile 的分析，方便定位瓶颈点并发现优化机会。
+- 新增 Runtime Profile，以及基于文本的 Profile 分析指令（SHOW PROFILELIST，ANALYZE PROFILE，EXPLAIN ANALYZE），用户可以通过 MySQL 客户端直接进行 Profile 的分析，方便定位瓶颈点并发现优化机会。
 
 #### SQL 语句和函数
 
@@ -137,7 +137,7 @@ displayed_sidebar: "Chinese"
 
 #### 物化视图 
 
-**异步****物化视图**
+**异步物化视图**
 
 - 异步物化视图自动刷新：当创建物化视图涉及的表、视图及视图内涉及的表、物化视图发生 Schema Change 或 Swap 操作后，物化视图可以进行自动刷新
 - 数据一致性：
@@ -222,7 +222,7 @@ displayed_sidebar: "Chinese"
   - 删除 `block_cache_report_stats`。
   - 删除 `block_cache_lru_insertion_point`。
 
-Block Cache 更名为 Data Cache 后，StarRocks 引入一套新的以 `datacache` 为前缀的 BE 参数以取代原有以 `block_cache` 为前缀的参数。升级后，原有参数仍然生效，新参数在启用后将覆盖原有参数。但不支持新老参数混用，否则可能会导致部分配置不生效。未来，StarRocks 计划弃用原有以 `block_cache` 为前缀的参数，所以建议用户使用新的以 `datacache` 为前缀的参数。
+  Block Cache 更名为 Data Cache 后，StarRocks 引入一套新的以 `datacache` 为前缀的 BE 参数以取代原有以 `block_cache` 为前缀的参数。升级后，原有参数仍然生效，新参数在启用后将覆盖原有参数。但不支持新老参数混用，否则可能会导致部分配置不生效。未来，StarRocks 计划弃用原有以 `block_cache` 为前缀的参数，所以建议用户使用新的以 `datacache` 为前缀的参数。
 
 - 新增以下 BE 配置项：
   - `spill_max_dir_bytes_ratio`

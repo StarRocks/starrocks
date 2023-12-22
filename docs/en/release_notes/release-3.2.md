@@ -224,7 +224,7 @@ To be updated.
   - Removed `block_cache_report_stats`.
   - Removed `block_cache_lru_insertion_point`.
 
-After renaming Block Cache to Data Cache, StarRocks has introduced a new set of BE parameters prefixed with `datacache` to replace the original parameters prefixed with `block_cache`. After upgrade to v3.2, the original parameters will still be effective. Once enabled, the new parameters will override the original ones. The mixed usage of new and original parameters is not supported, as it may result in some configurations not taking effect. In the future, StarRocks plans to deprecate the original parameters with the `block_cache` prefix, so we recommend you use the new parameters with the `datacache` prefix.
+  After renaming Block Cache to Data Cache, StarRocks has introduced a new set of BE parameters prefixed with `datacache` to replace the original parameters prefixed with `block_cache`. After upgrade to v3.2, the original parameters will still be effective. Once enabled, the new parameters will override the original ones. The mixed usage of new and original parameters is not supported, as it may result in some configurations not taking effect. In the future, StarRocks plans to deprecate the original parameters with the `block_cache` prefix, so we recommend you use the new parameters with the `datacache` prefix.
 
 - Added the following BE configuration items:
   - `spill_max_dir_bytes_ratio`
