@@ -52,7 +52,7 @@ jobs:
           ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
-            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author}
+            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 
@@ -100,6 +100,17 @@ jobs:
             echo "::error::Backport PR title is not valid. It should end with '(backport #[0-9]+)'"
             exit 1
           fi
+
+      - name: update body
+        if: >
+          github.base_ref != 'main' && github.event.action != 'opened' &&
+          !contains(github.event.pull_request.title, 'Revert') &&
+          !contains(toJson(github.event.pull_request.body), '[x] This is a backport pr') &&
+          !contains(toJson(github.event.pull_request.body), '[ ] This is a backport pr')
+
+        run: |
+          echo "::error::Branch PR does not contain the backport option!"
+          exit 1
 
   backport-check:
     needs: title-check

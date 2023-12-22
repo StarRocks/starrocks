@@ -141,3 +141,50 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
+<<<<<<< HEAD
+=======
+
+  clean_ci_workflow:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.merged != true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: cancel
+        run: |
+          if [[ "${BRANCH}" == "main" ]]; then
+            yaml=ci-pipeline.yml
+          else
+            yaml=ci-pipeline-branch.yml
+          fi
+          
+          gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
+
+  update_backport_merged_msg:
+    runs-on: ubuntu-latest
+    if: >
+      github.base_ref != 'main' && github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.title, '(backport #' &&
+      !contains(github.event.pull_request.labels.*.name, 'sync')
+    env:
+      LABEL: ${{ github.base_ref }}-merged
+    steps:
+      - name: prepare label
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          gh label create ${LABEL} -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
+
+      - name: commit_sha
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
+          gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${BRANCH}-merged"
+          
+>>>>>>> 1507714d3f ([Tool] Add merged label when backport pr merged (#37571))
