@@ -19,6 +19,7 @@
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -178,6 +179,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipeFiles>();
     case TSchemaTableType::SCH_PIPES:
         return std::make_unique<SchemaTablePipes>();
+    case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
+        return std::make_unique<SchemaBeDataCacheMetricsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
