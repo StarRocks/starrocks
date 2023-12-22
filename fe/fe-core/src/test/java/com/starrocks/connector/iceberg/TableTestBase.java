@@ -40,11 +40,17 @@ public class TableTestBase {
     public static final Schema SCHEMA =
             new Schema(required(3, "id", Types.IntegerType.get()), required(4, "data", Types.StringType.get()));
 
+    public static final Schema SCHEMA_B =
+            new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "k2", Types.IntegerType.get()));
+
     protected static final int BUCKETS_NUMBER = 16;
 
     // Partition spec used to create tables
     protected static final PartitionSpec SPEC =
             PartitionSpec.builderFor(SCHEMA).bucket("data", BUCKETS_NUMBER).build();
+    protected static final PartitionSpec SPEC_B =
+            PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+    protected static final PartitionSpec SPEC_B_1 = PartitionSpec.builderFor(SCHEMA_B).build();
 
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC)
@@ -54,6 +60,28 @@ public class TableTestBase {
                     .withRecordCount(2)
                     .build();
 
+    public static final DataFile FILE_B_1 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b1.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=2")
+                    .withRecordCount(3)
+                    .build();
+
+    public static final DataFile FILE_B_2 =
+            DataFiles.builder(SPEC_B)
+                    .withPath("/path/to/data-b2.parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartitionPath("k2=3")
+                    .withRecordCount(4)
+                    .build();
+
+    public static final DataFile FILE_B_5 = DataFiles.builder(SPEC_B)
+            .withPath("/path/to/data-b5.parquet")
+            .withFileSizeInBytes(20)
+            .withRecordCount(4)
+            .build();
+
     static final FileIO FILE_IO = new TestTables.LocalFileIO();
 
     @Rule
@@ -61,7 +89,11 @@ public class TableTestBase {
 
     protected File tableDir = null;
     protected File metadataDir = null;
+
     public TestTables.TestTable table = null;
+    public TestTables.TestTable mockedNativeTableB = null;
+    public TestTables.TestTable mockedNativeTableG = null;
+
     protected final int formatVersion = 1;
 
     @Before
@@ -70,7 +102,9 @@ public class TableTestBase {
         tableDir.delete(); // created by table create
 
         this.metadataDir = new File(tableDir, "metadata");
-        this.table = create(SCHEMA, SPEC);
+        this.table = create(SCHEMA, SPEC, "test");
+        this.mockedNativeTableB = create(SCHEMA_B, SPEC_B, "tb");
+        this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg");
     }
 
     @After
@@ -78,8 +112,8 @@ public class TableTestBase {
         TestTables.clearTables();
     }
 
-    protected TestTables.TestTable create(Schema schema, PartitionSpec spec) {
-        return TestTables.create(tableDir, "test", schema, spec, formatVersion);
+    protected TestTables.TestTable create(Schema schema, PartitionSpec spec, String tableName) {
+        return TestTables.create(tableDir, tableName, schema, spec, formatVersion);
     }
 
     ManifestFile writeManifest(DataFile... files) throws IOException {
