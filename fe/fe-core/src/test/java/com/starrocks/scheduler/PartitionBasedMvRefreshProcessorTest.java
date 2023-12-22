@@ -1652,7 +1652,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
-        mockedJDBCMetadata.initPartitions();
+        mockedJDBCMetadata.addPartitions();
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv5"));
@@ -1668,9 +1668,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
 
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
-                        "p20230802_20230803", "p20230803_20230804"),
-                partitions);
+        Assert.assertEquals(ImmutableList.of("p20230801_20230802", "p20230802_20230803", "p20230803_20230804",
+                        "p20230804_20230805"), partitions);
     }
 
     @Test
