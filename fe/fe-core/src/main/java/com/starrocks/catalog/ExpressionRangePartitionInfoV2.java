@@ -110,9 +110,9 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             }
 
             try {
-                PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
                 // The current expression partition only supports 1 column
                 slotRef.setType(sourcePartitionTypes.get(0));
+                PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             } catch (Throwable ex) {
                 LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
             }
@@ -158,7 +158,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         List<String> partitionExprDesc = Lists.newArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr instanceof CastExpr) {
-                if (canSimplifyCast(partitionExpr)) {
+                if (isTimestampFunction(partitionExpr)) {
                     partitionExprDesc.add(partitionExpr.getChild(0).toSql());
                 }
             } else {
@@ -211,7 +211,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return sb.toString();
     }
 
-    private boolean canSimplifyCast(Expr partitionExpr) {
+    public static boolean isTimestampFunction(Expr partitionExpr) {
         if (partitionExpr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) partitionExpr;
             if (!castExpr.getChildren().isEmpty()) {
