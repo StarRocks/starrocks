@@ -141,8 +141,6 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
-<<<<<<< HEAD
-=======
 
   clean_ci_workflow:
     runs-on: ubuntu-latest
@@ -187,4 +185,3 @@ jobs:
           ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${BRANCH}-merged"
           
->>>>>>> 1507714d3f ([Tool] Add merged label when backport pr merged (#37571))
