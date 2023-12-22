@@ -193,6 +193,7 @@ public class OptimizerTraceUtil {
             LOG.info("[MV TRACE] [REWRITE {} {}] {}",
                     optimizerContext.getTraceInfo().getQueryId(),
                     rule.type().name(),
+<<<<<<< HEAD
                     String.format(format, object));
         }
 
@@ -202,6 +203,12 @@ public class OptimizerTraceUtil {
             FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
             tracer.log(String.format("[%s] %s", rule.type().name(), ft.getMessage()));
         }
+=======
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
+        });
+>>>>>>> 9c0cfa7534 ([BugFix] Compensate extra predicates after union all pull up rewrite (backport #37085) (#37378))
     }
 
     private static void log(ConnectContext ctx, String message) {
