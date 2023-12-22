@@ -112,9 +112,13 @@ public class Utils {
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds,
                                       long baseVersion, long newVersion, long commitTimeInSecond,
-                                      Map<Long, Double> compactionScores, long workerGroupId)
+                                      Map<Long, Double> compactionScores, long workerGroupId,
+                                      Map<ComputeNode, List<Long>> nodeToTablets)
             throws NoAliveBackendException, RpcException {
-        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        if (nodeToTablets == null) {
+            nodeToTablets = new HashMap<>();
+        }
+
         for (Tablet tablet : tablets) {
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet, workerGroupId);
             if (node == null) {
@@ -162,7 +166,7 @@ public class Utils {
                                       long commitTimeInSecond, Map<Long, Double> compactionScores, long workerGroupId)
             throws NoAliveBackendException, RpcException {
         List<Long> txnIds = Lists.newArrayList(txnId);
-        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores, workerGroupId);
+        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores, workerGroupId, null);
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version, long workerGroupId)

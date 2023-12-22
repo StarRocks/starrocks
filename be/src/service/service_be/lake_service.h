@@ -43,6 +43,10 @@ public:
                        const ::starrocks::lake::DeleteTabletRequest* request,
                        ::starrocks::lake::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
 
+    void delete_txn_log(::google::protobuf::RpcController* controller,
+                        const ::starrocks::lake::DeleteTxnLogRequest* request,
+                        ::starrocks::lake::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) override;
+
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* request,
                  ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
 

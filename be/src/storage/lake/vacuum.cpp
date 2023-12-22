@@ -594,4 +594,24 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     st.to_protobuf(response->mutable_status());
 }
 
+void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(request.tablet_ids_size() > 0);
+    DCHECK(response != nullptr);
+
+    std::vector<std::string> files_to_delete;
+    files_to_delete.reserve(request.tablet_ids_size() * request.txn_ids_size());
+
+    for (auto tablet_id : request.tablet_ids()) {
+        for (auto txn_id : request.txn_ids()) {
+            auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            files_to_delete.emplace_back(log_path);
+
+            tablet_mgr->metacache()->erase(log_path);
+        }
+    }
+
+    delete_files_async(files_to_delete);
+}
+
 } // namespace starrocks::lake
