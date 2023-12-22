@@ -3,6 +3,7 @@
 package com.starrocks.epack.sql.parser;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -70,9 +71,11 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
+import org.antlr.v4.runtime.ParserRuleContext;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -83,6 +86,10 @@ public class AstBuilderEPack extends AstBuilder {
 
     public AstBuilderEPack(long sqlMode) {
         super(sqlMode);
+    }
+
+    public AstBuilderEPack(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+        super(sqlMode, hintMap);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
