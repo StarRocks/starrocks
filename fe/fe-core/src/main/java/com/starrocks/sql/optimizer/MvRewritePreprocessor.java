@@ -218,12 +218,12 @@ public class MvRewritePreprocessor {
             OptExpression clonePlan = MvUtils.cloneExpression(logicalTree);
             OptExpression optimizedViewPlan = optimizeViewPlan(
                     clonePlan, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
+            viewScanOperator.setOriginalPlan(optimizedViewPlan);
+            viewScans.add(viewScanOperator);
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
             builder.setProjection(null);
-            builder.setOriginalPlan(optimizedViewPlan);
             LogicalViewScanOperator clone = builder.build();
-            viewScans.add(clone);
             OptExpression viewScanExpr = OptExpression.create(clone);
             // should add a projection to make predicate pushdown rules work right
             Projection projection = viewScanOperator.getProjection();

@@ -448,14 +448,16 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
-        if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
-            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        }
-
+        // try view based mv rewrite first,
+        // then try normal mv rewrite rules
         if (isEnableSingleViewMvRewrite()) {
             // view based mv rewrite for single view
             viewBasedMvRuleRewrite(tree, rootTaskContext);
+        }
+
+        if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
@@ -513,9 +515,7 @@ public class Optimizer {
                 && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && !context.getCandidateMvs().isEmpty()
                 && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable)
-                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite()
-                && Collections.disjoint(
-                        context.getAppliedMvRules(), RuleSet.getRewriteRulesByType(RuleSetType.SINGLE_TABLE_MV_REWRITE));
+                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite();
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,

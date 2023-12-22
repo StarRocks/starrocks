@@ -46,7 +46,6 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         if (expressions == null || expressions.isEmpty()) {
             return Lists.newArrayList();
         } else {
-            context.addAppliedRule(this);
             if (expressions.size() == 1) {
                 return expressions;
             }

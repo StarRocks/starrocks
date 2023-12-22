@@ -54,7 +54,6 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
     private final List<MaterializationContext> candidateMvs;
-    private final List<Rule> appliedMvRules;
 
     private Set<OlapTable>  queryTables;
 
@@ -81,7 +80,6 @@ public class OptimizerContext {
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
-        this.appliedMvRules = Lists.newArrayList();
     }
 
     @VisibleForTesting
@@ -106,7 +104,6 @@ public class OptimizerContext {
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
         this.candidateMvs = Lists.newArrayList();
-        this.appliedMvRules = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -260,13 +257,5 @@ public class OptimizerContext {
 
     public List<LogicalViewScanOperator> getViewPlanMap() {
         return viewScans;
-    }
-
-    public void addAppliedRule(Rule rule) {
-        appliedMvRules.add(rule);
-    }
-
-    public List<Rule> getAppliedMvRules() {
-        return appliedMvRules;
     }
 }
