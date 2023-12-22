@@ -164,7 +164,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
                 .collect(Collectors.toList());
 
-        // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order
+        int singleDistinctFunctionColumnId = aggregate.getSingleDistinctFunctionColumnId();
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newLinkedHashMap();
         for (ColumnRefOperator aggRef : aggregate.getAggregations().keySet()) {
             CallOperator aggFn = aggregate.getAggregations().get(aggRef);
@@ -173,11 +173,16 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 continue;
             }
 
+
             // merge stage is different from update stage
             if (FunctionSet.MAX.equals(aggFn.getFnName()) || FunctionSet.MIN.equals(aggFn.getFnName())) {
                 ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
                 aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
                 inputStringRefs.union(aggRef.getId());
+
+                if (singleDistinctFunctionColumnId == aggRef.getId()) {
+                    singleDistinctFunctionColumnId = newAggRef.getId();
+                }
             } else {
                 aggregations.put(aggRef, context.stringExprToDictExprMap.get(aggFn).cast());
             }
@@ -187,7 +192,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Projection projection = rewriteProjection(aggregate.getProjection(), inputStringRefs);
         PhysicalHashAggregateOperator op =
                 new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
-                        aggregate.getSingleDistinctFunctionPos(), aggregate.isSplit(), aggregate.getLimit(), predicate,
+                        singleDistinctFunctionColumnId, aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }

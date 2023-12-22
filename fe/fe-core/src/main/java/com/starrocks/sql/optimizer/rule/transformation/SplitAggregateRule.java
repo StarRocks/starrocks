@@ -51,6 +51,7 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -199,15 +200,18 @@ public class SplitAggregateRule extends TransformationRule {
         checkDistinctAgg(distinctAggCallOperator);
 
         // Get distinct columns and position in all aggregate functions
-        List<ColumnRefOperator> distinctColumns = Lists.newArrayList();
-        int singleDistinctFunctionPos = -1;
-        for (Map.Entry<ColumnRefOperator, CallOperator> kv : operator.getAggregations().entrySet()) {
-            singleDistinctFunctionPos++;
-            if (kv.getValue().isDistinct()) {
-                distinctColumns = kv.getValue().getUsedColumns().getStream().
-                        map(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
-                break;
-            }
+        int singleDistinctFunctionColumnId = -1;
+        List<ColumnRefOperator> distinctColumns = Collections.emptyList();
+        List<ColumnRefOperator> distinctRefs = operator.getAggregations().entrySet().stream()
+                .filter(entry -> entry.getValue().isDistinct()).map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        if (!distinctRefs.isEmpty()) {
+            Preconditions.checkState(distinctRefs.size() == 1);
+            ColumnRefOperator distinctRef = distinctRefs.get(0);
+            singleDistinctFunctionColumnId = distinctRef.getId();
+
+            distinctColumns = operator.getAggregations().get(distinctRef).getUsedColumns()
+                    .getColumnRefOperators(context.getColumnRefFactory());
         }
 
         // if two stage agg is suitable, transform it to two stage agg
@@ -218,15 +222,15 @@ public class SplitAggregateRule extends TransformationRule {
         if (!operator.getGroupingKeys().isEmpty()) {
             if (isGroupByAllConstant(input, operator)) {
                 return implementOneDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
-                        input, operator, distinctColumns, singleDistinctFunctionPos,
+                        input, operator, distinctColumns, singleDistinctFunctionColumnId,
                         operator.getGroupingKeys());
             } else {
                 return implementOneDistinctWithGroupByAgg(context.getColumnRefFactory(), input, operator,
-                        singleDistinctFunctionPos);
+                        singleDistinctFunctionColumnId);
             }
         } else {
             return implementOneDistinctWithoutGroupByAgg(context.getColumnRefFactory(),
-                    input, operator, distinctColumns, singleDistinctFunctionPos);
+                    input, operator, distinctColumns, singleDistinctFunctionColumnId);
         }
     }
 
@@ -329,8 +333,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.GLOBAL)
                 .setAggregations(createNormalAgg(AggType.GLOBAL, newAggMap))
                 .setSplit()
-                // we have split the agg to two phase, hence clear the distinct pos
-                .setSingleDistinctFunctionPos(-1)
+                // we have split the agg to two phase, hence clear the distinct function id
+                .setSingleDistinctFunctionColumnId(-1)
                 .build();
         OptExpression globalOptExpression = OptExpression.create(global, localOptExpression);
 
@@ -343,7 +347,7 @@ public class SplitAggregateRule extends TransformationRule {
             ColumnRefFactory columnRefFactory,
             OptExpression input,
             LogicalAggregationOperator oldAgg,
-            int singleDistinctFunctionPos) {
+            int singleDistinctFunctionColumnId) {
 
         LogicalAggregationOperator local = createDistinctAggForFirstPhase(
                 columnRefFactory,
@@ -372,7 +376,7 @@ public class SplitAggregateRule extends TransformationRule {
         LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder().withOperator(oldAgg)
                 .setType(AggType.GLOBAL)
                 .setAggregations(createDistinctAggForSecondPhase(AggType.GLOBAL, oldAgg.getAggregations()))
-                .setSingleDistinctFunctionPos(singleDistinctFunctionPos);
+                .setSingleDistinctFunctionColumnId(singleDistinctFunctionColumnId);
         if (!shouldFurtherSplit) {
             // set isSplit = true to avoid split the global agg
             aggBuilder.setSplit();
@@ -389,7 +393,7 @@ public class SplitAggregateRule extends TransformationRule {
             OptExpression input,
             LogicalAggregationOperator oldAgg,
             List<ColumnRefOperator> distinctAggColumns,
-            int singleDistinctFunctionPos,
+            int singleDistinctFunctionColumnId,
             List<ColumnRefOperator> groupByColumns) {
         List<ColumnRefOperator> partitionColumns = distinctAggColumns;
 
@@ -428,7 +432,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setAggregations(createDistinctAggForSecondPhase(AggType.DISTINCT_LOCAL, oldAgg.getAggregations()))
                 .setGroupingKeys(groupByColumns)
                 .setPartitionByColumns(partitionColumns)
-                .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
+                .setSingleDistinctFunctionColumnId(singleDistinctFunctionColumnId)
                 .setPredicate(null)
                 .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
@@ -467,13 +471,11 @@ public class SplitAggregateRule extends TransformationRule {
             OptExpression input,
             LogicalAggregationOperator oldAgg,
             List<ColumnRefOperator> distinctAggColumns,
-            int singleDistinctFunctionPos) {
-        List<ColumnRefOperator> partitionColumns = distinctAggColumns;
-
+            int singleDistinctFunctionColumnId) {
         LogicalAggregationOperator local = createDistinctAggForFirstPhase(
                 columnRefFactory,
                 Lists.newArrayList(), oldAgg.getAggregations(), AggType.LOCAL);
-        local.setPartitionByColumns(partitionColumns);
+        local.setPartitionByColumns(distinctAggColumns);
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
 
         LogicalAggregationOperator distinctGlobal = createDistinctAggForFirstPhase(
@@ -486,8 +488,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.DISTINCT_LOCAL)
                 .setAggregations(createDistinctAggForSecondPhase(AggType.DISTINCT_LOCAL, oldAgg.getAggregations()))
                 .setGroupingKeys(Lists.newArrayList())
-                .setPartitionByColumns(partitionColumns)
-                .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
+                .setPartitionByColumns(distinctAggColumns)
+                .setSingleDistinctFunctionColumnId(singleDistinctFunctionColumnId)
                 .setPredicate(null)
                 .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)

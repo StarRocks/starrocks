@@ -53,7 +53,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
 
-    // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order, but the order is not fixed
     // When generate plan fragment, we need this info.
     // For select count(distinct id_bigint), sum(id_int) from test_basic;
     // In the distinct local (update serialize) agg stage:
@@ -61,8 +60,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     //|   |  output: count(<slot 13>), sum(<slot 16>)                                         |
     //|   |  group by:                                                                        |
     // count function is update function, but sum is merge function
-    // if singleDistinctFunctionPos is -1, means no single distinct function
-    private final int singleDistinctFunctionPos;
+    // if singleDistinctFunctionColumnId is -1, means no single distinct function
+    private final int singleDistinctFunctionColumnId;
 
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
@@ -81,7 +80,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
                                          Map<ColumnRefOperator, CallOperator> aggregations,
-                                         int singleDistinctFunctionPos,
+                                         int singleDistinctFunctionColumnId,
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
@@ -91,7 +90,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.groupBys = groupBys;
         this.partitionByColumns = partitionByColumns;
         this.aggregations = aggregations;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
+        this.singleDistinctFunctionColumnId = singleDistinctFunctionColumnId;
         this.isSplit = isSplit;
         this.limit = limit;
         this.predicate = predicate;
@@ -133,11 +132,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     }
 
     public boolean hasSingleDistinct() {
-        return singleDistinctFunctionPos > -1;
+        return singleDistinctFunctionColumnId > -1;
     }
 
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
+    public int getSingleDistinctFunctionColumnId() {
+        return singleDistinctFunctionColumnId;
     }
 
     public boolean isSplit() {

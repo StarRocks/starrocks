@@ -626,6 +626,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             final List<Map.Entry<ColumnRefOperator, CallOperator>> newAggMapEntry = Lists.newArrayList();
 
+            int singleDistinctFunctionColumnId = aggOperator.getSingleDistinctFunctionColumnId();
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
                 boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
                         (PhysicalHashAggregateOperator.COULD_APPLY_LOW_CARD_AGGREGATE_FUNCTION.contains(
@@ -695,6 +696,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                         oldCall.isDistinct());
 
                         newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
+                        if (kv.getKey().getId() == singleDistinctFunctionColumnId) {
+                            singleDistinctFunctionColumnId = outputColumn.getId();
+                        }
                     } else {
                         newAggMapEntry.add(kv);
                     }
@@ -742,7 +746,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
             final PhysicalHashAggregateOperator newHashAggregator =
                     new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            singleDistinctFunctionColumnId, aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());

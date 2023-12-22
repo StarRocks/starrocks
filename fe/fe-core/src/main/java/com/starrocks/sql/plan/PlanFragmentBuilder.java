@@ -1685,7 +1685,7 @@ public class PlanFragmentBuilder {
                 Map<ColumnRefOperator, CallOperator> aggregations,
                 List<ColumnRefOperator> groupBys,
                 List<ColumnRefOperator> partitionBys,
-                TupleDescriptor outputTupleDesc,
+                int singleDistinctFunctionColumnId, TupleDescriptor outputTupleDesc,
                 ExecPlan context) {
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
             // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
@@ -1734,6 +1734,13 @@ public class PlanFragmentBuilder {
                 intermediateSlotDesc.setIsMaterialized(true);
                 SlotRef intermediateSlotRef = new SlotRef(aggregation.getKey().toString(), intermediateSlotDesc);
                 intermediateAggrExprs.add(intermediateSlotRef);
+
+                // set merge agg fn for single distinct function
+                // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
+                // sum function is update function, but count is merge function
+                if (aggregation.getKey().getId() == singleDistinctFunctionColumnId) {
+                    aggExpr.setMergeAggFn();
+                }
             }
 
             ArrayList<Expr> partitionExpressions = Lists.newArrayList();
@@ -1770,8 +1777,8 @@ public class PlanFragmentBuilder {
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
 
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
-            AggregateExprInfo aggExpr =
-                    buildAggregateTuple(aggregations, groupBys, partitionBys, outputTupleDesc, context);
+            AggregateExprInfo aggExpr = buildAggregateTuple(aggregations, groupBys, partitionBys,
+                    node.getSingleDistinctFunctionColumnId(), outputTupleDesc, context);
             ArrayList<Expr> groupingExpressions = aggExpr.groupExpr;
             ArrayList<FunctionCallExpr> aggregateExprList = aggExpr.aggregateExpr;
             ArrayList<Expr> partitionExpressions = aggExpr.partitionExpr;
@@ -1779,9 +1786,6 @@ public class PlanFragmentBuilder {
 
             AggregationNode aggregationNode;
             if (node.getType().isLocal() && node.isSplit()) {
-                if (node.hasSingleDistinct()) {
-                    setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
-                }
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1805,7 +1809,6 @@ public class PlanFragmentBuilder {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
                 // output type match other node, so must use `update finalized` phase
                 if (node.hasSingleDistinct()) {
-                    setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
                     AggregateInfo aggInfo = AggregateInfo.create(
                             groupingExpressions,
                             aggregateExprList,
@@ -1869,7 +1872,6 @@ public class PlanFragmentBuilder {
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
                 // count function is update function, but sum is merge function
-                setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1961,16 +1963,6 @@ public class PlanFragmentBuilder {
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);
-            }
-        }
-
-        // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
-        // sum function is update function, but count is merge function
-        private void setMergeAggFn(List<FunctionCallExpr> aggregateExprList, int singleDistinctFunctionPos) {
-            for (int i = 0; i < aggregateExprList.size(); i++) {
-                if (i != singleDistinctFunctionPos) {
-                    aggregateExprList.get(i).setMergeAggFn();
-                }
             }
         }
 
@@ -3176,8 +3168,8 @@ public class PlanFragmentBuilder {
             PhysicalStreamAggOperator node = (PhysicalStreamAggOperator) optExpr.getOp();
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
-            AggregateExprInfo aggExpr =
-                    buildAggregateTuple(node.getAggregations(), node.getGroupBys(), null, outputTupleDesc, context);
+            AggregateExprInfo aggExpr = buildAggregateTuple(node.getAggregations(), node.getGroupBys(), null, -1,
+                    outputTupleDesc, context);
 
             // TODO(murphy) refine the aggregate info
             AggregateInfo aggInfo =

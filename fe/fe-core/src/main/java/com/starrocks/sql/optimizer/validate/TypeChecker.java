@@ -87,7 +87,7 @@ public class TypeChecker implements PlanValidator.Checker {
         public Void visitLogicalAggregate(OptExpression optExpression, Void context) {
             LogicalAggregationOperator operator = (LogicalAggregationOperator) optExpression.getOp();
             checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(),
-                    operator.getSingleDistinctFunctionPos());
+                    operator.getSingleDistinctFunctionColumnId());
             visit(optExpression, context);
             return null;
         }
@@ -105,7 +105,7 @@ public class TypeChecker implements PlanValidator.Checker {
         public Void visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) optExpression.getOp();
             checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(),
-                    operator.getSingleDistinctFunctionPos());
+                    operator.getSingleDistinctFunctionColumnId());
             visit(optExpression, context);
             return null;
         }
@@ -148,26 +148,24 @@ public class TypeChecker implements PlanValidator.Checker {
 
 
         private void checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations, AggType aggType, boolean isSplit,
-                                  int singleDistinctFunctionPos) {
-            int index = -1;
-            boolean hasSingleDistinct = singleDistinctFunctionPos != - 1;
+                                  int singleDistinctFunctionColumnId) {
+            boolean hasSingleDistinct = singleDistinctFunctionColumnId != - 1;
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
-                index++;
                 ColumnRefOperator outputCol = entry.getKey();
                 CallOperator aggCall = entry.getValue();
                 boolean isMergeAggFn = false;
                 switch (aggType) {
                     case LOCAL:
-                        isMergeAggFn = isSplit && hasSingleDistinct && (index != singleDistinctFunctionPos);
+                        isMergeAggFn = isSplit && hasSingleDistinct && (entry.getKey().getId() != singleDistinctFunctionColumnId);
                         break;
                     case GLOBAL:
-                        isMergeAggFn = isSplit && (!hasSingleDistinct || index != singleDistinctFunctionPos);
+                        isMergeAggFn = isSplit && (!hasSingleDistinct || entry.getKey().getId() != singleDistinctFunctionColumnId);
                         break;
                     case DISTINCT_GLOBAL:
                         isMergeAggFn = true;
                         break;
                     case DISTINCT_LOCAL:
-                        isMergeAggFn = index != singleDistinctFunctionPos;
+                        isMergeAggFn = entry.getKey().getId() != singleDistinctFunctionColumnId;
                 }
 
                 if (aggType.isGlobal()) {
