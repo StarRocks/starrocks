@@ -1022,6 +1022,10 @@ alterClause
     | alterLoadErrorUrlClause
     | createImageClause
     | cleanTabletSchedQClause
+    | decommissionDiskClause
+    | cancelDecommissionDiskClause
+    | disableDiskClause
+    | cancelDisableDiskClause
 
     //Alter table clause
     | createIndexClause
@@ -1108,6 +1112,22 @@ createImageClause
 
 cleanTabletSchedQClause
     : CLEAN TABLET SCHEDULER QUEUE
+    ;
+
+decommissionDiskClause
+    : DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDecommissionDiskClause
+    : CANCEL DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+disableDiskClause
+    : DISABLE DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDisableDiskClause
+    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------
@@ -2869,7 +2889,7 @@ nonReserved
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILOVER | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

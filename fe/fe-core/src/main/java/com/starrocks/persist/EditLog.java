@@ -504,6 +504,11 @@ public class EditLog {
                     globalStateMgr.replayDeleteReplica(info);
                     break;
                 }
+                case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.replayBatchDeleteReplica(info);
+                    break;
+                }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
@@ -1257,6 +1262,26 @@ public class EditLog {
                     globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
                 case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
@@ -1287,7 +1312,8 @@ public class EditLog {
                 }
                 case OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP: {
                     UpdateFailoverGroupLog updateFailoverGroupLog = (UpdateFailoverGroupLog) journal.getData();
-                    globalStateMgr.getFailoverGroupMgr().replayUpdateFailoverGroup(updateFailoverGroupLog.getFailoverGroup());
+                    globalStateMgr.getFailoverGroupMgr()
+                            .replayUpdateFailoverGroup(updateFailoverGroupLog.getFailoverGroup());
                     break;
                 }
                 default: {
@@ -1632,6 +1658,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DELETE_REPLICA, info);
         }
+    }
+
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA_BATCH, info);
     }
 
     public void logTimestamp(Timestamp stamp) {
@@ -2431,5 +2461,21 @@ public class EditLog {
 
     public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
         logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 }

@@ -91,7 +91,7 @@ public class DataProperty implements Writable {
         for (Backend backend : backends) {
             if (backend.hasPathHash()) {
                 mediumSet.addAll(backend.getDisks().values().stream()
-                        .filter(v -> v.getState() == DiskInfo.DiskState.ONLINE)
+                        .filter(DiskInfo::canCreateTablet)
                         .map(DiskInfo::getStorageMedium).collect(Collectors.toSet()));
             }
         }

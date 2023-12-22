@@ -49,7 +49,14 @@ import java.io.IOException;
 public class DiskInfo implements Writable {
     public enum DiskState {
         ONLINE,
-        OFFLINE
+        // Reported from BE, if disk is detected as unavailable, state will be OFFLINE.
+        // Tablets on OFFLINE disk will be dropped.
+        OFFLINE,
+        // Set by user, tablets on DISABLED disk will be dropped.
+        DISABLED,
+        // Set by user, tablets on DECOMMISSIONED disk will be cloned to other backends.
+        // Before the decommission finish, the disk is still usable, i.e. can provide read and write capability.
+        DECOMMISSIONED
     }
 
     private static final Logger LOG = LogManager.getLogger(DiskInfo.class);
@@ -127,6 +134,14 @@ public class DiskInfo implements Writable {
 
     public DiskState getState() {
         return state;
+    }
+
+    public boolean canReadWrite() {
+        return state == DiskState.ONLINE || state == DiskState.DECOMMISSIONED;
+    }
+
+    public boolean canCreateTablet() {
+        return state == DiskState.ONLINE;
     }
 
     // return true if changed

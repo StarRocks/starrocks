@@ -37,7 +37,6 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
@@ -61,7 +60,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class BackendLoadStatistic {
@@ -222,7 +220,7 @@ public class BackendLoadStatistic {
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
         for (RootPathLoadStatistic pathStat : pathStats) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
                 continue;
             }
 
@@ -320,6 +318,10 @@ public class BackendLoadStatistic {
         long totalCapacity = 0;
         long totalUsedCapacity = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                continue;
+            }
+
             if (pathStat.getStorageMedium() == medium) {
                 totalCapacity += pathStat.getCapacityB();
                 totalUsedCapacity += pathStat.getUsedCapacityB();
@@ -332,6 +334,11 @@ public class BackendLoadStatistic {
         int highCounter = 0;
         for (RootPathLoadStatistic pathStat : pathStatistics) {
             if (pathStat.getStorageMedium() != medium) {
+                continue;
+            }
+
+            if (pathStat.getDiskState() != DiskState.ONLINE) {
+                pathStat.setClazz(Classification.MID);
                 continue;
             }
 
@@ -433,56 +440,6 @@ public class BackendLoadStatistic {
         return status;
     }
 
-    public boolean hasAvailDisk() {
-        for (RootPathLoadStatistic rootPathLoadStatistic : pathStatistics) {
-            if (rootPathLoadStatistic.getDiskState() == DiskState.ONLINE) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Classify the paths into 'low', 'mid' and 'high',
-     * and skip offline path, and path with different storage medium
-     */
-    public void getPathStatisticByClass(
-            Set<Long> low, Set<Long> mid, Set<Long> high, TStorageMedium storageMedium) {
-
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == Classification.LOW) {
-                low.add(pathStat.getPathHash());
-            } else if (pathStat.getClazz() == Classification.HIGH) {
-                high.add(pathStat.getPathHash());
-            } else {
-                mid.add(pathStat.getPathHash());
-            }
-        }
-
-        LOG.debug("after adjust, backend {}, medium: {}, path classification low/mid/high: {}/{}/{}",
-                beId, storageMedium, low.size(), mid.size(), high.size());
-    }
-
-    public Set<Long> getPathStatisticForMIDAndClazz(Classification clazz, TStorageMedium storageMedium) {
-        Set<Long> paths = Sets.newHashSet();
-        for (RootPathLoadStatistic pathStat : pathStatistics) {
-            if (pathStat.getDiskState() == DiskState.OFFLINE
-                    || (storageMedium != null && pathStat.getStorageMedium() != storageMedium)) {
-                continue;
-            }
-
-            if (pathStat.getClazz() == clazz || pathStat.getClazz() == Classification.MID) {
-                paths.add(pathStat.getPathHash());
-            }
-        }
-        return paths;
-    }
-
     public List<RootPathLoadStatistic> getPathStatistics() {
         return pathStatistics;
     }
@@ -495,11 +452,6 @@ public class BackendLoadStatistic {
         Optional<RootPathLoadStatistic> pathStat = pathStatistics.stream().filter(
                 p -> p.getPathHash() == pathHash).findFirst();
         return pathStat.isPresent() ? pathStat.get() : null;
-    }
-
-    public long getAvailPathNum(TStorageMedium medium) {
-        return pathStatistics.stream().filter(
-                p -> p.getDiskState() == DiskState.ONLINE && p.getStorageMedium() == medium).count();
     }
 
     public boolean hasMedium(TStorageMedium medium) {
