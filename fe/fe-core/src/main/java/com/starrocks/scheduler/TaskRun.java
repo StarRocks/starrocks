@@ -201,8 +201,10 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.resetSessionVariable();
         if (MapUtils.isNotEmpty(properties)) {
             // handle warehouse alone, because warehouseId is saved in properties rather than warehouseName
-            runCtx.setCurrentWarehouseId(
-                    Long.valueOf(properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)));
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)) {
+                runCtx.setCurrentWarehouseId(
+                        Long.valueOf(properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)));
+            }
 
             for (String key : properties.keySet()) {
                 try {
