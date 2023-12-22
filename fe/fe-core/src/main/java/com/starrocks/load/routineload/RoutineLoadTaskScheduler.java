@@ -84,7 +84,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private final ExecutorService threadPool = Executors.newCachedThreadPool();
 
     private long lastBackendSlotUpdateTime = -1;
 
