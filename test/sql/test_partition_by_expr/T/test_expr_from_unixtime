@@ -52,6 +52,9 @@ CREATE TABLE partition_unixtime_ms (
 )
 PARTITION BY RANGE(from_unixtime_ms(create_time))(
 START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
 );
 insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
 select * from partition_unixtime_ms;
