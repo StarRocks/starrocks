@@ -164,17 +164,21 @@ At this point you have StarRocks running, and you have MinIO running. The MinIO 
 This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
 
 ```plaintext
+#highlight-start
 # enable shared data, set storage type, set endpoint
 run_mode = shared_data
+#highlight-end
 cloud_native_storage_type = S3
 aws_s3_endpoint = minio:9000
 
 # set the path in MinIO
 aws_s3_path = starrocks
 
+#highlight-start
 # credentials for MinIO object read/write
 aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
 aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+#highlight-end
 aws_s3_use_instance_profile = false
 aws_s3_use_aws_sdk_default_behavior = false
 
