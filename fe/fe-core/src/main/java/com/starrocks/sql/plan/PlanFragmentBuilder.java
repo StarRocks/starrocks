@@ -2000,6 +2000,9 @@ public class PlanFragmentBuilder {
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
+            } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(distribution.getDistributionSpec().getType())) {
+                exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
+                dataPartition = DataPartition.RANDOM;
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
                         + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);
