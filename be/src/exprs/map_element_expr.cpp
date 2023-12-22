@@ -19,6 +19,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "types/logical_type.h"
@@ -56,7 +57,13 @@ public:
         auto& map_values = down_cast<MapColumn*>(map_column)->values_column();
         const auto& offsets = down_cast<MapColumn*>(map_column)->offsets().get_data();
 
-        size_t num_rows = map_is_const && key_is_const ? 1 : chunk->num_rows();
+        size_t num_rows = 0;
+        if (UNLIKELY(chunk == nullptr)) {
+            // in test case
+            num_rows = std::max(map_col->size(), key_col->size());
+        } else {
+            num_rows = map_is_const && key_is_const ? 1 : chunk->num_rows();
+        }
         auto res = map_values->clone_empty(); // must be nullable
         res->reserve(num_rows);
 
@@ -95,9 +102,9 @@ public:
             if (!res->is_null(0)) {
                 // map_value is nullable, remove it.
                 auto col = down_cast<NullableColumn*>(res.get())->data_column();
-                return ConstColumn::create(std::move(col), chunk->num_rows());
+                return ConstColumn::create(std::move(col), num_rows);
             }
-            return ConstColumn::create(std::move(res), chunk->num_rows());
+            return ConstColumn::create(std::move(res), num_rows);
         } else {
             return res;
         }
