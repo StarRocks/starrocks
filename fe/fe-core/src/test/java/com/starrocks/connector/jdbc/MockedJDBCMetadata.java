@@ -47,14 +47,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
-<<<<<<< HEAD
-    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
-    private List<PartitionInfo> partitions = Arrays.asList(new Partition("d", 1690819200L),
-=======
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
     private List<PartitionInfo> partitions = Arrays.asList(
             new Partition("d", 1690819200L),
->>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
             new Partition("d", 1690819200L),
             new Partition("d", 1690819200L));
 
@@ -158,16 +153,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
-<<<<<<< HEAD
-                return Arrays.asList("1234567", "1234568", "1234569");
-            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList("20230801", "20230802");
-=======
                 return Arrays.asList("1234567", "1234568", "1234569", "1234570");
-            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)
-                    || tableName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
+            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
                 return Arrays.asList("20230801", "20230802", "20230803", "20230804");
->>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
             } else {
                 return partitionNames;
             }

@@ -15,6 +15,7 @@
 package com.starrocks.schema;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.parquet.Strings;
 
@@ -101,12 +102,7 @@ public class MTable {
     }
 
     public MTable withProperties(String value) {
-<<<<<<< HEAD
-        String[] arr = value.split(",");
-        return withProperties(Lists.newArrayList(arr));
-=======
-        return withProperties(List.of(value));
->>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
+        return withProperties(ImmutableList.of(value));
     }
 
     public MTable withProperties(List<String> values) {

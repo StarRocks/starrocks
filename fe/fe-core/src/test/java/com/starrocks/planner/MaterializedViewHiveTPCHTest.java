@@ -23,7 +23,6 @@ import org.junit.runners.MethodSorters;
 public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
-        PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 

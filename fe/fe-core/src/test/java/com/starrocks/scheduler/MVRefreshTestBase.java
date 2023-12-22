@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -114,8 +115,6 @@ public class MVRefreshTestBase {
     public static void tearDown() throws Exception {
     }
 
-<<<<<<< HEAD
-=======
     public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         new StmtExecutor(connectContext, sql).execute();
@@ -136,5 +135,4 @@ public class MVRefreshTestBase {
         Assert.assertNotNull(table);
         return table;
     }
->>>>>>> c03caac42c ([UT] Fix unstable mv related uts (#37109))
 }
