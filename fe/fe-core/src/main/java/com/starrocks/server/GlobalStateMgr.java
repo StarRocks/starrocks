@@ -1221,15 +1221,15 @@ public class GlobalStateMgr {
 
             if (System.currentTimeMillis() - waitStartTime > printHintTimeInterval * printHintCnt) {
                 printHintCnt++;
-                LOG.warn("It took too much time to get ready, there are some reasons: \n" +
-                        "1. There are too many BDB logs to replay, because the failure of checkpoint. \n" +
-                        "2. More than half of the followers in the cluster are not started. \n" +
-                        "3. There are multiple IPs on the machine, " +
+                LOG.warn("It took too much time to get ready, there are some reasons: " +
+                        "1. There are too many BDB logs to replay, because the failure of checkpoint. " +
+                        "2. More than half of the followers in the cluster are not started. " +
+                        "3. There are multiple IPs on the machine, or ip has changed, " +
                         "you should specify the priority_networks to use the IP from image/ROLE, " +
-                        "ignore this reason if you are using FQDN. \n" +
+                        "ignore this reason if you are using FQDN. " +
                         "4. The time deviation between machines is greater than 5s, " +
-                        "please use ntp or other tools to synchronize clock. \n" +
-                        "5. The configuration of edit_log_port is changed, please reset to the original value. \n" +
+                        "please use ntp or other tools to synchronize clock. " +
+                        "5. The configuration of edit_log_port is changed, please reset to the original value. " +
                         "6. The thread of replayer is blocked, please use jstack to find the details");
             }
         }
