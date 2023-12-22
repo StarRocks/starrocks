@@ -139,6 +139,7 @@ public class LoadLoadingTask extends LoadTask {
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setWarehouseId(warehouseId);
+        loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.plan();
     }
 
