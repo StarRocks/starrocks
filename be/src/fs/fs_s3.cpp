@@ -70,6 +70,8 @@ public:
     using ClientConfiguration = Aws::Client::ClientConfiguration;
     using S3Client = Aws::S3::S3Client;
     using S3ClientPtr = std::shared_ptr<S3Client>;
+    using ClientConfigurationPtr = std::shared_ptr<ClientConfiguration>;
+    using AWSCloudConfigurationPtr = std::shared_ptr<AWSCloudConfiguration>;
 
     static S3ClientFactory& instance() {
         static S3ClientFactory obj;
@@ -106,11 +108,12 @@ private:
 
     class ClientCacheKey {
     public:
-        ClientConfiguration config;
-        AWSCloudConfiguration aws_cloud_configuration;
+        ClientConfigurationPtr config;
+        AWSCloudConfigurationPtr aws_cloud_configuration;
 
         bool operator==(const ClientCacheKey& rhs) const {
-            return config == rhs.config && aws_cloud_configuration == rhs.aws_cloud_configuration;
+            return !config && !(rhs.config) && *config == *(rhs.config) && !aws_cloud_configuration &&
+                   !(rhs.aws_cloud_configuration) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
         }
     };
 
@@ -194,7 +197,9 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
 
-    ClientCacheKey client_cache_key{config, aws_cloud_configuration};
+    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
+    auto aws_config = std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration);
+    ClientCacheKey client_cache_key{client_conf, aws_config};
     {
         // Duplicate code for cache s3 client
         std::lock_guard l(_lock);
@@ -225,8 +230,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
-
-    ClientCacheKey client_cache_key{config, AWSCloudConfiguration{}};
+    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
+    ClientCacheKey client_cache_key{client_conf, std::make_shared<AWSCloudConfiguration>()};
     for (size_t i = 0; i < _items; i++) {
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
