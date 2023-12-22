@@ -371,6 +371,16 @@ public:
         }
     }
 
+    std::string get_preconditions_block_reasons() {
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            return std::string(dependencies_block() ? "(dependencies," : "(") +
+                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(local_rf_block() ? "local runtime filter)" : ")");
+        } else {
+            return "";
+        }
+    }
+
     StatusOr<bool> is_not_blocked() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {

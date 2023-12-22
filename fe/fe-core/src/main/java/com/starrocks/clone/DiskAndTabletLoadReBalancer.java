@@ -205,6 +205,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                 List<RootPathLoadStatistic> pathStats = beStat.getPathStatistics(medium);
                 for (RootPathLoadStatistic pathStat : pathStats) {
+                    if (pathStat.getDiskState() != DiskInfo.DiskState.ONLINE) {
+                        continue;
+                    }
                     if (pathStat.getCapacityB() <= 0) {
                         continue;
                     }
@@ -1034,6 +1037,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             List<Long> pathHashList = Lists.newArrayList();
             for (RootPathLoadStatistic pathStat : beStat.getPathStatistics()) {
                 if (pathStat.getStorageMedium() == medium
+                        && pathStat.getDiskState() == DiskInfo.DiskState.ONLINE
                         && (pathStat.getClazz() == Classification.LOW || pathStat.getClazz() == Classification.MID)) {
                     pathHashList.add(pathStat.getPathHash());
                 }
@@ -1110,8 +1114,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             partitionStats = getPartitionStats(medium, false, beIds, null);
         } else {
             for (RootPathLoadStatistic pathStat : pathStats) {
-                diskCapMap
-                        .put(pathStat.getPathHash(), Pair.create(pathStat.getCapacityB(), pathStat.getUsedCapacityB()));
+                if (pathStat.getDiskState() == DiskInfo.DiskState.ONLINE) {
+                    diskCapMap.put(pathStat.getPathHash(),
+                            Pair.create(pathStat.getCapacityB(), pathStat.getUsedCapacityB()));
+                }
             }
             paths = Lists.newArrayList(diskCapMap.keySet());
             partitionStats = getPartitionStats(medium, true, null, Pair.create(beId, paths));
@@ -1354,6 +1360,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                     for (Replica replica : replicas) {
                         if (replica.getState() != ReplicaState.NORMAL) {
+                            continue;
+                        }
+
+                        RootPathLoadStatistic pathLoadStatistic = loadStatistic
+                                .getRootPathLoadStatistic(replica.getBackendId(), replica.getPathHash());
+                        if (pathLoadStatistic == null || pathLoadStatistic.getDiskState() != DiskInfo.DiskState.ONLINE) {
                             continue;
                         }
 
@@ -1862,7 +1874,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             this.pathSortIndex = new HashMap<>();
             for (RootPathLoadStatistic pathStatistic : statistic.getPathStatistics()) {
                 if (pathStatistic.getStorageMedium() != this.medium
-                        || pathStatistic.getDiskState() == DiskInfo.DiskState.OFFLINE
+                        || pathStatistic.getDiskState() != DiskInfo.DiskState.ONLINE
                         || pathStatistic.getCapacityB() <= 0) {
                     continue;
                 }

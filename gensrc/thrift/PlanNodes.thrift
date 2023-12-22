@@ -42,6 +42,7 @@ include "Descriptors.thrift"
 include "Partitions.thrift"
 include "RuntimeFilter.thrift"
 include "CloudConfiguration.thrift"
+include "DataCache.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
@@ -298,10 +299,6 @@ struct TIcebergDeleteFile {
     4: optional i64 length
 }
 
-struct TDataCacheOptions {
-    1: optional i32 priority
-}
-
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -352,7 +349,7 @@ struct THdfsScanRange {
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
 
-    17: optional TDataCacheOptions datacache_options
+    17: optional DataCache.TDataCacheOptions datacache_options
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
