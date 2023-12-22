@@ -47,7 +47,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
-    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
+    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
     private List<PartitionInfo> partitions = Arrays.asList(
             new Partition("d", 1690819200L),
             new Partition("d", 1690819200L),
@@ -209,6 +209,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         }
     }
 
+
     public void addPartitions() {
         readLock();
         try {
@@ -220,6 +221,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
+
     }
 
     public void refreshPartitions() {

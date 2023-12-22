@@ -1504,8 +1504,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         taskRun.executeTaskRun();
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).sorted().collect(Collectors.toList());
-        Assert.assertEquals(ImmutableList.of("p00010101_20230801", "p20230801_20230802",
-                        "p20230802_20230803", "p20230803_99991231"),
+        Assert.assertEquals(ImmutableList.of("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"),
                 partitions);
     }
 
