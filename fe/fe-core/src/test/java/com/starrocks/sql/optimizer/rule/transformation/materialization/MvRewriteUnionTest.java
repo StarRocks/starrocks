@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -351,14 +352,14 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     @Test
     public void testUnionAllRewriteWithExtraPredicates() {
         starRocksAssert.withTable(new MTable("mt1", "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "k1 INT",
                                 "k2 string",
                                 "v1 INT",
                                 "v2 INT"
                         ),
                         "k1",
-                        List.of(
+                        ImmutableList.of(
                                 "PARTITION `p1` VALUES LESS THAN ('3')",
                                 "PARTITION `p2` VALUES LESS THAN ('6')",
                                 "PARTITION `p3` VALUES LESS THAN ('9')"
@@ -397,7 +398,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     }
 
                     {
-                        List<Pair<String, String>> sqls = List.of(
+                        List<Pair<String, String>> sqls = ImmutableList.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
                                         "1:OlapScanNode\n" +
                                                 "     TABLE: mt1\n" +
@@ -423,7 +424,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
                     }
                     {
-                        List<Pair<String, String>> sqls = List.of(
+                        List<Pair<String, String>> sqls = ImmutableList.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
                                         "1:OlapScanNode\n" +
                                                 "     TABLE: mt1\n" +
