@@ -72,6 +72,7 @@ import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import scala.util.control.Exception;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -152,10 +153,6 @@ public class GlobalTransactionMgr implements Writable {
         switch (sourceType) {
             case BACKEND_STREAMING:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
-                        Config.min_load_timeout_second);
-                break;
-            case LAKE_COMPACTION:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_lake_compaction_timeout_second,
                         Config.min_load_timeout_second);
                 break;
             default:
