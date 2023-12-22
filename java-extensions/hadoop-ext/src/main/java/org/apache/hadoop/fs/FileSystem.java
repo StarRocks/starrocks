@@ -3758,8 +3758,7 @@ public abstract class FileSystem extends Configured
         HadoopExt.getInstance().rewriteConfiguration(conf);
         UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
         FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> createFileSystemInternal(uri, conf));
-        FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
-        return fs2;
+        return fs;
     }
 
     /**
