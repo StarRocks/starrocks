@@ -21,12 +21,6 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
-        ./fs/fs_broker_test.cpp
-        ./fs/fs_posix_test.cpp
-        ./fs/fs_memory_test.cpp
-        ./fs/fs_s3_test.cpp
-        ./fs/fs_test.cpp
-        ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
@@ -274,21 +268,17 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         )
 
-if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
-endif ()
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-    list(APPEND EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
-endif ()
-
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
 set(STORAGE_EXEC_FILES
+        ./fs/fs_broker_test.cpp
+        ./fs/fs_posix_test.cpp
+        ./fs/fs_memory_test.cpp
+        ./fs/fs_s3_test.cpp
+        ./fs/fs_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
@@ -415,6 +405,16 @@ set(STORAGE_EXEC_FILES
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         )
+
+if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
+    list(APPEND STORAGE_EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND STORAGE_EXEC_FILES ./io/cache_input_stream_test.cpp)
+endif ()
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND STORAGE_EXEC_FILES ./fs/fs_starlet_test.cpp)
+    list(APPEND STORAGE_EXEC_FILES ./storage/lake/local_pk_index_manager_test.cpp)
+endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
