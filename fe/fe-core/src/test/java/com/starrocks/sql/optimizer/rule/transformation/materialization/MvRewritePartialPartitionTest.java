@@ -29,13 +29,36 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+<<<<<<< HEAD
         MvRewriteTestBase.prepareDefaultDatas();
+=======
+
+        starRocksAssert.withTable(cluster, "t1");
+        starRocksAssert.withTable(cluster, "test_base_part");
+        starRocksAssert.withTable(cluster, "table_with_partition");
+        starRocksAssert.withTable(cluster, "table_with_day_partition");
+
+        mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
+    }
+
+    @Before
+    public void before() {
+        startCaseTime = Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
     }
 
     @Test
     public void testPartialPartition1() throws Exception {
-        createAndRefreshMv("test", "partial_mv",
-                "create materialized view partial_mv" +
+        createAndRefreshMv("create materialized view partial_mv" +
                         " partition by id_date" +
                         " distributed by hash(`t1a`)" +
                         " as" +
@@ -61,8 +84,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartialPartition2() throws Exception {
-        createAndRefreshMv("test", "partial_mv_2",
-                "create materialized view partial_mv_2" +
+        createAndRefreshMv("create materialized view partial_mv_2" +
                         " partition by id_date" +
                         " distributed by hash(`t1a`)" +
                         " as" +
@@ -78,8 +100,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartialPartition3_1() throws Exception {
-        createAndRefreshMv("test", "partial_mv_3_1",
-                "create materialized view partial_mv_3_1" +
+        createAndRefreshMv("create materialized view partial_mv_3_1" +
                         " partition by date_trunc('month', new_date)" +
                         " distributed by hash(`t1a`)" +
                         " as" +
@@ -95,8 +116,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartialPartition3_2() throws Exception {
-        createAndRefreshMv("test", "partial_mv_3_2",
-                "create materialized view partial_mv_3_2" +
+        createAndRefreshMv("create materialized view partial_mv_3_2" +
                         " partition by new_date" +
                         " distributed by hash(`t1a`)" +
                         " as" +
@@ -112,8 +132,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartialPartition4() throws Exception {
-        createAndRefreshMv("test", "partial_mv_4",
-                "create materialized view partial_mv_4" +
+        createAndRefreshMv("create materialized view partial_mv_4" +
                         " partition by new_name" +
                         " distributed by hash(`t1a`)" +
                         " as" +
@@ -130,7 +149,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testPartialPartition5() throws Exception {
         cluster.runSql("test", "insert into test_base_part values (1, 1, 1, 1);");
-        createAndRefreshMv("test", "partial_mv_5", "create materialized view partial_mv_5" +
+        createAndRefreshMv("create materialized view partial_mv_5" +
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, sum(c2) as c2 from test_base_part group by c1, c3;");
@@ -151,7 +170,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testPartialPartition6() throws Exception {
         // test partition prune
-        createAndRefreshMv("test", "partial_mv_6", "create materialized view partial_mv_6" +
+        createAndRefreshMv("create materialized view partial_mv_6" +
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, c2 from test_base_part where c3 < 2000;");
@@ -175,7 +194,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Ignore
     public void testPartialPartition7() throws Exception {
         // test bucket prune
-        createAndRefreshMv("test", "partial_mv_7", "create materialized view partial_mv_7" +
+        createAndRefreshMv("create materialized view partial_mv_7" +
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
@@ -184,7 +203,13 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part");
         dropMv("test", "partial_mv_7");
 
+<<<<<<< HEAD
         createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
+=======
+    @Test
+    public void testPartialPartition8() throws Exception {
+        createAndRefreshMv("create materialized view partial_mv_8" +
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, c2 from test_base_part where c3 < 1000;");
@@ -196,11 +221,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartialPartition9() throws Exception {
-        createAndRefreshMv("test", "partial_mv_9", "CREATE MATERIALIZED VIEW partial_mv_9" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW partial_mv_9" +
                 " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "REFRESH MANUAL AS SELECT k1, v1 as k2, v2 as k3 from t1;");
         // create nested mv based on partial_mv_9
-        createAndRefreshMv("test", "partial_mv_10", "CREATE MATERIALIZED VIEW partial_mv_10" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW partial_mv_10" +
                 " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "REFRESH MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from partial_mv_9 group by k1;");
         cluster.runSql("test", "insert into t1 values (4,1,1);");
@@ -238,7 +263,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into ttl_base_table values (1,1,1),(1,1,2),(1,2,1),(1,2,2),\n" +
                 "                                              (2,1,1),(2,1,2),(2,2,1),(2,2,2),\n" +
                 "                                              (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
-        createAndRefreshMv("test", "ttl_mv_2", "CREATE MATERIALIZED VIEW ttl_mv_2\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW ttl_mv_2\n" +
                 "               PARTITION BY k1\n" +
                 "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "               REFRESH ASYNC\n" +
@@ -278,7 +303,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 " (\"2019-01-01\",1,1),(\"2019-01-01\",1,2),(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
                 " (\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
                 " (\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
-        createAndRefreshMv("test", "ttl_mv_3", "CREATE MATERIALIZED VIEW ttl_mv_3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW ttl_mv_3\n" +
                 "               PARTITION BY k1\n" +
                 "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "               REFRESH MANUAL\n" +
@@ -312,7 +337,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "                                              (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
 
         String mvName = "ttl_mv_3";
-        createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW " + mvName +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW " + mvName +
                 " PARTITION BY k1\n" +
                 " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 " REFRESH ASYNC\n" +
@@ -352,8 +377,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testHivePartialPartitionWithTTL() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_parttbl_mv",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -389,8 +413,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testHivePartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_parttbl_mv",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -429,8 +452,14 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv");
 
+<<<<<<< HEAD
         createAndRefreshMv("test", "hive_parttbl_mv_2",
                 "CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
+=======
+    @Test
+    public void testHivePartialPartition2() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -458,8 +487,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "hive_parttbl_mv_2");
 
         // test partition prune
-        createAndRefreshMv("test", "hive_parttbl_mv_3",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_3`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_3`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -477,8 +505,14 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan, "partitions=2/6");
         dropMv("test", "hive_parttbl_mv_3");
 
+<<<<<<< HEAD
         createAndRefreshMv("test", "hive_parttbl_mv_4",
                 "CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
+=======
+    @Test
+    public void testHivePartialPartition4() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -497,8 +531,14 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         " OR (20: l_orderkey != 100)");
         dropMv("test", "hive_parttbl_mv_4");
 
+<<<<<<< HEAD
         createAndRefreshMv("test", "hive_parttbl_mv_5",
                 "CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
+=======
+    @Test
+    public void testHivePartialPartition5() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
                         "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
@@ -555,7 +595,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
             cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
 
-            createAndRefreshMv("test", "partial_mv_12", "CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
@@ -583,7 +623,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
             cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
 
-            createAndRefreshMv("test", "partial_mv_13", "CREATE MATERIALIZED VIEW `partial_mv_13`\n" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `partial_mv_13`\n" +
                     "COMMENT \"MATERIALIZED_VIEW\"\n" +
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
@@ -613,8 +653,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String mvName = "hive_query_rewrite";
 
         // Disable
-        createAndRefreshMv("test", mvName,
-                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                         "REFRESH MANUAL\n" +
@@ -635,8 +674,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", mvName);
 
         // Checked
-        createMv("test", mvName,
-                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -658,8 +696,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", mvName);
 
         // Loose
-        createAndRefreshMv("test", mvName,
-                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -687,8 +724,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         {
             // default
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH MANUAL\n" +
@@ -710,8 +746,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         {
             // Disable
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH MANUAL\n" +
@@ -734,17 +769,16 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         {
             // Checked
-            createMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
-                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
-                            "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
-                            "REFRESH DEFERRED MANUAL\n" +
-                            "PROPERTIES (\n" +
-                            "\"replication_num\" = \"1\",\n" +
-                            "\"query_rewrite_consistency\" = \"checked\"\n" +
-                            ")\n" +
-                            "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
-                            "GROUP BY l_shipdate");
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"query_rewrite_consistency\" = \"checked\"\n" +
+                    ")\n" +
+                    "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "GROUP BY l_shipdate");
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
@@ -759,8 +793,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         }
         {
             // Loose
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                             "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +
@@ -800,7 +833,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into base_tbl1 values " +
                 " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
 
-        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
                 " PARTITION BY ds \n" +
                 " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
                 " REFRESH MANUAL\n" +
@@ -871,7 +904,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into base_tbl1 values " +
                 " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
 
-        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
                 " PARTITION BY ds \n" +
                 " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
                 " REFRESH MANUAL\n" +
@@ -958,7 +991,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into base_tbl1 values " +
                 " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
 
-        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
                 " PARTITION BY date_trunc('day', ds) \n" +
                 " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
                 " REFRESH MANUAL\n" +
@@ -1023,7 +1056,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into base_tbl1 values " +
                 " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
 
-        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +
                 " PARTITION BY date_trunc('day', ds) \n" +
                 " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
                 " REFRESH MANUAL\n" +

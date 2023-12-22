@@ -67,6 +67,7 @@ public class OptimizerTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/OptimizerTest.java
     public static void setUp() throws Exception {
         // set timeout to a really long time so that ut can pass even when load of ut machine is very high
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -95,6 +96,10 @@ public class OptimizerTest {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
     }
+=======
+    public static void before() throws Exception {
+        starRocksAssert.useTable("t0");
+>>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580)):fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewritePreprocessorTest.java
 
     @AfterClass
     public static void tearDown() throws Exception {
