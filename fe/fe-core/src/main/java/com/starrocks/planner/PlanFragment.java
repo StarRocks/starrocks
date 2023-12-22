@@ -143,6 +143,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
+    protected boolean withLocalShuffle = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
@@ -295,6 +296,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setForceSetTableSinkDop() {
         this.forceSetTableSinkDop = true;
+    }
+
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffleIfTrue(boolean withLocalShuffle) {
+        this.withLocalShuffle |= withLocalShuffle;
     }
 
     public boolean isAssignScanRangesPerDriverSeq() {
