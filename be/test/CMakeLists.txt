@@ -427,6 +427,8 @@ add_executable(starrocks_storage_test test_main.cpp $<TARGET_OBJECTS:starrocks_s
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 TARGET_LINK_LIBRARIES(starrocks_storage_test ${TEST_LINK_LIBS})
 
+add_dependencies(starrocks_storage_test starrocks_test)
+
 # =================================================
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
