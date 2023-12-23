@@ -230,7 +230,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on t0.v1 = test_all_type.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view1");
@@ -264,7 +264,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on view1.v1 = view2.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view3");
@@ -293,7 +293,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1 from t0");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v11)" +
                     " as " +
                     " SELECT v11, v12 from (select vv1.v1 v11, vv2.v1 v12 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1 ) t");
@@ -315,13 +315,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "join depts" +
                     " on emps_par.deptno = depts.deptno) t");
 
-            createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+            createAndRefreshMv("create materialized view join_mv_2" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
                     " SELECT deptno1, deptno2, empid, name from view1 union SELECT deptno1, deptno2, empid, name from view1");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
@@ -1000,7 +1000,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -1040,8 +1040,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +

@@ -151,15 +151,10 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @Test
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-<<<<<<< HEAD
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
-=======
-        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan1 = getFragmentPlan(query1);
@@ -176,13 +171,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         // enforce choose the hive scan operator, not mv plan
         connectContext.getSessionVariable().setUseNthExecPlan(1);
-<<<<<<< HEAD
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
-=======
-        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         createAndRefreshMv("create materialized view hive_join_mv_1" +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                 " distributed by hash(s_suppkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +

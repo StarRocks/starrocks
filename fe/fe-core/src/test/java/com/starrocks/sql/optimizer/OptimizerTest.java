@@ -67,39 +67,9 @@ public class OptimizerTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/OptimizerTest.java
-    public static void setUp() throws Exception {
-        // set timeout to a really long time so that ut can pass even when load of ut machine is very high
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-        // set some parameters to speedup test
-        Config.tablet_sched_checker_interval_seconds = 1;
-        Config.tablet_sched_repair_delay_factor_second = 1;
-        Config.enable_new_publish_mechanism = true;
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
-        cluster = PseudoCluster.getInstance();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test");
-        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
-                "  `v1` bigint NULL COMMENT \"\",\n" +
-                "  `v2` bigint NULL COMMENT \"\",\n" +
-                "  `v3` bigint NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-    }
-=======
     public static void before() throws Exception {
         starRocksAssert.useTable("t0");
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580)):fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewritePreprocessorTest.java
+    }
 
     @AfterClass
     public static void tearDown() throws Exception {

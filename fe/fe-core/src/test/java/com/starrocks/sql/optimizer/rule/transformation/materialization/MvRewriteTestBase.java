@@ -170,11 +170,6 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
-<<<<<<< HEAD
-    protected void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
-        starRocksAssert.withMaterializedView(sql);
-        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
-=======
     protected static void withRefreshedMV(String sql, StarRocksAssert.ExceptionRunnable action) {
         TableName mvTableName = null;
         try {
@@ -196,7 +191,6 @@ public class MvRewriteTestBase {
                 e.printStackTrace();
             }
         }
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
     }
 
     protected static void createAndRefreshMv(String sql) throws Exception {
@@ -211,7 +205,7 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
-    protected void dropMv(String dbName, String mvName) throws Exception {
+    protected static void dropMv(String dbName, String mvName) throws Exception {
         starRocksAssert.dropMaterializedView(mvName);
     }
 

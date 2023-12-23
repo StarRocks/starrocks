@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -159,8 +158,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         " PARTITION BY k1\n" +
                         " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
@@ -173,8 +170,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
-            String pr = Tracers.printLogs();
-            Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
                     "     partitions=4/5");
@@ -182,8 +177,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
             String plan = getFragmentPlan(query);
-            String pr = Tracers.printLogs();
-            Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "partitions=4/5\n" +
                     "     rollup: test_partition_tbl_mv1");
@@ -213,8 +206,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-06-01' group by k1;";
             String plan = getFragmentPlan(query);
 
-            String pr = Tracers.printLogs();
-            Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv1");

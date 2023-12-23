@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import autovalue.shaded.com.google.common.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -29,31 +29,12 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-<<<<<<< HEAD
-        MvRewriteTestBase.prepareDefaultDatas();
-=======
 
         starRocksAssert.withTable(cluster, "t1");
         starRocksAssert.withTable(cluster, "test_base_part");
         starRocksAssert.withTable(cluster, "table_with_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition");
 
-        mockedHiveMetadata =
-                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
-        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
-                ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
     }
 
     @Test
@@ -203,13 +184,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part");
         dropMv("test", "partial_mv_7");
 
-<<<<<<< HEAD
-        createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
-=======
-    @Test
-    public void testPartialPartition8() throws Exception {
         createAndRefreshMv("create materialized view partial_mv_8" +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, c2 from test_base_part where c3 < 1000;");
@@ -452,14 +427,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv");
 
-<<<<<<< HEAD
-        createAndRefreshMv("test", "hive_parttbl_mv_2",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
-=======
-    @Test
-    public void testHivePartialPartition2() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -505,14 +473,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan, "partitions=2/6");
         dropMv("test", "hive_parttbl_mv_3");
 
-<<<<<<< HEAD
-        createAndRefreshMv("test", "hive_parttbl_mv_4",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
-=======
-    @Test
-    public void testHivePartialPartition4() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -531,14 +492,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         " OR (20: l_orderkey != 100)");
         dropMv("test", "hive_parttbl_mv_4");
 
-<<<<<<< HEAD
-        createAndRefreshMv("test", "hive_parttbl_mv_5",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
-=======
-    @Test
-    public void testHivePartialPartition5() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
->>>>>>> e1f9061b9e ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (#37580))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
                         "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
