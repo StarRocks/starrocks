@@ -47,9 +47,9 @@ public:
     int64_t data_version() const { return _data_version; }
     void update_data_version(int64_t version) { _data_version = version; }
 
-    void lock() { _mutex.lock(); }
-
-    void unlock() { _mutex.unlock(); }
+    std::unique_ptr<std::lock_guard<std::mutex>> fetch_guard() {
+        return std::make_unique<std::lock_guard<std::mutex>>(_mutex);
+    }
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

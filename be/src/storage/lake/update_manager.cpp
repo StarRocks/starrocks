@@ -64,10 +64,12 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                                           int64_t base_version, int64_t new_version) {
+                                                           int64_t base_version, int64_t new_version,
+                                                           std::unique_ptr<std::lock_guard<std::mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
+    guard = index.fetch_guard();
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
@@ -79,7 +81,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
-    index.lock();
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
         _index_cache.remove(index_entry);
@@ -341,7 +342,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
     Status st;
     st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
-        std::lock_guard<LakePrimaryIndex> lk(index);
+        index.fetch_guard();
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
             auto& pks = *upserts[i];
@@ -371,7 +372,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
                                               std::vector<std::vector<uint64_t>>* rss_rowids) {
     Status st;
     st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
-        std::lock_guard<LakePrimaryIndex> lk(index);
+        index.fetch_guard();
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
