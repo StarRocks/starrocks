@@ -58,7 +58,13 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
+=======
+import org.junit.FixMethodOrder;
+import org.junit.Ignore;
+>>>>>>> f731708af3 ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (backport #37580) (#37679))
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -70,10 +76,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
 
+<<<<<<< HEAD
 public class PartitionBasedMvRefreshProcessorTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
+=======
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
+>>>>>>> f731708af3 ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (backport #37580) (#37679))
 
     @BeforeClass
     public static void beforeClass() throws Exception {

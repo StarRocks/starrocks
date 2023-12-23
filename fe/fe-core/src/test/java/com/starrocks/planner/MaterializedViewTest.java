@@ -35,6 +35,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         Config.default_replication_num = 1;
 
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("locations");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
+        starRocksAssert.useTable("emps_bigint");
+        starRocksAssert.useTable("emps_no_constraint");
+        starRocksAssert.useTable("dependents");
+
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +

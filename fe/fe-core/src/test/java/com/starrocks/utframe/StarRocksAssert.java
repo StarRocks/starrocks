@@ -35,6 +35,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
@@ -50,6 +51,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.pseudocluster.PseudoCluster;
+>>>>>>> f731708af3 ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (backport #37580) (#37679))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -58,6 +64,12 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskRun;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.schema.MSchema;
+import com.starrocks.schema.MTable;
+>>>>>>> f731708af3 ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (backport #37580) (#37679))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -86,6 +98,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -107,6 +120,10 @@ public class StarRocksAssert {
         Config.tablet_create_timeout_second = 60;
         this.ctx = ctx;
         this.ctx.setQueryId(UUIDUtil.genUUID());
+    }
+
+    public interface ExceptionRunnable {
+        public abstract void run() throws Exception;
     }
 
     public ConnectContext getCtx() {
@@ -222,6 +239,119 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert withTable(MTable mTable,
+                                      ExceptionRunnable action) {
+        return withTables(ImmutableList.of(mTable), action);
+    }
+
+    public StarRocksAssert withTables(List<MTable> mTables,
+                                     ExceptionRunnable action) {
+        List<String> names = Lists.newArrayList();
+        try {
+            for (MTable mTable : mTables) {
+                String sql = mTable.getCreateTableSql();
+                System.out.println(sql);
+                CreateTableStmt createTableStmt =
+                        (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                names.add(mTable.getTableName());
+            }
+            if (action != null) {
+                action.run();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("create table failed");
+        } finally {
+            for (String t : names) {
+                try {
+                    dropTable(t);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Create tables and do insert datas and later actions.
+     * @param cluster : insert into datas into table if it's not null.
+     * @param tables  : tables which needs to be created and inserted.
+     * @param action  : actions which will be used to do later.
+     * @return
+     */
+    public StarRocksAssert withTables(PseudoCluster cluster,
+                                      List<String> tables,
+                                      ExceptionRunnable action) {
+        try {
+            for (String table : tables) {
+                MTable mTable = MSchema.getTable(table);
+                String sql = mTable.getCreateTableSql();
+                CreateTableStmt createTableStmt =
+                        (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+
+                if (cluster != null) {
+                    String dbName = createTableStmt.getDbName();
+                    String insertSQL = mTable.getGenerateDataSQL();
+                    if (!Strings.isNullOrEmpty(insertSQL)) {
+                        cluster.runSql(dbName, insertSQL);
+                    }
+                }
+            }
+            if (action != null) {
+                action.run();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("Do action failed:" +  e.getMessage());
+        } finally {
+            if (action != null) {
+                for (String table : tables) {
+                    try {
+                        dropTable(table);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Create the table and insert datas into the table with no actions later.
+     */
+    public StarRocksAssert withTable(PseudoCluster cluster,
+                                     String tableName) {
+        return withTables(cluster, ImmutableList.of(tableName), null);
+    }
+
+    /**
+     * Create table only and no insert datas into the table and do actions.
+     */
+    public StarRocksAssert withTable(String table, ExceptionRunnable action) {
+        return withTables(null, ImmutableList.of(table), action);
+    }
+
+    /**
+     * Create table and insert datas into the table and do actions.
+     */
+    public StarRocksAssert withTable(PseudoCluster cluster,
+                                     String table,
+                                     ExceptionRunnable action) {
+
+        return withTables(cluster, ImmutableList.of(table), action);
+    }
+
+    /**
+     * To distinguish `withTable(sql)`, call it `useTable` to select existed table from MSchema.
+     */
+    public StarRocksAssert useTable(String table) {
+        return withTables(null, ImmutableList.of(table), null);
+    }
+
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
     }
@@ -247,6 +377,21 @@ public class StarRocksAssert {
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createView(createTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert withView(String sql, ExceptionRunnable action) throws Exception {
+        CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        String viewName = createTableStmt.getTable();
+        try {
+            withView(sql);
+            action.run();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("With view " + viewName + " failed:" + e.getMessage());
+        } finally {
+            dropView(viewName);
+        }
         return this;
     }
 

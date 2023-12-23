@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -32,6 +33,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -65,6 +67,8 @@ public class MvRewriteTestBase {
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
 
+    protected static String DB_NAME = "test";
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         Config.dynamic_partition_check_interval_seconds = 10000;
@@ -89,9 +93,7 @@ public class MvRewriteTestBase {
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test");
-
-        Config.enable_experimental_mv = true;
+        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -113,6 +115,7 @@ public class MvRewriteTestBase {
         };
     }
 
+<<<<<<< HEAD
     private static void setPartitionVersion(Partition partition, long version) {
         partition.setVisibleVersion(version, System.currentTimeMillis());
         MaterializedIndex baseIndex = partition.getBaseIndex();
@@ -307,6 +310,8 @@ public class MvRewriteTestBase {
                 "(\"varchar3\", '1991-04-02', 4, 1, 1)");
     }
 
+=======
+>>>>>>> f731708af3 ([UT] Introduce MTable/MSchema to avoid creating unused tables in FE UTs (backport #36711) (backport #37580) (#37679))
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
@@ -337,17 +342,42 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
-    protected void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
+    protected static void withRefreshedMV(String sql, StarRocksAssert.ExceptionRunnable action) {
+        TableName mvTableName = null;
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.assertTrue(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+            mvTableName = createMaterializedViewStatement.getTableName();
+            Assert.assertTrue(mvTableName != null);
+
+            createAndRefreshMv(sql);
+            action.run();
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            String dbName = mvTableName.getDb() == null ? DB_NAME : mvTableName.getDb();
+            try {
+                dropMv(dbName, mvTableName.getTbl());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    protected static void createAndRefreshMv(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(stmt instanceof CreateMaterializedViewStatement);
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        Assert.assertTrue(mvTableName != null);
+        String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? DB_NAME : mvTableName.getDb();
+        String mvName = mvTableName.getTbl();
         starRocksAssert.withMaterializedView(sql);
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
-    protected void createMv(String dbName, String mvName, String sql) throws Exception {
-        starRocksAssert.withMaterializedView(sql);
-        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
-    }
-
-    protected void dropMv(String dbName, String mvName) throws Exception {
+    protected static void dropMv(String dbName, String mvName) throws Exception {
         starRocksAssert.dropMaterializedView(mvName);
     }
 
