@@ -15,34 +15,35 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.github.benmanes.caffeine.cache.AsyncCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.common.Config;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-public class JDBCAsyncCache<K, V> {
+public class JDBCMetaCache<K, V> {
 
     private boolean enableCache = false;
-    private AsyncCache<K, V> asyncCache;
+    private Cache<K, V> metaCache;
     private long currentExpireSec;
 
     private final String jdbcMetaCacheEnable = "jdbc_meta_cache_enable";
     private final String jdbcMetaCacheExpireSec = "jdbc_meta_cache_expire_sec";
 
 
-    public JDBCAsyncCache(Map<String, String> properties, Boolean permanent) {
+    public JDBCMetaCache(Map<String, String> properties, Boolean permanent) {
 
         if (permanent) {
-            this.asyncCache = Caffeine.newBuilder().buildAsync();
+            this.metaCache = Caffeine.newBuilder().build();
         } else if (checkEnableCache(properties)) {
             initializeExpireSec(properties);
-            this.asyncCache = Caffeine.newBuilder()
+            this.metaCache = Caffeine.newBuilder()
                     .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS)
-                    .buildAsync();
+                    .build();
         }
     }
 
@@ -67,19 +68,19 @@ public class JDBCAsyncCache<K, V> {
 
     public @NonNull V get(@NonNull K key, @NonNull Function<K, V> function) {
         if (this.enableCache) {
-            return this.asyncCache.get(key, function).join();
+            return Objects.requireNonNull(this.metaCache.get(key, function));
         } else {
             return function.apply(key);
         }
     }
 
     public @NonNull V getPersistentCache(@NonNull K key, @NonNull Function<K, V> function) {
-        return this.asyncCache.get(key, function).join();
+        return Objects.requireNonNull(this.metaCache.get(key, function));
     }
 
     public void invalidate(@NonNull K key) {
-        if (this.asyncCache != null) {
-            this.asyncCache.synchronous().invalidate(key);
+        if (this.metaCache != null) {
+            this.metaCache.invalidate(key);
         }
     }
 

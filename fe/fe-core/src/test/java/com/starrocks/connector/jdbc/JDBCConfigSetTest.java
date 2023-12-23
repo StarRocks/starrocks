@@ -48,20 +48,20 @@ public class JDBCConfigSetTest {
     public void testSetJDBCCacheConfig() {
         try {
             Map<String, String> properties = new HashMap<>();
-            JDBCAsyncCache<String, Integer> cacheWithDefaultClose = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cacheWithDefaultClose = new JDBCMetaCache<>(properties, false);
             Assert.assertFalse(cacheWithDefaultClose.isEnableCache());
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
-            JDBCAsyncCache<String, Integer> cacheWithDefaultOpen = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cacheWithDefaultOpen = new JDBCMetaCache<>(properties, false);
             Assert.assertTrue(cacheWithDefaultOpen.isEnableCache());
             Assert.assertEquals(cacheWithDefaultOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
             properties.put("jdbc_meta_cache_enable", "true");
             properties.put("jdbc_meta_cache_expire_sec", "60");
-            JDBCAsyncCache<String, Integer> cacheOpen = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cacheOpen = new JDBCMetaCache<>(properties, false);
             Assert.assertTrue(cacheOpen.isEnableCache());
             Assert.assertNotEquals(cacheOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
             properties.put("jdbc_meta_cache_enable", "false");
-            JDBCAsyncCache<String, Integer> cacheClose = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cacheClose = new JDBCMetaCache<>(properties, false);
             Assert.assertFalse(cacheClose.isEnableCache());
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
         } catch (Exception e) {
@@ -73,7 +73,7 @@ public class JDBCConfigSetTest {
     public void testJDBCCacheGetWithOutEnable() {
         try {
             Map<String, String> properties = new HashMap<>();
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
             Assert.assertNotEquals(step1, step2);
@@ -89,7 +89,7 @@ public class JDBCConfigSetTest {
             Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
             Map<String, String> properties = new HashMap<>();
             properties.put("jdbc_meta_cache_enable", "true");
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             Assert.assertTrue(cache.isEnableCache());
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
@@ -106,7 +106,7 @@ public class JDBCConfigSetTest {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             Map<String, String> properties = new HashMap<>();
             properties.put("jdbc_meta_cache_enable", "true");
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int invalidateBefore = cache.get("testKey", k -> 20231111);
             Assert.assertEquals(invalidateBefore, 20231111);
             cache.invalidate("testKey");
@@ -124,7 +124,7 @@ public class JDBCConfigSetTest {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             Map<String, String> properties = new HashMap<>();
             properties.put("jdbc_meta_cache_enable", "true");
-            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>(properties, false);
+            JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int changeBefore = cache.get("testKey", k -> 20231111);
             Assert.assertEquals(changeBefore, 20231111);
             cache.invalidate("testKey");

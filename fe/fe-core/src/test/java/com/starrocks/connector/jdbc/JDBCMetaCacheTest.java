@@ -136,13 +136,6 @@ public class JDBCMetaCacheTest {
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
-            List<String> resultWithCache = jdbcMetadata.listDbNames();
-            Assert.assertEquals(expectResult, resultWithCache);
-            JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
-            List<String> resultWithoutCache = jdbcMetadata.listDbNames();
-            Assert.assertNotEquals(expectResult, resultWithoutCache);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -155,13 +148,6 @@ public class JDBCMetaCacheTest {
             dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
-            Database db2 = jdbcMetadata.getDb("test");
-            Assert.assertEquals("test", db2.getOriginName());
-            JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
-            Database db3 = jdbcMetadata.getDb("test");
-            Assert.assertNull(db3);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -174,14 +160,6 @@ public class JDBCMetaCacheTest {
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
-            List<String> resultWithCache = jdbcMetadata.listTableNames("test");
-            Assert.assertEquals(expectResult, resultWithCache);
-            JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
-            List<String> resultWithOutCache = jdbcMetadata.listTableNames("test");
-            Assert.assertNotEquals(expectResult, resultWithOutCache);
-
         } catch (Exception e) {
             Assert.fail();
         }

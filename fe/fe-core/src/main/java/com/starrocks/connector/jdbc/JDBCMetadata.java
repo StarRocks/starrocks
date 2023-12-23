@@ -50,10 +50,10 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
-    private JDBCAsyncCache<JDBCTableName, List<String>> partitionNamesCache;
-    private JDBCAsyncCache<JDBCTableName, Integer> tableIdCache;
-    private JDBCAsyncCache<JDBCTableName, Table> tableInstanceCache;
-    private JDBCAsyncCache<JDBCTableName, List<Partition>> partitionInfoCache;
+    private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
+    private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
+    private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
+    private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -77,10 +77,10 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
-        partitionNamesCache = new JDBCAsyncCache<>(properties, false);
-        tableIdCache = new JDBCAsyncCache<>(properties, true);
-        tableInstanceCache = new JDBCAsyncCache<>(properties, false);
-        partitionInfoCache = new JDBCAsyncCache<>(properties, false);
+        partitionNamesCache = new JDBCMetaCache<>(properties, false);
+        tableIdCache = new JDBCMetaCache<>(properties, true);
+        tableInstanceCache = new JDBCMetaCache<>(properties, false);
+        partitionInfoCache = new JDBCMetaCache<>(properties, false);
     }
 
     public void checkAndSetSupportPartitionInformation() {
@@ -102,7 +102,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
-            throw new StarRocksConnectorException("refresh db names cache for JDBC catalog fail!", e);
+            throw new StarRocksConnectorException("list db names for JDBC catalog fail!", e);
         }
     }
 
@@ -131,7 +131,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return list.build();
             }
         } catch (SQLException e) {
-            throw new StarRocksConnectorException("refresh table names cache for JDBC catalog fail!", e);
+            throw new StarRocksConnectorException("list table names for JDBC catalog fail!", e);
         }
     }
 
@@ -156,7 +156,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                         return schemaResolver.getTable(tableId, tblName, fullSchema,
                                 partitionColumns, dbName, catalogName, properties);
                     } catch (SQLException | DdlException e) {
-                        LOG.warn("refresh table cache for JDBC catalog fail!", e);
+                        LOG.warn("get table for JDBC catalog fail!", e);
                         return null;
                     }
                 });
@@ -169,7 +169,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                     try (Connection connection = getConnection()) {
                         return schemaResolver.listPartitionNames(connection, databaseName, tableName);
                     } catch (SQLException e) {
-                        throw new StarRocksConnectorException("refresh partition names cache for JDBC catalog fail!",
+                        throw new StarRocksConnectorException("list partition names for JDBC catalog fail!",
                                 e);
                     }
                 });
@@ -205,7 +205,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                         }
                         return Lists.newArrayList();
                     } catch (SQLException e) {
-                        throw new StarRocksConnectorException("refresh partitions cache for JDBC catalog fail!", e);
+                        throw new StarRocksConnectorException("get partitions for JDBC catalog fail!", e);
                     }
                 });
 
