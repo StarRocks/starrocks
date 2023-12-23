@@ -16,10 +16,15 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -66,5 +71,34 @@ public class SimplifiedPredicateRuleTest {
         CaseWhenOperator cwo7 = new CaseWhenOperator(Type.INT, null, OI_100,
                 Lists.newArrayList(OB_FALSE, OI_200, OI_NULL, OI_300));
         assertEquals(OI_100, rule.apply(cwo7, null));
+    }
+
+    @Test
+    public void applyLike() {
+        SimplifiedPredicateRule rule = new SimplifiedPredicateRule();
+
+        ScalarOperator operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+                ConstantOperator.createVarchar("zxcv"));
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertEquals(OperatorType.BINARY, result.getOpType());
+        assertEquals(BinaryType.EQ, ((BinaryPredicateOperator) result).getBinaryType());
+        assertEquals(ConstantOperator.createVarchar("zxcv"), result.getChild(1));
+
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+                ConstantOperator.createVarchar("%zxcv"));
+        result = rule.apply(operator, null);
+        assertEquals(OperatorType.LIKE, result.getOpType());
+
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+                ConstantOperator.createVarchar("_zxcv"));
+        result = rule.apply(operator, null);
+        assertEquals(OperatorType.LIKE, result.getOpType());
+
+        // test for none-string right child
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+                ConstantOperator.createBoolean(false));
+        result = rule.apply(operator, null);
+        assertEquals(OperatorType.LIKE, result.getOpType());
     }
 }

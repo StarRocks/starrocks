@@ -111,7 +111,7 @@ private:
 
     int64_t _max_buffer_size = config::write_buffer_size;
     // initial value is max size
-    size_t _max_buffer_row = -1;
+    size_t _max_buffer_row = std::numeric_limits<size_t>::max();
     size_t _total_rows = 0;
     size_t _merged_rows = 0;
 

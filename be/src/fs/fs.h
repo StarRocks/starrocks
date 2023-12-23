@@ -301,6 +301,9 @@ struct WritableFileOptions {
     bool sync_on_close = true;
     // For remote filesystem, skip filling local filesystem cache on write requests
     bool skip_fill_local_cache = false;
+
+    bool direct_write = false;
+
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };

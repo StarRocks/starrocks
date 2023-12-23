@@ -135,6 +135,7 @@ public class LoadLoadingTask extends LoadTask {
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
+        loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.plan();
     }
 
