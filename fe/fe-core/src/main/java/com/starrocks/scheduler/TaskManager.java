@@ -306,6 +306,7 @@ public class TaskManager {
         try {
             taskRun = TaskRunBuilder.newBuilder(task)
                     .properties(option.getTaskRunProperties())
+                    .setExecuteOption(option)
                     .type(option)
                     .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
@@ -328,9 +329,12 @@ public class TaskManager {
     }
 
     public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
-        return taskRunManager
-                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
-                        build(), option);
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .build();
+        return taskRunManager.submitTaskRun(taskRun, option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -683,7 +687,7 @@ public class TaskManager {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun, status.isMergeRedundant());
+                taskRunManager.arrangeTaskRun(taskRun);
                 break;
             // this will happen in build image
             case RUNNING:

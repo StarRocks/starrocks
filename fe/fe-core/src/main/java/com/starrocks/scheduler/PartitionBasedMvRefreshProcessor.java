@@ -16,6 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -89,6 +90,7 @@ import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
@@ -318,6 +320,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
+        // log the final mv refresh plan for each refresh for better trace and debug
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("MV Refresh Final Plan" +
+                            "\nMV: {}" +
+                            "\nMV PartitionsToRefresh: {}" +
+                            "\nBase PartitionsToScan: {}" +
+                            "\nInsert Plan:\n{}",
+                    materializedView.getName(),
+                    String.join(",", mvToRefreshedPartitions), refTablePartitionNames,
+                    execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE));
+        } else {
+            LOG.info("MV Refresh Final Plan, mv: {}, MV PartitionsToRefresh: {}, Base PartitionsToScan: {}",
+                    materializedView.getName(), String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
+        }
         mvContext.setExecPlan(execPlan);
 
         return insertStmt;
@@ -1026,6 +1042,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     .collect(Collectors.toList());
             insertStmt.setTargetColumnNames(targetColumnNames);
         }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Generate refresh materialized view {} insert-overwrite statement, " +
+                            "materialized view's target partition names:{}, " +
+                            "materialized view's target columns: {}, " +
+                            "definition:{}",
+                    materializedView.getName(),
+                    Joiner.on(",").join(materializedViewPartitions),
+                    insertStmt.getTargetColumnNames() == null ? "" : Joiner.on(",").join(insertStmt.getTargetColumnNames()),
+                    definition);
+        }
         return insertStmt;
     }
 
@@ -1069,6 +1095,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // try to push down into table relation
                     Scope tableRelationScope = tableRelation.getScope();
                     if (canResolveSlotsInTheScope(slots, tableRelationScope)) {
+                        LOG.info("Optimize materialized view {} refresh task, generate table relation {} " +
+                                        "partition predicate:{} ",
+                                materializedView.getName(), tableRelation.getName(), partitionPredicates.toSql());
                         tableRelation.setPartitionPredicate(partitionPredicates);
                     }
 
@@ -1079,9 +1108,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     QueryRelation queryRelation = queryStatement.getQueryRelation();
                     if (queryRelation instanceof SelectRelation) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-                        selectRelation.setWhereClause(
-                                Expr.compoundAnd(Lists.newArrayList(selectRelation.getWhereClause(),
-                                        partitionPredicates)));
+                        Expr finalExpr = Expr.compoundAnd(Lists.newArrayList(selectRelation.getWhereClause(),
+                                partitionPredicates));
+                        selectRelation.setWhereClause(finalExpr);
+                        LOG.info("Optimize materialized view {} refresh task, generate table relation {} " +
+                                        "final predicate:{} ",
+                                materializedView.getName(), tableRelation.getName(), finalExpr.toSql());
                     }
                 }
             }
