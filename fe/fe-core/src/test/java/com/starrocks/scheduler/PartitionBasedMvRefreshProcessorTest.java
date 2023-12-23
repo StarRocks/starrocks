@@ -55,8 +55,10 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -70,6 +72,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
     @BeforeClass
@@ -827,7 +830,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -838,7 +841,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/7");
+        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "t1",
                 ImmutableList.of("par_col=0"));
@@ -847,7 +850,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7", "partitions=3/3");
+        assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
     }
 
     @Test
