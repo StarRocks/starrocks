@@ -36,6 +36,7 @@ import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -131,6 +132,10 @@ public class HiveMetadata implements ConnectorMetadata {
 
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         return hmsOps.createTable(stmt);
+    }
+
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        hmsOps.createTableLike(stmt);
     }
 
     @Override

@@ -32,8 +32,10 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -365,5 +367,51 @@ public class HiveMetastoreOperationsTest {
         stmt.getColumns().addAll(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
+    }
+
+    @Test
+    public void testCreateTableLike() throws DdlException {
+        new MockUp<HiveWriteUtils>() {
+            public void createDirectory(Path path, Configuration conf) {
+            }
+        };
+
+        HiveMetastoreOperations mockedHmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog") {
+            @Override
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("mytable_locatino");
+            }
+        };
+
+        // stmt is constructed according to getTable method in HiveMetastoreTest as when creating a table using Create
+        // Table Like DDL, the system looks for the like table from hms.
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                true,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("col2", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("col1"), new ArrayList<>()),
+                null,
+                new HashMap<>(),
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        stmt.getColumns().addAll(columns);
+
+        CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
+                false,
+                new TableName("hive_catalog", "hive_db", "hive_table_1"),
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                null,
+                null,
+                new HashMap<>(),
+                NodePosition.ZERO);
+        createTableLikeStmt.setCreateTableStmt(stmt);
+        Assert.assertTrue(mockedHmsOps.createTableLike(createTableLikeStmt));
     }
 }

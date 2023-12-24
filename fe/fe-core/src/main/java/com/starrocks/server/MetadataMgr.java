@@ -47,6 +47,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -256,6 +257,46 @@ public class MetadataMgr {
             return connectorMetadata.get().createTable(stmt);
         } else {
             throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                String dbName = stmt.getDbName();
+                String tableName = stmt.getTableName();
+                String existedCatalogName = stmt.getExistedCatalogName();
+                String existedDbName = stmt.getExistedDbName();
+                String existedTableName = stmt.getExistedTableName();
+
+                if (getDb(catalogName, dbName) == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                }
+                if (!catalogName.equals(existedCatalogName)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, String.format(
+                            "Failed to create table %s.%s.%s. msg: Like table across catalogs is not supported",
+                            catalogName, dbName, tableName));
+                }
+                if (tableExists(catalogName, dbName, tableName)) {
+                    if (stmt.isSetIfNotExists()) {
+                        LOG.info("create table[{}] which already exists", tableName);
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                    }
+                }
+
+                if (!tableExists(existedCatalogName, existedDbName, existedTableName)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE,
+                            String.format("Failed to create table %s.%s. msg: Like table %s.%s doesn't exist",
+                                    dbName, tableName, existedDbName, existedTableName));
+                }
+            }
+            connectorMetadata.get().createTableLike(stmt);
+        } else {
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
