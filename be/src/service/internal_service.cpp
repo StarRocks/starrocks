@@ -50,8 +50,7 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -862,39 +861,9 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
     }
 
     RuntimeState state(_exec_env);
-    RuntimeProfile profile{"dummy_profile", false};
-    ScannerCounter counter{};
-    std::unique_ptr<FileScanner> p_scanner;
-
-    auto tp = scan_range.ranges[0].format_type;
-    {
-        switch (tp) {
-        case TFileFormatType::FORMAT_PARQUET:
-            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        case TFileFormatType::FORMAT_ORC:
-            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        default:
-            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
-            LOG(WARNING) << err_msg;
-            st = Status::InvalidArgument(err_msg);
-            return;
-        }
-    }
-
-    st = p_scanner->open();
-    if (!st.ok()) {
-        LOG(WARNING) << "open file scanner failed: " << st;
-        return;
-    }
-
-    DeferOp defer2([&p_scanner] { p_scanner->close(); });
 
     std::vector<SlotDescriptor> schema;
-    st = p_scanner->get_schema(&schema);
+    st = FileScanner::sample_schema(&state, scan_range, &schema);
     if (!st.ok()) {
         LOG(WARNING) << "get schema failed: " << st;
         return;
