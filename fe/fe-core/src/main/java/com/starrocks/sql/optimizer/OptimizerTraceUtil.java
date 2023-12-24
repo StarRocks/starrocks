@@ -193,7 +193,7 @@ public class OptimizerTraceUtil {
             LOG.info("[MV TRACE] [REWRITE {} {}] {}",
                     optimizerContext.getTraceInfo().getQueryId(),
                     rule.type().name(),
-                    String.format(format, object));
+                    MessageFormatter.arrayFormat(format, object).getMessage());
         }
 
         // Trace log if needed.

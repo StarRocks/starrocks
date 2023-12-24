@@ -49,6 +49,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -447,6 +449,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
+
+    public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
 
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
@@ -978,6 +982,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
+
+    @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
+    private String queryDebugOptions = "";
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
@@ -1994,6 +2001,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setOptimizerExecuteTimeout(long optimizerExecuteTimeout) {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
+    }
+
+    public QueryDebugOptions getQueryDebugOptions() {
+        if (Strings.isNullOrEmpty(queryDebugOptions)) {
+            return QueryDebugOptions.getInstance();
+        }
+
+        return QueryDebugOptions.read(queryDebugOptions);
+    }
+
+    public void setQueryDebugOptions(String queryDebugOptions) throws SemanticException {
+        if (!Strings.isNullOrEmpty(queryDebugOptions)) {
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException("Invalid planner options: %s", queryDebugOptions);
+            }
+        }
+        this.queryDebugOptions = queryDebugOptions;
     }
 
     public boolean getEnableGroupbyUseOutputAlias() {
