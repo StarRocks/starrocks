@@ -650,38 +650,6 @@ public class MaterializedViewRewriter {
         }
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * If materialized view has to-refreshed partitions, need to add compensated partition predicate
-     * into materialized view's predicate split. so it can be used for predicate compensate or union all
-     * rewrite.
-     */
-    private ScalarOperator compensateMVPartitionPredicate(List<ScalarOperator> mvPredicates,
-                                                          ReplaceColumnRefRewriter mvColumnRefRewriter) {
-        ScalarOperator mvPrunedPartitionPredicate = getMVCompensatePartitionPredicate();
-        if (mvPrunedPartitionPredicate != null) {
-            List<ScalarOperator> partitionPredicates =
-                    getPartitionRelatedPredicates(mvPredicates, mvRewriteContext.getMaterializationContext().getMv());
-            if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
-                    && !((IsNullPredicateOperator) p).isNotNull())) {
-                // there is no partition column is null predicate
-                // add latest partition predicate to mv predicate
-                return mvColumnRefRewriter.rewrite(mvPrunedPartitionPredicate);
-            }
-        }
-        return ConstantOperator.TRUE;
-    }
-
-    private ScalarOperator getMVCompensatePartitionPredicate() {
-        if (mvRewriteContext.isCompensatePartitionPredicate()) {
-            return materializationContext.getMvPartialPartitionPredicate();
-        } else {
-            return null;
-        }
-    }
-
->>>>>>> 9c0cfa7534 ([BugFix] Compensate extra predicates after union all pull up rewrite (backport #37085) (#37378))
     private OptExpression rewriteViewDelta(List<Table> queryTables,
                                            List<Table> mvTables,
                                            PredicateSplit mvPredicateSplit,

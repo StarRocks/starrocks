@@ -94,8 +94,6 @@ public class PlanTestNoneDBBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     private static String ignoreColRefs(String s) {
         // ignore colRef id
         // eg:
@@ -122,14 +120,6 @@ public class PlanTestNoneDBBase {
         }
     }
 
-    public static void assertContainsCTEReuse(String sql) throws Exception {
-        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
-        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
-                getExplainString(TExplainLevel.NORMAL);
-        assertContains(plan, "  MultiCastDataSinks");
-    }
-
->>>>>>> 9c0cfa7534 ([BugFix] Compensate extra predicates after union all pull up rewrite (backport #37085) (#37378))
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
             Assert.assertTrue(text, text.contains(s));
