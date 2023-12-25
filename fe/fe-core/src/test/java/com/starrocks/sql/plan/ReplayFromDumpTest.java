@@ -396,9 +396,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testInsertWithView() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/insert_view"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 2:Project\n" +
+        Assert.assertTrue(replayPair.second, UtFrameUtils.matchPlanWithoutId(" 2:Project\n" +
                 "  |  <slot 2> : 2: t2_c2\n" +
-                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
+                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)", replayPair.second));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("OLAP TABLE SINK"));
     }
 
@@ -468,14 +468,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testGatherWindowCTE2() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/gather_window_cte"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  0:UNION\n" +
+        Assert.assertTrue(replayPair.second, UtFrameUtils.matchPlanWithoutId("  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [16, DATE, false] | [17, BIGINT, true] | [18, DECIMAL128(27,19), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2: c_0_0, DATE, false] | [7: row_number(), BIGINT, true] " +
                 "| [8: last_value(4: c_0_2), DECIMAL128(27,19), true]\n" +
                 "  |      [9: c_0_0, DATE, false] | [14: row_number(), BIGINT, true] " +
-                "| [15: last_value(11: c_0_2), DECIMAL128(27,19), true]"));
+                "| [15: last_value(11: c_0_2), DECIMAL128(27,19), true]", replayPair.second));
     }
 
     @Test

@@ -14,17 +14,32 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.qe.ConnectContext;
 
+import java.util.List;
+
 public class MvPlanContextBuilder {
-    public MvPlanContext getPlanContext(MaterializedView mv) {
+    public static List<MvPlanContext> getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(
-                ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
-        return mvOptimizer.optimize(mv, connectContext);
+        ConnectContext connectContext = ConnectContext.get();
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            connectContext.setThreadLocalInfo();
+        }
+        MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
+        List<MvPlanContext> results = Lists.newArrayList(contextWithoutView);
+        List<TableType> baseTableTypes = mv.getBaseTableTypes();
+        if (baseTableTypes.stream().anyMatch(type -> type == TableType.VIEW)) {
+            MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
+            results.add(contextWithView);
+        }
+        return results;
     }
 }
