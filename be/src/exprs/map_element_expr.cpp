@@ -41,8 +41,16 @@ public:
         ASSIGN_OR_RETURN(ColumnPtr map_col, _children[0]->evaluate_checked(context, chunk));
         ASSIGN_OR_RETURN(ColumnPtr key_col, _children[1]->evaluate_checked(context, chunk));
 
+        size_t num_rows = 0;
+        if (UNLIKELY(chunk == nullptr)) {
+            // in test case
+            num_rows = std::max(map_col->size(), key_col->size());
+        } else {
+            num_rows = chunk->num_rows();
+        }
+
         if (map_col->only_null() || key_col->only_null()) {
-            return ColumnHelper::create_const_null_column(chunk->num_rows());
+            return ColumnHelper::create_const_null_column(num_rows);
         }
 
         bool map_is_const = map_col->is_constant();
@@ -57,17 +65,11 @@ public:
         auto& map_values = down_cast<MapColumn*>(map_column)->values_column();
         const auto& offsets = down_cast<MapColumn*>(map_column)->offsets().get_data();
 
-        size_t num_rows = 0;
-        if (UNLIKELY(chunk == nullptr)) {
-            // in test case
-            num_rows = std::max(map_col->size(), key_col->size());
-        } else {
-            num_rows = map_is_const && key_is_const ? 1 : chunk->num_rows();
-        }
+        size_t actual_rows = map_is_const && key_is_const ? 1 : num_rows;
         auto res = map_values->clone_empty(); // must be nullable
-        res->reserve(num_rows);
+        res->reserve(actual_rows);
 
-        for (size_t i = 0; i < num_rows; i++) {
+        for (size_t i = 0; i < actual_rows; i++) {
             auto map_idx = map_is_const ? 0 : i;
             auto key_idx = key_is_const ? 0 : i;
             bool has_equal = false;
