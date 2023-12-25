@@ -19,6 +19,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
@@ -31,15 +32,45 @@ class MapElementExpr final : public Expr {
 public:
     explicit MapElementExpr(const TExprNode& node) : Expr(node) {}
 
-    MapElementExpr(const MapElementExpr& m) = default;
-    MapElementExpr(MapElementExpr&& m) = default;
+    MapElementExpr(const MapElementExpr& m) : Expr(m) { _const_input = m._const_input; }
+    MapElementExpr(MapElementExpr&& m) noexcept : Expr(m) { _const_input = m._const_input; }
+
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+        RETURN_IF_ERROR(Expr::open(state, context, scope));
+        DCHECK_EQ(2, _children.size());
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            _const_input.resize(_children.size());
+            for (auto i = 0; i < _children.size(); ++i) {
+                if (_children[i]->is_constant()) {
+                    // _const_input[i] maybe not be of ConstColumn
+                    ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+                } else {
+                    _const_input[i] = nullptr;
+                }
+            }
+        } else {
+            DCHECK_EQ(_const_input.size(), _children.size());
+        }
+        return Status::OK();
+    }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
 #ifndef BE_TEST
         DCHECK_EQ(_type, _children[0]->type().children[1]);
 #endif
-        ASSIGN_OR_RETURN(ColumnPtr map_col, _children[0]->evaluate_checked(context, chunk));
-        ASSIGN_OR_RETURN(ColumnPtr key_col, _children[1]->evaluate_checked(context, chunk));
+        ColumnPtr map_col;
+        ColumnPtr key_col;
+        if (_const_input[0] == nullptr) {
+            ASSIGN_OR_RETURN(map_col, _children[0]->evaluate_checked(context, chunk));
+        } else {
+            map_col = _const_input[0];
+        }
+
+        if (_const_input[1] == nullptr) {
+            ASSIGN_OR_RETURN(key_col, _children[1]->evaluate_checked(context, chunk));
+        } else {
+            key_col = _const_input[1];
+        }
 
         size_t num_rows = 0;
         if (UNLIKELY(chunk == nullptr)) {
@@ -49,7 +80,7 @@ public:
             num_rows = chunk->num_rows();
         }
 
-        if (map_col->only_null() || key_col->only_null()) {
+        if (map_col->only_null()) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
 
@@ -113,6 +144,9 @@ public:
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
+
+private:
+    Columns _const_input;
 };
 
 Expr* MapElementExprFactory::from_thrift(const TExprNode& node) {

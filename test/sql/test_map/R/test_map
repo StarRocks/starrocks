@@ -81,6 +81,10 @@ None
 None
 None
 -- !result
+select map{null: "a", 2: "b"}[null];
+-- result:
+a
+-- !result
 -- name: testEmptyMap
 with t0 as (
     select c1 from (values(map())) as t(c1)
