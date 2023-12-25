@@ -65,10 +65,16 @@ public class PipeManager {
             Pair<Long, String> dbIdAndName = resolvePipeNameUnlock(stmt.getPipeName());
             boolean existed = nameToId.containsKey(dbIdAndName);
             if (existed) {
-                if (!stmt.isIfNotExists()) {
+                if (!stmt.isIfNotExists() && !stmt.isReplace()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_PIPE_EXISTS);
                 }
-                return;
+                if (stmt.isIfNotExists()) {
+                    return;
+                } else if (stmt.isReplace()) {
+                    LOG.info("Pipe {} already exist, replace it with a new one", stmt.getPipeName());
+                    Pipe pipe = pipeMap.get(nameToId.get(dbIdAndName));
+                    dropPipeImpl(pipe);
+                }
             }
 
             // Add pipe
@@ -97,18 +103,20 @@ public class PipeManager {
             }
             pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            pipe.suspend();
-            pipe.destroy();
-            removePipe(pipe);
-
-            // persistence
-            repo.deletePipe(pipe);
+            dropPipeImpl(pipe);
         } catch (Throwable e) {
             LOG.error("drop pipe {} failed", pipe, e);
             throw e;
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    private void dropPipeImpl(Pipe pipe) {
+        pipe.suspend();
+        pipe.destroy();
+        removePipe(pipe);
+        repo.deletePipe(pipe);
     }
 
     public void dropPipesOfDb(String dbName, long dbId) {
