@@ -203,7 +203,7 @@ FROM <data_source>
     "property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
     ```
 
-- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制**
+- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制
 
     ```sql
     "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
