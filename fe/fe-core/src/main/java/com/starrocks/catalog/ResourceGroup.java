@@ -44,6 +44,8 @@ public class ResourceGroup {
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
+    public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
+
     public static final long DEFAULT_WG_ID = 0;
     public static final long DEFAULT_MV_WG_ID = 1;
     public static final long DEFAULT_MV_VERSION = 1;
@@ -70,6 +72,7 @@ public class ResourceGroup {
                     .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("spill_mem_limit_threshold", ScalarType.createVarchar(200)))
                     .addColumn(new Column("type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
                     .build();
@@ -95,6 +98,8 @@ public class ResourceGroup {
     private Long bigQueryCpuSecondLimit;
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
+    @SerializedName(value = "spillMemLimitThreshold")
+    private Double spillMemLimitThreshold;
     @SerializedName(value = "workGroupType")
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
@@ -126,6 +131,11 @@ public class ResourceGroup {
             row.add("" + 0);
         }
         row.add("" + concurrencyLimit);
+        if (spillMemLimitThreshold != null) {
+            row.add("" + (spillMemLimitThreshold * 100) + "%");
+        } else {
+            row.add("" + "100%");
+        }
         row.add("" + resourceGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
         return row;
@@ -197,6 +207,10 @@ public class ResourceGroup {
         if (concurrencyLimit != null) {
             twg.setConcurrency_limit(concurrencyLimit);
         }
+
+        if (spillMemLimitThreshold != null) {
+            twg.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+        }
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
         }
@@ -266,6 +280,14 @@ public class ResourceGroup {
 
     public void setConcurrencyLimit(int concurrencyLimit) {
         this.concurrencyLimit = concurrencyLimit;
+    }
+
+    public Double getSpillMemLimitThreshold() {
+        return spillMemLimitThreshold;
+    }
+
+    public void setSpillMemLimitThreshold(double spillMemLimitThreshold) {
+        this.spillMemLimitThreshold = spillMemLimitThreshold;
     }
 
     public TWorkGroupType getResourceGroupType() {

@@ -169,13 +169,13 @@ class WorkGroupDriverQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
         _wg1 = std::make_shared<workgroup::WorkGroup>("wg100", 100, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
         _wg2 = std::make_shared<workgroup::WorkGroup>("wg200", 200, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5, 10,
-                                                      workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
         _wg3 = std::make_shared<workgroup::WorkGroup>("wg300", 300, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
         _wg4 = std::make_shared<workgroup::WorkGroup>("wg400", 400, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      workgroup::WorkGroupType::WG_NORMAL);
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL);
         _wg1 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg1);
         _wg2 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg2);
         _wg3 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg3);
