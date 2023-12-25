@@ -461,20 +461,26 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             List<Column> mvColumns = Lists.newArrayList();
-            Map<String, String> columnCommentMap = null;
-            if (CollectionUtils.isNotEmpty(statement.getColWithComments())) {
-                columnCommentMap = statement.getColWithComments().stream()
-                        .collect(Collectors.toMap(ColWithComment::getColName, ColWithComment::getComment));
-            } else {
-                columnCommentMap = Maps.newHashMap();
-            }
             for (int i = 0; i < relationFields.size(); ++i) {
                 Type type = AnalyzerUtils.transformTableColumnType(relationFields.get(i).getType(), false);
                 Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
-                column.setComment(columnCommentMap.getOrDefault(columnNames.get(i), ""));
                 mvColumns.add(column);
+            }
+
+            if (statement.getColWithComments() != null) {
+                List<ColWithComment> colWithComments = statement.getColWithComments();
+                if (colWithComments.size() != mvColumns.size()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                }
+                for (int i = 0; i < colWithComments.size(); ++i) {
+                    Column column = mvColumns.get(i);
+                    ColWithComment colWithComment = colWithComments.get(i);
+                    colWithComment.analyze();
+                    column.setName(colWithComment.getColName());
+                    column.setComment(colWithComment.getComment());
+                }
             }
 
             // set duplicate key, when sort key is set, it is dup key col.
