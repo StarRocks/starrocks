@@ -156,6 +156,14 @@ public class StatementPlanner {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
         }
         setOutfileSink(queryStmt, plan);
+        int sleep = session.getSessionVariable().getBigQueryProfileSecondThreshold();
+        if (sleep > 0) {
+            try {
+                Thread.sleep(sleep * 1000L);
+            } catch (Exception e) {
+                System.out.println("end");
+            }
+        }
         return plan;
     }
 
