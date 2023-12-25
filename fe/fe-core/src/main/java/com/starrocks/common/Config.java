@@ -593,6 +593,17 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Number of worker threads for http server to deal with http requests which may do
+     * some I/O operations. If set with a non-positive value, it will use netty's default
+     * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
+     * default value is 0 which is same as the previous behaviour.
+     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * for details.
+     */
+    @ConfField
+    public static int http_worker_threads_num = 0;
+
+    /**
      * The backlog_num for netty http server
      * When you enlarge this backlog_num, you should ensure its value larger than
      * the linux /proc/sys/net/core/somaxconn config
