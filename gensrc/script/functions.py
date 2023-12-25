@@ -315,6 +315,14 @@ vectorized_functions = [
     [304022, "money_format", "VARCHAR", ["DECIMAL128"], "StringFunctions::money_format_decimal<TYPE_DECIMAL128>"],
     [30403, "money_format", "VARCHAR", ["DOUBLE"], "StringFunctions::money_format_double"],
 
+    [30404, "format", "VARCHAR", ["BIGINT", "INT"], "StringFunctions::format_bigint"],
+    [30405, "format", "VARCHAR", ["LARGEINT", "INT"], "StringFunctions::format_largeint"],
+    [30406, "format", "VARCHAR", ["DECIMALV2", "INT"], "StringFunctions::format_decimalv2val"],
+    [304060, "format", "VARCHAR", ["DECIMAL32", "INT"], "StringFunctions::format_decimal<TYPE_DECIMAL32>"],
+    [304061, "format", "VARCHAR", ["DECIMAL64", "INT"], "StringFunctions::format_decimal<TYPE_DECIMAL64>"],
+    [304062, "format", "VARCHAR", ["DECIMAL128", "INT"], "StringFunctions::format_decimal<TYPE_DECIMAL128>"],
+    [30407, "format", "VARCHAR", ["DOUBLE", "INT"], "StringFunctions::format_double"],
+
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
     [30411, 'url_extract_parameter', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::url_extract_parameter',

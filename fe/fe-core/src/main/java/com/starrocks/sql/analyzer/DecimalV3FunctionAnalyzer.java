@@ -433,6 +433,10 @@ public class DecimalV3FunctionAnalyzer {
             newFn = getFunctionOfRound(node, fn, argTypes);
         } else if (FunctionSet.ARRAY_DECIMAL_FUNCTIONS.contains(fnName)) {
             newFn = getArrayDecimalFunction(fn, argumentTypes);
+        } else if (FunctionSet.FORMAT.equals(fnName)) {
+            Type[] argTypes = replaceArgDecimalType(fn.getArgs(), argumentTypes);
+            newFn = fn.copy();
+            newFn.setArgsType(argTypes);
         }
 
         if (newFn != null) {

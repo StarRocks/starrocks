@@ -444,6 +444,37 @@ public:
     template <LogicalType Type>
     static StatusOr<ColumnPtr> money_format_decimal(FunctionContext* context, const starrocks::Columns& columns);
 
+    /**
+     * @param: [DOUBLE]
+     * @paramType: [DoubleColumn]
+     * @return: BinaryColumn
+     */
+    static StatusOr<ColumnPtr> format_double(FunctionContext* context, const Columns& columns);
+
+    /**
+     * @param: [BIGINT]
+     * @paramType: [Int64Column]
+     * @return: BinaryColumn
+     */
+    static StatusOr<ColumnPtr> format_bigint(FunctionContext* context, const Columns& columns);
+
+    /**
+     * @param: [LARGEINT]
+     * @paramType: [Int128Column]
+     * @return: BinaryColumn
+     */
+    static StatusOr<ColumnPtr> format_largeint(FunctionContext* context, const Columns& columns);
+
+    /**
+     * @param: [DECIMALV2]
+     * @paramType: [Int128Column]
+     * @return: BinaryColumn
+     */
+    static StatusOr<ColumnPtr> format_decimalv2val(FunctionContext* context, const Columns& columns);
+
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> format_decimal(FunctionContext* context, const Columns& columns);
+
     static Status trim_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status trim_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -570,6 +601,54 @@ private:
         return ss.str();
     };
 
+    /**
+    * FORMAT(s,d)
+    * Formats the number string s to a format like '#,###,###.##', truncated to d decimal places, and returns the result as a string.
+    * If d is 0, the result has no decimal point or fractional part; If d is negative, treat like 0.
+    * Rounding should be handled before entering this method.
+    * FORMAT(12332.123456, 4) -> "12,332.1234"
+    * FORMAT(12332.2,0) -> "12,332"
+    * FORMAT(12332.1,4) -> "12,332.1000"
+    * FORMAT(1.1, -4) -> "1"
+    */
+    static std::string transform_format(const std::string& s, int d) {
+        size_t idx = s.find(".");
+        bool neg_sign = s.find("-") != std::string::npos;
+        int d_start = idx + 1;
+        if (idx == std::string::npos) {
+            idx = s.length();
+            d_start = -1;
+        }
+        int num = 0, start = neg_sign ? 1 : 0;
+        std::string res;
+        for (int i = idx - 1; i >= start; i--) {
+            res.push_back(s[i]);
+            num++;
+            if (num == 3 && i != start) {
+                res.push_back(',');
+                num = 0;
+            }
+        }
+        std::reverse(res.begin(), res.end());
+
+        if (res.length() == 0) {
+            res.push_back('0');
+        }
+
+        if (d > 0) {
+            res.push_back('.');
+
+            for (int i = 0; i < d; i++) {
+                if (d_start >= 0 && d_start < s.length()) {
+                    res.push_back(s[d_start++]);
+                } else {
+                    res.push_back('0');
+                }
+            }
+        }
+        return neg_sign ? "-" + res : res;
+    };
+
     struct ParseUrlState {
         bool const_pattern{false};
         std::unique_ptr<UrlParser::UrlPart> url_part;
@@ -592,6 +671,28 @@ private:
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                  size_t num_rows, int adjust_scale,
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
+
+    static inline ColumnPtr format_double_const(const Columns& columns);
+    static inline ColumnPtr format_double_not_const(const Columns& columns);
+
+    static inline ColumnPtr format_bigint_const(const Columns& columns);
+    static inline ColumnPtr format_bigint_not_const(const Columns& columns);
+
+    static inline ColumnPtr format_largeint_const(const Columns& columns);
+    static inline ColumnPtr format_largeint_not_const(const Columns& columns);
+
+    static inline ColumnPtr format_decimalv2val_const(const Columns& columns);
+    static inline ColumnPtr format_decimalv2val_not_const(const Columns& columns);
+
+    template <LogicalType Type, bool check_overflow>
+    static inline void format_decimal_impl_const(FunctionContext* context, ColumnViewer<Type> const& data_viewer,
+                                                 int format_scale, size_t num_rows,
+                                                 ColumnBuilder<TYPE_VARCHAR>* result);
+
+    template <LogicalType Type, bool check_overflow>
+    static inline void format_decimal_impl_not_const(FunctionContext* context, ColumnViewer<Type> const& data_viewer,
+                                                     ColumnViewer<TYPE_INT> const& scale_viewer, size_t num_rows,
+                                                     ColumnBuilder<TYPE_VARCHAR>* result);
 };
 
 template <LogicalType Type, bool scale_up, bool check_overflow>
@@ -629,6 +730,98 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
     }
 }
 
+template <LogicalType Type, bool check_overflow>
+void StringFunctions::format_decimal_impl_const(FunctionContext* context, ColumnViewer<Type> const& data_viewer,
+                                                int format_scale, size_t num_rows,
+                                                ColumnBuilder<TYPE_VARCHAR>* result) {
+    const auto& type = context->get_arg_type(0);
+    int scale = type->scale;
+    int d = std::max(format_scale, 0);
+    int adjust_scale = std::abs(scale - d);
+    using CppType = RunTimeCppType<Type>;
+    const auto scale_factor = get_scale_factor<CppType>(adjust_scale);
+
+    static constexpr auto max_precision = decimal_precision_limit<CppType>;
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (data_viewer.is_null(row)) {
+            result->append_null();
+            continue;
+        }
+
+        auto num_value = data_viewer.value(row);
+        CppType rounded_num;
+
+        bool overflow;
+        if (scale > d) {
+            overflow = DecimalV3Cast::round<CppType, ROUND_HALF_UP, false, check_overflow>(num_value, scale_factor,
+                                                                                           &rounded_num);
+        } else {
+            overflow = DecimalV3Cast::round<CppType, ROUND_HALF_UP, true, check_overflow>(num_value, scale_factor,
+                                                                                          &rounded_num);
+        }
+
+        std::string rounded_format;
+        if (rounded_num == 0) {
+            rounded_format = transform_format("0", d);
+        } else {
+            bool is_negative = rounded_num < 0;
+            CppType abs_rounded_num = is_negative ? -rounded_num : rounded_num;
+            auto str = DecimalV3Cast::to_string<CppType>(abs_rounded_num, max_precision, d);
+            std::string prefix = is_negative ? "-" : "";
+            rounded_format = transform_format(prefix + str, d);
+        }
+        result->append(Slice(rounded_format.data(), rounded_format.size()), overflow);
+    }
+}
+
+template <LogicalType Type, bool check_overflow>
+void StringFunctions::format_decimal_impl_not_const(FunctionContext* context, ColumnViewer<Type> const& data_viewer,
+                                                    ColumnViewer<TYPE_INT> const& scale_viewer, size_t num_rows,
+                                                    ColumnBuilder<TYPE_VARCHAR>* result) {
+    const auto& type = context->get_arg_type(0);
+    int scale = type->scale;
+
+    using CppType = RunTimeCppType<Type>;
+    static constexpr auto max_precision = decimal_precision_limit<CppType>;
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (data_viewer.is_null(row) || scale_viewer.is_null(row)) {
+            result->append_null();
+            continue;
+        }
+
+        int d = scale_viewer.value(row);
+        d = std::max(d, 0);
+        int adjust_scale = std::abs(scale - d);
+        const auto scale_factor = get_scale_factor<CppType>(adjust_scale);
+
+        auto num_value = data_viewer.value(row);
+        CppType rounded_num;
+
+        bool overflow;
+        if (scale > d) {
+            overflow = DecimalV3Cast::round<CppType, ROUND_HALF_UP, false, check_overflow>(num_value, scale_factor,
+                                                                                           &rounded_num);
+        } else {
+            overflow = DecimalV3Cast::round<CppType, ROUND_HALF_UP, true, check_overflow>(num_value, scale_factor,
+                                                                                          &rounded_num);
+        }
+
+        std::string rounded_format;
+        if (rounded_num == 0) {
+            rounded_format = transform_format("0", scale_viewer.value(row));
+        } else {
+            bool is_negative = rounded_num < 0;
+            CppType abs_rounded_num = is_negative ? -rounded_num : rounded_num;
+            auto str = DecimalV3Cast::to_string<CppType>(abs_rounded_num, max_precision, d);
+            std::string prefix = is_negative ? "-" : "";
+            rounded_format = transform_format(prefix + str, scale_viewer.value(row));
+        }
+        result->append(Slice(rounded_format.data(), rounded_format.size()), overflow);
+    }
+}
+
 template <LogicalType Type>
 StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -646,6 +839,25 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
     } else {
         // scale up
         money_format_decimal_impl<Type, true, true>(context, money_viewer, num_rows, 2 - scale, &result);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> StringFunctions::format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    using CppType = RunTimeCppType<Type>;
+    static_assert(lt_is_decimal<Type>, "Invalid decimal type");
+    auto data_viewer = ColumnViewer<Type>(columns[0]);
+    auto num_rows = columns[0]->size();
+
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    if (columns[1]->is_constant()) {
+        format_decimal_impl_const<Type, true>(context, data_viewer, ColumnHelper::get_const_value<TYPE_INT>(columns[1]),
+                                              num_rows, &result);
+    } else {
+        auto scale_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+        format_decimal_impl_not_const<Type, true>(context, data_viewer, scale_viewer, num_rows, &result);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

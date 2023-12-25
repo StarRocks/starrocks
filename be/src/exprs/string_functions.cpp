@@ -3866,6 +3866,57 @@ StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* contex
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+inline ColumnPtr StringFunctions::format_double_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
+    auto scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
+    scale = std::max(scale, 0);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        double rounded = MathFunctions::double_round(data_viewer.value(row), scale, false, false);
+        std::string rounded_format = transform_format(std::to_string(rounded), scale);
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_double_not_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
+    auto scale_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row) || scale_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        double rounded = MathFunctions::double_round(
+                data_viewer.value(row), scale_viewer.value(row) < 0 ? 0 : scale_viewer.value(row), false, false);
+        std::string rounded_format = transform_format(std::to_string(rounded), scale_viewer.value(row));
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::format_double(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[1]->is_constant()) {
+        return format_double_const(columns);
+    } else {
+        return format_double_not_const(columns);
+    }
+}
+
 StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* context, const starrocks::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
 
@@ -3883,6 +3934,56 @@ StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* contex
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_bigint_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
+    auto scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
+    scale = std::max(scale, 0);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        std::string numstr = std::to_string(data_viewer.value(row));
+        std::string rounded_format = transform_format(numstr, scale);
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_bigint_not_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
+    auto scale_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row) || scale_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        std::string numstr = std::to_string(data_viewer.value(row));
+        std::string rounded_format = transform_format(numstr, scale_viewer.value(row));
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::format_bigint(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[1]->is_constant()) {
+        return format_bigint_const(columns);
+    } else {
+        return format_bigint_not_const(columns);
+    }
 }
 
 StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* context,
@@ -3905,6 +4006,60 @@ StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* cont
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_largeint_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
+    auto scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
+    scale = std::max(scale, 0);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        std::stringstream numstr;
+        auto num_value = data_viewer.value(row);
+        starrocks::operator<<(numstr, num_value);
+        std::string rounded_format = transform_format(numstr.str(), scale);
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_largeint_not_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
+    auto scale_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row) || scale_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        std::stringstream numstr;
+        auto num_value = data_viewer.value(row);
+        starrocks::operator<<(numstr, num_value);
+        std::string rounded_format = transform_format(numstr.str(), scale_viewer.value(row));
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::format_largeint(FunctionContext* context, const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[1]->is_constant()) {
+        return format_largeint_const(columns);
+    } else {
+        return format_largeint_not_const(columns);
+    }
 }
 
 StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* context,
@@ -3930,6 +4085,62 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* 
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_decimalv2val_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
+    auto scale = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
+    scale = std::max(scale, 0);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto num_value = data_viewer.value(row);
+        DecimalV2Value rounded;
+        num_value.round(&rounded, scale, HALF_UP);
+
+        std::string rounded_format = transform_format(rounded.to_string(), scale);
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+inline ColumnPtr StringFunctions::format_decimalv2val_not_const(const Columns& columns) {
+    auto data_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
+    auto scale_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_viewer.is_null(row) || scale_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto num_value = data_viewer.value(row);
+        DecimalV2Value rounded;
+        num_value.round(&rounded, scale_viewer.value(row) < 0 ? 0 : scale_viewer.value(row), HALF_UP);
+
+        std::string rounded_format = transform_format(rounded.to_string(), scale_viewer.value(row));
+        result.append(Slice(rounded_format.data(), rounded_format.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::format_decimalv2val(FunctionContext* context, const starrocks::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns[1]->is_constant()) {
+        return format_decimalv2val_const(columns);
+    } else {
+        return format_decimalv2val_not_const(columns);
+    }
 }
 
 // regex method

@@ -124,6 +124,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [concat_ws](./string-functions/concat_ws.md) | 使用分隔符将两个或以上的字符串拼接成一个新的字符串。  |
 | [ends_with](./string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
 | [find_in_set](./string-functions/find_in_set.md) | 返回指定的字符串在一系列字符串列表中第一次出现的位置。  |
+| [format](./string-functions/format.md) | 格式化数字 X，结果样式为 '#,###,###.##'，四舍五入到第 D 个小数位。  |
 | [group_concat](./string-functions/group_concat.md) | 将结果集中的多行结果连接成一个字符串。  |
 | [hex_decode_binary](./string-functions/hex_decode_binary.md) |  将一个十六进制编码的字符串解码为 VARBINARY 类型的值。 |
 | [hex_decode_string](./string-functions/hex_decode_string.md) | 将输入字符串中每一对十六进制数字解析为一个数字，并将解析得到的数字转换为表示该数字的字节，然后返回一个二进制字符串。  |

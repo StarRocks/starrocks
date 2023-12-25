@@ -297,6 +297,7 @@ You can find a function based on the following categories:
 - [crc32](./string-functions/crc32.md)
 - [ends_with](./string-functions/ends_with.md)
 - [find_in_set](./string-functions/find_in_set.md)
+- [format](./string-functions/format.md)
 - [group_concat](./string-functions/group_concat.md)
 - [hex](./string-functions/hex.md)
 - [hex_decode_binary](./string-functions/hex_decode_binary.md)

@@ -183,6 +183,7 @@ public class FunctionSet {
     public static final String LTRIM = "ltrim";
     public static final String RTRIM = "rtrim";
     public static final String MONEY_FORMAT = "money_format";
+    public static final String FORMAT = "format";
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
