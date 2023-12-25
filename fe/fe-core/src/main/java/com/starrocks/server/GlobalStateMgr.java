@@ -1197,9 +1197,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
-        final long printHintTimeInterval = 60 * 1000L;
-        int printHintCnt = 1;
-        long waitStartTime = System.currentTimeMillis();
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1219,18 +1217,20 @@ public class GlobalStateMgr {
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
 
-            if (System.currentTimeMillis() - waitStartTime > printHintTimeInterval * printHintCnt) {
-                printHintCnt++;
-                LOG.warn("It took too much time to get ready, there are some reasons: " +
-                        "1. There are too many BDB logs to replay, because the failure of checkpoint. " +
-                        "2. More than half of the followers in the cluster are not started. " +
-                        "3. There are multiple IPs on the machine, or ip has changed, " +
-                        "you should specify the priority_networks to use the IP from image/ROLE, " +
-                        "ignore this reason if you are using FQDN. " +
-                        "4. The time deviation between machines is greater than 5s, " +
-                        "please use ntp or other tools to synchronize clock. " +
-                        "5. The configuration of edit_log_port is changed, please reset to the original value. " +
-                        "6. The thread of replayer is blocked, please use jstack to find the details");
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
             }
         }
     }
