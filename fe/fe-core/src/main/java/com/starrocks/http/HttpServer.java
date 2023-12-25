@@ -259,7 +259,8 @@ public class HttpServer {
         public void run() {
             // Configure the server.
             EventLoopGroup bossGroup = new NioEventLoopGroup();
-            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            int numWorkerThreads = Math.max(0, Config.http_worker_threads_num);
+            EventLoopGroup workerGroup = new NioEventLoopGroup(numWorkerThreads);
             try {
                 serverBootstrap = new ServerBootstrap();
                 serverBootstrap.option(ChannelOption.SO_BACKLOG, Config.http_backlog_num);
