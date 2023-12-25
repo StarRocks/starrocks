@@ -181,6 +181,9 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - PLAIN
   - SCRAM-SHA-256 and SCRAM-SHA-512
   - OAUTHBEARER
+  - GSSAPI (Kerberos)
+
+  **Examples:**
 
   - Access Kafka using the SSL security protocol:
 
@@ -209,6 +212,30 @@ If `property.group.id` is not specified, StarRocks generates a random value base
     -- SASL password
     "property.sasl.password" = "xxxxxx"
     ```
+
+  - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/GSSAPI (Kerberos) authentication mechanism:
+
+    ```sql
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT
+    "property.sasl.mechanism" = "GSSAPI", -- Specifies the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
+    "property.sasl.kerberos.service.name" = "kafka", -- Specifies the broker service name, default is Kafka.
+    "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- Specifies the client keytab location.
+    "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- Specifies the Kerberos principal.
+    ```
+
+    :::note
+
+    - Since StarRocks v3.1.4, SASL/GSSAPI (Kerberos) authentication is supported.
+    - SASL related modules need to be installed on the BE machine.
+
+        ```bash
+        # Debian/Ubuntu:
+        sudo apt-get install libsasl2-modules-gssapi-mit libsasl2-dev
+        # CentOS/Redhat:
+        sudo yum install cyrus-sasl-gssapi cyrus-sasl-devel
+        ```
+
+    :::
 
 ### FE and BE configuration items
 
