@@ -50,7 +50,8 @@ public:
         return Status::OK();
     }
 
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* base_state) const override;
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* base_state) const override;
 };
 
 } // namespace starrocks
