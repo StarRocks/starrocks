@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -164,6 +165,11 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitMockOperator(MockOperator node, ExpressionContext context) {
             return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalViewScan(LogicalViewScanOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override
