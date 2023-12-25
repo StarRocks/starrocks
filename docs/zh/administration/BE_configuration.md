@@ -28,7 +28,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。
 - 默认值：false
-- **引入版本：** 2.5.17, 3.0.9, 3.1.6, 3.2.1
+- **引入版本：**2.5.17、3.0.9、3.1.6、3.2.1
 
 #### report_task_interval_seconds
 
