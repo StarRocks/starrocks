@@ -26,8 +26,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TableWithPartitions {
-    private Table table;
-    private Set<String> partitionNames;
+    private final Table table;
+    private final Set<String> partitionNames;
     public TableWithPartitions(Table table, Set<String> partitionNames) {
         this.table = table;
         this.partitionNames = partitionNames;
