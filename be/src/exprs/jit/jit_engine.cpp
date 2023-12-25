@@ -172,7 +172,7 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
         // The function has already been compiled.
         if (func != nullptr) {
             LOG(WARNING) << "JIT: Failed to add IR module to JIT, module already exist";
-            return func;
+            return nullptr;
         }
 
         std::string error_message;
