@@ -2542,9 +2542,7 @@ PARALLEL_TEST(PersistentIndexTest, test_snapshot_with_minor_compact) {
     config::l0_max_mem_usage = old_config;
 }
 
-<<<<<<< HEAD
-=======
-TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
+PARALLEL_TEST(PersistentIndexTest, pindex_compaction_disk_limit) {
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
     TabletSharedPtr tablet3 = create_tablet(rand(), rand());
@@ -2573,7 +2571,7 @@ TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
     ASSERT_FALSE(mgr.disk_limit(tablet3.get()));
 }
 
-TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
+PARALLEL_TEST(PersistentIndexTest, pindex_compaction_schedule) {
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_OK(tablet->init());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
@@ -2591,7 +2589,7 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
     });
 }
 
-TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
+PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
     int64_t old_config = config::max_allow_pindex_l2_num;
     config::max_allow_pindex_l2_num = 100;
     config::l0_max_mem_usage = 100 * 1024; // 100KB
@@ -2718,7 +2716,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
     config::max_allow_pindex_l2_num = old_config;
 }
 
-TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
+PARALLEL_TEST(PersistentIndexTest, pindex_major_compact_meta) {
     // (1.0), (1.1), (3.0), (4.1), (5.0)
     // merge (1.0), (1.1), (3.0) into (3.0)
     std::vector<EditVersion> current_l2_versions;
@@ -2762,8 +2760,4 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
-
->>>>>>> a44147f1f8 ([Enhancement] limit persistent index compaction by disk (#36681))
 } // namespace starrocks
