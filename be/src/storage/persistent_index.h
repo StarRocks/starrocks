@@ -746,6 +746,9 @@ public:
         return res;
     }
 
+    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
