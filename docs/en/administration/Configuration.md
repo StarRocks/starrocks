@@ -1392,6 +1392,12 @@ curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<val
 
 BE dynamic parameters are as follows.
 
+#### enable_stream_load_verbose_log
+
+- **Default:** false
+- **Description:** Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- **Introduced in:** 2.5.17, 3.0.9, 3.1.6, 3.2.1
+
 #### report_task_interval_seconds
 
 - **Default:** 10 seconds

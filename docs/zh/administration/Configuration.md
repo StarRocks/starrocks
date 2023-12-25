@@ -1299,6 +1299,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 以下是 BE 动态参数列表。
 
+#### enable_stream_load_verbose_log
+
+- 含义：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。
+- 默认值：false
+- **引入版本：**2.5.17、3.0.9、3.1.6、3.2.1
+
 #### report_task_interval_seconds
 
 - 含义：汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。
