@@ -28,8 +28,7 @@ BE dynamic parameters are as follows.
 
 - **Default:** false
 - **Description:** Specifies whether to log the HTTP requests and responses for Stream Load jobs.
-
-This parameter is supported from v3.2.1 onwards.
+- **Introduced in:** 2.5.17, 3.0.9, 3.1.6, 3.2.1
 
 #### report_task_interval_seconds
 
