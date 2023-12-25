@@ -84,7 +84,8 @@ private:
     std::vector<level_t> _def_levels;
     std::vector<level_t> _rep_levels;
 
-    std::vector<uint8_t> _is_nulls;
+    // Use uint16_t instead of uint8_t to make it auto simd by compiler.
+    std::vector<uint16_t> _is_nulls;
 };
 
 class OptionalStoredColumnReader : public StoredColumnReader {
@@ -159,7 +160,8 @@ private:
     size_t _levels_decoded = 0;
     size_t _levels_capacity = 0;
 
-    std::vector<uint8_t> _is_nulls;
+    // Use uint16_t instead of uint8_t to make it auto simd by compiler.
+    std::vector<uint16_t> _is_nulls;
     std::vector<level_t> _def_levels;
 };
 
@@ -246,7 +248,6 @@ Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnCo
         _delimit_rows(&records_to_read, &num_parsed_levels);
 
         // decode value read from reader
-        // TODO(zc): optimized here
         {
             // ensure enough capacity
             _is_nulls.resize(num_parsed_levels);
@@ -406,7 +407,6 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
         }
 
         {
-            // TODO(zc): make it better
             _is_nulls.resize(records_to_read);
             // decode def levels
             for (size_t i = 0; i < records_to_read; ++i) {
