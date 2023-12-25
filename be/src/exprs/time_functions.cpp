@@ -1065,12 +1065,17 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
 
     int year = (year1 - year2);
 
+    const auto func = [](int month, int day, int hour, int minute, int second, int usec) -> int64_t {
+        return int64_t(month) * 100'000'000'000'000LL + day * 1'000'000'000'000LL + hour * 10'000'000'000LL +
+               minute * 100'000'000LL + second * 1'000'000LL + usec;
+    };
+
     if (year >= 0) {
-        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+        year -= (func(month1, day1, hour1, minute1, second1, usec1) <
+                 func(month2, day2, hour2, minute2, second2, usec2));
     } else {
-        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
+        year += (func(month1, day1, hour1, minute1, second1, usec1) >
+                 func(month2, day2, hour2, minute2, second2, usec2));
     }
     return year;
 }
@@ -1135,19 +1140,21 @@ DEFINE_TIME_BINARY_FN(years_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // months_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
-    int year1, month1, day1, hour1, mintue1, second1, usec1;
-    int year2, month2, day2, hour2, mintue2, second2, usec2;
-    l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    l.to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    r.to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
 
     int month = (year1 - year2) * 12 + (month1 - month2);
+    const auto func = [](int day, int hour, int minute, int second, int usec) -> int64_t {
+        return int64_t(day) * 1'000'000'000'000LL + hour * 10'000'000'000LL + minute * 100'000'000LL +
+               second * 1'000'000LL + usec;
+    };
 
     if (month >= 0) {
-        month -= (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
-                  day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        month -= (func(day1, hour1, minute1, second1, usec1) < func(day2, hour2, minute2, second2, usec2));
     } else {
-        month += (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
-                  day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        month += (func(day1, hour1, minute1, second1, usec1) > func(day2, hour2, minute2, second2, usec2));
     }
 
     return month;
