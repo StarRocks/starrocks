@@ -47,10 +47,7 @@ public:
     Status prefetch(SerdeContext& ctx) override;
 
     bool is_ready() override {
-        if (_current_process_idx < _streams.size()) {
-            return _streams[_current_process_idx]->is_ready();
-        }
-        return true;
+        return std::all_of(_streams.begin(), _streams.end(), [](auto& stream) { return stream->is_ready(); });
     }
 
     void close() override {
