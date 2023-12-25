@@ -283,6 +283,7 @@ public class MetadataMgr {
                 if (tableExists(catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
+                        return;
                     } else {
                         ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                     }
