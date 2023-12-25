@@ -590,12 +590,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### tablet_sched_balance_load_disk_safe_threshold
 
-- 含义：判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
+- 含义：判断 BE 磁盘使用率是否均衡的阈值。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
 - 默认值：0.5
 
 #### tablet_sched_balance_load_score_threshold
 
-- 含义：用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
+- 含义：用于判断 BE 负载是否均衡。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
 - 默认值：0.1
 
 #### tablet_sched_repair_delay_factor_second
@@ -1178,10 +1178,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ### 存储（FE 静态）
 
-#### tablet_sched_balancer_strategy
-
-- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
-- 默认值：`disk_and_tablet`
 
 #### tablet_sched_storage_cooldown_second
 
