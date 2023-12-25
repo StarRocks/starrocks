@@ -462,10 +462,10 @@ Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
         for (int64_t offset = 0; offset < _scanner_params.file_size;) {
-            int64_t length =
+            const int64_t remain_length =
                     std::min(static_cast<int64_t>(config::text_io_range_size), _scanner_params.file_size - offset);
-            ranges.emplace_back(offset, length, true);
-            offset += length;
+            ranges.emplace_back((io::SharedBufferedInputStream::IORange{.offset = offset, .size = remain_length}));
+            offset += remain_length;
         }
         RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
