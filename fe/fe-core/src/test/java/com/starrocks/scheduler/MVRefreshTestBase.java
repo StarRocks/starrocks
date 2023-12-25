@@ -49,6 +49,7 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.util.List;
+import java.util.Map;
 
 public class MVRefreshTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -134,5 +135,13 @@ public class MVRefreshTestBase {
         Table table = db.getTable(tableName);
         Assert.assertNotNull(table);
         return table;
+    }
+
+    protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+        return taskRun;
     }
 }
