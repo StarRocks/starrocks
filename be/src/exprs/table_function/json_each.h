@@ -27,7 +27,8 @@ namespace starrocks {
 // | b . | 2 .   |
 class JsonEach final : public TableFunction {
 public:
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override;
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state, TableFunctionState* state,
+                                                  bool* eos) const override;
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new TableFunctionState();
