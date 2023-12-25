@@ -272,7 +272,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             BasicStatsMeta basicStatsMeta = entry.getValue();
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                     basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
-                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
+                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties(),
+                    basicStatsMeta.getUpdateRows()));
         }
 
         for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList()) {

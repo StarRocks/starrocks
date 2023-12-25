@@ -61,26 +61,23 @@ StarRocks supports full and sampled collection, both can be performed automatica
 
 StarRocks offers flexible statistics collection methods. You can choose automatic, manual, or custom collection, whichever suits your business scenarios.
 
-### Automatic collection
+### Automatic full collection
 
 For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection.
 
 From 2.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
 
-Conditions that will trigger automatic collection:
+Conditions that trigger automatic collection:
 
-- Table data has changed since previous statistics collection.
+- `enable_statistic_collect` is `true`
 
-- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
+- The collection time is within the range of the configured collection period. (The default collection period is all day.)
 
 - The update time of the previous collecting job is earlier than the latest update time of partitions.
 
 - The health of table statistics is below the specified threshold (`statistic_auto_collect_ratio`).
 
-> Formula for calculating statistics health:
->
-> If the number of partitions with data updated is less than 10, the formula is `1 - (Number of updated rows since previous collection/Total number of rows)`.
-> If the number of partitions with data updated is greater than or equal to 10, the formula is `1 - MIN(Number of updated rows since previous collection/Total number of rows, Number of updated partitions since previous collection/Total number of partitions)`.
+> Formula for calculating statistics health: 1 - Number of added rows since the previous statistics collection/Total number of rows in the smallest partition
 
 In addition, StarRocks allows you to configure collection policies based on table size and table update frequency:
 
