@@ -22,6 +22,7 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -85,5 +86,9 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "list_fail_point",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_short_circuit",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request);
 }
 
