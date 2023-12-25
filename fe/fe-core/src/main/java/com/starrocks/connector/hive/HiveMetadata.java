@@ -130,10 +130,12 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getAllTableNames(dbName);
     }
 
+    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         return hmsOps.createTable(stmt);
     }
 
+    @Override
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
         hmsOps.createTableLike(stmt);
     }
