@@ -27,13 +27,21 @@ public:
     TableFunctionState() = default;
     virtual ~TableFunctionState() = default;
 
+<<<<<<< HEAD
     void set_params(starrocks::Columns columns) { this->_columns = std::move(columns); }
 
     void set_offset(int offset) { this->_offset = offset; }
 
     int get_offset() { return _offset; }
+=======
+    void set_params(Columns columns) {
+        this->_columns = std::move(columns);
+        set_processed_rows(0);
+        on_new_params();
+    }
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
 
-    starrocks::Columns& get_columns() { return _columns; }
+    Columns& get_columns() { return _columns; }
 
     void set_status(Status status) { _status = std::move(status); }
 
@@ -41,7 +49,14 @@ public:
 
 private:
     //Params of table function
+<<<<<<< HEAD
     starrocks::Columns _columns;
+=======
+    Columns _columns;
+
+    size_t _processed_rows = 0;
+
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
     /**
      * _offset is used to record the return value offset of the currently processed columns parameter,
      * if the table function needs to return too many results.
@@ -65,7 +80,12 @@ public:
     virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
 
     //Table function processing logic
+<<<<<<< HEAD
     virtual std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const = 0;
+=======
+    virtual std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                          TableFunctionState* state) const = 0;
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
 
     //Release the resources constructed in init and prepare
     virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;

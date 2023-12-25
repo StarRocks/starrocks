@@ -21,7 +21,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 std::pair<Columns, UInt32Column::Ptr> JsonEach::process(TableFunctionState* state, bool* eos) const {
+=======
+std::pair<Columns, UInt32Column::Ptr> JsonEach::process(RuntimeState* runtime_state, TableFunctionState* state) const {
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
     size_t num_input_rows = 0;
     JsonColumn* json_column = nullptr;
     if (!state->get_columns().empty()) {

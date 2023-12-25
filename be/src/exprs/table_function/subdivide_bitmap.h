@@ -25,14 +25,14 @@
 namespace starrocks {
 template <LogicalType Type>
 class SubdivideBitmap final : public TableFunction {
-    struct UnnestBitmapState final : public TableFunctionState {};
+    struct SubdivideBitmapState final : public TableFunctionState {};
     using SrcSizeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
 public:
     ~SubdivideBitmap() override = default;
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
-        *state = new UnnestBitmapState();
+        *state = new SubdivideBitmapState();
         return Status::OK();
     }
 
@@ -61,8 +61,13 @@ public:
     }
 
     // TODO: The TableFunction framework should support streaming processing to avoid generating large Column
+<<<<<<< HEAD
     std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override {
         *eos = true;
+=======
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override {
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
         if (state->get_columns().size() != 2) {
             state->set_status(Status::InternalError("The number of parameters of unnest_bitmap is not equal to 2"));
             return {};

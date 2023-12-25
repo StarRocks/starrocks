@@ -123,7 +123,12 @@ Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state, bool* eos) const {
+=======
+std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* runtime_state,
+                                                                TableFunctionState* state) const {
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
     Columns res;
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);

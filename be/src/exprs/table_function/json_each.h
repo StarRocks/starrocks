@@ -27,7 +27,12 @@ namespace starrocks {
 // | b . | 2 .   |
 class JsonEach final : public TableFunction {
 public:
+<<<<<<< HEAD
     std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override;
+=======
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override;
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new TableFunctionState();

@@ -105,7 +105,13 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     size_t remain_chunk_size = chunk_size;
     std::vector<ColumnPtr> output_columns;
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(_process_table_function());
+=======
+    if (_table_function_result.second == nullptr) {
+        RETURN_IF_ERROR(_process_table_function(state));
+    }
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
 
     output_columns.reserve(_outer_slots.size());
     for (int _outer_slot : _outer_slots) {
@@ -115,6 +121,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         output_columns.emplace_back(_table_function_result.first[i]->clone_empty());
     }
 
+<<<<<<< HEAD
     // If _remain_repeat_times > 0, first use the remaining data of the previous chunk to construct this data
     while (_remain_repeat_times > 0 || _input_chunk_index < _input_chunk->num_rows()) {
         bool has_remain_repeat_times = _remain_repeat_times > 0;
@@ -162,6 +169,16 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
 
         if (remain_chunk_size == 0) {
             // Chunk is full
+=======
+    while (output_columns[0]->size() < max_chunk_size) {
+        if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
+            _copy_result(output_columns, max_chunk_size);
+        } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
+            RETURN_IF_ERROR(_process_table_function(state));
+        } else {
+            DCHECK(!has_output());
+            DCHECK(need_input());
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
             break;
         }
     }
@@ -202,6 +219,7 @@ ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& colum
     return chunk;
 }
 
+<<<<<<< HEAD
 Status TableFunctionOperator::_process_table_function() {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
@@ -209,6 +227,29 @@ Status TableFunctionOperator::_process_table_function() {
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
         return _table_function_state->status();
+=======
+Status TableFunctionOperator::_process_table_function(RuntimeState* state) {
+    SCOPED_TIMER(_table_function_exec_timer);
+    COUNTER_UPDATE(_table_function_exec_counter, 1);
+    _input_index_of_first_result = _table_function_state->processed_rows();
+    _next_output_row = 0;
+    _next_output_row_offset = 0;
+
+    _table_function_result = _table_function->process(state, _table_function_state);
+    return _table_function_state->status();
+}
+
+Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    _input_chunk.reset();
+    _input_index_of_first_result = 0;
+    _next_output_row_offset = 0;
+    _next_output_row = 0;
+    _is_finished = false;
+    _table_function_result.first.clear();
+    _table_function_result.second = nullptr;
+    if (_table_function_state != nullptr) {
+        _table_function_state->set_params(Columns{});
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
     }
     return Status::OK();
 }
