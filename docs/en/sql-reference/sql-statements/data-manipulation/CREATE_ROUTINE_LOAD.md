@@ -218,7 +218,7 @@ If `property.group.id` is not specified, StarRocks generates a random value base
     ```sql
     "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT
     "property.sasl.mechanism" = "GSSAPI", -- Specifies the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
-    "property.sasl.kerberos.service.name" = "kafka", -- Specifies the broker service name, default is Kafka.
+    "property.sasl.kerberos.service.name" = "kafka", -- Specifies the broker service name. Default value is kafka.
     "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- Specifies the client keytab location.
     "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- Specifies the Kerberos principal.
     ```
