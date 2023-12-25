@@ -237,7 +237,7 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test*" \
     | grep -v starrocks_test_part1 \
     | grep -v starrocks_test_part2 \
     | grep -v bench_test \

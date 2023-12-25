@@ -448,6 +448,10 @@ add_executable(starrocks_test_part2 test_main.cpp $<TARGET_OBJECTS:starrocks_tes
 TARGET_LINK_LIBRARIES(starrocks_test_part1 ${TEST_LINK_LIBS})
 TARGET_LINK_LIBRARIES(starrocks_test_part2 ${TEST_LINK_LIBS})
 
+# starrocks_test_part1" and "starrocks_test_part2" are two large binary files that 
+# may cause OOM error during parallel linking in CI. 
+# The "add_dependencies" function can force "starrocks_test_part2" to compile 
+# in series after "starrocks_test_part1", thereby avoiding OOM incidents.
 add_dependencies(starrocks_test_part2 starrocks_test_part1)
 
 # =================================================
