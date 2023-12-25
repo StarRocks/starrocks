@@ -2768,7 +2768,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
-
     }
 
     public int getCboMaterializedViewRewriteLimit() {

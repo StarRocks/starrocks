@@ -81,7 +81,7 @@ public class OptimizerTraceUtil {
         });
     }
 
-    public static void logMVRewrite(String ruleName, String format, Object... object) {
+    public static void logMVRewriteRule(String ruleName, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     ruleName,
