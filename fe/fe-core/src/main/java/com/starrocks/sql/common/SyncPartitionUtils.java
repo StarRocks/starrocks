@@ -271,9 +271,17 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
-    // TODO: should support like to_date(ds) + 1 day ?
+    /**
+     * Convert base table with partition expression with the associated partition expressions.
+     * eg: Create MV mv1
+     *      partition by tbl1.dt
+     *      as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
+     * This method will format tbl1's range partition key directly, and will format tbl2's partition range key by
+     * using `date_trunc('month', tbl2.dt)`.
+     * TODO: now `date_trunc` is supported, should support like to_date(ds) + 1 day ?
+     */
     public static Range<PartitionKey> transferRange(Range<PartitionKey> baseRange,
-                                                    Expr partitionExpr) throws AnalysisException {
+                                                    Expr partitionExpr) {
         if (!(partitionExpr instanceof FunctionCallExpr)) {
             return baseRange;
         }
@@ -282,7 +290,7 @@ public class SyncPartitionUtils {
             return baseRange;
         }
         if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-            throw new SemanticException("Do not support function: {}", functionCallExpr.getFnName().getFunction());
+            throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
         }
 
         String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
@@ -301,7 +309,7 @@ public class SyncPartitionUtils {
             truncUpperDateTime = upperDate.toLocalDateTime();
         } else {
             upperDate = (DateLiteral) upperExpr;
-            truncUpperDateTime = getLowerDateTime(upperDate.toLocalDateTime(), granularity);
+            truncUpperDateTime = getUpperDateTime(upperDate.toLocalDateTime(), granularity);
         }
 
         Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
@@ -309,12 +317,17 @@ public class SyncPartitionUtils {
 
         PartitionKey lowerPartitionKey = new PartitionKey();
         PartitionKey upperPartitionKey = new PartitionKey();
-        if (partitionType == PrimitiveType.DATE) {
-            lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATE), partitionType);
-            upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATE), partitionType);
-        } else {
-            lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATETIME), partitionType);
-            upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATETIME), partitionType);
+        try {
+            if (partitionType == PrimitiveType.DATE) {
+                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATE), partitionType);
+                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATE), partitionType);
+            } else {
+                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATETIME), partitionType);
+                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATETIME), partitionType);
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert partition with date_trunc expression to date failed, lower:%s, upper:%s",
+                    truncLowerDateTime, truncUpperDateTime);
         }
         return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
     }
@@ -434,7 +447,7 @@ public class SyncPartitionUtils {
                     .map(name -> {
                         Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
                         Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
-                        return new PartitionRange(name, convertRanges);
+                        return new PartitionRange(name, transferRange(convertRanges, basePartitionExprMap.get(baseTable)));
                     })
                     .sorted(PartitionRange::compareTo).collect(Collectors.toList());
             for (PartitionRange baseRange : baseRanges) {
@@ -477,13 +490,14 @@ public class SyncPartitionUtils {
         // if [date_trunc(min), date_trunc(max)), overlap with [mvMin, mvMax), then [min, max) is corresponding partition
         Map<Table, List<PartitionRange>> baseRangesMap = new HashMap<>();
         for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
+            Table baseTable = entry.getKey();
             Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
             List<PartitionRange> baseRanges = entry.getValue().keySet()
                     .stream()
                     .map(name -> {
                         Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
                         Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
-                        return new PartitionRange(name, convertRanges);
+                        return new PartitionRange(name, transferRange(convertRanges, basePartitionExprMap.get(baseTable)));
                     })
                     .sorted(PartitionRange::compareTo)
                     .collect(Collectors.toList());

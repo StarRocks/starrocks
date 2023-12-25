@@ -1461,7 +1461,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     .map(x -> new TableWithPartitions(x, baseChangedPartitionNames.get(x)))
                     .collect(Collectors.toList());
             if (isCalcPotentialRefreshPartition(baseTableWithPartitions,
-                    basePartitionNameToRangeMap, needRefreshMvPartitionNames)) {
+                    basePartitionNameToRangeMap, needRefreshMvPartitionNames, mvPartitionNameToRangeMap)) {
                 // because the relation of partitions between materialized view and base partition table is n : m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
@@ -1486,7 +1486,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      *  dst:     |--------------|     |--------------|
      * eg: base table is partitioned by one day, and mv is partition by date_trunc('month', dt)
      * <p>
-     * Many-to-Many
+     * One/Many-to-Many
      *  src:     |----| |----| |----| |----| |----| |----|
      *  dst:     |--------------| |--------------| |--------------|
      * eg: base table is partitioned by three days, and mv is partition by date_trunc('month', dt)
@@ -1510,10 +1510,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
                                                    Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap,
-                                                   Set<String> mvPartitions) {
-        Map<String, Range<PartitionKey>> mvRangePartitionMap = getRangePartitionMap();
+                                                   Set<String> mvPartitions,
+                                                   Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap) {
         List<PartitionRange> mvSortedPartitionRanges =
-                TableWithPartitions.getSortedPartitionRanges(mvRangePartitionMap, mvPartitions);
+                TableWithPartitions.getSortedPartitionRanges(mvPartitionNameToRangeMap, mvPartitions);
         for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
             Map<String, Range<PartitionKey>> baseRangePartitionMap =
                     refBaseTableRangePartitionMap.get(baseTableWithPartition.getTable());
