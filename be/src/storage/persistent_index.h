@@ -333,6 +333,8 @@ public:
 
     void clear();
 
+    Status create_index_file(std::string& path);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -783,6 +785,9 @@ protected:
 
     bool _dump_snapshot = false;
     bool _flushed = false;
+    bool _cancel_major_compaction = false;
+
+private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;
