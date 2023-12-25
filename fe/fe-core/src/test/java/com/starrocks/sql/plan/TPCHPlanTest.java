@@ -35,6 +35,7 @@ public class TPCHPlanTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 
     @Test
