@@ -64,6 +64,8 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
 
+    private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
+
     private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
     public static final String FAKE_PATH = "fake://";
@@ -72,11 +74,16 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
 
+    public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
+
     private String path;
     private String format;
-    private Map<String, String> properties;
-    private List<String> columnsFromPath = new ArrayList<>();
     private String compressionType;
+
+    private int autoDetectSampleFiles;
+
+    private List<String> columnsFromPath = new ArrayList<>();
+    private Map<String, String> properties;
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
@@ -194,6 +201,16 @@ public class TableFunctionTable extends Table {
                 columnsFromPath.add(col.trim());
             }
         }
+
+        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
+            autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
+        } else {
+            try {
+                autoDetectSampleFiles = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_FILES));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+            }
+        }
     }
 
     private void parseFiles() throws DdlException {
@@ -232,6 +249,7 @@ public class TableFunctionTable extends Table {
         params.setUse_broker(false);
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
+        params.setSchema_sample_file_count(autoDetectSampleFiles);
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();
