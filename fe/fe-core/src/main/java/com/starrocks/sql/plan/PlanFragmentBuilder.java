@@ -1194,7 +1194,7 @@ public class PlanFragmentBuilder {
                 prepareMinMaxExpr(scanNodePredicates, scanOperatorPredicates, context);
                 prepareCommonExpr(scanNodePredicates, scanOperatorPredicates, context);
             } catch (Exception e) {
-                LOG.warn("Odps scan node get scan range locations failed : " + e);
+                LOG.error("Odps scan node get scan range locations failed", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 

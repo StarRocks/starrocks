@@ -37,8 +37,19 @@ import com.aliyun.odps.table.read.split.impl.IndexedInputSplitAssigner;
 import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.aliyun.odps.type.TypeInfoFactory;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.io.IOException;
@@ -49,31 +60,43 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
 public class MockedBase {
-    protected AliyunCloudCredential aliyunCloudCredential = new AliyunCloudCredential("ak", "sk", "http://127.0.0.1");
-    protected OdpsProperties odpsProperties;
-    protected Odps odps = Mockito.mock(Odps.class);
-    protected Tables tables = Mockito.mock(Tables.class);
-    protected Projects projects = Mockito.mock(Projects.class);
-    protected Partition partition = Mockito.mock(Partition.class);
-    protected Iterator<Table> tableIterator = Mockito.mock(Iterator.class);
-    protected Iterator<Project> projectIterator = Mockito.mock(Iterator.class);
-    protected Table table = Mockito.mock(Table.class);
-    protected Project project = Mockito.mock(Project.class);
-    protected SecurityManager securityManager = Mockito.mock(SecurityManager.class);
-    protected Account account = Mockito.mock(AliyunAccount.class);
+    protected static AliyunCloudCredential aliyunCloudCredential =
+            new AliyunCloudCredential("ak", "sk", "http://127.0.0.1");
+    protected static OdpsProperties odpsProperties;
+    protected static Odps odps = Mockito.mock(Odps.class);
+    protected static Tables tables = Mockito.mock(Tables.class);
+    protected static Projects projects = Mockito.mock(Projects.class);
+    protected static Partition partition = Mockito.mock(Partition.class);
+    protected static Iterator<Table> tableIterator = Mockito.mock(Iterator.class);
+    protected static Iterator<Project> projectIterator = Mockito.mock(Iterator.class);
+    protected static Table table = Mockito.mock(Table.class);
+    protected static Project project = Mockito.mock(Project.class);
+    protected static SecurityManager securityManager = Mockito.mock(SecurityManager.class);
+    protected static Account account = Mockito.mock(AliyunAccount.class);
+    protected static OdpsConnector odpsConnector = Mockito.mock(OdpsConnector.class);
+    protected static OdpsMetadata odpsMetadata = Mockito.mock(OdpsMetadata.class);
+    protected static ConnectorContext context = Mockito.mock(ConnectorContext.class);
 
     @Mock
-    TableReadSessionBuilder mockTableReadSessionBuilder = Mockito.mock(TableReadSessionBuilder.class);
-    TableBatchReadSession tableBatchReadSession = Mockito.mock(TableBatchReadSessionImpl.class);
-    InputSplitAssigner inputSplitAssigner = Mockito.mock(IndexedInputSplitAssigner.class);
+    static TableReadSessionBuilder mockTableReadSessionBuilder = Mockito.mock(TableReadSessionBuilder.class);
+    static TableBatchReadSession tableBatchReadSession = Mockito.mock(TableBatchReadSessionImpl.class);
+    static InputSplitAssigner inputSplitAssigner = Mockito.mock(IndexedInputSplitAssigner.class);
 
-    public void initMock() throws OdpsException, IOException {
+    static MockedStatic<GlobalStateMgr> mockedStatic = Mockito.mockStatic(GlobalStateMgr.class);
+    static GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+    static CatalogMgr catalogMgr = Mockito.mock(CatalogMgr.class);
+    static ConnectorMgr connectorMgr = Mockito.mock(ConnectorMgr.class);
+    static MetadataMgr metadataMgr = Mockito.mock(MetadataMgr.class);
+    static OdpsSplitsInfo odpsSplitsInfo = Mockito.mock(OdpsSplitsInfo.class);
+
+    public static void initMock() throws OdpsException, IOException {
         Map<String, String> properties = new HashMap<>();
         properties.put("odps.access.id", "ak");
         properties.put("odps.access.key", "sk");
@@ -142,5 +165,26 @@ public class MockedBase {
         InputSplit split2 = new RowRangeInputSplit("session", 0, 10000L);
         when(inputSplitAssigner.getTotalRowCount()).thenReturn(10000L);
         when(inputSplitAssigner.getSplitByRowOffset(0, 10000L)).thenReturn(split2);
+
+        Mockito.when(context.getProperties()).thenReturn(properties);
+        Mockito.when(context.getCatalogName()).thenReturn("catalog");
+        Mockito.when(context.getType()).thenReturn("odps");
+
+        when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
+
+        when(odpsConnector.getMetadata()).thenReturn(odpsMetadata);
+        mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+        when(globalStateMgr.getCatalogMgr()).thenReturn(catalogMgr);
+        when(globalStateMgr.getConnectorMgr()).thenReturn(connectorMgr);
+        when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
+        when(connectorMgr.getConnector(anyString())).thenReturn(
+                new CatalogConnector(odpsConnector, new InformationSchemaConnector("catalog")));
+
+        RemoteFileInfo fileInfo = new RemoteFileInfo();
+        fileInfo.setFiles(ImmutableList.of(RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
+        when(metadataMgr.getRemoteFileInfos(any(), any(), any(), anyLong(), any(), any(), anyLong())).thenReturn(
+                ImmutableList.of(fileInfo));
+        when(odpsMetadata.getRemoteFileInfos(any(), any(), anyLong(), any(), any(), anyLong(), any())).thenReturn(
+                ImmutableList.of(fileInfo));
     }
 }
