@@ -188,7 +188,7 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - Access Kafka using the SSL security protocol:
 
     ```SQL
-    "property.security.protocol" = "ssl", -- Specifies the security protocol as SSL.
+    "property.security.protocol" = "ssl", -- Specify the security protocol as SSL.
     "property.ssl.ca.location" = "FILE:ca-cert", -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
     -- If the Kafka server enables client authentication, the following three parameters are also required:
     "property.ssl.certificate.location" = "FILE:client.pem", -- Path to the client's public key used for authentication.
@@ -199,8 +199,8 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
     ```SQL
-    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT.
-    "property.sasl.mechanism" = "PLAIN", -- Specifies the SASL mechanism as PLAIN which is a simple username/password authentication mechanism.
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specify the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "PLAIN", -- Specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism.
     "property.sasl.username" = "admin",  -- SASL username.
     "property.sasl.password" = "xxxxxx"  -- SASL password.
     ```
@@ -208,8 +208,8 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/GSSAPI (Kerberos) authentication mechanism:
 
     ```sql
-    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT.
-    "property.sasl.mechanism" = "GSSAPI", -- Specifies the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specify the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "GSSAPI", -- Specify the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
     "property.sasl.kerberos.service.name" = "kafka", -- The broker service name. Default value is kafka.
     "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- The client keytab location.
     "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- The Kerberos principal.
