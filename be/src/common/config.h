@@ -298,7 +298,7 @@ CONF_mBool(enable_lazy_delta_column_compaction, "true");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
-CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
@@ -1052,6 +1052,9 @@ CONF_mBool(enable_pindex_compression, "true");
 // So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
 // filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
 CONF_mInt32(max_bf_read_bytes_percent, "10");
+
+// If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
+CONF_mBool(enable_pindex_rebuild_in_compaction, "false");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
