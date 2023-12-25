@@ -1146,6 +1146,6 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 
 // simdjson_iterate_batch sets the maximum size of single json document. Default 1GB.
-CONF_mInt64(simdjson_iterate_batch, "1073741824");
+CONF_mInt64(simdjson_iterate_batch_size, "1073741824");
 
 } // namespace starrocks::config
