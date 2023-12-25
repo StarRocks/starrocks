@@ -4312,8 +4312,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     return new_l2_version;
 }
 
-static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions, const EditVersion& output_l2_version,
-                               PersistentIndexMetaPB& index_meta) {
+void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                         const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta) {
     // delete input l2 versions, and add output l2 version
     std::vector<EditVersion> new_l2_versions;
     std::vector<bool> new_l2_version_merged;
