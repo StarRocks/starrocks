@@ -2660,9 +2660,6 @@ TEST_P(PersistentIndexTest, test_snapshot_with_minor_compact) {
     config::l0_max_mem_usage = old_config;
 }
 
-<<<<<<< HEAD
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest, ::testing::Values(PersistentIndexTestParam{false}));
-=======
 TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
@@ -2881,8 +2878,6 @@ TEST_P(PersistentIndexTest, pindex_major_compact_meta) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
-                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
->>>>>>> a44147f1f8 ([Enhancement] limit persistent index compaction by disk (#36681))
+INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest, ::testing::Values(PersistentIndexTestParam{false}));
 
 } // namespace starrocks
