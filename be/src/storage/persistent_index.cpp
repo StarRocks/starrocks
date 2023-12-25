@@ -2076,6 +2076,17 @@ void ShardByLengthMutableIndex::clear() {
     }
 }
 
+Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
+    if (_index_file != nullptr) {
+        std::string msg = strings::Substitute("l0 index file already exist: $0", _index_file->filename());
+        return Status::InternalError(msg);
+    }
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, path));
+    return Status::OK();
+}
+
 #ifdef __SSE2__
 
 #include <emmintrin.h>
@@ -2977,6 +2988,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
@@ -4558,12 +4570,18 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
 Status PersistentIndex::major_compaction(Tablet* tablet) {
+    if (_cancel_major_compaction) {
+        return Status::InternalError("cancel major compaction");
+    }
     bool expect_running_state = false;
     if (!_major_compaction_running.compare_exchange_strong(expect_running_state, true)) {
         // already in compaction
         return Status::OK();
     }
-    DeferOp defer([&]() { _major_compaction_running.store(false); });
+    DeferOp defer([&]() {
+        _major_compaction_running.store(false);
+        _cancel_major_compaction = false;
+    });
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
@@ -4589,6 +4607,9 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
     {
         std::lock_guard lg(*tablet->updates()->get_index_lock());
+        if (_cancel_major_compaction) {
+            return Status::OK();
+        }
         PersistentIndexMetaPB index_meta;
         RETURN_IF_ERROR(
                 TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
@@ -4664,6 +4685,60 @@ double PersistentIndex::get_write_amp_score() const {
         return 0.0;
     } else {
         return _write_amp_score.load();
+    }
+}
+
+Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
+    std::unique_lock wrlock(_lock);
+    _cancel_major_compaction = true;
+
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (_l0) {
+        _l0.reset();
+    }
+    RETURN_IF_ERROR(create(fix_size, version));
+
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
+    _l2_versions.clear();
+    _l2_vec.clear();
+    _has_l1 = false;
+    _dump_snapshot = true;
+
+    std::string file_path = get_l0_index_file_name(_path, version);
+    RETURN_IF_ERROR(_l0->create_index_file(file_path));
+    RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(0, 0, false));
+
+    index_meta->clear_l0_meta();
+    index_meta->clear_l1_version();
+    index_meta->clear_l2_versions();
+    index_meta->clear_l2_version_merged();
+    index_meta->set_key_size(_key_size);
+    index_meta->set_size(0);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_4);
+    version.to_pb(index_meta->mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
+
+    return Status::OK();
+}
+
+void PersistentIndex::reset_cancel_major_compaction() {
+    if (!_major_compaction_running.load(std::memory_order_relaxed)) {
+        _cancel_major_compaction = false;
     }
 }
 
