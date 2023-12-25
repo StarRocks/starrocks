@@ -1,0 +1,89 @@
+-- name: test_date_trunc
+select date_trunc('year', '2023-10-31 23:59:59.001002');
+-- result:
+2023-01-01 00:00:00
+-- !result
+select date_trunc('year', '2023-10-31');
+-- result:
+2023-01-01 00:00:00
+-- !result
+select date_trunc('quarter', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-01 00:00:00
+-- !result
+select date_trunc('quarter', '2023-10-31');
+-- result:
+2023-10-01 00:00:00
+-- !result
+select date_trunc('quarter', '2023-09-15 23:59:59.001002');
+-- result:
+2023-07-01 00:00:00
+-- !result
+select date_trunc('quarter', '2023-09-15');
+-- result:
+2023-07-01 00:00:00
+-- !result
+select date_trunc('month', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-01 00:00:00
+-- !result
+select date_trunc('month', '2023-10-31');
+-- result:
+2023-10-01 00:00:00
+-- !result
+select date_trunc('week', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-30 00:00:00
+-- !result
+select date_trunc('week', '2023-10-31');
+-- result:
+2023-10-30 00:00:00
+-- !result
+select date_trunc('day', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('day', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('hour', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 23:00:00
+-- !result
+select date_trunc('hour', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('minute', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 23:59:00
+-- !result
+select date_trunc('minute', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('second', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 23:59:59
+-- !result
+select date_trunc('second', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('millisecond', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 23:59:59.001000
+-- !result
+select date_trunc('millisecond', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result
+select date_trunc('microsecond', '2023-10-31 23:59:59.001002');
+-- result:
+2023-10-31 23:59:59.001002
+-- !result
+select date_trunc('microsecond', '2023-10-31');
+-- result:
+2023-10-31 00:00:00
+-- !result

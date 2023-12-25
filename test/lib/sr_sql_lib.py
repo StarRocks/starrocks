@@ -1235,3 +1235,13 @@ class StarrocksSQLApiLib(object):
 
             res = self._stream_load(label, db, table_name, data, headers)
             tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
+
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
