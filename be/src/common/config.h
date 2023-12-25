@@ -1036,8 +1036,10 @@ CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
-// control the background compaction threads
-CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// Number of max major compaction threads
+CONF_mInt32(pindex_major_compaction_num_threads, "0");
+// Limit of major compaction per disk.
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc interval
