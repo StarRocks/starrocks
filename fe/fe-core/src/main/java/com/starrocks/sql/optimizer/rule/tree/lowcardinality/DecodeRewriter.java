@@ -231,6 +231,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         HashDistributionSpec spec = (HashDistributionSpec) exchange.getDistributionSpec();
         List<DistributionCol> shuffledColumns = Lists.newArrayList();
         for (DistributionCol column : spec.getHashDistributionDesc().getDistributionCols()) {
+            if (!info.outputStringColumns.contains(column.getColId())) {
+                shuffledColumns.add(column);
+                continue;
+            }
             ColumnRefOperator stringRef = factory.getColumnRef(column.getColId());
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.getOrDefault(stringRef, stringRef);
             shuffledColumns.add(new DistributionCol(dictRef.getId(), column.isNullStrict()));
