@@ -22,7 +22,7 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 <InsertPrivNote />
 
-### Gather connection details
+### Gather authentication details
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
@@ -288,7 +288,6 @@ This method supports the Parquet, ORC, and CSV file formats.
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes](../loading/Load_to_Primary_Key_tables.md) such as UPSERT and DELETE operations during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
 - In addition to Parquet and ORC file formats, Broker Load supports CSV files.
