@@ -500,6 +500,9 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
             _cols.emplace_back(std::move(column));
             _num_columns++;
         }
+        if (ori_tablet_schema->columns().back().name() == "__row") {
+            _cols.emplace_back(ori_tablet_schema->columns().back());
+        }
     }
 
     if (!index.column_param().sort_key_uid().empty()) {
