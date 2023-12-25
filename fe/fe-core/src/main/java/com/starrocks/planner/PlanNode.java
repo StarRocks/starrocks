@@ -862,7 +862,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             for (TupleId tupleId : getTupleIds()) {
                 for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
                     if (!slot.getId().equals(slotRef.getSlotId())) {
-                        return false;
+                        continue;
                     }
                     if (!slotRef.isNullable() || rfDesc.isNullLast()) {
                         return true;
