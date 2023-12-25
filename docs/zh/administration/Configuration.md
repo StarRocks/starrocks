@@ -870,7 +870,17 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：FE 节点上 HTTP 服务器的端口。
 - 默认值：8030
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ##### http_backlog_num
+=======
+#### http_worker_threads_num
+
+- 含义：Http Server 用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。
+- 默认值：0
+- 引入版本：2.5.18，3.0.10，3.1.7，3.2.2
+
+#### http_backlog_num
+>>>>>>> d24bede84e ([Enhancement] Support to configure the number of http worker threads on FE (#37530)):docs/zh/administration/FE_configuration.md
 
 - 含义：HTTP 服务器支持的 Backlog 队列长度。
 - 默认值：1024
