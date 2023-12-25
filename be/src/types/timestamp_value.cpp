@@ -835,11 +835,11 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     return;
 }
 
-void TimestampValue::from_unix_second(int64_t second) {
+void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {
     second += timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
     Timestamp s = second % SECS_PER_DAY;
-    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
+    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC + microsecond);
 }
 
 bool TimestampValue::is_valid() const {
