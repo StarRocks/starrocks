@@ -52,6 +52,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -164,16 +165,21 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        SessionVariable currentVariable = session.getSessionVariable();
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
+        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
+                currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
@@ -335,6 +341,7 @@ public class InsertPlanner {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
+            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
