@@ -708,6 +708,9 @@ public:
 
     void reset_cancel_major_compaction();
 
+    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
