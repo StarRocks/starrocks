@@ -173,6 +173,7 @@ displayed_sidebar: "Chinese"
 
     ```Bash
     [db]
+    type = mysql
     host = xxx.xx.xxx.xx
     port = 3306
     user = user1

@@ -181,6 +181,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     ```Bash
     [db]
+    type = mysql
     host = xxx.xx.xxx.xx
     port = 3306
     user = user1
