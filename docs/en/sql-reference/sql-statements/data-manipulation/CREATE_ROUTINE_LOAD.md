@@ -188,39 +188,31 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - Access Kafka using the SSL security protocol:
 
     ```SQL
-    -- Specify the security protocol as SSL.
-    "property.security.protocol" = "ssl"
-    -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
+    "property.security.protocol" = "ssl", -- Specifies the security protocol as SSL.
+    "property.ssl.ca.location" = "FILE:ca-cert", -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
     -- If the Kafka server enables client authentication, the following three parameters are also required:
-    -- Path to the client's public key used for authentication.
-    "property.ssl.certificate.location" = "FILE:client.pem"
-    -- Path to the client's private key used for authentication.
-    "property.ssl.key.location" = "FILE:client.key"
-    -- Password for the client's private key.
-    "property.ssl.key.password" = "xxxxxx"
+    "property.ssl.certificate.location" = "FILE:client.pem", -- Path to the client's public key used for authentication.
+    "property.ssl.key.location" = "FILE:client.key", -- Path to the client's private key used for authentication.
+    "property.ssl.key.password" = "xxxxxx" -- Password for the client's private key.
     ```
 
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
     ```SQL
-    -- Specify the security protocol as SASL_PLAINTEXT
-    "property.security.protocol" = "SASL_PLAINTEXT"
-    -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
-    "property.sasl.mechanism" = "PLAIN" 
-    -- SASL username
-    "property.sasl.username" = "admin"
-    -- SASL password
-    "property.sasl.password" = "xxxxxx"
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "PLAIN", -- Specifies the SASL mechanism as PLAIN which is a simple username/password authentication mechanism.
+    "property.sasl.username" = "admin",  -- SASL username.
+    "property.sasl.password" = "xxxxxx"  -- SASL password.
     ```
 
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/GSSAPI (Kerberos) authentication mechanism:
 
     ```sql
-    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specifies the security protocol as SASL_PLAINTEXT.
     "property.sasl.mechanism" = "GSSAPI", -- Specifies the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
-    "property.sasl.kerberos.service.name" = "kafka", -- Specifies the broker service name. Default value is kafka.
-    "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- Specifies the client keytab location.
-    "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- Specifies the Kerberos principal.
+    "property.sasl.kerberos.service.name" = "kafka", -- The broker service name. Default value is kafka.
+    "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- The client keytab location.
+    "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- The Kerberos principal.
     ```
 
     :::note

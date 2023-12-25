@@ -218,7 +218,7 @@ FROM <data_source>
   "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
   "property.sasl.mechanism" = "GSSAPI", -- 指定 SASL 认证机制为 GSSAPI, 默认是 GSSAPI
   "property.sasl.kerberos.service.name" = "kafka", -- 指定 broker service name，默认是 Kafka
-  "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- 指定 client keytab location
+  "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- 指定 client keytab 的位置
   "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- 指定 kerberos principal
   ```
 
