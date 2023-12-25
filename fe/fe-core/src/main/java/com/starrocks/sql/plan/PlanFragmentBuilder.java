@@ -867,7 +867,8 @@ public class PlanFragmentBuilder {
 
             MetaScanNode scanNode =
                     new MetaScanNode(context.getNextNodeId(),
-                            tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames());
+                            tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                            context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
             scanNode.computeStatistics(optExpression.getStatistics());
 

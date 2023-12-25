@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
@@ -38,6 +39,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,11 +58,12 @@ public class MetaScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames) {
+                        Map<Integer, String> columnIdToNames, long warehouseId) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
+        this.warehouseId = warehouseId;
     }
 
     public void computeRangeLocations() {
@@ -86,8 +89,14 @@ public class MetaScanNode extends ScanNode {
 
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
-                tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                        visibleVersion, -1, schemaHash);
+                if (RunMode.isSharedDataMode()) {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                } else {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash);
+                }
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
