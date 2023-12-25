@@ -2769,7 +2769,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         // 1. upsert
         for (int i = 0; i < K; i++) {
             incre_key(i);
-            std::vector<IndexValue> old_values(M);
+            std::vector<IndexValue> old_values(M, IndexValue(NullIndexValue));
             ASSERT_OK(index.load(index_meta));
             ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), M));
             ASSERT_OK(index.upsert(M, key_slices.data(), values.data(), old_values.data()));
@@ -2780,7 +2780,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         // 2. update half key
         for (int i = 0; i < K - 2; i++) {
             update_key(i);
-            std::vector<IndexValue> old_values(M);
+            std::vector<IndexValue> old_values(M, IndexValue(NullIndexValue));
             ASSERT_OK(index.load(index_meta));
             ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), M));
             ASSERT_OK(index.upsert(M, key_slices.data(), values.data(), old_values.data()));
