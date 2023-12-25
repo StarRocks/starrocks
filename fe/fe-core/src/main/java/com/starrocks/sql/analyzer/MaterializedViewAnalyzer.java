@@ -494,7 +494,7 @@ public class MaterializedViewAnalyzer {
                 for (String col : keyCols) {
                     Column column = columnMap.get(col).first;
                     column.setIsKey(true);
-                    //                    column.setAggregationType(null, false);
+                    column.setAggregationType(null, false);
                 }
                 return Streams.mapWithIndex(mvColumns.stream(), (column, idx) -> Pair.create(column, (int) idx))
                         .collect(Collectors.toList());
