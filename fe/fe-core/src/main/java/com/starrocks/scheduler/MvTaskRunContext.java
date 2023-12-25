@@ -36,6 +36,8 @@ public class MvTaskRunContext extends TaskRunContext {
     private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition key range.
     private Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap;
+    private Map<String, Range<PartitionKey>> mvRangePartitionMap;
+
     // all the RefBaseTable's partition name to its list partition keys.
     private Map<String, List<List<String>>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
@@ -122,6 +124,14 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setExternalRefBaseTableMVPartitionMap(
             Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap) {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
+    }
+
+    public Map<String, Range<PartitionKey>> getMvRangePartitionMap() {
+        return mvRangePartitionMap;
+    }
+
+    public void setMvRangePartitionMap(Map<String, Range<PartitionKey>> mvRangePartitionMap) {
+        this.mvRangePartitionMap = mvRangePartitionMap;
     }
 
     public ExecPlan getExecPlan() {

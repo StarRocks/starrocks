@@ -1,0 +1,276 @@
+-- name: test_materialized_view_refresh_with_many_to_many
+create external catalog hive_catalog_${uuid0}
+properties
+(
+    "type" = "hive",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog hive_catalog_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table hive_tbl_${uuid0} (
+    num int,
+    dt date not null
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+                                     (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+                                     (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+                                     (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+                                     (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11"),
+                                     (2,"2020-07-16"),(3,"2020-07-19"),(4,"2020-07-22"),(5,"2020-07-25");
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc('month',dt) REFRESH MANUAL AS SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+-- result:
+None
+-- !result
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+-- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	3
+2020-07-19	5
+2020-07-22	7
+2020-07-25	9
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-15");
+-- result:
+-- !result
+function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+-- result:
+None
+-- !result
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+-- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	3
+2020-07-19	5
+2020-07-22	7
+2020-07-25	9
+-- !result
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-25");
+-- result:
+-- !result
+function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+-- result:
+None
+-- !result
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+-- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-06-25	3
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	3
+2020-07-19	5
+2020-07-22	7
+2020-07-25	9
+-- !result
+set catalog hive_catalog_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+drop table hive_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_catalog_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `mock_tbl` (
+ k1 date,
+  k2 int,
+  v1 int
+) ENGINE=OLAP
+PARTITION BY RANGE(`k1`)
+(
+   PARTITION p0 values [('2021-07-23'),('2021-07-26')),
+   PARTITION p1 values [('2021-07-26'),('2021-07-29')),
+   PARTITION p2 values [('2021-07-29'),('2021-08-02')),
+   PARTITION p3 values [('2021-08-02'),('2021-08-04'))
+)
+DISTRIBUTED BY HASH(`k2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into mock_tbl values('2021-07-23',2,10), ('2021-07-27',2,10), ('2021-07-29',2,10), ('2021-08-02',2,10);
+-- result:
+-- !result
+create materialized view test_mv_with_many_to_many 
+partition by date_trunc('month',k1) 
+distributed by hash(k2) buckets 3 
+refresh deferred manual
+properties('replication_num' = '1', 'partition_refresh_number'='1')
+as select k1, k2, v1 from mock_tbl;
+-- result:
+-- !result
+refresh materialized view test_mv_with_many_to_many with sync mode;
+select * from test_mv_with_many_to_many order by k1, k2;
+-- result:
+2021-07-23	2	10
+2021-07-27	2	10
+2021-07-29	2	10
+2021-08-02	2	10
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_many_to_many")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_many_to_many")
+-- result:
+None
+-- !result
+insert into mock_tbl values ('2021-07-29',3,10), ('2021-08-02',3,10);
+-- result:
+-- !result
+refresh materialized view test_mv_with_many_to_many with sync mode;
+select * from test_mv_with_many_to_many order by k1, k2;
+-- result:
+2021-07-23	2	10
+2021-07-27	2	10
+2021-07-29	2	10
+2021-07-29	3	10
+2021-08-02	2	10
+2021-08-02	3	10
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
+-- result:
+None
+-- !result
+drop table mock_tbl;
+-- result:
+-- !result
+drop materialized view test_mv_with_many_to_many;
+-- result:
+-- !result
+CREATE TABLE `mock_tbl` (
+ k1 date,
+  k2 int,
+  v1 int
+) ENGINE=OLAP
+PARTITION BY RANGE(`k1`)
+(
+   PARTITION p0 values [('2021-07-01'),('2021-08-01')),
+   PARTITION p1 values [('2021-08-01'),('2021-09-01')),
+   PARTITION p2 values [('2021-09-01'),('2021-10-01'))
+)
+DISTRIBUTED BY HASH(`k2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into mock_tbl values('2021-07-01',2,10), ('2021-08-02',2,10), ('2021-09-03',2,10);
+-- result:
+-- !result
+create materialized view test_mv_with_one_to_many 
+partition by date_trunc('day',k1) 
+distributed by hash(k2) buckets 3 
+refresh deferred manual
+properties('replication_num' = '1', 'partition_refresh_number'='1')
+as select k1, k2, v1 from mock_tbl;
+-- result:
+-- !result
+refresh materialized view test_mv_with_one_to_many with sync mode;
+select * from test_mv_with_one_to_many order by k1, k2;
+-- result:
+2021-07-01	2	10
+2021-08-02	2	10
+2021-09-03	2	10
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_one_to_many")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_one_to_many")
+-- result:
+None
+-- !result
+insert into mock_tbl values ('2021-08-02',3,10), ('2021-09-03',3,10);
+-- result:
+-- !result
+refresh materialized view test_mv_with_one_to_many with sync mode;
+select * from test_mv_with_one_to_many order by k1;
+-- result:
+2021-07-01	2	10
+2021-08-02	2	10
+2021-08-02	3	10
+2021-09-03	2	10
+2021-09-03	3	10
+-- !result
+function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
+-- result:
+None
+-- !result
+drop table mock_tbl;
+-- result:
+-- !result
+drop materialized view test_mv_with_one_to_many;
+-- result:
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result
