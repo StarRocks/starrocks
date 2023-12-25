@@ -273,6 +273,70 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Convert base table with partition expression with the associated partition expressions.
+     * eg: Create MV mv1
+     *      partition by tbl1.dt
+     *      as select * from tbl1 join on tbl2 on tbl1.dt = date_trunc('month', tbl2.dt)
+     * This method will format tbl1's range partition key directly, and will format tbl2's partition range key by
+     * using `date_trunc('month', tbl2.dt)`.
+     * TODO: now `date_trunc` is supported, should support like to_date(ds) + 1 day ?
+     */
+    public static Range<PartitionKey> transferRange(Range<PartitionKey> baseRange,
+                                                    Expr partitionExpr) {
+        if (!(partitionExpr instanceof FunctionCallExpr)) {
+            return baseRange;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return baseRange;
+        }
+        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
+        }
+
+        String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+        // assume expr partition must be DateLiteral and only one partition
+        LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
+        LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
+        Preconditions.checkArgument(lowerExpr instanceof DateLiteral);
+        DateLiteral lowerDate = (DateLiteral) lowerExpr;
+        LocalDateTime lowerDateTime = lowerDate.toLocalDateTime();
+        LocalDateTime truncLowerDateTime = getLowerDateTime(lowerDateTime, granularity);
+
+        DateLiteral upperDate;
+        LocalDateTime truncUpperDateTime;
+        if (upperExpr instanceof MaxLiteral) {
+            upperDate = new DateLiteral(Type.DATE, true);
+            truncUpperDateTime = upperDate.toLocalDateTime();
+        } else {
+            upperDate = (DateLiteral) upperExpr;
+            truncUpperDateTime = getUpperDateTime(upperDate.toLocalDateTime(), granularity);
+        }
+
+        Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
+        PrimitiveType partitionType = baseRange.lowerEndpoint().getTypes().get(0);
+
+        PartitionKey lowerPartitionKey = new PartitionKey();
+        PartitionKey upperPartitionKey = new PartitionKey();
+        try {
+            if (partitionType == PrimitiveType.DATE) {
+                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATE), partitionType);
+                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATE), partitionType);
+            } else {
+                lowerPartitionKey.pushColumn(new DateLiteral(truncLowerDateTime, Type.DATETIME), partitionType);
+                upperPartitionKey.pushColumn(new DateLiteral(truncUpperDateTime, Type.DATETIME), partitionType);
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert partition with date_trunc expression to date failed, lower:%s, upper:%s",
+                    truncLowerDateTime, truncUpperDateTime);
+        }
+        return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
+    }
+
+>>>>>>> 7c2c8cbc36 ([BugFix] Fix mv refresh bugs when base table to mv partition mapping is one to many or many to many (#34980))
     /**
      * return all src partition name to intersected dst partition names which the src partition
      * is intersected with dst partitions.
@@ -336,15 +400,163 @@ public class SyncPartitionUtils {
         return result;
     }
 
+<<<<<<< HEAD
     public static void calcPotentialRefreshPartition(Set<String> needRefreshMvPartitionNames,
                                                      Set<String> baseChangedPartitionNames,
                                                      Map<String, Set<String>> baseToMvNameRef,
                                                      Map<String, Set<String>> mvToBaseNameRef) {
+=======
+    public static void updatePartitionRefMap(Map<String, Map<Table, Set<String>>> result,
+                                             String partitionKey,
+                                             Table table, String partitionValue) {
+        Map<Table, Set<String>> partitionMap = result.computeIfAbsent(partitionKey, k -> new HashMap<>());
+        Set<String> basePartitions = partitionMap.computeIfAbsent(table, k -> new HashSet<>());
+        basePartitions.add(partitionValue);
+    }
+
+    public static void updateTableRefMap(Map<Table, Map<String, Set<String>>> result,
+                                         Table table,
+                                         String partitionKey, String partitionValue) {
+        Map<String, Set<String>> partitionMap = result.computeIfAbsent(table, k -> new HashMap<>());
+        Set<String> basePartitions = partitionMap.computeIfAbsent(partitionKey, k -> new HashSet<>());
+        basePartitions.add(partitionValue);
+    }
+
+    public static void initialMvRefMap(Map<String, Map<Table, Set<String>>> result,
+                                       List<PartitionRange> partitionRanges,
+                                       Table table) {
+        for (PartitionRange partitionRange : partitionRanges) {
+            Map<Table, Set<String>> partitionMap =
+                    result.computeIfAbsent(partitionRange.getPartitionName(), k -> new HashMap<>());
+            partitionMap.computeIfAbsent(table, k -> new HashSet<>());
+        }
+    }
+
+    public static void initialBaseRefMap(
+            Map<Table, Map<String, Set<String>>> result, Table table, PartitionRange partitionRange) {
+        Map<String, Set<String>> partitionMap = result.computeIfAbsent(table, k -> new HashMap<>());
+        partitionMap.computeIfAbsent(partitionRange.getPartitionName(), k -> new HashSet<>());
+    }
+
+    public static Map<Table, Map<String, Set<String>>> generateBaseRefMap(
+            Map<Table, Map<String, Range<PartitionKey>>> baseRangeMap,
+            Map<Table, Expr> basePartitionExprMap,
+            Map<String, Range<PartitionKey>> mvRangeMap) {
+        Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
+        // for each partition of base, find the corresponding partition of mv
+        List<PartitionRange> mvRanges = mvRangeMap.keySet()
+                .stream()
+                .map(name -> new PartitionRange(name, mvRangeMap.get(name)))
+                .sorted(PartitionRange::compareTo)
+                .collect(Collectors.toList());
+
+        for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
+            Table baseTable = entry.getKey();
+            Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
+            List<PartitionRange> baseRanges = refreshedPartitionsMap.keySet()
+                    .stream()
+                    .map(name -> {
+                        Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
+                        Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
+                        return new PartitionRange(name, transferRange(convertRanges, basePartitionExprMap.get(baseTable)));
+                    })
+                    .sorted(PartitionRange::compareTo).collect(Collectors.toList());
+            for (PartitionRange baseRange : baseRanges) {
+                int mid = Collections.binarySearch(mvRanges, baseRange);
+                if (mid < 0) {
+                    initialBaseRefMap(result, baseTable, baseRange);
+                    continue;
+                }
+                PartitionRange mvRange = mvRanges.get(mid);
+                updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRange.getPartitionName());
+
+                int lower = mid - 1;
+                while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
+                    updateTableRefMap(
+                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
+                    lower--;
+                }
+
+                int higher = mid + 1;
+                while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
+                    updateTableRefMap(
+                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
+                    higher++;
+                }
+            }
+        }
+        return result;
+    }
+
+    public static Map<String, Map<Table, Set<String>>> generateMvRefMap(
+            Map<String, Range<PartitionKey>> mvRangeMap,
+            Map<Table, Expr> basePartitionExprMap,
+            Map<Table, Map<String, Range<PartitionKey>>> baseRangeMap) {
+        Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
+        // for each partition of mv, find all corresponding partition of base
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                mvRangeMap.get(name))).collect(Collectors.toList());
+
+        // [min, max) -> [date_trunc(min), date_trunc(max))
+        // if [date_trunc(min), date_trunc(max)), overlap with [mvMin, mvMax), then [min, max) is corresponding partition
+        Map<Table, List<PartitionRange>> baseRangesMap = new HashMap<>();
+        for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
+            Table baseTable = entry.getKey();
+            Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
+            List<PartitionRange> baseRanges = entry.getValue().keySet()
+                    .stream()
+                    .map(name -> {
+                        Range<PartitionKey> partitionKeyRanges = refreshedPartitionsMap.get(name);
+                        Range<PartitionKey> convertRanges = convertToDatePartitionRange(partitionKeyRanges);
+                        return new PartitionRange(name, transferRange(convertRanges, basePartitionExprMap.get(baseTable)));
+                    })
+                    .sorted(PartitionRange::compareTo)
+                    .collect(Collectors.toList());
+            baseRangesMap.put(entry.getKey(), baseRanges);
+        }
+        Collections.sort(mvRanges, PartitionRange::compareTo);
+
+        for (Map.Entry<Table, List<PartitionRange>> entry : baseRangesMap.entrySet()) {
+            initialMvRefMap(result, mvRanges, entry.getKey());
+            List<PartitionRange> baseRanges = entry.getValue();
+            for (PartitionRange baseRange : baseRanges) {
+                int mid = Collections.binarySearch(mvRanges, baseRange);
+                if (mid < 0) {
+                    continue;
+                }
+                PartitionRange mvRange = mvRanges.get(mid);
+                updatePartitionRefMap(result, mvRange.getPartitionName(), entry.getKey(), baseRange.getPartitionName());
+
+                int lower = mid - 1;
+                while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
+                    updatePartitionRefMap(
+                            result, mvRanges.get(lower).getPartitionName(), entry.getKey(), baseRange.getPartitionName());
+                    lower--;
+                }
+
+                int higher = mid + 1;
+                while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
+                    updatePartitionRefMap(
+                            result, mvRanges.get(higher).getPartitionName(), entry.getKey(), baseRange.getPartitionName());
+                    higher++;
+                }
+            }
+        }
+        return result;
+    }
+
+    public static void calcPotentialRefreshPartition(Set<String> needRefreshMvPartitionNames,
+                                                     Map<Table, Set<String>> baseChangedPartitionNames,
+                                                     Map<Table, Map<String, Set<String>>> baseToMvNameRef,
+                                                     Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
+                                                     Set<String> mvPotentialRefreshPartitionNames) {
+>>>>>>> 7c2c8cbc36 ([BugFix] Fix mv refresh bugs when base table to mv partition mapping is one to many or many to many (#34980))
         gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                baseToMvNameRef, mvToBaseNameRef);
+                baseToMvNameRef, mvToBaseNameRef, mvPotentialRefreshPartitionNames);
     }
 
     private static void gatherPotentialRefreshPartitionNames(Set<String> needRefreshMvPartitionNames,
+<<<<<<< HEAD
                                                              Set<String> baseChangedPartitionNames,
                                                              Map<String, Set<String>> baseToMvNameRef,
                                                              Map<String, Set<String>> mvToBaseNameRef) {
@@ -361,9 +573,41 @@ public class SyncPartitionUtils {
         }
         baseChangedPartitionNames.addAll(newBaseChangedPartitionNames);
         needRefreshMvPartitionNames.addAll(newNeedRefreshMvPartitionNames);
+=======
+                                                             Map<Table, Set<String>> baseChangedPartitionNames,
+                                                             Map<Table, Map<String, Set<String>>> baseToMvNameRef,
+                                                             Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
+                                                             Set<String> mvPotentialRefreshPartitionNames) {
+        int curNameCount = needRefreshMvPartitionNames.size();
+        for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
+            // baseTable with its partitions by mv's partition
+            Map<Table, Set<String>> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
+            Set<String> mvNeedRefreshPartitions = Sets.newHashSet();
+            for (Map.Entry<Table, Set<String>> entry : baseNames.entrySet()) {
+                Table baseTable = entry.getKey();
+                Set<String> baseTablePartitions = entry.getValue();
+                // base table partition with associated mv's partitions
+                Map<String, Set<String>> baseTableToMVPartitionsMap = baseToMvNameRef.get(baseTable);
+                for (String baseTablePartition : baseTablePartitions) {
+                    // find base table partition associated mv partition names
+                    Set<String> mvAssociatedPartitions = baseTableToMVPartitionsMap.get(baseTablePartition);
+                    mvNeedRefreshPartitions.addAll(mvAssociatedPartitions);
+                }
+
+                Preconditions.checkState(mvNeedRefreshPartitions.contains(needRefreshMvPartitionName));
+                if (mvNeedRefreshPartitions.size() > 1) {
+                    needRefreshMvPartitionNames.addAll(mvNeedRefreshPartitions);
+                    mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);
+                    baseChangedPartitionNames.computeIfAbsent(baseTable, x -> Sets.newHashSet())
+                            .addAll(baseTablePartitions);
+                }
+            }
+        }
+
+>>>>>>> 7c2c8cbc36 ([BugFix] Fix mv refresh bugs when base table to mv partition mapping is one to many or many to many (#34980))
         if (curNameCount != needRefreshMvPartitionNames.size()) {
             gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                    baseToMvNameRef, mvToBaseNameRef);
+                    baseToMvNameRef, mvToBaseNameRef, mvPotentialRefreshPartitionNames);
         }
     }
 

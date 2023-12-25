@@ -137,6 +137,10 @@ public class StarRocksAssert {
         public abstract void run() throws Exception;
     }
 
+    public interface ExceptionConsumer<T> {
+        public abstract void accept(T name) throws Exception;
+    }
+
     public ConnectContext getCtx() {
         return this.ctx;
     }
@@ -472,6 +476,31 @@ public class StarRocksAssert {
         return withMaterializedView(sql, false);
     }
 
+    public StarRocksAssert withMaterializedView(String sql, ExceptionConsumer action) {
+        String mvName = null;
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+            mvName = createMaterializedViewStatement.getTableName().getTbl();
+            withMaterializedView(sql);
+            action.accept(mvName);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            // Create mv may fail.
+            if (!Strings.isNullOrEmpty(mvName)) {
+                try {
+                    dropMaterializedView(mvName);
+                } catch (Exception e) {
+                    // e.printStackTrace();
+                }
+            }
+        }
+        return this;
+    }
+
     public StarRocksAssert withMaterializedView(String sql, ExceptionRunnable action) {
         String mvName = null;
         try {
@@ -483,7 +512,6 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail();
         } finally {
             Preconditions.checkState(!Strings.isNullOrEmpty(mvName));

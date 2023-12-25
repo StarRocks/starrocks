@@ -33,7 +33,13 @@ public class MvTaskRunContext extends TaskRunContext {
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
     private Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition key range.
+<<<<<<< HEAD
     private Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
+=======
+    private Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap;
+    private Map<String, Range<PartitionKey>> mvRangePartitionMap;
+
+>>>>>>> 7c2c8cbc36 ([BugFix] Fix mv refresh bugs when base table to mv partition mapping is one to many or many to many (#34980))
     // all the RefBaseTable's partition name to its list partition keys.
     private Map<String, List<List<String>>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
@@ -116,6 +122,14 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setExternalRefBaseTableMVPartitionMap(Map<String, Set<String>> externalRefBaseTableMVPartitionMap) {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
+    }
+
+    public Map<String, Range<PartitionKey>> getMvRangePartitionMap() {
+        return mvRangePartitionMap;
+    }
+
+    public void setMvRangePartitionMap(Map<String, Range<PartitionKey>> mvRangePartitionMap) {
+        this.mvRangePartitionMap = mvRangePartitionMap;
     }
 
     public ExecPlan getExecPlan() {
