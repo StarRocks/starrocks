@@ -49,13 +49,8 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
-<<<<<<< HEAD
-        _tablet->updates()->pk_index_major_compaction();
-        _mgr->unmark_running(_tablet->tablet_id());
-=======
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
         _mgr->unmark_running(_tablet.get());
->>>>>>> a44147f1f8 ([Enhancement] limit persistent index compaction by disk (#36681))
     }
 
 private:
