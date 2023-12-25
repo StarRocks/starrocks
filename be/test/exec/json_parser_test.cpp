@@ -502,8 +502,8 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-PARALLEL_TEST(JsonParserTest, test_simdjson_iterate_batch) {
-    config::simdjson_iterate_batch = 8;
+PARALLEL_TEST(JsonParserTest, test_simdjson_iterate_batch_size) {
+    config::simdjson_iterate_batch_size = 8;
 
     simdjson::ondemand::parser simdjson_parser;
     // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
@@ -517,7 +517,7 @@ PARALLEL_TEST(JsonParserTest, test_simdjson_iterate_batch) {
     simdjson::ondemand::object row;
 
     st = parser->get_current(&row);
-    // Data quality error: The document is too big to fit in the parser's window. Please increase the parser's windows size by setting new BE config simdjson_iterate_batch
+    // Data quality error: The document is too big to fit in the parser's window. Please increase the parser's windows size by setting new BE config simdjson_iterate_batch_size
     ASSERT_TRUE(st.is_data_quality_error());
 }
 
