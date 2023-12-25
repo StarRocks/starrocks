@@ -46,11 +46,19 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+<<<<<<< HEAD
     Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
     Status _process_table_function();
+=======
+    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+private:
+    ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
+    [[nodiscard]] Status _process_table_function(RuntimeState* state);
+>>>>>>> 6413369141 ([Refactor] Table function use the chunk size of runtime state (#37731))
     void _copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_column_size);
 
     const TPlanNode& _tnode;
