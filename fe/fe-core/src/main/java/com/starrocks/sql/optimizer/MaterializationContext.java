@@ -189,9 +189,6 @@ public class MaterializationContext {
         if (query == OperatorType.LOGICAL_JOIN) {
             return MvUtils.isLogicalSPJ(mvExpression);
         }
-        if (Pattern.isScanOperator(query)) {
-            return Pattern.isScanOperator(mvExpression.getOp().getOpType());
-        }
         return MvUtils.isLogicalSPJ(mvExpression);
     }
 
