@@ -224,7 +224,7 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
         }
         _parquet_file_schema = result.ValueOrDie();
     } else {
-        return Status::InternalError("unsupported file format" + _file_format);
+        return Status::InternalError("unsupported file format: " + _file_format);
     }
 
     return Status::OK();
