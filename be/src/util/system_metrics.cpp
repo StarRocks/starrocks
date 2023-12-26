@@ -325,7 +325,9 @@ void SystemMetrics::_update_memory_metrics() {
     // memory of the page cache. This could be problematic for users. Therefore, in this case,
     // we use the memory usage size maintained by the page cache itself as the metric value.
     auto cache = StoragePageCache::instance();
-    _memory_metrics->storage_page_cache_mem_bytes.set_value(cache->memory_usage());
+    if (cache != nullptr) {
+        _memory_metrics->storage_page_cache_mem_bytes.set_value(cache->memory_usage());
+    }
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
