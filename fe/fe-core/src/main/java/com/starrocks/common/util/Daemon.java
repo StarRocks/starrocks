@@ -29,8 +29,8 @@ public class Daemon extends Thread {
 
     private long intervalMs;
     private Runnable runnable;
-    private AtomicBoolean isStop = new AtomicBoolean(false);
-    private AtomicBoolean isStart = new AtomicBoolean(false);
+    private final AtomicBoolean isStopped = new AtomicBoolean(false);
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
     private MetaContext metaContext = null;
 
@@ -63,8 +63,8 @@ public class Daemon extends Thread {
 
     @Override
     public synchronized void start() {
-        isStop.set(false);
-        if (isStart.compareAndSet(false, true)) {
+        isStopped.set(false);
+        if (isRunning.compareAndSet(false, true)) {
             super.start();
         }
     }
@@ -74,11 +74,11 @@ public class Daemon extends Thread {
     }
 
     public void setStop() {
-        isStop.set(true);
+        isStopped.set(true);
     }
 
     public boolean isRunning() {
-        return isStart.get();
+        return isRunning.get();
     }
 
     public long getInterval() {
@@ -102,7 +102,7 @@ public class Daemon extends Thread {
             metaContext.setThreadLocalInfo();
         }
 
-        while (!isStop.get()) {
+        while (!isStopped.get()) {
             try {
                 runOneCycle();
             } catch (Throwable e) {
@@ -120,7 +120,7 @@ public class Daemon extends Thread {
             MetaContext.remove();
         }
         LOG.error("daemon thread exits. name=" + this.getName());
-        if (!isStart.compareAndSet(true, false)) {
+        if (!isRunning.compareAndSet(true, false)) {
             LOG.warn("set daemon thread {} to stop failed", getName());
         }
     }
