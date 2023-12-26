@@ -558,7 +558,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
-    std::vector<IndexValue> old_values(N);
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     auto one_time_num = N / 4;
     // do snapshot twice, when cannot do flush_l0, which mean index_file checker works
