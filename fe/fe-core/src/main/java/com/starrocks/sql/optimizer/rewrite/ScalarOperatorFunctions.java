@@ -472,14 +472,15 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
-        long value = unixTime.getBigint() / 1000;
+        long millisecond = unixTime.getBigint();
 
-        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP*1000) {
             throw new AnalysisException(
                     "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
+        long second = millisecond / 1000;
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(second), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 

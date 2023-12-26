@@ -108,7 +108,7 @@ public class ColumnFilterConverter {
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
                 if (firstExpr instanceof SlotRef) {
-                    SlotRef slotRef = (SlotRef) node.getChild(0);
+                    SlotRef slotRef = (SlotRef) firstExpr;
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new StringLiteral(constant.getVarchar()));
                         return true;
@@ -118,7 +118,7 @@ public class ColumnFilterConverter {
                     FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
                 if (firstExpr instanceof SlotRef) {
-                    SlotRef slotRef = (SlotRef) node.getChild(0);
+                    SlotRef slotRef = (SlotRef) firstExpr;
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new IntLiteral(constant.getBigint()));
                         return true;
