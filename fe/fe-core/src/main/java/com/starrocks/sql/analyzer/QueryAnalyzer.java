@@ -884,10 +884,14 @@ public class QueryAnalyzer {
                             node.getFunctionName().getFunction(), node.getFunctionParams().getNamedArgStr());
                 }
             }
+
             if (namesArray != null) {
                 Preconditions.checkState(fn.hasNamedArg());
-                node.getFunctionParams().reorderNamedArg(fn.getArgNames());
+                node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
+            } else if (node.getFunctionParams().exprs().size() < fn.getNumArgs()) {
+                node.getFunctionParams().appendPositionalDefaultArgExprs(fn);
             }
+            Preconditions.checkState(node.getFunctionParams().exprs().size() == fn.getNumArgs());
 
             if (!(fn instanceof TableFunction)) {
                 throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),
