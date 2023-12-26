@@ -11,11 +11,9 @@ DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -35,7 +33,6 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
