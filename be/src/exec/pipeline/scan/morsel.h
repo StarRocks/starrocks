@@ -368,8 +368,9 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
 
 private:
-    rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
-    rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
+    rowid_t _lower_bound_ordinal(size_t short_keys, Segment* segment, const SeekTuple& key, bool lower) const;
+    rowid_t _upper_bound_ordinal(size_t short_keys, Segment* segment, const SeekTuple& key, bool lower,
+                                 rowid_t end) const;
     bool _is_last_split_of_current_morsel();
 
     Rowset* _cur_rowset();

@@ -194,7 +194,7 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
     }
 
     OlapReaderStatistics stats;
-    auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats);
+    auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats, tablet_schema);
     if (!res.ok()) {
         return res.status();
     }

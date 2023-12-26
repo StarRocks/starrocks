@@ -74,17 +74,11 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 // A Segment is used to represent a segment in memory format. When segment is
 // generated, it won't be modified, so this struct aimed to help read operation.
 // It will prepare all ColumnReader to create ColumnIterator as needed.
-// And user can create a RowwiseIterator through new_iterator function.
-//
-// NOTE: This segment is used to a specified TabletSchema, when TabletSchema
-// is changed, this segment can not be used any more. For example, after a schema
-// change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
 public:
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                   uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
-                                                   size_t* footer_length_hint = nullptr,
+                                                   uint32_t segment_id, size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
                                                    bool skip_fill_local_cache = true,
                                                    lake::TabletManager* tablet_manager = nullptr);
@@ -93,8 +87,7 @@ public:
                                                      size_t* footer_length_hint,
                                                      const FooterPointerPB* partial_rowset_footer);
 
-    Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
-            lake::TabletManager* tablet_manager);
+    Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, lake::TabletManager* tablet_manager);
 
     ~Segment();
 
@@ -103,8 +96,7 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
 
@@ -134,10 +126,7 @@ public:
     // column does not hava a default value, an error will be returned.
     StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator_or_default(const TabletColumn& column,
                                                                              ColumnAccessPath* path);
-
     Status new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** iter);
-
-    size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
     uint32_t num_rows_per_block() const {
         DCHECK(invoked(_load_index_once));
@@ -165,20 +154,15 @@ public:
 
     size_t num_columns() const { return _column_readers.size(); }
 
-    const ColumnReader* column(size_t i) const {
-        auto unique_id = _tablet_schema->column(i).unique_id();
-        return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
-    }
-
     const ColumnReader* column_with_uid(size_t uid) const {
         return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
     }
 
+    ColumnReader* column_with_uid(size_t uid) {
+        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
+    }
+
     FileSystem* file_system() const { return _fs.get(); }
-
-    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
-
-    const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
 
     const std::string& file_name() const { return _fname; }
 
@@ -193,13 +177,7 @@ public:
 
     size_t mem_usage() const;
 
-    int64_t get_data_size() {
-        auto res = _fs->get_file_size(_fname);
-        if (res.ok()) {
-            return res.value();
-        }
-        return 0;
-    }
+    int64_t get_data_size() { return _fs->get_file_size(_fname).value_or(0); }
 
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
@@ -209,36 +187,11 @@ public:
     // so the segment size in the cache needs to be updated when indexes are loading.
     void update_cache_size();
 
+    const std::map<ColumnUID, std::unique_ptr<ColumnReader>>& column_readers() const { return _column_readers; }
+
     DISALLOW_COPY_AND_MOVE(Segment);
 
 private:
-    struct DummyDeleter {
-        void operator()(const TabletSchema*) {}
-    };
-
-    // TabletSchemaWrapper can work as a raw pointer or shared pointer.
-    class TabletSchemaWrapper {
-    public:
-        // Does not take the ownership of TabletSchema pointed by |raw_ptr|.
-        explicit TabletSchemaWrapper(const TabletSchema* raw_ptr) : _schema(raw_ptr, DummyDeleter()) {}
-
-        explicit TabletSchemaWrapper(const TabletSchemaCSPtr* shared_ptr) : _schema(*shared_ptr) {}
-
-        // Shard the ownership of |ptr|.
-        explicit TabletSchemaWrapper(TabletSchemaCSPtr ptr) : _schema(std::move(ptr)) {}
-
-        DISALLOW_COPY_AND_MOVE(TabletSchemaWrapper);
-
-        const TabletSchema* operator->() const { return _schema.get(); }
-
-        const TabletSchema& operator*() const { return *_schema; }
-
-        const TabletSchemaCSPtr& schema() { return _schema; };
-
-    private:
-        TabletSchemaCSPtr _schema;
-    };
-
     Status _load_index(bool skip_fill_local_cache);
 
     void _reset();
@@ -267,7 +220,6 @@ private:
 
     std::shared_ptr<FileSystem> _fs;
     std::string _fname;
-    TabletSchemaWrapper _tablet_schema;
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
@@ -275,7 +227,7 @@ private:
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added
     // after this segment is generated.
-    std::map<int32_t, std::unique_ptr<ColumnReader>> _column_readers;
+    std::map<ColumnUID, std::unique_ptr<ColumnReader>> _column_readers;
 
     // used to guarantee that short key index will be loaded at most once in a thread-safe way
     OnceFlag _load_index_once;

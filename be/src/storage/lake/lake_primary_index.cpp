@@ -127,7 +127,8 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     for (auto& rowset : *rowsets) {
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
+                                                                 tablet_schema);
         if (!res.ok()) {
             return res.status();
         }

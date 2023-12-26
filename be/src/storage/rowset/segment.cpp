@@ -43,6 +43,7 @@
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
@@ -72,11 +73,10 @@ namespace starrocks {
 using strings::Substitute;
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                 uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
-                                                 size_t* footer_length_hint,
+                                                 uint32_t segment_id, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
                                                  bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
-    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, std::move(tablet_schema), tablet_manager);
+    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, tablet_manager);
     RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
@@ -171,13 +171,9 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
-Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  lake::TabletManager* tablet_manager)
-        : _fs(std::move(fs)),
-          _fname(std::move(path)),
-          _tablet_schema(std::move(tablet_schema)),
-          _segment_id(segment_id),
-          _tablet_manager(tablet_manager) {
+        : _fs(std::move(fs)), _fname(std::move(path)), _segment_id(segment_id), _tablet_manager(tablet_manager) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
@@ -239,11 +235,13 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
+    if (UNLIKELY(read_options.tablet_schema == nullptr)) {
+        return Status::InvalidArgument("tablet_schema in SegmentReadOptions is nullptr");
+    }
     // trying to prune the current segment by segment-level zone map
     for (const auto& pair : read_options.predicates_for_zone_map) {
         ColumnId column_id = pair.first;
-        const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
+        const auto& tablet_column = read_options.tablet_schema->column(column_id);
         auto column_unique_id = tablet_column.unique_id();
         if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
             continue;
@@ -321,24 +319,14 @@ bool Segment::has_loaded_index() const {
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
-    std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
-        const auto& column_pb = footer->columns(ordinal);
-        column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
-    }
-
-    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
-        const auto& column = _tablet_schema->column(ordinal);
-        auto iter = column_id_to_footer_ordinal.find(column.unique_id());
-        if (iter == column_id_to_footer_ordinal.end()) {
-            continue;
+    for (uint32_t i = 0, sz = footer->columns().size(); i < sz; ++i) {
+        auto* column_pb = footer->mutable_columns(i);
+        ASSIGN_OR_RETURN(auto reader, ColumnReader::create(column_pb, this));
+        auto [_, inserted] = _column_readers.emplace(column_pb->unique_id(), std::move(reader));
+        if (UNLIKELY(!inserted)) {
+            LOG(ERROR) << "Segment footer with duplicated column unique id: " << footer->DebugString();
+            return Status::Corruption(fmt::format("duplicated column unique id: {}", column_pb->unique_id()));
         }
-
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
-        if (!res.ok()) {
-            return res.status();
-        }
-        _column_readers.emplace(column.unique_id(), std::move(res).value());
     }
     return Status::OK();
 }
@@ -379,15 +367,8 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
-    if (read_tablet_schema != nullptr) {
-        return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
-                             TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]), nullptr);
-    } else {
-        return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
-                             TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]), nullptr);
-    }
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
+    return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0, nullptr);
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

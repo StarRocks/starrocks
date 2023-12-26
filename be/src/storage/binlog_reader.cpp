@@ -264,6 +264,7 @@ Status BinlogReader::_init_segment_iterator() {
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset->rowset_path()))
     seg_options.chunk_size = _reader_params.chunk_size;
     seg_options.stats = &_stats;
+    seg_options.tablet_schema = _rowset->schema();
     // set start row to read if next change event is not the first row in the segment
     if (log_entry_info->start_seq_id < _next_seq_id) {
         // for duplicate key, LogEntryInfo#start_row_id is 0

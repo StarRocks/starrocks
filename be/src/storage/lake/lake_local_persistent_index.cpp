@@ -221,7 +221,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         total_data_size += rowset->data_size();
         total_segments += rowset->num_segments();
 
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
+                                                                 tablet_schema);
         if (!res.ok()) {
             return res.status();
         }

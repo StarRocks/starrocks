@@ -182,7 +182,6 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     auto sample_segment = segments[0];
     std::string path = sample_segment->file_name();
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(path));
-    auto schema = sample_segment->tablet_schema_share_ptr();
 
     // create a dummy segment with the same path to cache ahead in metacache,
     // the later segment open operation will not update the mem_usage due to instance mismatch.
@@ -190,12 +189,12 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         // clean the cache
         cache->prune();
         //create the dummy segment and put it into metacache
-        auto dummy_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto dummy_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), _tablet_mgr.get());
         cache->cache_segment(path, dummy_segment);
         EXPECT_EQ(dummy_segment, cache->lookup_segment(path));
         auto sz1 = cache->memory_usage();
 
-        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), _tablet_mgr.get());
         auto st = mirror_segment->open(nullptr, nullptr, true);
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
@@ -208,7 +207,7 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         // clean the cache
         cache->prune();
         //create the dummy segment and put it into metacache
-        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), _tablet_mgr.get());
         cache->cache_segment(path, mirror_segment);
         auto sz1 = cache->memory_usage();
         auto ssz1 = mirror_segment->mem_usage();

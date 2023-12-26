@@ -65,7 +65,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
 
     OlapReaderStatistics stats;
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats));
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats, tablet_schema));
     }
     CHECK_EQ(_segment_iters.size(), rowset->num_segments());
 

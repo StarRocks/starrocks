@@ -275,7 +275,8 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
-    const ColumnReader* col_reader = _segment->column(cid);
+    ColumnUID uid = _params->tablet_schema->column(cid).unique_id();
+    const ColumnReader* col_reader = _segment->column_with_uid(uid);
     if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
         return Status::NotFound("");
     }

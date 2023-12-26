@@ -206,7 +206,7 @@ protected:
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0));
 
         OlapReaderStatistics statistics;
         SegmentReadOptions opts;
@@ -214,6 +214,7 @@ protected:
         opts.tablet_id = tablet_id;
         opts.stats = &statistics;
         opts.chunk_size = 1024;
+        opts.tablet_schema = _tablet_schema;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);

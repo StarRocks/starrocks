@@ -657,6 +657,7 @@ Status HorizontalRowsetWriter::_final_merge() {
 
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
+    seg_options.tablet_schema = _context.tablet_schema;
 
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
         if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
@@ -664,7 +665,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         std::string tmp_segment_file =
                 Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        auto segment_ptr = Segment::open(_fs, tmp_segment_file, seg_id, _context.tablet_schema);
+        auto segment_ptr = Segment::open(_fs, tmp_segment_file, seg_id);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();

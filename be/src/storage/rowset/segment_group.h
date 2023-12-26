@@ -109,7 +109,7 @@ private:
 // It is used to perform binary search on the short keys of all the segments.
 class SegmentGroup {
 public:
-    SegmentGroup(std::vector<SegmentSharedPtr>&& segments);
+    explicit SegmentGroup(std::vector<SegmentSharedPtr>&& segments, size_t num_short_keys);
 
     ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group.lower_bound(key); }
 
@@ -130,16 +130,12 @@ public:
         return _segments[0]->num_rows_per_block();
     }
 
-    size_t num_short_keys() const {
-        if (_segments.empty()) {
-            return 0;
-        }
-        return _segments[0]->num_short_keys();
-    }
+    size_t num_short_keys() const { return _num_short_keys; }
 
 private:
     std::vector<SegmentSharedPtr> _segments;
     ShortKeyIndexDecoderGroup _decoder_group;
+    size_t _num_short_keys;
 };
 
 } // namespace starrocks

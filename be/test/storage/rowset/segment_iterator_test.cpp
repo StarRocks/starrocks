@@ -189,13 +189,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
     ASSERT_OK(segment_data_builder.finalize_footer());
 
     //
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    SegmentReadOptions seg_options;
-    OlapReaderStatistics stats;
-    seg_options.fs = _fs;
-    seg_options.stats = &stats;
     VecSchemaBuilder schema_builder;
     schema_builder.add(0, "c0", TYPE_INT)
             .add(1, "c1", TYPE_VARCHAR)
@@ -204,6 +200,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
             .add(4, "c4", TYPE_VARCHAR);
     auto vec_schema = schema_builder.build();
     ObjectPool pool;
+    OlapReaderStatistics stats;
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
@@ -291,15 +288,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
-    seg_options.fs = _fs;
-    seg_options.stats = &stats;
-    seg_options.tablet_schema = tablet_schema;
-
     ColumnIteratorOptions iter_opts;
     ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
@@ -385,7 +377,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -401,6 +393,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
 
     auto* con = pool.add(new ConjunctivePredicates());
     auto type_varchar = get_type_info(TYPE_VARCHAR);
@@ -479,14 +472,10 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    SegmentReadOptions seg_options;
     OlapReaderStatistics stats;
-    seg_options.fs = _fs;
-    seg_options.stats = &stats;
-
     ColumnIteratorOptions iter_opts;
     ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
@@ -506,6 +495,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
 
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;

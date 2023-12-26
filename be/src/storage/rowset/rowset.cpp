@@ -159,8 +159,7 @@ Status Rowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(fs, seg_path, seg_id, _schema, &footer_size_hint,
-                                 rowset_meta()->partial_rowset_footer(seg_id));
+        auto res = Segment::open(fs, seg_path, seg_id, &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -179,7 +178,7 @@ Status Rowset::reload() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(fs, seg_path, seg_id, _schema, &footer_size_hint);
+        auto res = Segment::open(fs, seg_path, seg_id, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -199,25 +198,7 @@ Status Rowset::reload_segment(int32_t segment_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
     std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
-    auto res = Segment::open(fs, seg_path, segment_id, _schema, &footer_size_hint);
-    if (!res.ok()) {
-        LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
-        return res.status();
-    }
-    _segments[segment_id] = std::move(res).value();
-    return Status::OK();
-}
-
-Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema) {
-    DCHECK(_segments.size() > segment_id);
-    if (_segments.size() <= segment_id) {
-        LOG(WARNING) << "Error segment id: " << segment_id;
-        return Status::InternalError("Error segment id");
-    }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
-    size_t footer_size_hint = 16 * 1024;
-    std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
-    auto res = Segment::open(fs, seg_path, segment_id, schema, &footer_size_hint);
+    auto res = Segment::open(fs, seg_path, segment_id, &footer_size_hint);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
         return res.status();
@@ -584,7 +565,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
-    seg_options.tablet_schema = options.tablet_schema;
+    seg_options.tablet_schema = options.tablet_schema ? options.tablet_schema : _schema;
+    DCHECK(seg_options.tablet_schema != nullptr);
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -683,7 +665,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
-    seg_options.tablet_schema = tablet_schema;
+    seg_options.tablet_schema = tablet_schema ? tablet_schema : _schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
 
@@ -716,6 +698,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.tablet_schema = _schema;
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_update_files());
     TabletSegmentId tsid;
@@ -723,7 +706,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     for (int64_t i = 0; i < num_update_files(); i++) {
         // open update file
         std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
-        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, i, _schema));
+        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, i));
         if (seg_ptr->num_rows() == 0) {
             seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
@@ -749,11 +732,12 @@ StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.tablet_schema = _schema;
 
     // open update file
     DCHECK(update_file_id < num_update_files());
     std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), update_file_id);
-    ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, update_file_id, _schema));
+    ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, update_file_id));
     if (seg_ptr->num_rows() == 0) {
         return new_empty_iterator(schema, config::vector_chunk_size);
     }

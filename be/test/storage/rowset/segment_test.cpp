@@ -106,7 +106,7 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_fs, filename, 0, query_schema);
+        *res = *Segment::open(_fs, filename, 0);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -172,13 +172,13 @@ TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
     SegmentWriterOptions opts1;
     shared_ptr<Segment> seg1;
     build_segment(opts1, schema, schema, 100, DefaultIntGenerator, &seg1);
-    ASSERT_TRUE(seg1->column(3)->has_bloom_filter_index());
+    ASSERT_TRUE(seg1->column_with_uid(4)->has_bloom_filter_index());
 
     // for base segment
     SegmentWriterOptions opts2;
     shared_ptr<Segment> seg2;
     build_segment(opts2, schema, schema, 100, DefaultIntGenerator, &seg2);
-    ASSERT_TRUE(seg2->column(3)->has_bloom_filter_index());
+    ASSERT_TRUE(seg2->column_with_uid(4)->has_bloom_filter_index());
 }
 
 TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
@@ -215,13 +215,14 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
+    seg_options.tablet_schema = tablet_schema;
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -343,13 +344,14 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
+    seg_options.tablet_schema = tablet_schema;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -442,13 +444,14 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, file_name, 0);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
+    seg_options.tablet_schema = tablet_schema;
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);

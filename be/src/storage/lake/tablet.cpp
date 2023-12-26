@@ -132,9 +132,8 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     auto segment_path = segment_location(segment_name);
     auto segment = _mgr->metacache()->lookup_segment(segment_path);
     if (segment == nullptr) {
-        ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
-        segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, std::move(tablet_schema), _mgr);
+        segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, _mgr);
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
