@@ -424,7 +424,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testMultiListPartition() throws UserException{
+    public void testMultiListPartitionV2() throws UserException{
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
