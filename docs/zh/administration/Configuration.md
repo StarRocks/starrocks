@@ -215,6 +215,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | frontend_address                     | 0.0.0.0           | FE 节点的 IP 地址。                                          |
 | priority_networks                    | 空字符串          | 为那些有多个 IP 地址的服务器声明一个选择策略。 <br />请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。 |
 | http_port                            | 8030              | FE 节点上 HTTP 服务器的端口。                                |
+| http_worker_threads_num              | 0                 | Http 服务器用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。引入版本：2.5.18，3.0.10，3.1.7，3.2.2。                              |
 | http_backlog_num                     | 1024              | HTTP 服务器支持的 Backlog 队列长度。                         |
 | cluster_name                         | StarRocks Cluster | FE 所在 StarRocks 集群的名称，显示为网页标题。               |
 | rpc_port                             | 9020              | FE 节点上 Thrift 服务器的端口。                              |
