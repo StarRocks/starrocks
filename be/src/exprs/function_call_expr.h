@@ -28,6 +28,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedFunctionCallExpr(*this)); }
 
+    const FunctionDescriptor* get_function_desc() { return _fn_desc; }
+
 protected:
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
 

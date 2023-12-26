@@ -10,6 +10,8 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_call_expr.h"
+#include "exprs/literal.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -270,6 +272,42 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         output->emplace_back(new_pred);
     }
 
+    return Status::OK();
+}
+Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                roaring::Roaring* row_bitmap) const {
+    // Only support like predicate for now
+    auto* vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root());
+    if (!vectorized_function_call) {
+        int children_num = _expr_ctxs[0]->root()->get_num_children();
+        bool found_like = false;
+        for (int i = 0; i < children_num; i++) {
+            vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root()->get_child(i));
+            if (vectorized_function_call) {
+                auto function_desc = vectorized_function_call->get_function_desc();
+                if (LIKE_FN_NAME == boost::to_lower_copy(function_desc->name)) {
+                    found_like = true;
+                    break;
+                }
+            }
+        }
+        if (!found_like) {
+            return Status::NotSupported("Not supported function call in inverted index");
+        }
+    } else {
+        auto function_desc = vectorized_function_call->get_function_desc();
+        if (LIKE_FN_NAME != boost::to_lower_copy(function_desc->name)) {
+            return Status::NotSupported("Not supported predicate with seeking inverted index");
+        }
+    }
+    auto* like_target = dynamic_cast<VectorizedLiteral*>(vectorized_function_call->get_child(1));
+    RETURN_IF(!like_target, Status::InvertedIndexNotSupport("Not supported like predicate parameters"));
+    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr))
+    Slice padded_value(literal_col->get(0).get_slice());
+    InvertedIndexQueryType query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
+    roaring::Roaring roaring;
+    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    *row_bitmap &= roaring;
     return Status::OK();
 }
 

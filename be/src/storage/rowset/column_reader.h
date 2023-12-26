@@ -47,6 +47,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "storage/inverted/inverted_index_iterator.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
@@ -152,6 +153,9 @@ public:
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
+    Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
+                                       const SegmentReadOptions& opts);
+
     uint32_t num_rows() const { return _segment->num_rows(); }
 
     size_t mem_usage() const;
@@ -180,10 +184,13 @@ private:
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
+
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
+    LogicalType _column_child_type = TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
 
@@ -200,6 +207,7 @@ private:
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
     std::unique_ptr<BloomFilterIndexReader> _bloom_filter_index;
+    std::unique_ptr<InvertedReader> _inverted_index;
 
     std::unique_ptr<ZoneMapPB> _segment_zone_map;
 
@@ -210,6 +218,7 @@ private:
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
     Segment* _segment = nullptr;
+    mutable std::mutex _load_index_lock;
 
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.

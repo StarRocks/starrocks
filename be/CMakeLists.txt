@@ -175,6 +175,15 @@ endif()
 
 # Set all libraries
 
+add_library(clucene-core STATIC IMPORTED)
+set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
+
+add_library(clucene-shared STATIC IMPORTED)
+set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-shared-static.a)
+
+add_library(clucene-contribs-lib STATIC IMPORTED)
+set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-contribs-lib.a)
+
 add_library(gflags STATIC IMPORTED GLOBAL)
 set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
 
@@ -835,6 +844,9 @@ set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     ${WL_START_GROUP}
+    clucene-core
+    clucene-shared
+    clucene-contribs-lib
     build_version
     rocksdb
     libs2
