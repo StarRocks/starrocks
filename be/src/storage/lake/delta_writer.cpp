@@ -344,7 +344,11 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     _last_write_ts = butil::gettimeofday_s();
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto full = res.value();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();

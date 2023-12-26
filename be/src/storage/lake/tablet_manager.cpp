@@ -28,7 +28,6 @@
 #include "gutil/strings/util.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
-#include "storage/lake/delta_writer.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -43,6 +42,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
 #include "util/raw_container.h"
@@ -543,6 +543,29 @@ void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchema
 StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
     ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
     return VersionedTablet(this, std::move(metadata));
+}
+
+StatusOr<SegmentPtr> TabletManager::load_segment(const std::string& segment_path, int segment_id,
+                                                 size_t* footer_size_hint, bool fill_data_cache,
+                                                 bool fill_metadata_cache, TabletSchemaPtr tablet_schema) {
+    auto segment = metacache()->lookup_segment(segment_path);
+    if (segment == nullptr) {
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
+        segment = std::make_shared<Segment>(std::move(fs), segment_path, segment_id, std::move(tablet_schema), this);
+        if (fill_metadata_cache) {
+            // NOTE: the returned segment may be not the same as the parameter passed in
+            // Use the one in cache if the same key already exists
+            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_path, segment);
+                cached_segment != nullptr) {
+                segment = cached_segment;
+            }
+        }
+    }
+    // segment->open will read the footer, and it is time-consuming.
+    // separate it from static Segment::open is to prevent a large number of cache misses,
+    // and many temporary segment objects generation when loading the same segment concurrently.
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, !fill_data_cache));
+    return segment;
 }
 
 } // namespace starrocks::lake

@@ -70,12 +70,11 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
 
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(*tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+    Rowset rowset(tablet->tablet_mgr(), tablet->id(), &op_write.rowset(), -1 /*unused*/, tablet_schema);
 
-    RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, rowset_ptr.get()));
+    RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, &rowset));
 
-    if (!op_write.has_txn_meta() || rowset_ptr->num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
+    if (!op_write.has_txn_meta() || rowset.num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
     if (!op_write.txn_meta().partial_update_column_ids().empty()) {

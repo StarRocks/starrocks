@@ -257,7 +257,8 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -305,7 +306,8 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -359,7 +361,8 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -390,7 +393,8 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
@@ -457,7 +461,8 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
 
@@ -493,7 +498,8 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    auto res = _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
