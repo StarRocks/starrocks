@@ -39,6 +39,18 @@ select * from TABLE(generate_series(start=>2, 5));
 -- result:
 E: (1064, "Getting syntax error at line 1, column 46. Detail message: Unexpected input '5', the most similar input is {a legal identifier}.")
 -- !result
+select * from TABLE(generate_series(start=>2));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(start=>2)', the function doesn't support named arguments or has invalid arguments.")
+-- !result
+select * from TABLE(generate_series(end=>2));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(end=>2)', the function doesn't support named arguments or has invalid arguments.")
+-- !result
+select * from TABLE(generate_series(step=>2));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(step=>2)', the function doesn't support named arguments or has invalid arguments.")
+-- !result
 select * from TABLE(generate_series(start=>2, stop=>null));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(start=>2,stop=>NULL)', the function doesn't support named arguments or has invalid arguments.")
@@ -58,4 +70,22 @@ E: (1064, "Getting analyzing error. Detail message: Unknown table function 'gene
 select * from TABLE(generate_series(start=>2, step=>2, end=>4,end=>6));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(start=>2,step=>2,end=>4,end=>6)', the function doesn't support named arguments or has invalid arguments.")
+-- !result
+select * from TABLE(generate_series(1, 5));
+-- result:
+1
+2
+3
+4
+5
+-- !result
+select * from TABLE(generate_series(1, 5, 2));
+-- result:
+1
+3
+5
+-- !result
+select * from TABLE(generate_series(1));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Unknown table function 'generate_series(TINYINT)'.")
 -- !result
