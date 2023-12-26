@@ -474,7 +474,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
 
-        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP*1000) {
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
             throw new AnalysisException(
                     "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
