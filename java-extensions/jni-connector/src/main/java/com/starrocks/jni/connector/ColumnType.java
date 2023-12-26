@@ -238,8 +238,6 @@ public class ColumnType {
                     typeValue = parseDecimal(t);
                 } else if (t.startsWith("timestamp")) {
                     typeValue = TypeValue.DATETIME;
-                } else if (t.equalsIgnoreCase("date")) {
-                    typeValue = TypeValue.DATE;
                 } else {
                     typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
                 }
