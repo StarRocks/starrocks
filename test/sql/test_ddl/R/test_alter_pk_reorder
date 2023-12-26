@@ -61,6 +61,8 @@ select * from tab1 where k2 = 100;
 -- result:
 100	100	100	100	100
 -- !result
+
+
 -- name: test_alter_pk_reorder_column_type
 CREATE TABLE `test_alter_pk_reorder_column_type` (
   `k1` date NOT NULL COMMENT "",
@@ -81,11 +83,11 @@ PROPERTIES (
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v4);
 -- result:
-E: (1064, 'Unexpected exception: Sort key column[v4] type not supported: DOUBLE')
+E: (1064, 'Unexpected exception: Sort key column[v4] type not supported: DOUBLE in PrimaryKey table')
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
 -- result:
-E: (1064, 'Unexpected exception: Sort key column[v5] type not supported: FLOAT')
+E: (1064, 'Unexpected exception: Sort key column[v5] type not supported: FLOAT in PrimaryKey table')
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
 -- result:

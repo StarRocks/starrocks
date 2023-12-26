@@ -169,23 +169,22 @@ public class CreateTableAnalyzer {
         KeysDesc keysDesc = statement.getKeysDesc();
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
-            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
-                NodePosition keysPos = NodePosition.ZERO;
-                if (keysDesc != null) {
-                    keysPos = keysDesc.getPos();
+            List<String> columnNames = 
+                    statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+            for (String column : statement.getSortKeys()) {
+                int idx = columnNames.indexOf(column);
+                if (idx == -1) {
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
-                throw new SemanticException("only primary key support sort key", keysPos);
-            } else {
-                List<String> columnNames =
-                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
-
-                for (String column : statement.getSortKeys()) {
-                    int idx = columnNames.indexOf(column);
-                    if (idx == -1) {
-                        throw new SemanticException("Unknown column '%s' does not exist", column);
-                    }
-                    sortKeyIdxes.add(idx);
+                sortKeyIdxes.add(idx);
+            }
+        } else {
+            int cid = 0;
+            for (Column col : statement.getColumns()) {
+                if (col.isKey()) {
+                    sortKeyIdxes.add(cid);
                 }
+                cid++;
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();

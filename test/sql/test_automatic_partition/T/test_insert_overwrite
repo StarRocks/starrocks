@@ -103,7 +103,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "partition_live_number" = "1",
 "compression" = "LZ4"
 );
