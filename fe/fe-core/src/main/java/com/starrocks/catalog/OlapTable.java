@@ -39,6 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
@@ -59,11 +60,12 @@ import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
@@ -811,8 +813,8 @@ public class OlapTable extends Table {
             index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
             // replicas
-            List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                    .seqChooseBackendIds(replicationNum, true, true);
+            List<Long> beIds = List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
             if (CollectionUtils.isEmpty(beIds)) {
                 return new Status(ErrCode.COMMON_ERROR, "failed to find "
                         + replicationNum
@@ -2117,11 +2119,12 @@ public class OlapTable extends Table {
                             return localTablet.getId();
                         }
 
-                        Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet
-                                .getHealthStatusWithPriority(
+                        Pair<TabletHealthStatus, TabletSchedCtx.Priority> statusPair =
+                                TabletChecker.getTabletHealthStatusWithPriority(
+                                        localTablet,
                                         infoService, visibleVersion, replicationNum,
-                                        aliveBeIdsInCluster);
-                        if (statusPair.first != TabletStatus.HEALTHY) {
+                                        aliveBeIdsInCluster, getLocation());
+                        if (statusPair.first != TabletHealthStatus.HEALTHY) {
                             LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
                                     id, tablet.getId(), statusPair.first, localTablet.getImmutableReplicas());
                             return localTablet.getId();
@@ -2376,6 +2379,22 @@ public class OlapTable extends Table {
         tableProperty.buildPersistentIndexType();
     }
 
+    public Multimap<String, String> getLocation() {
+        if (tableProperty != null) {
+            return tableProperty.getLocation();
+        }
+        return null;
+    }
+
+    public void setLocation(String location) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, location);
+        tableProperty.buildLocation();
+    }
+
     public Boolean enableReplicatedStorage() {
         if (tableProperty != null) {
             return tableProperty.enableReplicatedStorage();
@@ -2475,18 +2494,18 @@ public class OlapTable extends Table {
         tableProperty.buildStorageCoolDownTTL();
     }
 
-    public boolean hasForbitGlobalDict() {
+    public boolean hasForbiddenGlobalDict() {
         if (tableProperty == null) {
             return false;
         }
-        return tableProperty.hasForbitGlobalDict();
+        return tableProperty.hasForbiddenGlobalDict();
     }
 
-    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
+    public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
+        tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
     }
 
     // return true if partition with given name already exist, both in partitions
@@ -2712,7 +2731,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             return new HashMap<>();
         }
-        return tableProperty.getBinlogAvailaberVersions();
+        return tableProperty.getBinlogAvailableVersions();
     }
 
     public void clearBinlogAvailableVersion() {

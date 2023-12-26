@@ -121,7 +121,8 @@ public class LoadAction extends RestBaseAction {
             }
             Collections.shuffle(nodeIds);
         } else {
-            nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendIds(1, true, false);
+            nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .seqChooseBackendIds(1, true, false, null);
         }
         
         if (CollectionUtils.isEmpty(nodeIds)) {

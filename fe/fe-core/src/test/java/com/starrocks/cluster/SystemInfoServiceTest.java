@@ -420,21 +420,21 @@ public class SystemInfoServiceTest {
         Assert.assertNotNull(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
 
-        List<Long> longList =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseComputeNodes(1, false, false);
+        List<Long> longList = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
+                .seqChooseComputeNodes(1, false, false);
         Assert.assertEquals(1, longList.size());
         ComputeNode computeNode = new ComputeNode();
         computeNode.setHost("192.168.0.1");
         computeNode.setHttpPort(9030);
         computeNode.setAlive(true);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
-        List<Long> computeNods =
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseComputeNodes(1, true, false);
+        List<Long> computeNods = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
+                .seqChooseComputeNodes(1, true, false);
         Assert.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
         Exception exception = Assertions.assertThrows(UserException.class, () -> {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendOrComputeId();
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend alive."));
 
@@ -453,7 +453,7 @@ public class SystemInfoServiceTest {
         };
 
         exception = Assert.assertThrows(UserException.class, () -> {
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendOrComputeId();
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
     }
