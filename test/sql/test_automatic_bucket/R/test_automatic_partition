@@ -1,0 +1,446 @@
+-- name: test_bucket_size
+create table t(k int);
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t set('bucket_size'='1024');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "1024",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_invalid_bucket_size
+create table t0(k int) properties('bucket_size'='0');
+-- result:
+-- !result
+create table t(k int) properties('bucket_size'='-1');
+-- result:
+E: (1064, 'Unexpected exception: Illegal bucket size: -1')
+-- !result
+create table t(k int) properties('bucket_size'='1024');
+-- result:
+-- !result
+alter table t set('bucket_size'='0');
+-- result:
+-- !result
+alter table t set('bucket_size'='-1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
+-- !result
+alter table t set('bucket_size'='2048');
+-- result:
+-- !result
+-- name: test_automatic_bucket
+create database kkk;
+-- result:
+-- !result
+use kkk;
+-- result:
+-- !result
+create table t(k int);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+alter table t set('bucket_size'='1');
+-- result:
+-- !result
+-- name: test_range_partition @sequential
+create database ttt;
+-- result:
+-- !result
+use ttt;
+-- result:
+-- !result
+create table t(k date, v int) PARTITION BY RANGE(`k`)
+(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
+PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
+PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")),
+PARTITION p20210104 VALUES [("2021-01-04"), ("2021-01-05")),
+PARTITION p20210105 VALUES [("2021-01-05"), ("2021-01-06")))
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+15
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+15
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+18
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+21
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
+-- result:
+24
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-03	1
+2021-01-01	1
+2021-01-05	1
+-- !result
+-- name: test_list_partition @sequential
+create database ddd;
+-- result:
+-- !result
+use ddd;
+-- result:
+-- !result
+create table t(k date not null, v int) PARTITION BY LIST(`k`)
+(PARTITION p20210101 VALUES IN ("2021-01-01"),
+PARTITION p20210102 VALUES IN ("2021-01-02"),
+PARTITION p20210103 VALUES IN ("2021-01-03"),
+PARTITION p20210104 VALUES IN ("2021-01-04"),
+PARTITION p20210105 VALUES IN ("2021-01-05"))
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+15
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+15
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+18
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+21
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
+-- result:
+24
+-- !result
+select * from t;
+-- result:
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
+2021-01-03	1
+-- !result
+-- name: test_expr_partition @sequential
+create database eee;
+-- result:
+-- !result
+use eee;
+-- result:
+-- !result
+create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+3
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+6
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+12
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+18
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
+-- result:
+21
+-- !result
+select * from t;
+-- result:
+2021-01-03	1
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
+-- !result
+-- name: test_schema_change @sequential
+create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2);
+-- result:
+-- !result
+insert into t values('2021-01-03', 2);
+-- result:
+-- !result
+insert into t values('2021-01-05', 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3);
+-- result:
+-- !result
+insert into t values('2021-01-03', 3);
+-- result:
+-- !result
+insert into t values('2021-01-05', 3);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3);
+-- result:
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-01	2
+2021-01-01	3
+2021-01-01	2
+2021-01-01	3
+2021-01-01	1
+2021-01-03	2
+2021-01-03	3
+2021-01-05	2
+2021-01-03	1
+2021-01-05	3
+2021-01-05	1
+-- !result
+alter table t add column c bigint;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+2021-01-01	3	None
+2021-01-03	3	None
+2021-01-01	1	None
+2021-01-03	1	None
+2021-01-01	2	None
+2021-01-05	3	None
+2021-01-01	3	None
+2021-01-01	1	None
+2021-01-05	1	None
+2021-01-03	2	None
+2021-01-01	2	None
+2021-01-05	2	None
+-- !result
+alter table t order by (k,c,v);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+2021-01-01	None	1
+2021-01-01	None	2
+2021-01-01	None	3
+2021-01-01	None	3
+2021-01-01	None	1
+2021-01-03	None	2
+2021-01-03	None	3
+2021-01-03	None	1
+2021-01-01	None	2
+2021-01-05	None	3
+2021-01-05	None	1
+2021-01-05	None	2
+-- !result
+-- name: test_mv @sequential
+create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-03', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-05', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-03', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-05', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-03', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-05', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3, 3);
+-- result:
+-- !result
+select * from t;
+-- result:
+2021-01-01	2	2
+2021-01-05	2	2
+2021-01-01	2	2
+2021-01-01	3	3
+2021-01-01	3	3
+2021-01-03	1	1
+2021-01-01	1	1
+2021-01-05	3	3
+2021-01-01	1	1
+2021-01-03	2	2
+2021-01-05	1	1
+2021-01-03	3	3
+-- !result
+create materialized view mv as select k, v1 from t;
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+select k, v1 from t;
+-- result:
+2021-01-05	3
+2021-01-01	3
+2021-01-01	2
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
+2021-01-03	3
+2021-01-01	2
+2021-01-05	2
+2021-01-01	3
+2021-01-03	1
+2021-01-03	2
+-- !result
