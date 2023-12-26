@@ -1,0 +1,169 @@
+
+以下查询可以在您的 SQL 客户端中运行。
+
+#### 纽约市每小时有多少次交通事故？
+
+```sql
+SELECT COUNT(*),
+       date_trunc("hour", crashdata.CRASH_DATE) AS Time
+FROM crashdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 200;
+```
+
+以下是部分输出。请注意，以下特意截取了 1 月 6 日和 7 日的数据，因为这是非假期周的星期一和星期二。相比之下，元旦（1 月 1 日）可能不是在工作日早高峰期的代表性数据。
+
+```plaintext
+|       14 | 2014-01-06 06:00:00 |
+|       16 | 2014-01-06 07:00:00 |
+# highlight-start
+|       43 | 2014-01-06 08:00:00 |
+|       44 | 2014-01-06 09:00:00 |
+|       21 | 2014-01-06 10:00:00 |
+# highlight-end
+|       28 | 2014-01-06 11:00:00 |
+|       34 | 2014-01-06 12:00:00 |
+|       31 | 2014-01-06 13:00:00 |
+|       35 | 2014-01-06 14:00:00 |
+|       36 | 2014-01-06 15:00:00 |
+|       33 | 2014-01-06 16:00:00 |
+|       40 | 2014-01-06 17:00:00 |
+|       35 | 2014-01-06 18:00:00 |
+|       23 | 2014-01-06 19:00:00 |
+|       16 | 2014-01-06 20:00:00 |
+|       12 | 2014-01-06 21:00:00 |
+|       17 | 2014-01-06 22:00:00 |
+|       14 | 2014-01-06 23:00:00 |
+|       10 | 2014-01-07 00:00:00 |
+|        4 | 2014-01-07 01:00:00 |
+|        1 | 2014-01-07 02:00:00 |
+|        3 | 2014-01-07 03:00:00 |
+|        2 | 2014-01-07 04:00:00 |
+|        6 | 2014-01-07 06:00:00 |
+|       16 | 2014-01-07 07:00:00 |
+# highlight-start
+|       41 | 2014-01-07 08:00:00 |
+|       37 | 2014-01-07 09:00:00 |
+|       33 | 2014-01-07 10:00:00 |
+# highlight-end
+```
+
+从数据中可以看出，似乎在星期一或星期二的早高峰期有大约 40 起事故，而在下午 5 点左右的事故数量也接近这个数字。
+
+#### 纽约市的平均温度是多少？
+
+```sql
+SELECT avg(HourlyDryBulbTemperature),
+       date_trunc("hour", weatherdata.DATE) AS Time
+FROM weatherdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 100;
+```
+
+输出：
+
+请注意，这是来自2014年的数据。
+
+```plaintext
++-------------------------------+---------------------+
+| avg(HourlyDryBulbTemperature) | Time                |
++-------------------------------+---------------------+
+|                            25 | 2014-01-01 00:00:00 |
+|                            25 | 2014-01-01 01:00:00 |
+|                            24 | 2014-01-01 02:00:00 |
+|                            24 | 2014-01-01 03:00:00 |
+|                            24 | 2014-01-01 04:00:00 |
+|                            24 | 2014-01-01 05:00:00 |
+|                            25 | 2014-01-01 06:00:00 |
+|                            26 | 2014-01-01 07:00:00 |
+```
+
+#### 能见度不佳的情况下在纽约市驾驶是否安全？
+
+为了回答这个问题，需要查看在能见度较差（0 到 1.0 英里之间）时的交通事故数量。在两个表格上对 DATETIME 列进行 JOIN。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyVisibility BETWEEN 0.0 AND 1.0
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+从以上可以得出，在能见度较低的一个小时内的最高交通事故数量是 129。有多个因素需要考虑在内：
+
+- 2014 年 2 月 3 日是星期一
+- 上午 8 点是早高峰时段
+- 当时正在下雨（那个小时的降水量为 0.12 英寸）
+- 温度为 32 华氏度（水的冰点）
+- 能见度为 0.25 英里，纽约市的正常能见度为 10 英里
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |       0.33 | 0.03          | 09 Jan 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+|      95 |     26 |       0.37 | 0.12          | 01 Mar 2015 15:00 |
+|      93 |     35 |       0.75 | 0.09          | 18 Jan 2015 09:00 |
+|      92 |     31 |       0.25 | 0.12          | 03 Feb 2014 10:00 |
+|      87 |   26.8 |        0.5 | 0.09          | 01 Mar 2015 16:00 |
+|      85 |     55 |       0.75 | 0.20          | 23 Dec 2015 17:00 |
+|      85 |     20 |       0.62 | 0.01          | 06 Jan 2015 11:00 |
+|      83 |   19.6 |       0.41 | 0.04          | 05 Mar 2015 13:00 |
+|      80 |     20 |       0.37 | 0.02          | 06 Jan 2015 10:00 |
+|      76 |   26.5 |       0.25 | 0.06          | 05 Mar 2015 09:00 |
+|      71 |     26 |       0.25 | 0.09          | 05 Mar 2015 10:00 |
+|      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
+```
+
+#### 在结冰条件下驾驶是否安全？
+
+水汽在 40 华氏度时会转变为冰；因此以下查询关注温度为 0 到 40 华氏度的区间。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyDryBulbTemperature BETWEEN 0.0 AND 40.5 
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+结果显示在寒冷的一月，星期天早晨城市中仍有大量交通事故。根据 [weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) 显示，当天有一场大风暴，导致许多交通事故，这正如查询结果中所显示的一样。
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     192 |     34 |        1.5 | 0.09          | 18 Jan 2015 08:00 |
+|     170 |     21 |       NULL |               | 21 Jan 2014 10:00 |
+|     145 |     19 |       NULL |               | 21 Jan 2014 11:00 |
+|     138 |   33.5 |          5 | 0.02          | 18 Jan 2015 07:00 |
+|     137 |     21 |       NULL |               | 21 Jan 2014 09:00 |
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |        0.7 | 0.04          | 09 Jan 2015 08:00 |
+|      98 |     16 |          8 | 0.00          | 06 Mar 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+```
+
+请小心驾驶！
+
