@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+import org.apache.commons.collections4.SetUtils;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,6 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
@@ -273,6 +276,25 @@ public class MaterializationContext {
 
     public static class RewriteOrdering implements Comparator<MaterializationContext> {
 
+        private OptExpression query;
+        private LogicalAggregationOperator queryAgg;
+        private Set<String> queryDimensionNames;
+
+        public RewriteOrdering(OptExpression query, ColumnRefFactory factory) {
+            this.query = query;
+            resolveAggregation(query);
+        }
+
+        private void resolveAggregation(OptExpression query) {
+            if (query.getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+                this.queryAgg = (LogicalAggregationOperator) query.getOp();
+                List<ColumnRefOperator> quDimensions = Lists.newArrayList(this.queryAgg.getGroupingKeys());
+                quDimensions.addAll(MvUtils.getPredicateColumns(this.query));
+                this.queryDimensionNames =
+                        quDimensions.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
+            }
+        }
+
         private static int getOperatorOrdering(OperatorType op) {
             if (op == OperatorType.LOGICAL_AGGR) {
                 return 1;
@@ -283,6 +305,33 @@ public class MaterializationContext {
             } else {
                 return 4;
             }
+        }
+
+        /**
+         * Prefer MV with similar dimensions
+         */
+        private int orderingAggregation(MaterializationContext mv) {
+            if (mv.getMvExpression().getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
+                // TODO: consider move the dimension extraction to MV prepare
+                LogicalAggregationOperator aggregation = (LogicalAggregationOperator) mv.getMvExpression().getOp();
+                List<ColumnRefOperator> mvDimensions = aggregation.getGroupingKeys();
+                Set<String> mvDimensionNames =
+                        mvDimensions.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
+
+                if (this.queryDimensionNames.isEmpty()) {
+                    return 0;
+                } else if (mvDimensionNames.equals(queryDimensionNames)) {
+                    // MV dimensions equal to query dimensions
+                    return 0;
+                } else if (mvDimensionNames.containsAll(queryDimensionNames)) {
+                    // MV dimensions contains all query dimensions
+                    return SetUtils.difference(mvDimensionNames, queryDimensionNames).size();
+                } else {
+                    // Could not cover, usually it could not rewrite
+                    return mvDimensionNames.size() + queryDimensionNames.size();
+                }
+            }
+            return 100;
         }
 
         /**
@@ -305,7 +354,9 @@ public class MaterializationContext {
             OperatorType o2Type = o2.getMvExpression().getOp().getOpType();
 
             if (o1Type == o2Type && (o1Type == OperatorType.LOGICAL_AGGR)) {
-                return Comparator.comparing(RewriteOrdering::orderingRowCount)
+                return Comparator
+                        .comparing(this::orderingAggregation)
+                        .thenComparing(RewriteOrdering::orderingRowCount)
                         .thenComparing(MaterializationContext::getMVUsedCount)
                         .compare(o1, o2);
             } else if (o1Type == o2Type && o1Type == OperatorType.LOGICAL_JOIN) {

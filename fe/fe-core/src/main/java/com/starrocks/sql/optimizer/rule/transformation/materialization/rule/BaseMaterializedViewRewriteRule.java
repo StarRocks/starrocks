@@ -99,7 +99,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
-        mvCandidateContexts.sort(new MaterializationContext.RewriteOrdering());
+        MaterializationContext.RewriteOrdering ordering =
+                new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
+        mvCandidateContexts.sort(ordering);
         int numCandidates = context.getSessionVariable().getCboMaterializedViewRewriteCandidateLimit();
         if (numCandidates > 0 && mvCandidateContexts.size() > numCandidates) {
             logMVRewrite(context, this, "too many MV candidates, truncate them to " + numCandidates);
