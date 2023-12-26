@@ -2708,4 +2708,18 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
+    
+    /*
+     * replication transaction config
+     */
+    @ConfField(mutable = true)
+    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    @ConfField(mutable = true)
+    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    @ConfField(mutable = true)
+    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
+    @ConfField(mutable = true)
+    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
 }

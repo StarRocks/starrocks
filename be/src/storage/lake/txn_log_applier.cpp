@@ -253,6 +253,9 @@ public:
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
+        }
         return Status::OK();
     }
 
@@ -375,6 +378,29 @@ private:
             _metadata->set_next_rowset_id(new_rowset->id() + std::max(1, new_rowset->segments_size()));
         }
         DCHECK(!op_schema_change.has_delvec_meta());
+        return Status::OK();
+    }
+
+    Status apply_replication_log(const TxnLogPB_OpReplication& op_replication) {
+        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+            LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
+                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
+            return Status::Corruption("Invalid txn meta state: " +
+                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
+        }
+        if (op_replication.txn_meta().snapshot_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
+                         << ", new version: " << _new_version;
+            return Status::Corruption("mismatched snapshot version and new version");
+        }
+
+        if (!op_replication.txn_meta().incremental_snapshot()) {
+            _metadata->clear_rowsets();
+        }
+        for (const auto& op_write : op_replication.op_writes()) {
+            RETURN_IF_ERROR(apply_write_log(op_write));
+        }
         return Status::OK();
     }
 

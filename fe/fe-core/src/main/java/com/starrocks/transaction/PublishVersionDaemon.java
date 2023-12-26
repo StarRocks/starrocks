@@ -771,6 +771,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
                                      @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
+        long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
@@ -792,9 +793,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != txnVersion) {
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                    partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
+            baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
@@ -819,7 +822,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
                         compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
