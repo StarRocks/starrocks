@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -351,8 +352,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         if (lastException != null) {
-            throw new DmlException("Refresh materialized view %s failed after retrying %s times", lastException,
-                    this.materializedView.getName(), maxRefreshMaterializedViewRetryNum);
+            String errorMsg;
+            if (lastException instanceof NullPointerException) {
+                errorMsg = ExceptionUtils.getStackTrace(lastException);
+            } else {
+                errorMsg = lastException.getMessage();
+            }
+            // field ERROR_MESSAGE in information_schema.task_runs length is 65535
+            errorMsg = errorMsg.substring(0, 65535);
+            throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
+                    lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
     }
 
