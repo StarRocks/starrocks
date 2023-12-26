@@ -462,7 +462,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
         DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser("drop materialized view " + materializedViewName + ";", ctx);
+                parseStmtWithNewParser("drop materialized view if exists " + materializedViewName + ";", ctx);
         GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
         return this;
     }
