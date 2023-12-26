@@ -310,12 +310,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    if (need_lock) {
-        RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
-    } else {
-        RETURN_IF_ERROR(
-                tablet->update_mgr()->get_rowids_from_pkindex_unlock(tablet, _base_version, _upserts, &rss_rowids));
-    }
+    RETURN_IF_ERROR(
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids, need_lock));
 
     for (size_t i = 0; i < num_segments; i++) {
         std::vector<uint32_t> rowids;
@@ -423,12 +419,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    if (need_lock) {
-        RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
-    } else {
-        RETURN_IF_ERROR(
-                tablet->update_mgr()->get_rowids_from_pkindex_unlock(tablet, _base_version, _upserts, &rss_rowids));
-    }
+    RETURN_IF_ERROR(
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids, need_lock));
 
     int64_t t_read_values = MonotonicMillis();
     size_t total_rows = 0;
@@ -563,7 +555,7 @@ Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, co
         new_rss_rowids_vec[segment_id].resize(_upserts[segment_id]->size());
     }
     RETURN_IF_ERROR(
-            tablet->update_mgr()->get_rowids_from_pkindex_unlock(tablet, _base_version, _upserts, &new_rss_rowids_vec));
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &new_rss_rowids_vec, false));
 
     size_t total_conflicts = 0;
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());

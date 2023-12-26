@@ -317,7 +317,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     return Status::OK();
 }
 
-Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
+Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
                                        const std::function<void(LakePrimaryIndex&)>& op) {
     TRACE_COUNTER_SCOPE_LATENCY_US("handle_index_op_latency_us");
     auto index_entry = _index_cache.get(tablet->id());
@@ -331,6 +331,10 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
     if (!index.is_load(base_version)) {
         return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
+    std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    if (need_lock) {
+        guard = index.fetch_guard();
+    }
     op(index);
 
     return Status::OK();
@@ -338,25 +342,9 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
 
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
                                               const std::vector<ColumnUniquePtr>& upserts,
-                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+                                              std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
-        // get rss_rowids for each segment of rowset
-        index.fetch_guard();
-        uint32_t num_segments = upserts.size();
-        for (size_t i = 0; i < num_segments; i++) {
-            auto& pks = *upserts[i];
-            st.update(index.get(pks, (*rss_rowids)[i]));
-        }
-    }));
-    return st;
-}
-
-Status UpdateManager::get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
-                                                     const std::vector<ColumnUniquePtr>& upserts,
-                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
-    Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet, base_version, need_lock, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -369,25 +357,9 @@ Status UpdateManager::get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t bas
 
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
                                               const std::vector<ColumnUniquePtr>& upserts,
-                                              std::vector<std::vector<uint64_t>>* rss_rowids) {
+                                              std::vector<std::vector<uint64_t>>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
-        index.fetch_guard();
-        // get rss_rowids for each segment of rowset
-        uint32_t num_segments = upserts.size();
-        for (size_t i = 0; i < num_segments; i++) {
-            auto& pks = *upserts[i];
-            st.update(index.get(pks, &((*rss_rowids)[i])));
-        }
-    }));
-    return st;
-}
-
-Status UpdateManager::get_rowids_from_pkindex_unlock(Tablet* tablet, int64_t base_version,
-                                                     const std::vector<ColumnUniquePtr>& upserts,
-                                                     std::vector<std::vector<uint64_t>>* rss_rowids) {
-    Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet, base_version, need_lock, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
