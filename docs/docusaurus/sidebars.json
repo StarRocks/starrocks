@@ -356,7 +356,7 @@
              {
               "type": "link",
               "label": "DBT",
-              "description": "Modeling and transformation with dbt",
+              "description": "Modeling and transformation with DBT",
               "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
              }
            ]
@@ -1165,6 +1165,7 @@
           "items": [
              "integrations/batch/Spark-connector-starrocks",
              "integrations/batch/SparkLoad"
+           ]
         },
         {
           "type": "category",
@@ -1177,7 +1178,7 @@
              {
               "type": "link",
               "label": "DBT",
-              "description": "Modeling and transformation with dbt",
+              "description": "通过 DBT 实现数据建模与转换",
               "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
              }
            ]
