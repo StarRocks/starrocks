@@ -1686,13 +1686,14 @@ public class GlobalStateMgr {
         int flag = dis.readInt();
         int starrocksMetaVersion;
         if (flag < 0) {
+            dis.readInt();
             starrocksMetaVersion = dis.readInt();
         } else {
             // when flag is positive, this is new version format
             starrocksMetaVersion = flag;
         }
 
-        if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
+        if (starrocksMetaVersion != FeConstants.STARROCKS_META_VERSION) {
             LOG.error("Not compatible with meta version {}, current version is {}",
                     starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
