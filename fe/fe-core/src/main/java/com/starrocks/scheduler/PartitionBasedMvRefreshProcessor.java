@@ -350,7 +350,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             StatementPlanner.lock(dbs);
 
-            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView);
+            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView, ctx);
             // Must set execution id before StatementPlanner.plan
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             execPlan = StatementPlanner.plan(insertStmt, ctx);
@@ -1159,8 +1159,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public InsertStmt analyzeInsertStmt(InsertStmt insertStmt,
                                         Map<String, Set<String>> refTableRefreshPartitions,
-                                        MaterializedView materializedView) throws AnalysisException {
-        Analyzer.analyze(insertStmt, ConnectContext.get());
+                                        MaterializedView materializedView,
+                                        ConnectContext ctx) throws AnalysisException {
+        Analyzer.analyze(insertStmt, ctx);
 
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
