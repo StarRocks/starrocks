@@ -237,6 +237,8 @@ public:
         _cardinality =  bitmap.cardinality();
         if (bitmap.type() == BitmapValue::BitmapDataType::BITMAP) {
             _bitmap_iter = std::make_unique<detail::Roaring64MapSetBitForwardIterator>(*bitmap._bitmap);
+        } else {
+            _bitmap_iter.reset();
         }
     }
 
