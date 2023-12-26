@@ -12,7 +12,7 @@ Release date: December 21, 2023
 
 #### Data Lake Analytics
 
-- Supports reading [Hive Catalog](https://docs.starrocks.io/docs/3.2/data_source/catalog/hive_catalog/) tables and file external tables in Avro, SequenceFile, and RCFile formats through Java Native Interface (JNI).
+- Supports reading [Hive Catalog](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/) tables and file external tables in Avro, SequenceFile, and RCFile formats through Java Native Interface (JNI).
 
 #### Materialized View
 
@@ -24,8 +24,8 @@ Release date: December 21, 2023
 #### Query and SQL functions
 
 - Supports the prepared statement. It allows better performance for processing high-concurrency point lookup queries. It also prevents SQL injection effectively.
-- Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
-- Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_unique_agg/).
+- Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
+- Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_unique_agg/).
 
 #### Monitoring and alerts
 
@@ -38,10 +38,10 @@ Release date: December 21, 2023
 ### Improvements
 
 - Upgraded the default GC algorithm in JDK8 to G1. [#37268](https://github.com/StarRocks/starrocks/pull/37268)
-- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for [AWS S3 in Broker Load jobs](https://docs.starrocks.io/docs/3.2/loading/s3/) are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for [AWS S3 in Broker Load jobs](https://docs.starrocks.io/docs/loading/s3/) are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes. [#35615](https://github.com/StarRocks/starrocks/pull/35615)
-- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
 
 ### Bug Fixes
 
@@ -72,8 +72,8 @@ Release date: December 1, 2023
 
 #### Data Lake Analytics
 
-- Supports creating and dropping databases and managed tables in [Hive catalogs](https://docs.starrocks.io/docs/3.2/data_source/catalog/hive_catalog/), and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
-- Supports [Unified Catalog](https://docs.starrocks.io/docs/3.2/data_source/catalog/unified_catalog/), with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
+- Supports creating and dropping databases and managed tables in [Hive catalogs](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/), and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
+- Supports [Unified Catalog](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/), with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
 - Supports collecting statistics of Hive and Iceberg tables using ANALYZE TABLE, and storing the statistics in StarRocks, thus facilitating optimization of query plans and accelerating subsequent queries.
 - Supports Information Schema for external tables, providing additional convenience for interactions between external systems (such as BI tools) and StarRocks.
 
@@ -85,7 +85,7 @@ Release date: December 1, 2023
   - Loading complex data types including ARRAY, JSON, MAP, and STRUCT.
 - Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](../unloading/unload_using_insert_into_files.md).
 - Supports [manual optimization of table structure and data distribution strategy](../table_design/Data_distribution.md#optimize-data-distribution-after-table-creation-since-32) used in an existing table to optimize the query and loading performance. You can set a new bucket key, bucket number, or sort key for a table. You can also set a different bucket number for specific partitions.
-- Supports continuous data loading from [AWS S3](https://docs.starrocks.io/docs/3.2/loading/s3/#use-pipe) or [HDFS](https://docs.starrocks.io/docs/3.2/loading/hdfs_load/#use-pipe) using the PIPE method.
+- Supports continuous data loading from [AWS S3](https://docs.starrocks.io/docs/loading/s3/#use-pipe) or [HDFS](https://docs.starrocks.io/docs/loading/hdfs_load/#use-pipe) using the PIPE method.
   - When PIPE detects new  or modifications in a remote storage directory, it can automatically load the new or modified data into the destination table in StarRocks. While loading data, PIPE automatically splits a large loading task into smaller, serialized tasks, enhancing stability in large-scale data ingestion scenarios and reducing the cost of error retries.
 
 #### Query
