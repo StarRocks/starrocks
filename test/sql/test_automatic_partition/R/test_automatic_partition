@@ -513,7 +513,7 @@ show partitions from ss_year;
 .*p2025.*
 -- !result
 
--- name: test_without_property
+-- name: test_without_property @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
 -- result:
 -- !result
