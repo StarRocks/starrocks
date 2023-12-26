@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 import RoutineLoadPrivNote from '../assets/commonMarkdown/RoutineLoadPrivNote.md'
 
-## **功能**
+## 功能
 
 该语法用于修改 Routine Load 导入作业。注意，只能修改处于 `PAUSED` 状态的作业。您可以通过 [PAUSE ROUTINE LOAD](./PAUSE_ROUTINE_LOAD.md) 暂停 Routine Load 导入作业。
 

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 从 Apache Kafka® 持续导入
+# 使用 Routine Load 导入数据
 
 本文介绍 Routine Load 的基本原理、以及如何通过 Routine Load 持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
 
