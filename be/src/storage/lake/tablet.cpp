@@ -74,8 +74,16 @@ Status Tablet::put_txn_log(const TxnLogPtr& log) {
     return _mgr->put_txn_log(log);
 }
 
+Status Tablet::put_txn_slog(const TxnLogPtr& log) {
+    return _mgr->put_txn_slog(log);
+}
+
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
     return _mgr->get_txn_log(_id, txn_id);
+}
+
+StatusOr<TxnLogPtr> Tablet::get_txn_slog(int64_t txn_id) {
+    return _mgr->get_txn_slog(_id, txn_id);
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
@@ -176,6 +184,10 @@ std::string Tablet::metadata_root_location() const {
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
+}
+
+std::string Tablet::txn_slog_location(int64_t txn_id) const {
+    return _mgr->txn_slog_location(_id, txn_id);
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {

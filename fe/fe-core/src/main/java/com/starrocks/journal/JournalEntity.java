@@ -110,6 +110,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -1035,6 +1036,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_STORAGE_VOLUME:
             case OperationType.OP_UPDATE_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
             default: {

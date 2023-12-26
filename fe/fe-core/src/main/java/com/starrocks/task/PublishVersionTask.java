@@ -44,6 +44,7 @@ import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TTxnType;
 import com.starrocks.transaction.TransactionState;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
@@ -65,10 +66,11 @@ public class PublishVersionTask extends AgentTask {
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
+    private TTxnType txnType;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state, boolean enableSyncPublish) {
+                              long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
@@ -77,6 +79,7 @@ public class PublishVersionTask extends AgentTask {
         this.commitTimestamp = commitTimestamp;
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
+        this.txnType = txnType;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -92,6 +95,7 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
+        publishVersionRequest.setTxn_type(txnType);
         return publishVersionRequest;
     }
 
