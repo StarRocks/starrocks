@@ -31,7 +31,7 @@ public:
     static NgramHash getAsciiHash(const Gram* ch) { return crc_hash_32(ch, N, CRC_HASH_SEED1) & (0xffffu); }
 
     // for every gram of needle, we calculate its' hash value and store its' frequency in map, and return the number of gram in needle
-    size_t static calculateMapWithNeedle(NgramHash* map, const Slice& needle, [[maybe_unused]] NgramHash* map_memo) {
+    size_t static calculateMapWithNeedle(NgramHash* map, const Slice& needle) {
         size_t needle_length = needle.get_size();
         NgramHash cur_hash;
         size_t i;
@@ -62,21 +62,38 @@ public:
         NgramHash cur_hash;
         size_t i;
         const char* ptr = haystack.get_data();
+        std::memset(map_memo, 0, map_size * sizeof(NgramHash));
+
+        // only for test
+        std::unique_ptr<NgramHash[]> checkMap(new NgramHash[map_size]);
+        NgramHash* checkMapPtr;
+        if constexpr (need_recovery_map) {
+            checkMapPtr = checkMap.get();
+            std::memcpy(checkMapPtr, map, map_size * sizeof(NgramHash));
+        }
+
         for (i = 0; i + N <= haystack_length; i++) {
             cur_hash = getAsciiHash(ptr + i);
             // if this gram is in needle
             if (map[cur_hash] > 0) {
                 needle_gram_count--;
-            }
-            map[cur_hash]--;
-            if constexpr (need_recovery_map) {
-                map_memo[i] = cur_hash;
+                map[cur_hash]--;
+                if constexpr (need_recovery_map) {
+                    map_memo[i] = cur_hash;
+                }
             }
         }
 
         if constexpr (need_recovery_map) {
+            bool isTest = true;
             for (int j = 0; j < i; j++) {
-                map[map_memo[j]]++;
+                if (map_memo[j]) {
+                    map[map_memo[j]]++;
+                }
+            }
+            if (std::memcmp(map, checkMapPtr, map_size) != 0) {
+                while (isTest) {
+                }
             }
         }
 
@@ -104,10 +121,9 @@ public:
         }
 
         auto res = RunTimeColumnType<TYPE_FLOAT>::create(haystack->size());
-        size_t needle_gram_count = calculateMapWithNeedle(map.get(), needle, nullptr);
+        // needle_gram_count may be zero because needle is empty or N is too large for needle
+        size_t needle_gram_count = calculateMapWithNeedle(map.get(), needle);
         for (int i = 0; i < haystack->size(); i++) {
-            // cur_needle_gram_count may be zero because needle is empty or N is too large for needle
-            size_t cur_needle_gram_count = needle_gram_count;
             const Slice& cur_haystack_str = haystack->get_slice(i);
             // if haystack is too large, we can say they are not similar at all
             if (cur_haystack_str.get_size() >= max_string_size) {
@@ -115,9 +131,11 @@ public:
                 continue;
             }
             size_t needle_not_overlap_with_haystack =
-                    calculateDistanceWithHaystack<true>(map.get(), cur_haystack_str, memo.get(), cur_needle_gram_count);
-            float row_result =
-                    1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(cur_needle_gram_count, (size_t)1);
+                    calculateDistanceWithHaystack<true>(map.get(), cur_haystack_str, memo.get(), needle_gram_count);
+            float row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+
+            LOG(INFO) << "needle_not_overlap_with_haystack: " << needle_not_overlap_with_haystack
+                      << "\nneedle_gram_count:" << needle_gram_count;
             res->get_data()[i] = row_result;
         }
 
@@ -146,10 +164,12 @@ public:
             cur_haystack = Slice(buf.c_str(), buf.size());
         }
         // needle_gram_count may be zero because needle is empty or N is too large for needle
-        size_t needle_gram_count = calculateMapWithNeedle(hash.get(), needle, nullptr);
+        size_t needle_gram_count = calculateMapWithNeedle(hash.get(), needle);
         size_t needle_not_overlap_with_haystack =
                 calculateDistanceWithHaystack<false>(hash.get(), cur_haystack, nullptr, needle_gram_count);
         float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+        LOG(INFO) << "needle_not_overlap_with_haystack: " << needle_not_overlap_with_haystack
+                  << "\nneedle_gram_count:" << needle_gram_count;
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_ptr->size());
     }
