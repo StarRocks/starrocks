@@ -36,7 +36,12 @@ rename column col1 to col11;
 []
 -- !result
 alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
-modify column col4 BIGINT default '0';
+add column col5 string not null default "--";
+-- result:
+E: (1064, 'Unexpected exception: column in iceberg table must be nullable.')
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+modify column col4 BIGINT;
 -- result:
 []
 -- !result
@@ -44,11 +49,6 @@ alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
 drop column col4;
 -- result:
 []
--- !result
-alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
-rename new_ice_tbl_${uuid0};
--- result:
-E: (1064, 'Unexpected exception: Unsupported alter operation for iceberg connector')
 -- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:

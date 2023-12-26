@@ -272,7 +272,7 @@ public class MetadataMgr {
                 throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
             }
 
-            if (!listTableNames(catalogName, dbName).contains(tableName)) {
+            if (!tableExists(catalogName, dbName, tableName)) {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 

@@ -1135,7 +1135,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // drop/rename/modify column
         DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
         ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
-        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), false);
+        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
         Map<String, String> properties = new HashMap<>();
         ModifyColumnClause modifyColumnClause =
                 new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);

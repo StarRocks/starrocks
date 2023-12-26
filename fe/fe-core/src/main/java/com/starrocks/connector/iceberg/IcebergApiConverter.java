@@ -313,7 +313,7 @@ public class IcebergApiConverter {
 
                 // All non-partition columns must use NULL as the default value.
                 if (!column.isAllowNull()) {
-                    throw new StarRocksConnectorException("added column must use NULL as the default value.");
+                    throw new StarRocksConnectorException("column in iceberg table must be nullable.");
                 }
                 updateSchema.addColumn(
                         column.getName(),
@@ -340,7 +340,7 @@ public class IcebergApiConverter {
 
                 for (Column column : columns) {
                     if (!column.isAllowNull()) {
-                        throw new StarRocksConnectorException("added column must be allowed null.");
+                        throw new StarRocksConnectorException("column in iceberg table must be nullable.");
                     }
                     updateSchema.addColumn(
                             column.getName(),
@@ -376,7 +376,8 @@ public class IcebergApiConverter {
                 if (column.isAllowNull()) {
                     updateSchema.makeColumnOptional(column.getName());
                 } else {
-                    updateSchema.requireColumn(column.getName());
+                    throw new StarRocksConnectorException(
+                            "column in iceberg table must be nullable.");
                 }
 
                 // AFTER column / FIRST
