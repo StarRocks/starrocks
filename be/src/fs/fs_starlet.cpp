@@ -262,14 +262,23 @@ public:
     using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                       const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+                                                                       const std::string& file_name) override {
+        FileInfo info{.path = file_name};
+        return new_random_access_file(opts, info);
+    }
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const FileInfo& info) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(info.path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        if (info.size.has_value()) {
+            opt.file_size = info.size.value();
+        }
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 
         if (!file_st.ok()) {
@@ -282,7 +291,7 @@ public:
             istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
                                                                          config::experimental_lake_wait_per_get_ms);
         }
-        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
+        return std::make_unique<RandomAccessFile>(std::move(istream), info.path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
