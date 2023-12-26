@@ -33,7 +33,6 @@ public class OdpsTableTest {
 
     @Test
     public void testGetResourceName() {
-        // Test case designed by human: 测试方法getResourceName，预期返回值为 tableName
         OdpsTable odpsTable = mock(OdpsTable.class);
         when(odpsTable.getResourceName()).thenReturn("tableName");
         assertEquals("tableName", odpsTable.getResourceName());
@@ -41,7 +40,6 @@ public class OdpsTableTest {
 
     @Test
     public void testGetCatalogName() {
-        // Test case designed by human: 测试方法getCatalogName，预期返回值为 catalogName
         OdpsTable odpsTable = mock(OdpsTable.class);
         when(odpsTable.getCatalogName()).thenReturn("catalogName");
         assertEquals("catalogName", odpsTable.getCatalogName());
@@ -49,7 +47,6 @@ public class OdpsTableTest {
 
     @Test
     public void testGetDbName() {
-        // Test case designed by human: 测试方法getDbName，预期返回值为 dbName
         OdpsTable odpsTable = mock(OdpsTable.class);
         when(odpsTable.getDbName()).thenReturn("dbName");
         assertEquals("dbName", odpsTable.getDbName());
@@ -57,7 +54,6 @@ public class OdpsTableTest {
 
     @Test
     public void testGetTableName() {
-        // Test case designed by human: 测试方法getTableName，预期返回值为 tableName
         OdpsTable odpsTable = mock(OdpsTable.class);
         when(odpsTable.getTableName()).thenReturn("tableName");
         assertEquals("tableName", odpsTable.getTableName());
@@ -65,7 +61,6 @@ public class OdpsTableTest {
 
     @Test
     public void testDataColumnNames() {
-        // Test case designed by human: 测试方法getDataColumnNames，预期返回值为 dataColumns.stream().map(Column::getName).collect(Collectors.toList())
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> dataColumns = new ArrayList<>();
         Column column = new Column();

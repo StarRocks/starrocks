@@ -71,8 +71,9 @@ public class OdpsMetadataTest extends MockedBase {
 
     @Test
     public void testGetMetadata() {
-        Assert.assertNotNull(odpsConnector);
-        ConnectorMetadata metadata = odpsConnector.getMetadata();
+        OdpsConnector connector = new OdpsConnector(context);
+        Assert.assertNotNull(connector);
+        ConnectorMetadata metadata = connector.getMetadata();
         Assert.assertNotNull(metadata);
     }
 
