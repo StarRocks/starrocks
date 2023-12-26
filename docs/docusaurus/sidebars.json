@@ -349,10 +349,10 @@
           "type": "category",
           "label": "Loading Tools",
           "description": "Integrations with more loading tools",
-          "link": {"type": "doc", "id": "integrations/loading_tools"},
+          "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
           "items": [
-             "loading/CloudCanal",
-             "loading/DataX-starrocks-writer",
+             "integrations/loading_tools/CloudCanal",
+             "integrations/loading_tools/DataX",
              {
               "type": "link",
               "label": "DBT",
@@ -1171,10 +1171,10 @@
           "type": "category",
           "label": "导入工具",
           "description": "更多导入工具集成",
-          "link": {"type": "doc", "id": "integrations/loading_tools"},
+          "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
           "items": [
-             "loading/CloudCanal",
-             "loading/DataX-starrocks-writer",
+             "integrations/loading_tools/CloudCanal",
+             "integrations/loading_tools/DataX",
              {
               "type": "link",
               "label": "DBT",
