@@ -717,7 +717,7 @@ public class OffHeapColumnVector {
     /**
      * logical components in be: time_types.cpp, date::from_date
      */
-    public static int convertToDate(int year, int month, int day) {
+    private int convertToDate(int year, int month, int day) {
         int century;
         int julianDate;
 
@@ -739,7 +739,7 @@ public class OffHeapColumnVector {
     /**
      * logical components in be: time_types.h, timestamp::from_datetime
      */
-    public static long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
+    private long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
         int secsPerMinute = 60;
         int minsPerHour = 60;
         long usecsPerSec = 1000000;

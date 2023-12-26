@@ -236,8 +236,6 @@ public class ColumnType {
             default: {
                 if (t.startsWith("decimal")) {
                     typeValue = parseDecimal(t);
-                } else if (t.startsWith("timestamp")) {
-                    typeValue = TypeValue.DATETIME;
                 } else {
                     typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
                 }
