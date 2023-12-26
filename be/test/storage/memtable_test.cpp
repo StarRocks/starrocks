@@ -247,7 +247,7 @@ public:
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testDupKeysInsertFlushRead";
+    const string path = "./MemTableTest_testDupKeysInsertFlushRead";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 3000;
@@ -291,7 +291,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testUniqKeysInsertFlushRead";
+    const string path = "./MemTableTest_testUniqKeysInsertFlushRead";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS), "pk int,name varchar,pv int",
             path);
     const size_t n = 1000;
@@ -338,7 +338,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysWithDeletes";
+    const string path = "./MemTableTest_testPrimaryKeysWithDeletes";
     MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
@@ -368,7 +368,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysNullableSortKey";
+    const string path = "./MemTableTest_testPrimaryKeysNullableSortKey";
     auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
     MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
     const size_t n = 10;
@@ -433,7 +433,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitSinglePK";
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitSinglePK";
     MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
             path);
     const size_t n = 1000;
@@ -463,7 +463,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
 }
 
 TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitCompositePK";
+    const string path = "./MemTableTest_testPrimaryKeysSizeLimitCompositePK";
     MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
             "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
