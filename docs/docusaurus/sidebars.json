@@ -321,7 +321,7 @@
             "integrations/streaming/flink",
             {
               "type":"category",
-              "label": "Kafka",
+              "label": "Apache Kafka",
               "description": "Streaming from Kafka",
               "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
               "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
@@ -342,10 +342,20 @@
           "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
           "items": [
              "integrations/batch/Spark-connector-starrocks",
-             "integrations/batch/SparkLoad",
+             "integrations/batch/SparkLoad"
+           ]
+        },
+        {
+          "type": "category",
+          "label": "Loading Tools",
+          "description": "Integrations with more loading tools",
+          "link": {"type": "doc", "id": "integrations/loading_tools"},
+          "items": [
+             "loading/CloudCanal",
+             "loading/DataX-starrocks-writer",
              {
               "type": "link",
-              "label": "dbt",
+              "label": "DBT",
               "description": "Modeling and transformation with dbt",
               "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
              }
@@ -1154,10 +1164,19 @@
           "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
           "items": [
              "integrations/batch/Spark-connector-starrocks",
-             "integrations/batch/SparkLoad",
+             "integrations/batch/SparkLoad"
+        },
+        {
+          "type": "category",
+          "label": "导入工具",
+          "description": "更多导入工具集成",
+          "link": {"type": "doc", "id": "integrations/loading_tools"},
+          "items": [
+             "loading/CloudCanal",
+             "loading/DataX-starrocks-writer",
              {
               "type": "link",
-              "label": "dbt",
+              "label": "DBT",
               "description": "Modeling and transformation with dbt",
               "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
              }
