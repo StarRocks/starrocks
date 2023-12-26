@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -26,6 +25,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
@@ -50,6 +50,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessControl;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -124,7 +125,11 @@ public class CatalogMgr {
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControl());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                }
             } else {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
             }
@@ -175,7 +180,11 @@ public class CatalogMgr {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName.isEmpty()) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                    if (Config.access_control.equals("ranger")) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControl());
+                    } else {
+                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                    }
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
                 }
@@ -256,7 +265,11 @@ public class CatalogMgr {
         Map<String, String> properties = catalog.getConfig();
         String serviceName = properties.get("ranger.plugin.hive.service.name");
         if (serviceName == null || serviceName.isEmpty()) {
-            Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+            if (Config.access_control.equals("ranger")) {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControl());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+            }
         } else {
             Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
         }
@@ -297,7 +310,11 @@ public class CatalogMgr {
             Map<String, String> properties = log.getProperties();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName.isEmpty()) {
-                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControl());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+                }
             } else {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
             }
