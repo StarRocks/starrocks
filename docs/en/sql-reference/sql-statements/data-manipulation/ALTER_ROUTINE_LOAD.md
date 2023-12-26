@@ -31,21 +31,21 @@ FROM data_source
 
 - **`[<db_name>.]<job_name>`**
   - **`db_name`**: Optional. The name of the StarRocks database.
-  - **`job_name`****:** Required. The name of the Routine Load job to be altered.
+  - **`job_name`:** Required. The name of the Routine Load job to be altered.
 - **`load_properties`**
 
-The properties of the source data to be loaded. The syntax is as follows:
+   The properties of the source data to be loaded. The syntax is as follows:
 
-```SQL
-[COLUMNS TERMINATED BY '<column_separator>'],
-[ROWS TERMINATED BY '<row_separator>'],
-[COLUMNS ([<column_name> [, ...] ] [, column_assignment [, ...] ] )],
-[WHERE <expr>],
-[PARTITION ([ <partition_name> [, ...] ])]
-[TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
-```
+   ```SQL
+   [COLUMNS TERMINATED BY '<column_separator>'],
+   [ROWS TERMINATED BY '<row_separator>'],
+   [COLUMNS ([<column_name> [, ...] ] [, column_assignment [, ...] ] )],
+   [WHERE <expr>],
+   [PARTITION ([ <partition_name> [, ...] ])]
+   [TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
+   ```
 
- For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#load_properties).
+   For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#load_properties).
 
 - **`job_properties`**
 
@@ -77,13 +77,13 @@ The properties of the source data to be loaded. The syntax is as follows:
 
   - `timezone`
 
-For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#job_properties).
+  For detailed parameter descriptions, see [CREATE ROUTINE LOAD](./CREATE_ROUTINE_LOAD.md#job_properties).
 
 - **`data_source`** **and** **`data_source_properties`**
 
   - **`data_source`**
-  
-  Required. The source of the data you want to load. Valid value: `KAFKA`.
+
+    Required. The source of the data you want to load. Valid value: `KAFKA`.
 
   - **`data_source_properties`**
 

@@ -12,9 +12,9 @@ import RoutineLoadPrivNote from '../assets/commonMarkdown/RoutineLoadPrivNote.md
 
 :::note
 
-\- <RoutineLoadPrivNote />
+- <RoutineLoadPrivNote />
 
-\- Routine Load 中导入作业和导入任务的关系，参见xxx。
+- Routine Load 中导入作业和导入任务的关系，参见[从 Apache Kafka® 持续导入](../../../loading/RoutineLoad.md#基本原理)。
 
 :::
 

@@ -29,7 +29,7 @@ FROM data_source
 
 ## 参数说明
 
-- **`[db_name.]<job_name>`**
+- **`[<db_name>.]<job_name>`**
 
     指定要修改的作业名称。
 

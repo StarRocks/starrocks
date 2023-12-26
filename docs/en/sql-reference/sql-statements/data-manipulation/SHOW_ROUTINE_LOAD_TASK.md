@@ -12,10 +12,9 @@ Shows the execution information of load tasks within a Routine Load job.
 
 :::note
 
-\- <RoutineLoadPrivNote />
+- <RoutineLoadPrivNote />
 
-\- For the relationship between a Routine Load job and the load tasks in it, see xxx.
-
+- For the relationship between a Routine Load job and the load tasks in it, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md#basic-concepts)
 :::
 
 ## Syntax
@@ -28,7 +27,7 @@ SHOW ROUTINE LOAD TASK
 
 :::note
 
-You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK FOR JobName = <job_name>\G`) to vertically display the return result rather than in the usual horizontal table format. 
+You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK FOR JobName = <job_name>\G`) to vertically display the return result rather than in the usual horizontal table format.
 
 :::
 
