@@ -333,6 +333,8 @@ public:
 
     void clear();
 
+    Status create_index_file(std::string& path);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -671,6 +673,13 @@ public:
         return res;
     }
 
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -776,6 +785,9 @@ protected:
 
     bool _dump_snapshot = false;
     bool _flushed = false;
+    bool _cancel_major_compaction = false;
+
+private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;

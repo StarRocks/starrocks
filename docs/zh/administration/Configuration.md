@@ -346,7 +346,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
-| report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
+| ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
+| enable_stream_load_verbose_log                        | false       | N/A    | 是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。该参数自以下版本开始引入：2.5.17、3.0.9、3.1.6、3.2.1。 |
 | report_disk_state_interval_seconds                    | 60          | second | 汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。   |
 | report_tablet_interval_seconds                        | 60          | second | 汇报 tablet 的间隔。汇报所有的 tablet 的最新版本。           |
 | report_workgroup_interval_seconds                     | 5           | second | 汇报 workgroup 的间隔。汇报所有 workgroup 的最新版本。           |

@@ -173,6 +173,7 @@ displayed_sidebar: "Chinese"
 
     ```Bash
     [db]
+    type = mysql
     host = xxx.xx.xxx.xx
     port = 3306
     user = user1
@@ -206,7 +207,8 @@ displayed_sidebar: "Chinese"
     flink.starrocks.sink.buffer-flush.interval-ms=15000
     ```
 
-    - `[db]`：MySQL 的连接信息。
+    - `[db]`：源数据库的连接信息。
+        - `type`：源数据库类型，本示例中源数据库为 `mysql`。
         - `host` ：MySQL 所在服务器的 IP 地址。
         - `port`：MySQL 端口号，默认为`3306`。
         - `user` ：用户名。
