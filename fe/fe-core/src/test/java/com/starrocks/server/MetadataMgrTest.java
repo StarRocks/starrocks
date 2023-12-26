@@ -16,6 +16,10 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
@@ -24,7 +28,11 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -39,11 +47,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 
@@ -254,6 +264,112 @@ public class MetadataMgrTest {
 
         createTableStmt.setIfNotExists();
         Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testHiveCreateTableLike() throws Exception {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                true,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("col2", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("col1"), new ArrayList<>()),
+                null,
+                new HashMap<>(),
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        stmt.getColumns().addAll(columns);
+
+        CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
+                false,
+                new TableName("hive_catalog", "hive_db", "hive_table_1"),
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                null,
+                null,
+                new HashMap<>(),
+                NodePosition.ZERO);
+        createTableLikeStmt.setCreateTableStmt(stmt);
+
+        try {
+            metadataMgr.createTableLike(createTableLikeStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Unknown database 'hive_db'"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("hive_catalog", "hive_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTableLike(createTableLikeStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("Unable to instantiate " +
+                    "org.apache.hadoop.hive.metastore.HiveMetaStoreClient"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("hive_catalog", "hive_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table_1");
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTableLike(createTableLikeStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Table 'hive_table_1' already exists"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("hive_catalog", "hive_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table");
+                result = true;
+                minTimes = 0;
+
+                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table_1");
+                result = false;
+                minTimes = 0;
+
+                metadataMgr.getTable("hive_catalog", "hive_db", "hive_table_1");
+                result = new com.starrocks.catalog.Table(com.starrocks.catalog.Table.TableType.HIVE);
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTableLike(createTableLikeStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("Unable to instantiate " +
+                    "org.apache.hadoop.hive.metastore.HiveMetaStoreClient"));
+        }
     }
 
     @Test
