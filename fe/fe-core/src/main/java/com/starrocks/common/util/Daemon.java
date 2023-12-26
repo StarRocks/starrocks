@@ -63,8 +63,8 @@ public class Daemon extends Thread {
 
     @Override
     public synchronized void start() {
-        isStopped.set(false);
         if (isRunning.compareAndSet(false, true)) {
+            isStopped.set(false);
             super.start();
         }
     }
