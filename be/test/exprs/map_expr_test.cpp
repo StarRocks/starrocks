@@ -64,7 +64,7 @@ TEST_F(MapExprTest, test_evaluate) {
         auto expr(ExprsTestHelper::create_map_expr(type_map_int_str));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
-        ASSERT_TRUE(result->is_map());
+        ASSERT_TRUE(result->is_constant());
         EXPECT_EQ(0, result->get(0).get_map().size());
     }
 
@@ -132,7 +132,7 @@ TEST_F(MapExprTest, test_const_evaluate) {
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_constant());
-        ASSERT_EQ("{1:'a'}", result->debug_string());
+        ASSERT_EQ("CONST: {1:'a'} Size : 1", result->debug_string());
     }
 
     // more key-value pairs with duplicated keys
@@ -153,7 +153,7 @@ TEST_F(MapExprTest, test_const_evaluate) {
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_constant());
-        ASSERT_EQ("{1:'a',4:'x'}", result->debug_string());
+        ASSERT_EQ("CONST: {1:'a',4:'x'} Size : 1", result->debug_string());
     }
 }
 
