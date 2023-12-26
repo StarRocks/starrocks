@@ -34,7 +34,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | db_name                           | No           | The name of the database to which the load job belongs.      |
 | job_name                          | Yes          | The name of the load job.                                    |
 | ALL                               | No           | Displays all load jobs, including those in the `STOPPED` or  `CANCELLED` states. |
-| STATE                             | No           | State of the load job.                                       |
+| STATE                             | No           |  The status of the load job.                                       |
 | ORDER BY field_name [ASC \| DESC] | No           | Sorts the return result in ascending or descending order based on the specified field. The following fields are supported: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, and `CurrentTaskNum`.To sort the return result in ascending order, specify `ORDER BY field_name ASC`.To sort the return result in descending order, specify `ORDER BY field_name DESC`.If you do not specify the field or the sort order, the return result is sorted in ascending order of `Id` by default. |
 | LIMIT limit                       | No           | The number of load jobs that will be returned. If this parameter is not specified, the information of all load jobs that match the filter conditions are displayed. For example, if `LIMIT 10` is specified, only the information of 10 load jobs that match filter conditions will be returned. |
 | OFFSET offset                     | No           | The `offset` parameter defines the number of load jobs to be skipped. For example, `OFFSET 5` skips the first five load jobs and returns the rest. The value of the `offset` parameter defaults to `0`. |
@@ -52,18 +52,18 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | TableName            | Target table of the load job.                                |
 | State                | The status of the load job, including:<ul><li>`NEED_SCHEDULE`: The load job is waiting to be scheduled. After you use CREATE Routine Load job or RESUME ROUTINE LOAD to create or resume a Routine Load job, the load job first enters the `NEED_SCHEDULE` state.</li><li>`RUNNING`: The load job is running. You can view the consumption progress of the Routine Load job through `Statistic` and `Progress`.</li><li>`PAUSED`: The load job is paused. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. After fixing the error, you can use RESUME ROUTINE LOAD to resume the Routine Load job.</li><li>`CANCELLED`: The load job is cancelled. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. However, after fixing the error, you cannot recover the load job in this state.</li><li>`STOPPED`: Stopped state. You cannot recover the load job in this state.</li><li>`UNSTABLE`: Unstable state. A Routine Load job is set in the `UNSTABLE` state if any task within the Routine Load job lags (namely, the difference between the timestamp of the message being consumed and the current time exceeds this FE parameter [`routine_load_unstable_threshold_second`](../../../administration/FE_configuration.md#routine_load_unstable_threshold_second), and unconsumed messages exist in the data source.)</li></ul> |
 | DataSourceType       | The type of the data source. Fixed value: `KAFKA`.           |
-| CurrentTaskNum       | Current number of tasks in the load job.                     |
-| JobProperties        | Properties of the load job, such as partitions to be consumed and column mapping. |
-| DataSourceProperties | Properties of the data source, such as Topic and the list of addresses and ports of brokers in the Kafka cluster. |
-| CustomProperties     | Additional data source-related properties defined in the load job. |
-| Statistic            | Statistic of loading data, such as successfully loaded rows, total rows, and received data volume. |
-| Progress             | Progress (measured in the offset) of consuming messages in partitions of the topic. |
-| TimestampProgress    | Progress (measured in the timestamp) of consuming messages in partitions of the topic. |
-| ReasonOfStateChanged | Reasons for the load job being in CANCELLED or PAUSED state. |
+| CurrentTaskNum       | The current number of tasks in the load job.                     |
+| JobProperties        | The properties of the load job, such as partitions to be consumed and column mapping. |
+| DataSourceProperties | The properties of the data source, such as Topic and the list of addresses and ports of brokers in the Kafka cluster. |
+| CustomProperties     | The additional data source-related properties defined in the load job. |
+| Statistic            | The statistic of loading data, such as successfully loaded rows, total rows, and received data volume. |
+| Progress             | The progress (measured in the offset) of consuming messages in partitions of the topic. |
+| TimestampProgress    | The progress (measured in the timestamp) of consuming messages in partitions of the topic. |
+| ReasonOfStateChanged | The reasons for the load job being in CANCELLED or PAUSED state. |
 | ErrorLogUrls         | The URL of error logs. You can use the `curl` or `wget` command to  access the URL. |
 | TrackingSQL          | The SQL command that you can directly run to query the error log information recorded in the `information_schema` database. |
-| OtherMsg             | Information about all failed load tasks of the Routine Load job. |
-| LatestSourcePosition | Latest consumer position of messages in partitions of the topic. |
+| OtherMsg             | The information about all failed load tasks of the Routine Load job. |
+| LatestSourcePosition | The latest consumer position of messages in partitions of the topic. |
 
 ## Examples
 
