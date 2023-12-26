@@ -107,11 +107,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
             Long consumeOffset = entry.getValue();
             Long localLatestOffset = kafkaRoutineLoadJob.getPartitionOffset(partitionId);
             // If any partition has newer data, the task should be scheduled.
-            if (localLatestOffset == null || consumeOffset >= localLatestOffset) {
-                return false;
+            if (localLatestOffset != null && localLatestOffset > consumeOffset) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     @Override
