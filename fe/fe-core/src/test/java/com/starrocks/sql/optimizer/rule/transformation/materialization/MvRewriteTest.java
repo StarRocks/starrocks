@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -52,7 +53,17 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
+
+        starRocksAssert.withTable(cluster, "depts");
+        starRocksAssert.withTable(cluster, "locations");
+        starRocksAssert.withTable(cluster, "dependents");
+        starRocksAssert.withTable(cluster, "emps");
+        starRocksAssert.withTable(cluster, "emps_par");
+
+        starRocksAssert.withTable(cluster, "test_all_type");
+        starRocksAssert.withTable(cluster, "t0");
+        starRocksAssert.withTable(cluster, "t1");
+
         prepareDatas();
     }
 
@@ -104,7 +115,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on t0.v1 = test_all_type.t1d" +
                     " where t0.v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view1");
@@ -138,7 +149,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on view1.v1 = view2.t1d" +
                     " where view1.v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view3");
@@ -167,7 +178,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1 from t0");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v11)" +
                     " as " +
                     " SELECT vv1.v1 v11, vv2.v1 v12 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1");
@@ -187,13 +198,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " from emps_par join depts" +
                     " on emps_par.deptno = depts.deptno");
 
-            createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+            createAndRefreshMv("create materialized view join_mv_2" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
                     " SELECT deptno1, deptno2, empid, name from view1 union SELECT deptno1, deptno2, empid, name from view1");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
@@ -220,7 +231,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on t0.v1 = test_all_type.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view1");
@@ -254,7 +265,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " on view1.v1 = view2.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view3");
@@ -283,7 +294,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1 from t0");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v11)" +
                     " as " +
                     " SELECT v11, v12 from (select vv1.v1 v11, vv2.v1 v12 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1 ) t");
@@ -305,13 +316,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "join depts" +
                     " on emps_par.deptno = depts.deptno) t");
 
-            createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+            createAndRefreshMv("create materialized view join_mv_2" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
                     " SELECT deptno1, deptno2, empid, name from view1 union SELECT deptno1, deptno2, empid, name from view1");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(deptno2)" +
                     " partition by deptno1" +
                     " as " +
@@ -332,7 +343,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testJoinMvRewrite() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+        createAndRefreshMv("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
@@ -386,7 +397,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_1");
 
-        createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+        createAndRefreshMv("create materialized view join_mv_2" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t0.v1 as v1, test_all_type.t1c" +
@@ -423,7 +434,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_2");
 
-        createAndRefreshMv("test", "join_mv_3", "create materialized view join_mv_3" +
+        createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps.empid, depts.deptno, depts.name from emps join depts using (deptno)");
@@ -506,7 +517,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_3");
 
-        createAndRefreshMv("test", "join_mv_4", "create materialized view join_mv_4" +
+        createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
@@ -521,13 +532,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan18, "join_mv_4");
         dropMv("test", "join_mv_4");
 
-        createAndRefreshMv("test", "join_mv_5", "create materialized view join_mv_5" +
+        createAndRefreshMv("create materialized view join_mv_5" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
                 " where emps.name = 'a'");
 
-        createAndRefreshMv("test", "join_mv_6", "create materialized view join_mv_6" +
+        createAndRefreshMv("create materialized view join_mv_6" +
                 " distributed by hash(empid)" +
                 " as " +
                 " select empid, deptno, name2 from join_mv_5 where name2 like \"%abc%\"");
@@ -541,7 +552,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         dropMv("test", "join_mv_5");
         dropMv("test", "join_mv_6");
 
-        createAndRefreshMv("test", "join_mv_7", "create materialized view join_mv_7" +
+        createAndRefreshMv("create materialized view join_mv_7" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps.empid from emps join depts using (deptno)");
@@ -549,11 +560,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // TODO: rewrite on subquery
         String query20 = "select emps.empid from emps where deptno in (select deptno from depts)";
         String plan20 = getFragmentPlan(query20);
-        PlanTestBase.assertNotContains(plan20, "join_mv_7");
+        PlanTestBase.assertContains(plan20, "join_mv_7");
         dropMv("test", "join_mv_7");
 
         // multi relations test
-        createAndRefreshMv("test", "join_mv_8", "create materialized view join_mv_8" +
+        createAndRefreshMv("create materialized view join_mv_8" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps1.empid, emps2.name from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)");
@@ -563,7 +574,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan21, "join_mv_8");
         dropMv("test", "join_mv_8");
 
-        createAndRefreshMv("test", "join_mv_9", "create materialized view join_mv_9" +
+        createAndRefreshMv("create materialized view join_mv_9" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps1.empid, emps2.name as name1, depts.name as name2 from emps emps1 join depts using (deptno)" +
@@ -579,7 +590,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testCrossJoin() throws Exception {
-        createAndRefreshMv("test", "cross_join_mv1", "create materialized view cross_join_mv1" +
+        createAndRefreshMv("create materialized view cross_join_mv1" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
@@ -592,7 +603,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan1, "cross_join_mv1");
         dropMv("test", "cross_join_mv1");
 
-        createAndRefreshMv("test", "cross_join_mv2", "create materialized view cross_join_mv2" +
+        createAndRefreshMv("create materialized view cross_join_mv2" +
                 " distributed by hash(empid)" +
                 " as" +
                 " select emps1.empid, emps2.name as name1, depts.name as name2 from emps emps1 join depts" +
@@ -607,7 +618,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
+        createAndRefreshMv("create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
@@ -708,7 +719,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         dropMv("test", "agg_join_mv_1");
         Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv1));
 
-        createAndRefreshMv("test", "agg_join_mv_2", "create materialized view agg_join_mv_2" +
+        createAndRefreshMv("create materialized view agg_join_mv_2" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1b, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
@@ -732,7 +743,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "     PREDICATES: 16: v1 < 99");
         dropMv("test", "agg_join_mv_2");
 
-        createAndRefreshMv("test", "agg_join_mv_3", "create materialized view agg_join_mv_3" +
+        createAndRefreshMv("create materialized view agg_join_mv_3" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1b, sum(test_all_type.t1c) * 2 as total_sum," +
                 " count(distinct test_all_type.t1c) + 1 as total_num" +
@@ -773,7 +784,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "agg_join_mv_3");
 
-        createAndRefreshMv("test", "agg_join_mv_4", "create materialized view agg_join_mv_4" +
+        createAndRefreshMv("create materialized view agg_join_mv_4" +
                 " distributed by hash(`deptno`) as SELECT deptno, count(*) as num from emps group by deptno");
         String query10 = "select deptno, count(*) from emps group by deptno";
         String plan10 = getFragmentPlan(query10);
@@ -789,7 +800,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         Assert.assertFalse(scanOperators11.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
         dropMv("test", "agg_join_mv_4");
 
-        createAndRefreshMv("test", "agg_join_mv_5", "create materialized view agg_join_mv_5" +
+        createAndRefreshMv("create materialized view agg_join_mv_5" +
                 " distributed by hash(`deptno`) as SELECT deptno, count(1) as num from emps group by deptno");
         String query12 = "select deptno, count(1) from emps group by deptno";
         String plan12 = getFragmentPlan(query12);
@@ -798,7 +809,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         dropMv("test", "agg_join_mv_5");
 
         // test aggregate with projection
-        createAndRefreshMv("test", "agg_mv_6", "create materialized view agg_mv_6" +
+        createAndRefreshMv("create materialized view agg_mv_6" +
                 " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid, avg(salary) as total" +
                 " from emps group by empid");
 
@@ -829,7 +840,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan16, "agg_mv_6");
         dropMv("test", "agg_mv_6");
 
-        createAndRefreshMv("test", "agg_mv_7", "create materialized view agg_mv_7" +
+        createAndRefreshMv("create materialized view agg_mv_7" +
                 " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid," +
                 " sum(salary) as total, count(salary) as cnt" +
                 " from emps group by empid");
@@ -860,7 +871,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "agg_mv_7");
 
-        createAndRefreshMv("test", "agg_mv_8", "create materialized view agg_mv_8" +
+        createAndRefreshMv("create materialized view agg_mv_8" +
                 " distributed by hash(`empid`) as select empid, deptno," +
                 " sum(salary) as total, count(salary) + 1 as cnt" +
                 " from emps group by empid, deptno");
@@ -885,7 +896,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "agg_mv_8");
 
-        createAndRefreshMv("test", "agg_mv_9", "create materialized view agg_mv_9" +
+        createAndRefreshMv("create materialized view agg_mv_9" +
                 " distributed by hash(`deptno`) as select deptno," +
                 " count(distinct empid) as num" +
                 " from emps group by deptno");
@@ -921,7 +932,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into test_table_1 values('2022-09-01', 1, '08:00:00', 'player_id_1', 20.0)");
         cluster.runSql("test", "insert into test_table_1 values('2022-10-01', 1, '08:00:00', 'player_id_1', 20.0)");
 
-        createAndRefreshMv("test", "agg_mv_10", "create materialized view agg_mv_10" +
+        createAndRefreshMv("create materialized view agg_mv_10" +
                 " distributed by hash(experiment_id)\n" +
                 " refresh manual\n" +
                 " as\n" +
@@ -942,52 +953,55 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testAggExprRewrite() throws Exception {
-        {
-            // Group by Cast Expr
-            String mvName = "mv_q15";
-            createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_q15`\n" +
-                    "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                    "REFRESH ASYNC\n" +
-                    "AS \n" +
-                    "SELECT \n" +
-                    "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                    "    count(d_user) AS `cnt`\n" +
-                    "FROM `json_tbl`\n" +
-                    "GROUP BY `gender`");
-            String query =
-                    "SELECT \n" +
-                            "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                            "    count(d_user) AS `cnt`\n" +
-                            "FROM `json_tbl`\n" +
-                            "GROUP BY `gender`;";
-            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
-        }
+        // Group by Cast Expr
+        starRocksAssert.withTable("json_tbl",
+                () -> {
+                    {
+                        String mvName = "mv_q15";
+                        createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q15`\n" +
+                                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                                "REFRESH ASYNC\n" +
+                                "AS \n" +
+                                "SELECT \n" +
+                                "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                                "    count(d_user) AS `cnt`\n" +
+                                "FROM `json_tbl`\n" +
+                                "GROUP BY `gender`");
+                        String query =
+                                "SELECT \n" +
+                                        "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                                        "    count(d_user) AS `cnt`\n" +
+                                        "FROM `json_tbl`\n" +
+                                        "GROUP BY `gender`;";
+                        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+                    }
 
-        {
-            // Agg with Cast Expr
-            String mvName = "mv_q16";
-            createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_q16`\n" +
-                    "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                    "REFRESH ASYNC\n" +
-                    "AS \n" +
-                    "SELECT \n" +
-                    "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                    "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
-                    "FROM `json_tbl`\n" +
-                    "GROUP BY `gender`");
-            String query =
-                    "SELECT \n" +
-                            "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                            "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
-                            "FROM `json_tbl`\n" +
-                            "GROUP BY `gender`;";
-            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
-        }
+                    {
+                        // Agg with Cast Expr
+                        String mvName = "mv_q16";
+                        createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q16`\n" +
+                                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                                "REFRESH ASYNC\n" +
+                                "AS \n" +
+                                "SELECT \n" +
+                                "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                                "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
+                                "FROM `json_tbl`\n" +
+                                "GROUP BY `gender`");
+                        String query =
+                                "SELECT \n" +
+                                        "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                                        "    sum(cast(d_user->'age' as int)) AS `sum`\n" +
+                                        "FROM `json_tbl`\n" +
+                                        "GROUP BY `gender`;";
+                        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+                    }
+                });
     }
 
     @Test
     public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -1027,8 +1041,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
                         ") " +
@@ -1131,7 +1144,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testCardinality() throws Exception {
         try {
             FeConstants.USE_MOCK_DICT_MANAGER = true;
-            createAndRefreshMv("test", "emp_lowcard_sum", "CREATE MATERIALIZED VIEW emp_lowcard_sum" +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW emp_lowcard_sum" +
                     " DISTRIBUTED BY HASH(empid) AS SELECT empid, name, sum(salary) as sum_sal from emps group by " +
                     "empid, name;");
             String sql = "select name from emp_lowcard_sum group by name";
@@ -1257,7 +1270,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testTabletHintForbidMvRewrite() throws Exception {
-        createAndRefreshMv("test", "forbid_mv_1", "create materialized view forbid_mv_1" +
+        createAndRefreshMv("create materialized view forbid_mv_1" +
                 " distributed by hash(t1d) as SELECT " +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
                 " from test_all_type" +
@@ -1322,8 +1335,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "PROPERTIES ( \"replication_num\" = \"1\");");
 
         // With null-rejecting predicate
-        createAndRefreshMv("test", "_pushdown_predicate_join_mv1",
-                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv1`  \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv1`  \n" +
                         "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
                         "REFRESH MANUAL \n" +
                         "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
@@ -1388,8 +1400,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "PROPERTIES ( \"replication_num\" = \"1\");");
 
         // Without null-rejecting predicate
-        createAndRefreshMv("test", "_pushdown_predicate_join_mv2",
-                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv2`  \n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv2`  \n" +
                         "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
                         "REFRESH MANUAL \n" +
                         "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
@@ -1419,8 +1430,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testNonpartitionedMvWithPartitionPredicate() throws Exception {
-        createAndRefreshMv("test", "mv_with_partition_predicate_1",
-                "create materialized view mv_with_partition_predicate_1 distributed by hash(`k1`)" +
+        createAndRefreshMv("create materialized view mv_with_partition_predicate_1 distributed by hash(`k1`)" +
                         " as select k1, v1 from t1 where k1 = 3;");
         String query = "select k1, v1 from t1 where k1 = 3;";
         String plan = getFragmentPlan(query);
@@ -1498,8 +1508,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
-        createAndRefreshMv("test", "test_partition_tbl_mv1",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         "               PARTITION BY k1\n" +
                         "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "               REFRESH ASYNC\n" +
@@ -1567,8 +1576,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // MV1: MAP MV
         {
             String mvName = "mv_test_map_element";
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW \n" + mvName +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
@@ -1595,8 +1603,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // MV2: Array Element MV
         {
             String mvName = "mv_test_array_element";
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW \n" + mvName +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
@@ -1622,8 +1629,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // MV3: Array Slice MV
         {
             String mvName = "mv_test_array_slice";
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW \n" + mvName +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
@@ -1653,8 +1659,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // MV1: Projection MV
         {
             String mvName = "mv_projection_const";
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW \n" + mvName +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, k2, v3 " +
@@ -1669,8 +1674,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // MV2: Aggregation MV
         {
             String mvName = "mv_aggregation_projection_const";
-            createAndRefreshMv("test", mvName,
-                    "CREATE MATERIALIZED VIEW \n" + mvName +
+            createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, sum(v3) as sum_v3 \n" +
@@ -1738,8 +1742,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testJoinWithConstExprs1() throws Exception {
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv3",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -1798,8 +1801,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs2() throws Exception {
         cluster.runSql("test", "set enable_mv_optimizer_trace_log=true;");
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv3",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                         "PARTITION BY a_k1\n" +
                         "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -1883,8 +1885,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testJoinWithConstExprs3() throws Exception {
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv3",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                         "PARTITION BY a_k1\n" +
                         "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -1922,8 +1923,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testJoinWithConstExprs4() throws Exception {
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv3",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                         "PARTITION BY a_k1\n" +
                         "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -1953,8 +1953,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testJoinWithConstExprs5() throws Exception {
         // a.k1/b.k1 are both output
-        createAndRefreshMv("test", "test_partition_tbl_mv3",
-                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                         "PARTITION BY a_k1\n" +
                         "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
                         "REFRESH ASYNC\n" +
@@ -2076,13 +2075,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testQueryIncludingExcludingMVNames() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
-        createAndRefreshMv("test", "mv_agg_1", "CREATE MATERIALIZED VIEW mv_agg_1 " +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_agg_1 " +
                 " distributed by hash(empid) " +
                 "AS " +
                 "SELECT empid, sum(salary) as total " +
                 "FROM emps " +
                 "GROUP BY empid");
-        createAndRefreshMv("test", "mv_agg_2", "CREATE MATERIALIZED VIEW mv_agg_2 " +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_agg_2 " +
                 " distributed by hash(empid) " +
                 "AS " +
                 "SELECT empid, sum(salary) as total " +
@@ -2144,5 +2143,30 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView("mv_agg_1");
         starRocksAssert.dropMaterializedView("mv_agg_2");
+    }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
+                SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
     }
 }

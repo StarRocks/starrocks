@@ -182,6 +182,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            logMVRewrite(context, this, "Query compensate partition predicate:{}",
+                    queryPartitionPredicate);
             queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         return PredicateSplit.splitPredicate(queryPredicate);

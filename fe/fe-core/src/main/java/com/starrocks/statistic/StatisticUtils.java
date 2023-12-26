@@ -16,7 +16,6 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -144,7 +143,7 @@ public class StatisticUtils {
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+                StatsConstants.ScheduleType.ONCE, StatsConstants.buildInitStatsProp(), LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 

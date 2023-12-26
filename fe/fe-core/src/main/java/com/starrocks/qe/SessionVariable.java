@@ -49,6 +49,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -447,6 +449,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
+
+    public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
 
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
@@ -979,6 +984,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
 
+    @VariableMgr.VarAttr(name = QUERY_DEBUG_OPTIONS, flag = VariableMgr.INVISIBLE)
+    private String queryDebugOptions = "";
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -1259,6 +1267,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
+
+    /**
+     * Whether enable materialized-view rewrite for INSERT statement
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT)
+    private boolean enableMaterializedViewRewriteForInsert = false;
 
     @VarAttr(name = ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE)
     private boolean enableSyncMaterializedViewRewrite = true;
@@ -1996,6 +2010,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
     }
 
+    public QueryDebugOptions getQueryDebugOptions() {
+        if (Strings.isNullOrEmpty(queryDebugOptions)) {
+            return QueryDebugOptions.getInstance();
+        }
+
+        return QueryDebugOptions.read(queryDebugOptions);
+    }
+
+    public void setQueryDebugOptions(String queryDebugOptions) throws SemanticException {
+        if (!Strings.isNullOrEmpty(queryDebugOptions)) {
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException("Invalid planner options: %s", queryDebugOptions);
+            }
+        }
+        this.queryDebugOptions = queryDebugOptions;
+    }
+
     public boolean getEnableGroupbyUseOutputAlias() {
         return enableGroupbyUseOutputAlias;
     }
@@ -2437,6 +2470,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewRewriteForInsert() {
+        return enableMaterializedViewRewriteForInsert;
+    }
+
+    public void setEnableMaterializedViewRewriteForInsert(boolean value) {
+        this.enableMaterializedViewRewriteForInsert = value;
     }
 
     public boolean isEnableMaterializedViewUnionRewrite() {
@@ -2974,7 +3015,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() throws CloneNotSupportedException {
-        return super.clone();
+    public Object clone() {
+        try {
+            return super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
