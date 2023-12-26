@@ -57,7 +57,7 @@ public class MaterializedViewLowCardTPCHTest extends MaterializedViewTestBase {
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         String plan = getVerboseExplain(TpchSQL.Q07);
-        assertCContains(plan, "group by: [425: n_name, INT, true], " +
+        assertContainsIgnoreColRefs(plan, "group by: [425: n_name, INT, true], " +
                 "[426: n_name, INT, true], " +
                 "[49: year, SMALLINT, false]");
         connectContext.getSessionVariable().setQueryDebugOptions("");

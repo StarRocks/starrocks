@@ -1016,6 +1016,12 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** 8030
 - **Description:** The port on which the HTTP server in the FE node listens.
 
+#### http_worker_threads_num
+
+- **Default:** 0
+- **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
+- Introduced in: 2.5.18，3.0.10，3.1.7，3.2.2
+
 #### http_backlog_num
 
 - **Default:** 1024

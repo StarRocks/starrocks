@@ -1012,6 +1012,8 @@ CONF_Bool(datacache_block_buffer_enable, "true");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(datacache_engine, "");
+// The interval time (millisecond) for agent report datacache metrics to FE.
+CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1040,8 +1042,10 @@ CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
-// control the background compaction threads
-CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// Number of max major compaction threads
+CONF_mInt32(pindex_major_compaction_num_threads, "0");
+// Limit of major compaction per disk.
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc/evict interval

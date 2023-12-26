@@ -620,10 +620,26 @@ public class PipeManagerTest {
         // create if not exists
         CreatePipeStmt createAgain = createStmt;
         Assert.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
-        sql =
-                "create pipe if not exists p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+        sql = "create pipe if not exists p_crud as insert into tbl1 " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
+
+        // create or replace
+        String createOrReplaceSql = "create or replace pipe p_crud as insert into tbl1 " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')";
+        CreatePipeStmt createOrReplace = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createOrReplaceSql, ctx);
+        long previousId = getPipe("p_crud").getId();
+        pm.createPipe(createOrReplace);
+        Assert.assertNotEquals(previousId, getPipe("p_crud").getId());
+        pipe = pm.mayGetPipe(name).get();
+
+        // create or replace when not exists
+        previousId = pipe.getId();
+        dropPipe(name.getPipeName());
+        pm.createPipe(createOrReplace);
+        pipe = pm.mayGetPipe(name).get();
+        Assert.assertNotEquals(previousId, pipe.getId());
 
         // pause
         sql = "alter pipe p_crud suspend";

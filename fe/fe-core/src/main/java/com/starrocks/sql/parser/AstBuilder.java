@@ -45,6 +45,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
@@ -67,6 +68,7 @@ import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
@@ -98,7 +100,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -448,6 +449,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -462,6 +464,8 @@ import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
+
+    private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
 
     private int placeHolderSlotId = 0;
 
@@ -480,7 +484,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     FunctionSet.DAYS_SUB);
 
     public AstBuilder(long sqlMode) {
-        this.sqlMode = sqlMode;
+        this(sqlMode, new IdentityHashMap<>());
+    }
+
+    public AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+        this.hintMap = hintMap;
+        long hintSqlMode = 0L;
+        for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
+            for (HintNode hint : entry.getValue()) {
+                if (hint instanceof SetVarHint) {
+                    SetVarHint setVarHint = (SetVarHint) hint;
+                    hintSqlMode = setVarHint.getSqlModeHintValue();
+                }
+            }
+        }
+        this.sqlMode = sqlMode | hintSqlMode;
     }
 
     public List<Parameter> getParameters() {
@@ -717,8 +735,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     partitionDescList.add(rangePartitionDesc);
                 }
             }
-            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression);
+            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression, false);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            if (primaryExpression instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) primaryExpression;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (FunctionSet.FROM_UNIXTIME.equals(functionName)
+                        || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
+                    primaryExpression = new CastExpr(TypeDef.create(PrimitiveType.DATETIME), primaryExpression);
+                }
+            }
             return new ExpressionPartitionDesc(rangePartitionDesc, primaryExpression);
         }
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -746,20 +772,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private List<String> checkAndExtractPartitionColForRange(Expr expr) {
+    private List<String> checkAndExtractPartitionColForRange(Expr expr, boolean hasCast) {
         if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
-            return checkAndExtractPartitionColForRange(castExpr.getChild(0));
+            return checkAndExtractPartitionColForRange(castExpr.getChild(0), true);
         }
         NodePosition pos = expr.getPos();
         List<String> columnList = new ArrayList<>();
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (FunctionSet.SUBSTR.equals(functionName)
-                    || FunctionSet.SUBSTRING.equals(functionName)
-                    || FunctionSet.FROM_UNIXTIME.equals(functionName)) {
+            if (FunctionSet.SUBSTR.equals(functionName) || FunctionSet.SUBSTRING.equals(functionName)) {
                 List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
+                Expr firstExpr = paramsExpr.get(0);
+                if (firstExpr instanceof SlotRef) {
+                    columnList.add(((SlotRef) firstExpr).getColumnName());
+                } else {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+            } else if (FunctionSet.FROM_UNIXTIME.equals(functionName)
+                    || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
+                List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
+                if (hasCast || paramsExpr.size() > 1) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
@@ -1364,10 +1402,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.setVarHint() != null) {
-            properties = visitVarHints(context.setVarHint());
-        }
+
+        Map<String, String> properties = extractVarHints(hintMap.get(context));
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1723,7 +1759,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                     createPos(context));
-            stmt.setOptHints(visitVarHints(context.setVarHint()));
+            stmt.setOptHints(extractVarHints(hintMap.get(context)));
             return stmt;
         }
 
@@ -1734,7 +1770,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         // INSERT INTO FILES(...)
         Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
-        res.setOptHints(visitVarHints(context.setVarHint()));
+        res.setOptHints(extractVarHints(hintMap.get(context)));
         return res;
     }
 
@@ -1765,7 +1801,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
-        ret.setOptHints(visitVarHints(context.setVarHint()));
+        ret.setOptHints(extractVarHints(hintMap.get(context)));
         return ret;
     }
 
@@ -1791,7 +1827,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
-        ret.setOptHints(visitVarHints(context.setVarHint()));
+        ret.setOptHints(extractVarHints(hintMap.get(context)));
         return ret;
     }
 
@@ -2368,7 +2404,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             cluster = ((Identifier) visit(context.system)).getValue();
         }
         LoadStmt stmt = new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
-        stmt.setOptHints(visitVarHints(context.setVarHint()));
+        stmt.setOptHints(extractVarHints(hintMap.get(context)));
         return stmt;
     }
 
@@ -3934,7 +3970,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
         PipeName pipeName = resolvePipeName(context.qualifiedName());
-        boolean ifNotExists = context.IF() != null;
+        boolean ifNotExists = context.ifNotExists() != null && context.ifNotExists().IF() != null;
+        boolean replace = context.orReplace() != null && context.orReplace().OR() != null;
+
+        if (ifNotExists && replace) {
+            throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("OR REPLACE", "IF NOT EXISTS"));
+        }
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
@@ -3950,7 +3991,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         InsertStmt insertStmt = (InsertStmt) insertNode;
         int insertSqlIndex = context.insertStatement().start.getStartIndex();
 
-        return new CreatePipeStmt(ifNotExists, pipeName, insertSqlIndex, insertStmt, properties, createPos(context));
+        return new CreatePipeStmt(ifNotExists, replace, pipeName, insertSqlIndex, insertStmt, properties,
+                createPos(context));
     }
 
     @Override
@@ -4147,12 +4189,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private Map<String, String> visitVarHints(List<StarRocksParser.SetVarHintContext> hints) {
+    private Map<String, String> extractVarHints(List<HintNode> hints) {
         Map<String, String> selectHints = new HashMap<>();
-        for (StarRocksParser.SetVarHintContext hintContext : ListUtils.emptyIfNull(hints)) {
-            for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                selectHints.put(hintMapContext.k.getText(),
-                        ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
+        if (CollectionUtils.isEmpty(hints)) {
+            return selectHints;
+        }
+
+        for (HintNode hintNode : hints) {
+            if (hintNode instanceof SetVarHint) {
+                selectHints.putAll(hintNode.getValue());
             }
         }
         return selectHints;
@@ -4195,9 +4240,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        if (context.setVarHint() != null) {
-            selectList.setOptHints(visitVarHints(context.setVarHint()));
-        }
+        selectList.setOptHints(extractVarHints(hintMap.get(context)));
 
         SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
@@ -5833,11 +5876,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
-            ConnectContext session = ConnectContext.get();
-            if (session != null && session.getSessionVariable() != null) {
-                long sqlMode = session.getSessionVariable().getSqlMode();
-                isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
-            }
+            isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -6806,6 +6845,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Parameter parameter = new Parameter(placeHolderSlotId++);
         parameters.add(parameter);
         return parameter;
+    }
+
+    @Override
+    public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDecommissionDiskClause(StarRocksParser.CancelDecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitDisableDiskClause(StarRocksParser.DisableDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
+        throw new SemanticException("not support");
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

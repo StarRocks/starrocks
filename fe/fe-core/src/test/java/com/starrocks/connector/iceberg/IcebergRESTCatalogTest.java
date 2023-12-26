@@ -21,6 +21,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,5 +47,19 @@ public class IcebergRESTCatalogTest {
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testTableExists(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), new HashMap<>());
+        boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
+        Assert.assertTrue(exists);
     }
 }

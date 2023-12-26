@@ -36,6 +36,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -1934,6 +1935,10 @@ public class AuthorizationMgr {
             pluginVersion = ret.pluginVersion;
             userToPrivilegeCollection = ret.userToPrivilegeCollection;
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+
+            // Initialize the Authorizer class in advance during the loading phase
+            // to prevent loading errors and lack of permissions.
+            Authorizer.getInstance();
         } catch (PrivilegeException e) {
             throw new IOException("failed to load AuthorizationManager!", e);
         }

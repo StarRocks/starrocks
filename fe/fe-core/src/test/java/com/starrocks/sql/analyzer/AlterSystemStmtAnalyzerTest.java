@@ -54,8 +54,7 @@ public class AlterSystemStmtAnalyzerTest {
     @Test
     public void testVisitModifyBackendHostClause() {
         mockNet();
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test", "fqdn");
         Void resutl = visitor.visitModifyBackendHostClause(clause, null);
         Assert.assertTrue(resutl == null);
@@ -64,8 +63,7 @@ public class AlterSystemStmtAnalyzerTest {
     @Test
     public void testVisitModifyFrontendHostClause() {
         mockNet();
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
         Void resutl = visitor.visitModifyFrontendHostClause(clause, null);
         Assert.assertTrue(resutl == null);
@@ -73,16 +71,14 @@ public class AlterSystemStmtAnalyzerTest {
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyBackendHostClauseException() {
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyBackendHostClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyFrontendHostClauseException() {
-        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
-                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyFrontendHostClause(clause, null);
     }

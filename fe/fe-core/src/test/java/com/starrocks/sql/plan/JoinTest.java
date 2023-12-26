@@ -31,7 +31,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
-
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
