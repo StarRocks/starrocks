@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: AWS
 ---
 
 # 配置 AWS 认证信息
