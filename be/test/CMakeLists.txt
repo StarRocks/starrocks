@@ -55,6 +55,7 @@ set(EXEC_FILES_PART1
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp

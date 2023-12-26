@@ -59,6 +59,8 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
 
+    private static final String PARQUET_FORMAT = "parquet";
+
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
     // parsed from targetPartitionNames.
@@ -344,11 +346,11 @@ public class InsertStmt extends DmlStmt {
 
         if (format == null) {
             throw new SemanticException("format is a mandatory property. " +
-                    "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                    "Use \"format\" = \"parquet\" as only parquet format is supported now");
         }
 
-        if (!format.equalsIgnoreCase("parquet")) {
-            throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
+        if (!PARQUET_FORMAT.equals(format)) {
+            throw new SemanticException("use \"format\" = \"parquet\", as only parquet format is supported now");
         }
 
         if (compressionType == null) {
