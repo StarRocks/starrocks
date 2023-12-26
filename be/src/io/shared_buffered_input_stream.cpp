@@ -131,7 +131,7 @@ Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IO
             sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
-            if (r.active) {
+            if (r.is_active) {
                 small_active_ranges.emplace_back(r);
             } else {
                 small_lazy_flag[index] = true;
