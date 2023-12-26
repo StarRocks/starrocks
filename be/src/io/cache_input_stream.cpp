@@ -86,8 +86,10 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
             sb = ret.value();
             if (sb->buffer.capacity() > 0) {
                 strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-                _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
-                                                      block_offset, load_size);
+                if (_enable_populate_cache) {
+                    _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                          block_offset, load_size);
+                }
                 return Status::OK();
             }
         }

@@ -26,8 +26,14 @@ namespace starrocks::io {
 class SharedBufferedInputStream : public SeekableInputStream {
 public:
     struct IORange {
+        IORange(const int64_t offset, const int64_t size, const bool is_active = true)
+                : offset(offset), size(size), is_active(is_active) {}
         int64_t offset;
         int64_t size;
+<<<<<<< HEAD
+=======
+        bool is_active = true;
+>>>>>>> d138985346 ([Enhancement] Reduce IOPS in HDFS Text Reader when enable datacache (#37754))
         bool operator<(const IORange& x) const { return offset < x.offset; }
     };
     struct CoalesceOptions {
