@@ -65,6 +65,7 @@ public:
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    std::string rowset_path;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
