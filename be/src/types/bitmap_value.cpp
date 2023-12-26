@@ -1154,4 +1154,36 @@ void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
     }
 }
 
+uint64_t BitmapValueIter::next_batch(uint64_t* values, uint64_t count) {
+    uint64_t remain_rows = _remain_rows();
+    uint64_t read_count = std::min(count, remain_rows);
+    if (read_count <= 0) {
+        return 0;
+    }
+
+    switch (_bitmap->type()) {
+    case BitmapValue::EMPTY:
+        break;
+    case BitmapValue::SINGLE:
+        values[0] = _bitmap->_sv;
+        break;
+    case BitmapValue::SET: {
+        std::vector tmp_array(_bitmap->_set->begin(), _bitmap->_set->end());
+        std::sort(tmp_array.begin(), tmp_array.end());
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = tmp_array[_offset + i];
+        }
+        break;
+    }
+    case BitmapValue::BITMAP: {
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = *((*_bitmap_iter)++);
+        }
+        break;
+    }
+    }
+    _offset += read_count;
+    return read_count;
+}
+
 } // namespace starrocks
