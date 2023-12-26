@@ -469,6 +469,21 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
+        long value = unixTime.getBigint() / 1000;
+
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
     })
