@@ -71,4 +71,28 @@ public class MvRewriteTest extends MvRewriteTestBase {
             }
         }
     }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("test", mvName, "create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+    }
 }

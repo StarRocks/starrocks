@@ -64,7 +64,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
       > **说明**
       >
-      > StarRocks 可以通过安全认证机制，包括 SASL_SSL 认证、SASL 认证和 SSL 认证，以及无认证的方式连接 Kafka。本文以无认证的方式连接 Kafka 为例进行说明，如果您需要通过安全认证机制连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
+      > StarRocks 支持通过安全协议，包括 SASL_SSL、SAS_PLAINTEXT、SSL，或者 PLAINTEXT 来连接 Kafka。本文以 PLAINTEXT 方式连接 Kafka 为例进行演示，如果您需要通过其他安全协议连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 
 4. **持续生成新的导入任务，不间断地导入数据**
 
