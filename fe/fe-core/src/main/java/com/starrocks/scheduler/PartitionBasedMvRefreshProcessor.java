@@ -354,16 +354,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         if (lastException != null) {
-            String errorMsg;
+            String errorMsg = lastException.getMessage();
             if (lastException instanceof NullPointerException) {
                 errorMsg = ExceptionUtils.getStackTrace(lastException);
-            } else {
-                errorMsg = lastException.getMessage();
             }
             // field ERROR_MESSAGE in information_schema.task_runs length is 65535
-            if (errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH) {
-                errorMsg = errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH);
-            }
+            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ? errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
             throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
                     lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
