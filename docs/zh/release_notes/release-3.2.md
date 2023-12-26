@@ -204,8 +204,6 @@ displayed_sidebar: "Chinese"
 
 ##### BE
 
-> 具体内容从 [行为变更 Release notes](https://starrocks.feishu.cn/docx/MxZSd6aHdoxin3xNWuHcZ3iznEc#Dob8dlgkkoXlAsxatgAcTEO8nBf) 拷贝过来  [3.2版本datacache相关配置项变更](https://starrocks.feishu.cn/docx/Pd1Zd0v2ooU9iZx4YmtcVxw2nfe) 
-
 - Data Cache 相关配置项变更。 
   - 新增 `datacache_enable` 以取代 `block_cache_enable`。
   - 新增 `datacache_mem_size` 以取代 `block_cache_mem_size`。
