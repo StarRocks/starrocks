@@ -390,6 +390,10 @@ public class PseudoCluster {
         }
     }
 
+    public void shutdown() {
+        shutdown(true);
+    }
+
     /**
      * build cluster at specified dir
      *

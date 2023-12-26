@@ -45,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,7 +74,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
-                .add("DataCacheMetrics");
+                .add("DataCacheMetrics")
+                .add("location");
         if (RunMode.isSharedDataMode()) {
             builder.add("StarletPort").add("WorkerId");
         }
@@ -196,6 +198,7 @@ public class BackendsProcDir implements ProcDirInterface {
             double memUsedPct = backend.getMemUsedPct();
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
+            backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
 
             Optional<DataCacheMetrics> dataCacheMetrics = backend.getDataCacheMetrics();
             if (dataCacheMetrics.isPresent()) {

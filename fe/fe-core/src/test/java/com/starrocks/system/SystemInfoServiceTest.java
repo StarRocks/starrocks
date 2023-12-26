@@ -15,13 +15,15 @@
 
 package com.starrocks.system;
 
+import com.google.api.client.util.Maps;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -34,6 +36,7 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SystemInfoServiceTest {
@@ -82,7 +85,7 @@ public class SystemInfoServiceTest {
         mockFunc();
         Backend be = new Backend(100, "127.0.0.1", 1000);
         service.addBackend(be);
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
+        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox");
         service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
@@ -95,7 +98,7 @@ public class SystemInfoServiceTest {
         Backend be2 = new Backend(101, "127.0.0.1", 1001);
         service.addBackend(be1);
         service.addBackend(be2);
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
+        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox");
         service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
@@ -105,9 +108,26 @@ public class SystemInfoServiceTest {
     public void testUpdateBackendAddressNotFoundBe() throws Exception {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("originalHost-test", "sandbox");
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
         // This case will occur backend [%s] not found exception
         service.modifyBackendHost(clause);
+    }
+
+    /**
+     * Test method for {@link SystemInfoService#modifyBackendProperty(ModifyBackendClause)}.
+     */
+    @Test
+    public void testModifyBackendProperty() throws DdlException {
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        Map<String, String> properties = Maps.newHashMap();
+        String location = "rack:rack1";
+        properties.put(AlterSystemStmtAnalyzer.PROP_KEY_LOCATION, location);
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost:1000", properties);
+        service.modifyBackendProperty(clause);
+        Backend backend = service.getBackendWithHeartbeatPort("originalHost", 1000);
+        Assert.assertNotNull(backend);
+        Assert.assertEquals("{rack=rack1}", backend.getLocation().toString());
     }
 
     @Test

@@ -1484,6 +1484,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 // And because there should be only one colocate property modification clause in stmt,
                 // so just return after finished handling.
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                    if (olapTable.getLocation() != null) {
+                        throw new DdlException("table has location property and cannot be colocated");
+                    }
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                     GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
                     return null;
@@ -1537,6 +1540,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                     GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
                 }

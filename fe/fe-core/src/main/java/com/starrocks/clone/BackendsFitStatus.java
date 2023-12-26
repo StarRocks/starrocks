@@ -38,24 +38,25 @@ import com.google.common.collect.Lists;
 
 import java.util.List;
 
-public class BalanceStatus {
+/**
+ * Status represents that whether we can find a backend path to clone new replica.
+ */
+public class BackendsFitStatus {
     public enum ErrCode {
         OK,
-        META_NOT_FOUND,
-        STATE_NOT_NORMAL,
         COMMON_ERROR
     }
 
     private ErrCode errCode;
     private List<String> errMsgs = Lists.newArrayList();
 
-    public static final BalanceStatus OK = new BalanceStatus(ErrCode.OK, "");
+    public static final BackendsFitStatus OK = new BackendsFitStatus(ErrCode.OK, "");
 
-    public BalanceStatus(ErrCode errCode) {
+    public BackendsFitStatus(ErrCode errCode) {
         this.errCode = errCode;
     }
 
-    public BalanceStatus(ErrCode errCode, String errMsg) {
+    public BackendsFitStatus(ErrCode errCode, String errMsg) {
         this.errCode = errCode;
         this.errMsgs.add(errMsg);
     }

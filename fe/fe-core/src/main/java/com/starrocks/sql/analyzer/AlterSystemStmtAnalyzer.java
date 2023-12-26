@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -33,7 +34,7 @@ import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.SystemInfoService;
@@ -41,10 +42,20 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
+    public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
+    private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
+
+    static {
+        PROPS_SUPPORTED.add(PROP_KEY_LOCATION);
+    }
 
     public void analyze(DdlStmt ddlStmt, ConnectContext session) {
         if (ddlStmt instanceof AlterSystemStmt) {
@@ -126,9 +137,40 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-    public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
-        checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+    public Void visitModifyBackendClause(ModifyBackendClause clause, ConnectContext context) {
+        if (clause.getBackendHostPort() == null) {
+            checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
+        } else {
+            try {
+                SystemInfoService
+                        .validateHostAndPort(clause.getBackendHostPort(), false);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            analyzeBackendProperties(clause.getProperties());
+        }
         return null;
+    }
+
+    private void analyzeBackendProperties(Map<String, String> properties) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String propKey = entry.getKey();
+            if (!PROPS_SUPPORTED.contains(propKey)) {
+                throw new SemanticException("unsupported property: " + propKey);
+            }
+            if (propKey.equals(PROP_KEY_LOCATION)) {
+                String propVal = entry.getValue();
+                if (propVal.isEmpty()) {
+                    continue;
+                }
+                // Support single level location label for now
+                String regex = "(\\s*[a-z_0-9]+\\s*:\\s*[a-z_0-9]+\\s*)";
+                if (!Pattern.compile(regex).matcher(propVal).matches()) {
+                    throw new SemanticException("invalid location format: " + propVal +
+                            ", should be like: 'key:val'");
+                }
+            }
+        }
     }
 
     private void checkModifyHostClause(String srcHost, String destHost) {
@@ -138,7 +180,7 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
             if (srcHostIsIP && destHostIsIP) {
                 throw new SemanticException("Can't change ip to ip");
             }
-            // If can't get an ip through the srcHost/destHost, will throw UnknownHostException
+            // Can't get an ip through the srcHost/destHost, will throw UnknownHostException
             if (!srcHostIsIP) {
                 InetAddress.getByName(srcHost);
             }

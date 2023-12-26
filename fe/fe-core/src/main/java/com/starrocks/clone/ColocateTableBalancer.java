@@ -43,7 +43,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -670,7 +670,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         return entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
     }
 
-    public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+    public static boolean needToForceRepair(TabletHealthStatus st, LocalTablet tablet, Set<Long> backendsSet) {
         boolean hasBad = false;
         for (Replica replica : tablet.getImmutableReplicas()) {
             if (!backendsSet.contains(replica.getBackendId())) {
@@ -682,7 +682,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
             }
         }
 
-        return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+        return hasBad && st == TabletHealthStatus.COLOCATE_REDUNDANT;
     }
 
     private void logDebugInfoForColocateMismatch(Set<Long> bucketSeq, LocalTablet tablet) {
@@ -775,9 +775,10 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             if (!tabletScheduler.containsTablet(tablet.getId())) {
                                 Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                         bucketsSeq.size() + " vs. " + replicationNum);
-                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
+                                TabletHealthStatus
+                                        st = TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion,
                                         replicationNum, bucketsSeq);
-                                if (st != TabletStatus.HEALTHY) {
+                                if (st != TabletHealthStatus.HEALTHY) {
                                     isGroupStable = false;
                                     Priority colocateUnhealthyPrio = Priority.HIGH;
                                     if (isPartitionUrgent) {
@@ -809,7 +810,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                         ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
                                         tabletCtx.setRelocationForRepair(info != null
                                                 && info.getRelocationForRepair()
-                                                && st == TabletStatus.COLOCATE_MISMATCH);
+                                                && st == TabletHealthStatus.COLOCATE_MISMATCH);
 
                                         // For bad replica, we ignore the size limit of scheduler queue
                                         Pair<Boolean, Long> result =
@@ -817,12 +818,12 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                         needToForceRepair(st, tablet,
                                                         bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
                                         if (LOG.isDebugEnabled() && result.first &&
-                                                st == TabletStatus.COLOCATE_MISMATCH) {
+                                                st == TabletHealthStatus.COLOCATE_MISMATCH) {
                                             logDebugInfoForColocateMismatch(bucketsSeq, tablet);
                                         }
 
                                         waitTotalTimeMs += result.second;
-                                        if (result.first && tabletCtx.getRelocationForRepair()) {
+                                        if (result.first && tabletCtx.isRelocationForRepair()) {
                                             LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
                                                             "bucket sequence before: {}, bucket sequence now: {}",
                                                     tableId,
@@ -837,8 +838,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             } else {
                                 // tablet maybe added to scheduler because of balance between local disks,
                                 // in this case we shouldn't mark the group unstable
-                                if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
-                                        != TabletStatus.HEALTHY) {
+                                if (TabletChecker.getColocateTabletHealthStatus(
+                                        tablet, visibleVersion, replicationNum, bucketsSeq) != TabletHealthStatus.HEALTHY) {
                                     isGroupStable = false;
                                 }
                             }
@@ -1228,7 +1229,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
     }
 
     public void increaseScheduledTabletNumForBucket(TabletSchedCtx ctx) {
-        if (ctx.getRelocationForRepair()) {
+        if (ctx.isRelocationForRepair()) {
             ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
             if (info != null) {
                 info.increaseScheduledTabletNumForBucket(ctx.getTabletOrderIdx());

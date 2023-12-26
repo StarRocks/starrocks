@@ -1827,7 +1827,7 @@ public class EditLog {
         }
     }
 
-    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
+    public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 

@@ -898,7 +898,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
-            if (table.hasForbitGlobalDict()) {
+            if (table.hasForbiddenGlobalDict()) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
