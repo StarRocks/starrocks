@@ -301,18 +301,22 @@ public class Backend extends ComputeNode {
 
     public void decommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo != null) {
-            if (diskInfo.getState() == DiskState.DISABLED) {
-                throw new DdlException("Disk " + rootPath + " is in DISABLED state, can not decommission");
-            }
-            diskInfo.setState(DiskState.DECOMMISSIONED);
-            LOG.info("disk {} is set to DECOMMISSIONED", rootPath);
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
         }
+        if (diskInfo.getState() == DiskState.DISABLED) {
+            throw new DdlException("Disk " + rootPath + " is in DISABLED state, can not decommission");
+        }
+        diskInfo.setState(DiskState.DECOMMISSIONED);
+        LOG.info("disk {} is set to DECOMMISSIONED", rootPath);
     }
 
-    public void cancelDecommissionDisk(String rootPath) {
+    public void cancelDecommissionDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo != null && diskInfo.getState() == DiskState.DECOMMISSIONED) {
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
+        }
+        if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
             diskInfo.setState(DiskState.ONLINE);
             LOG.info("disk {} is recovered to ONLINE, previous state is DECOMMISSIONED", rootPath);
         }
@@ -320,18 +324,22 @@ public class Backend extends ComputeNode {
 
     public void disableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo != null) {
-            if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
-                throw new DdlException("Disk " + rootPath + " is in DECOMMISSIONED state, can not disable");
-            }
-            diskInfo.setState(DiskState.DISABLED);
-            LOG.info("disk {} is set to DISABLED", rootPath);
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
         }
+        if (diskInfo.getState() == DiskState.DECOMMISSIONED) {
+            throw new DdlException("Disk " + rootPath + " is in DECOMMISSIONED state, can not disable");
+        }
+        diskInfo.setState(DiskState.DISABLED);
+        LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
-    public void cancelDisableDisk(String rootPath) {
+    public void cancelDisableDisk(String rootPath) throws DdlException {
         DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo != null && diskInfo.getState() == DiskState.DISABLED) {
+        if (diskInfo == null) {
+            throw new DdlException("Disk: " + rootPath + " does not exist");
+        }
+        if (diskInfo.getState() == DiskState.DISABLED) {
             diskInfo.setState(DiskState.ONLINE);
             LOG.info("disk {} is recovered to ONLINE, previous state is DISABLED", rootPath);
         }
