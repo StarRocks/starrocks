@@ -851,4 +851,73 @@ TEST_F(BitmapValueTest, split_bitmap) {
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result[0].to_string(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13");
 }
+
+TEST_F(BitmapValueTest, next_batch) {
+    BitmapValueIter iter;
+    std::vector<uint64_t> values;
+
+    // empty
+    values.resize(5);
+    iter.reset(_empty_bitmap);
+    uint64_t ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 0);
+
+    // single
+    values.resize(5);
+    iter.reset(_single_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 1);
+    ASSERT_EQ(values[0], 0);
+
+    // set
+    values.resize(5);
+    iter.reset(_medium_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i + 5);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 10);
+    }
+
+    // bitmap
+    values.resize(30);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i + 30);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 60);
+    }
+
+    // read more then bitmap size
+    values.resize(100);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 100);
+    ASSERT_EQ(ret_size, 64);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+
+    // read 0
+    ret_size = iter.next_batch(values.data(), 0);
+    ASSERT_EQ(ret_size, 0);
+}
 } // namespace starrocks
