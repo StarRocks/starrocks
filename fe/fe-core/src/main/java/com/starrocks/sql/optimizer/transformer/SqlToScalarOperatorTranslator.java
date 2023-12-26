@@ -289,6 +289,7 @@ public final class SqlToScalarOperatorTranslator {
             return super.visit(node, context);
 
         }
+
         @Override
         public ScalarOperator visitParameterExpr(Parameter node, Context context) {
             if (node.getExpr() == null) {
@@ -839,6 +840,21 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public ScalarOperator visitDictionaryGetExpr(DictionaryGetExpr node, Context context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+
+            DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
+                    node.getDictionaryTxnId(), node.getKeySize());
+            return op;
+        }
+>>>>>>> bf6d1ad673 ([Enhancement] Support topn runtime filter for nullable columns that have filter (#37738))
     }
 
     static class IgnoreSlotVisitor extends Visitor {
@@ -858,8 +874,9 @@ public final class SqlToScalarOperatorTranslator {
                 LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
+            String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
             return new ColumnRefOperator(node.getSlotId().asInt(),
-                    node.getType(), node.getColumnName(), node.isNullable());
+                    node.getType(), columnName, node.isNullable());
         }
     }
 }
