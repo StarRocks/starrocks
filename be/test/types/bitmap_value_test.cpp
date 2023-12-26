@@ -851,4 +851,340 @@ TEST_F(BitmapValueTest, split_bitmap) {
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result[0].to_string(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13");
 }
+<<<<<<< HEAD
+=======
+
+TEST_F(BitmapValueTest, subset_limit) {
+    // empty
+    BitmapValue bitmap_1;
+    int64_t ret = _empty_bitmap.bitmap_subset_limit_internal(0, 1, &bitmap_1);
+    ASSERT_EQ(ret, 0);
+
+    // single
+    BitmapValue bitmap_2;
+    ret = _single_bitmap.bitmap_subset_limit_internal(0, 1, &bitmap_2);
+    ASSERT_EQ(ret, 1);
+    check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
+
+    // set
+    BitmapValue bitmap_3;
+    ret = _medium_bitmap.bitmap_subset_limit_internal(5, 2, &bitmap_3);
+    ASSERT_EQ(ret, 2);
+    check_bitmap(BitmapDataType::SET, bitmap_3, 5, 7);
+
+    // bitmap
+    BitmapValue bitmap_4;
+    ret = _large_bitmap.bitmap_subset_limit_internal(5, 2, &bitmap_4);
+    ASSERT_EQ(ret, 2);
+    check_bitmap(BitmapDataType::SET, bitmap_4, 5, 7);
+
+    // single (invalid)
+    BitmapValue bitmap_5;
+    ret = _single_bitmap.bitmap_subset_limit_internal(0, 0, &bitmap_5);
+    ASSERT_EQ(ret, 0);
+    ret = _single_bitmap.bitmap_subset_limit_internal(2, 1, &bitmap_5);
+    ASSERT_EQ(ret, 0);
+
+    // set (invalid)
+    BitmapValue bitmap_6;
+    ret = _medium_bitmap.bitmap_subset_limit_internal(3, 0, &bitmap_6);
+    ASSERT_EQ(ret, 0);
+    ret = _medium_bitmap.bitmap_subset_limit_internal(15, 1, &bitmap_6);
+    ASSERT_EQ(ret, 0);
+
+    // bitmap (invalid)
+    BitmapValue bitmap_7;
+    ret = _large_bitmap.bitmap_subset_limit_internal(3, 0, &bitmap_7);
+    ASSERT_EQ(ret, 0);
+    ret = _large_bitmap.bitmap_subset_limit_internal(68, 1, &bitmap_7);
+    ASSERT_EQ(ret, 0);
+}
+
+TEST_F(BitmapValueTest, subset_in_range) {
+    // empty
+    BitmapValue bitmap_1;
+    int64_t ret = _empty_bitmap.bitmap_subset_in_range_internal(0, 1, &bitmap_1);
+    ASSERT_EQ(ret, 0);
+
+    // single
+    BitmapValue bitmap_2;
+    ret = _single_bitmap.bitmap_subset_in_range_internal(0, 1, &bitmap_2);
+    ASSERT_EQ(ret, 1);
+    check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
+
+    // set
+    BitmapValue bitmap_3;
+    ret = _medium_bitmap.bitmap_subset_in_range_internal(5, 7, &bitmap_3);
+    ASSERT_EQ(ret, 2);
+    check_bitmap(BitmapDataType::SET, bitmap_3, 5, 7);
+
+    // bitmap
+    BitmapValue bitmap_4;
+    ret = _large_bitmap.bitmap_subset_in_range_internal(5, 7, &bitmap_4);
+    ASSERT_EQ(ret, 2);
+    check_bitmap(BitmapDataType::SET, bitmap_4, 5, 7);
+
+    // single (invalid)
+    BitmapValue bitmap_5;
+    ret = _single_bitmap.bitmap_subset_in_range_internal(0, 0, &bitmap_5);
+    ASSERT_EQ(ret, 0);
+    ret = _single_bitmap.bitmap_subset_in_range_internal(2, 3, &bitmap_5);
+    ASSERT_EQ(ret, 0);
+
+    // set (invalid)
+    BitmapValue bitmap_6;
+    ret = _medium_bitmap.bitmap_subset_limit_internal(15, 16, &bitmap_6);
+    ASSERT_EQ(ret, 0);
+
+    // bitmap (invalid)
+    BitmapValue bitmap_7;
+    ret = _medium_bitmap.bitmap_subset_limit_internal(68, 69, &bitmap_7);
+    ASSERT_EQ(ret, 0);
+}
+
+TEST_F(BitmapValueTest, next_batch) {
+    BitmapValueIter iter;
+    std::vector<uint64_t> values;
+
+    // empty
+    values.resize(5);
+    iter.reset(_empty_bitmap);
+    uint64_t ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 0);
+
+    // single
+    values.resize(5);
+    iter.reset(_single_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 1);
+    ASSERT_EQ(values[0], 0);
+
+    // set
+    values.resize(5);
+    iter.reset(_medium_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i + 5);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 10);
+    }
+
+    // bitmap
+    values.resize(30);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i + 30);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 60);
+    }
+
+    // read more then bitmap size
+    values.resize(100);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 100);
+    ASSERT_EQ(ret_size, 64);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+
+    // read 0
+    ret_size = iter.next_batch(values.data(), 0);
+    ASSERT_EQ(ret_size, 0);
+}
+
+std::string convert_bitmap_to_string(BitmapValue& bitmap) {
+    std::string buf;
+    buf.resize(bitmap.getSizeInBytes());
+    bitmap.write((char*)buf.c_str());
+    return buf;
+}
+
+TEST(BitmapValueTest1, bitmap_serde) {
+    bool use_v1 = config::bitmap_serialize_version == 1;
+    BitmapTypeCode::type type_bitmap32 = BitmapTypeCode::BITMAP32_SERIV2;
+    BitmapTypeCode::type type_bitmap64 = BitmapTypeCode::BITMAP64_SERIV2;
+    if (use_v1) {
+        type_bitmap32 = BitmapTypeCode::BITMAP32;
+        type_bitmap64 = BitmapTypeCode::BITMAP64;
+    }
+    { // EMPTY
+        BitmapValue empty;
+        std::string buffer = convert_bitmap_to_string(empty);
+        std::string expect_buffer(1, BitmapTypeCode::EMPTY);
+        ASSERT_EQ(expect_buffer, buffer);
+
+        BitmapValue out(buffer.data());
+        ASSERT_EQ(0, out.cardinality());
+    }
+    { // SINGLE32
+        uint32_t i = UINT32_MAX;
+        BitmapValue single32(i);
+        std::string buffer = convert_bitmap_to_string(single32);
+        std::string expect_buffer(1, BitmapTypeCode::SINGLE32);
+        put_fixed32_le(&expect_buffer, i);
+        ASSERT_EQ(expect_buffer, buffer);
+
+        BitmapValue out(buffer.data());
+        ASSERT_EQ(1, out.cardinality());
+        ASSERT_TRUE(out.contains(i));
+    }
+    { // BITMAP32
+        BitmapValue bitmap32(std::vector<uint64_t>{0, UINT32_MAX});
+        std::string buffer = convert_bitmap_to_string(bitmap32);
+
+        roaring::Roaring roaring;
+        roaring.add(0);
+        roaring.add(UINT32_MAX);
+        std::string expect_buffer(1, type_bitmap32);
+        expect_buffer.resize(1 + roaring.getSizeInBytes(use_v1));
+        roaring.write(&expect_buffer[1], use_v1);
+        ASSERT_EQ(expect_buffer, buffer);
+
+        BitmapValue out(buffer.data());
+        ASSERT_EQ(2, out.cardinality());
+        ASSERT_TRUE(out.contains(0));
+        ASSERT_TRUE(out.contains(UINT32_MAX));
+    }
+    { // SINGLE64
+        uint64_t i = static_cast<uint64_t>(UINT32_MAX) + 1;
+        BitmapValue single64(i);
+        std::string buffer = convert_bitmap_to_string(single64);
+        std::string expect_buffer(1, BitmapTypeCode::SINGLE64);
+        put_fixed64_le(&expect_buffer, i);
+        ASSERT_EQ(expect_buffer, buffer);
+
+        BitmapValue out(buffer.data());
+        ASSERT_EQ(1, out.cardinality());
+        ASSERT_TRUE(out.contains(i));
+    }
+    { // BITMAP64
+        BitmapValue bitmap64(std::vector<uint64_t>{0, static_cast<uint64_t>(UINT32_MAX) + 1});
+        std::string buffer = convert_bitmap_to_string(bitmap64);
+
+        roaring::Roaring roaring;
+        roaring.add(0);
+        std::string expect_buffer(1, type_bitmap64);
+        put_varint64(&expect_buffer, 2); // map size
+        for (uint32_t i = 0; i < 2; ++i) {
+            std::string map_entry;
+            put_fixed32_le(&map_entry, i); // map key
+            map_entry.resize(sizeof(uint32_t) + roaring.getSizeInBytes(use_v1));
+            roaring.write(&map_entry[4], use_v1); // map value
+
+            expect_buffer.append(map_entry);
+        }
+        ASSERT_EQ(expect_buffer, buffer);
+
+        BitmapValue out(buffer.data());
+        ASSERT_EQ(2, out.cardinality());
+        ASSERT_TRUE(out.contains(0));
+        ASSERT_TRUE(out.contains(static_cast<uint64_t>(UINT32_MAX) + 1));
+    }
+}
+
+// Forked from CRoaring's UT of Roaring64Map
+TEST(BitmapValueTest1, Roaring64Map) {
+    using starrocks::detail::Roaring64Map;
+    // create a new empty bitmap
+    Roaring64Map r1;
+    uint64_t r1_sum = 0;
+    // then we can add values
+    for (uint64_t i = 100; i < 1000; i++) {
+        r1.add(i);
+        r1_sum += i;
+    }
+    for (uint64_t i = 14000000000000000100ull; i < 14000000000000001000ull; i++) {
+        r1.add(i);
+        r1_sum += i;
+    }
+    ASSERT_TRUE(r1.contains((uint64_t)14000000000000000500ull));
+    ASSERT_EQ(1800, r1.cardinality());
+    size_t size_before = r1.getSizeInBytes(config::bitmap_serialize_version);
+    r1.runOptimize();
+    size_t size_after = r1.getSizeInBytes(config::bitmap_serialize_version);
+    ASSERT_LT(size_after, size_before);
+
+    Roaring64Map r2 = Roaring64Map::bitmapOf(5, 1ull, 2ull, 234294967296ull, 195839473298ull, 14000000000000000100ull);
+    ASSERT_EQ(1ull, r2.minimum());
+    ASSERT_EQ(14000000000000000100ull, r2.maximum());
+    ASSERT_EQ(4ull, r2.rank(234294967296ull));
+
+    // we can also create a bitmap from a pointer to 32-bit integers
+    const uint32_t values[] = {2, 3, 4};
+    Roaring64Map r3(3, values);
+    ASSERT_EQ(3, r3.cardinality());
+
+    // we can also go in reverse and go from arrays to bitmaps
+    uint64_t card1 = r1.cardinality();
+    auto* arr1 = new uint64_t[card1];
+    ASSERT_TRUE(arr1 != nullptr);
+    r1.toUint64Array(arr1);
+    Roaring64Map r1f(card1, arr1);
+    delete[] arr1;
+    // bitmaps shall be equal
+    ASSERT_TRUE(r1 == r1f);
+
+    // we can copy and compare bitmaps
+    Roaring64Map z(r3);
+    ASSERT_TRUE(r3 == z);
+
+    // we can compute union two-by-two
+    Roaring64Map r1_2_3 = r1 | r2;
+    r1_2_3 |= r3;
+
+    // we can compute a big union
+    const Roaring64Map* allmybitmaps[] = {&r1, &r2, &r3};
+    Roaring64Map bigunion = Roaring64Map::fastunion(3, allmybitmaps);
+    ASSERT_TRUE(r1_2_3 == bigunion);
+    ASSERT_EQ(1806, r1_2_3.cardinality());
+
+    // we can compute intersection two-by-two
+    Roaring64Map i1_2 = r1 & r2;
+    ASSERT_EQ(1, i1_2.cardinality());
+
+    // we can write a bitmap to a pointer and recover it later
+    uint32_t expectedsize = r1.getSizeInBytes(config::bitmap_serialize_version);
+    char* serializedbytes = new char[expectedsize];
+    r1.write(serializedbytes, config::bitmap_serialize_version);
+    Roaring64Map t = Roaring64Map::read(serializedbytes);
+    ASSERT_TRUE(r1 == t);
+    delete[] serializedbytes;
+
+    // we can iterate over all values using custom functions
+    uint64_t sum = 0;
+    auto func = [](uint64_t value, void* param) {
+        *(uint64_t*)param += value;
+        return true; // we always process all values
+    };
+    r1.iterate(func, &sum);
+    ASSERT_EQ(r1_sum, sum);
+
+    // we can also iterate the C++ way
+    sum = 0;
+    for (unsigned long i : t) {
+        sum += i;
+    }
+    ASSERT_EQ(r1_sum, sum);
+}
+
+>>>>>>> 72096e79df ([Enhancement] Add iter for BitampValue (#37773))
 } // namespace starrocks
