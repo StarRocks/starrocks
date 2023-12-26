@@ -180,9 +180,6 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
-
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
@@ -206,9 +203,6 @@ INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompact
 TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     auto version = 1;
     ASSERT_EQ(0, read(version));
-    auto tablet_id = _tablet_metadata->id();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
@@ -525,9 +519,6 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     }
     ASSERT_EQ(kChunkSize, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
-
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
@@ -672,9 +663,6 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     // add delete rowset version
     {
