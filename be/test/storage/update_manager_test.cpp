@@ -39,7 +39,7 @@ namespace starrocks {
 class UpdateManagerTest : public testing::Test {
 public:
     void SetUp() override {
-        _root_path = "./ut_dir/olap_update_manager_test";
+        _root_path = "./olap_update_manager_test";
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
         _meta = std::make_unique<KVStore>(_root_path);
