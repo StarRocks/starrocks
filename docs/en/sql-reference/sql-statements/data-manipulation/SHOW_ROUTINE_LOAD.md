@@ -43,13 +43,13 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 
 | **Parameter**        | **Description**                                              |
 | -------------------- | ------------------------------------------------------------ |
-| Id                   | Globally unique ID of the load job, generated automatically by StarRocks. |
-| Name                 | Name of the load job.                                        |
+| Id                   | The globally unique ID of the load job, generated automatically by StarRocks. |
+| Name                 | The name of the load job.                                        |
 | CreateTime           | The date and time when the load job was created.             |
 | PauseTime            | The date and time when the load job entered `PAUSED` state.  |
 | EndTime              | The date and time when the load job entered `STOPPED` state. |
-| DbName               | Database to which the target table of the load job belongs.  |
-| TableName            | Target table of the load job.                                |
+| DbName               | The database to which the target table of the load job belongs.  |
+| TableName            | The target table of the load job.                                |
 | State                | The status of the load job, including:<ul><li>`NEED_SCHEDULE`: The load job is waiting to be scheduled. After you use CREATE Routine Load job or RESUME ROUTINE LOAD to create or resume a Routine Load job, the load job first enters the `NEED_SCHEDULE` state.</li><li>`RUNNING`: The load job is running. You can view the consumption progress of the Routine Load job through `Statistic` and `Progress`.</li><li>`PAUSED`: The load job is paused. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. After fixing the error, you can use RESUME ROUTINE LOAD to resume the Routine Load job.</li><li>`CANCELLED`: The load job is cancelled. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. However, after fixing the error, you cannot recover the load job in this state.</li><li>`STOPPED`: Stopped state. You cannot recover the load job in this state.</li><li>`UNSTABLE`: Unstable state. A Routine Load job is set in the `UNSTABLE` state if any task within the Routine Load job lags (namely, the difference between the timestamp of the message being consumed and the current time exceeds this FE parameter [`routine_load_unstable_threshold_second`](../../../administration/FE_configuration.md#routine_load_unstable_threshold_second), and unconsumed messages exist in the data source.)</li></ul> |
 | DataSourceType       | The type of the data source. Fixed value: `KAFKA`.           |
 | CurrentTaskNum       | The current number of tasks in the load job.                     |
