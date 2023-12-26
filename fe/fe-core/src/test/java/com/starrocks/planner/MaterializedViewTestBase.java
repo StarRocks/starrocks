@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
 
@@ -74,6 +74,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableQueryCache(false);
         // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
