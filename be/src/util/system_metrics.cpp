@@ -43,7 +43,6 @@
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "jemalloc/jemalloc.h"
-#include "storage/page_cache.h"
 
 namespace starrocks {
 
@@ -321,13 +320,7 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(short_key_index_mem_tracker, short_key_index_mem_bytes)
     SET_MEM_METRIC_VALUE(compaction_mem_tracker, compaction_mem_bytes)
     SET_MEM_METRIC_VALUE(schema_change_mem_tracker, schema_change_mem_bytes)
-    // The memory usage of the page cache tracked by MemTracker may exceed the maximum available
-    // memory of the page cache. This could be problematic for users. Therefore, in this case,
-    // we use the memory usage size maintained by the page cache itself as the metric value.
-    auto cache = StoragePageCache::instance();
-    if (cache != nullptr) {
-        _memory_metrics->storage_page_cache_mem_bytes.set_value(cache->memory_usage());
-    }
+    SET_MEM_METRIC_VALUE(page_cache_mem_tracker, storage_page_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
