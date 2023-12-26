@@ -45,6 +45,7 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+#include "storage/inverted/index_descriptor.hpp"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -168,6 +169,16 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         opts.need_bloom_filter = column.is_bf_column();
         opts.need_bitmap_index = column.has_bitmap_index();
+        opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
+
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index) {
+            opts.standalone_index_file_paths.emplace(
+                    GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                                   _opts.segment_file_mark.rowset_id, _segment_id,
+                                                                   opts.tablet_index.at(GIN).index_id()));
+        }
+
         if (column.type() == LogicalType::TYPE_ARRAY) {
             if (opts.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -222,6 +233,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         _schema_without_full_row_column = std::make_unique<Schema>(_tablet_schema->schema(), cids);
     }
+
     return Status::OK();
 }
 
@@ -277,6 +289,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
+        RETURN_IF_ERROR(column_writer->write_inverted_index());
         *index_size += _wfile->size() - index_offset;
 
         // check global dict valid

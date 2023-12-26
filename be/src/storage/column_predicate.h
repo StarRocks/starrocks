@@ -26,6 +26,8 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
+#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
@@ -159,6 +161,11 @@ public:
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
 
     [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+        return Status::Cancelled("not implemented");
+    }
+
+    [[nodiscard]] virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                     roaring::Roaring* row_bitmap) const {
         return Status::Cancelled("not implemented");
     }
 

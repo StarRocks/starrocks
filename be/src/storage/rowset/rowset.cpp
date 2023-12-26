@@ -48,11 +48,13 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
+#include "storage/inverted/index_descriptor.hpp"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/union_iterator.h"
@@ -293,6 +295,17 @@ Status Rowset::remove() {
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
+
+        // delete index
+        for (const auto& index : *(_schema->indexes())) {
+            if (index.index_type() == IndexType::GIN) {
+                std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto ist = fs->delete_dir_recursive(inverted_index_path);
+                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                merge_status(ist);
+            }
+        }
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
@@ -372,6 +385,33 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
             PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
             return Status::RuntimeError("Fail to link segment data file");
         }
+
+        // link inverted files
+        if (!_schema->indexes()->empty()) {
+            int segment_n = i;
+            for (int index_id = 0; index_id < _schema->indexes()->size(); index_id++) {
+                const auto& index = (*(_schema->indexes()))[index_id];
+                if (index.index_type() == GIN) {
+                    std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                    std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+
+                    RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
+                    std::set<std::string> files;
+                    RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
+                    for (const auto& file : files) {
+                        auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
+                        auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
+
+                        if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
+                            PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
+                            return Status::RuntimeError("Fail to link index inverted file");
+                        }
+                    }
+                }
+            }
+        }
     }
     for (int i = 0; i < num_delete_files(); ++i) {
         std::string src_file_path = segment_del_file_path(_rowset_path, rowset_id(), i);
@@ -445,6 +485,43 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                          << ", errno=" << std::strerror(Errno::no());
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
+        }
+        // copy index
+        const auto& indexes = *_schema->indexes();
+        if (!indexes.empty()) {
+            for (const auto& index : indexes) {
+                if (index.index_type() == IndexType::GIN) {
+                    std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
+                                                                                           i, index.index_id());
+                    if (fs::path_exist(dst_index_path)) {
+                        LOG(WARNING) << "Index path already exist: " << dst_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_path));
+                    }
+
+                    std::string src_index_path = IndexDescriptor::inverted_index_file_path(
+                            _rowset_path, rowset_id().to_string(), i, index.index_id());
+
+                    if (!fs::create_directories(dst_index_path).ok()) {
+                        LOG(WARNING) << "Error to create inverted index dir " << dst_index_path
+                                     << ". errno=" << std::strerror(Errno::no());
+                        return Status::IOError(fmt::format("Error to create inverted index dir {}", dst_index_path));
+                    }
+                    std::set<std::string> files;
+                    RETURN_IF_ERROR(fs::list_dirs_files(src_index_path, nullptr, &files));
+                    for (const auto& file : files) {
+                        auto src_absolute_path = fmt::format("{}/{}", src_index_path, file);
+                        auto dst_absolute_path = fmt::format("{}/{}", dst_index_path, file);
+
+                        if (!fs::copy_file(src_index_path, dst_index_path).ok()) {
+                            LOG(WARNING) << "Error to copy index. src:" << src_index_path << ", dst:" << dst_index_path
+                                         << ", errno=" << std::strerror(Errno::no());
+                            return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ",
+                                                               src_index_path, dst_index_path,
+                                                               std::strerror(Errno::no())));
+                        }
+                    }
+                }
+            }
         }
     }
     for (int i = 0; i < num_delete_files(); ++i) {
@@ -598,6 +675,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.version = options.version;
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
     }
+    seg_options.rowset_path = _rowset_path;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
@@ -686,6 +764,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.rowset_path = _rowset_path;
     seg_options.version = version;
     seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);

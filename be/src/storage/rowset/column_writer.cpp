@@ -45,6 +45,8 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+#include "storage/inverted/inverted_index_option.h"
+#include "storage/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -239,6 +241,7 @@ public:
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
+    Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
@@ -261,10 +264,13 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
     if (is_string_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.need_speculate_encoding = true;
+        str_opts.field_name = column->name();
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
-        return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
+        ColumnWriterOptions str_opts = opts;
+        str_opts.field_name = column->name();
+        return std::make_unique<ScalarColumnWriter>(str_opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
         case LogicalType::TYPE_ARRAY:
@@ -338,6 +344,19 @@ Status ScalarColumnWriter::init() {
         _has_index_builder = true;
         RETURN_IF_ERROR(BloomFilterIndexWriter::create(BloomFilterOptions(), _type_info, &_bloom_filter_index_builder));
     }
+    if (_opts.need_inverted_index) {
+        _has_index_builder = true;
+        TabletIndex& inverted_tablet_index = _opts.tablet_index.at(GIN);
+
+        ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(inverted_tablet_index))
+        ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type))
+        RETURN_IF_ERROR(inverted_plugin->create_inverted_index_writer(
+                _type_info, _opts.field_name, _opts.standalone_index_file_paths.at(GIN), &inverted_tablet_index,
+                &_inverted_index_builder));
+        if (_inverted_index_builder != nullptr) {
+            RETURN_IF_ERROR(_inverted_index_builder->init());
+        }
+    }
     return Status::OK();
 }
 
@@ -360,6 +379,9 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
     }
     if (_bloom_filter_index_builder != nullptr) {
         size += _bloom_filter_index_builder->size();
+    }
+    if (_inverted_index_builder != nullptr) {
+        size += _inverted_index_builder->size();
     }
     return size;
 }
@@ -455,6 +477,13 @@ Status ScalarColumnWriter::write_bitmap_index() {
 Status ScalarColumnWriter::write_bloom_filter_index() {
     if (_bloom_filter_index_builder != nullptr) {
         return _bloom_filter_index_builder->finish(_wfile, _opts.meta->add_indexes());
+    }
+    return Status::OK();
+}
+
+Status ScalarColumnWriter::write_inverted_index() {
+    if (_inverted_index_builder != nullptr) {
+        return _inverted_index_builder->finish();
     }
     return Status::OK();
 }
@@ -665,10 +694,12 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_NULLS(_zone_map_index_builder, run);
                     INDEX_ADD_NULLS(_bitmap_index_builder, run);
                     INDEX_ADD_NULLS(_bloom_filter_index_builder, run);
+                    INDEX_ADD_NULLS(_inverted_index_builder, run);
                 } else {
                     INDEX_ADD_VALUES(_zone_map_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
+                    INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
                 }
                 pdata += type_info()->size() * run;
             }
@@ -676,6 +707,7 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_zone_map_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
+            INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
         }
 
         _next_rowid += num_written;

@@ -145,6 +145,19 @@ public:
 
     static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
+    static Status InvertedIndexNotSupport(std::string_view msg) {
+        return Status(TStatusCode::INVERTED_INDEX_NOT_SUPPORTED, msg);
+    }
+    static Status InvertedIndexFileNotFound(std::string_view msg) {
+        return Status(TStatusCode::INVERTED_INDEX_FILE_NOT_FOUND, msg);
+    }
+    static Status InvertedIndexInvalidParams(std::string_view msg) {
+        return Status(TStatusCode::INVERTED_INDEX_INVALID_PARAMETERS, msg);
+    }
+    static Status InvertedIndexCluceneError(std::string_view msg) {
+        return Status(TStatusCode::INVERTED_INDEX_CLUCENE_ERROR, msg);
+    }
+
     static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
     static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }

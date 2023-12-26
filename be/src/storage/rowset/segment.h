@@ -45,6 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
+#include "storage/inverted/inverted_index_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -193,6 +194,8 @@ public:
     // May be called multiple times, subsequent calls will no op.
     [[nodiscard]] Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
+
+    Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 

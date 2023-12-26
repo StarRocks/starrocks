@@ -53,6 +53,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
+#include "storage/inverted/index_descriptor.hpp"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
@@ -114,6 +115,9 @@ Status RowsetWriter::init() {
         _rowset_meta_pb->set_end_version(_context.version.second);
     }
     *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
+
+    _writer_options.segment_file_mark.rowset_path_prefix = _context.rowset_path_prefix;
+    _writer_options.segment_file_mark.rowset_id = _context.rowset_id.to_string();
 
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
@@ -425,6 +429,23 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
+            }
+        }
+
+        if (_context.tablet_schema != nullptr) {
+            const auto& indexes = *_context.tablet_schema->indexes();
+            if (!indexes.empty()) {
+                for (int i = 0; i < _num_segment; i++) {
+                    for (const auto& index : indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_dir_recursive(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
             }
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
