@@ -17,7 +17,9 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -30,6 +32,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -100,6 +103,31 @@ public class PartitionUtils {
                                 partitionInfo.getStorageCacheInfo(partition.getId()));
                     }
                     partitionInfoV2List.add(info);
+                } else if (partitionInfo instanceof ListPartitionInfo)  {
+                    PartitionPersistInfoV2 info = null;
+                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+
+                    listPartitionInfo.setIdToIsTempPartition(partition.getId(), true);
+                    List<String> values = listPartitionInfo.getIdToValues().get(sourcePartitionId);
+                    if (values != null) {
+                        listPartitionInfo.setValues(partition.getId(), values);
+                        List<LiteralExpr> literalExprs = listPartitionInfo.getLiteralExprValues().get(sourcePartitionId);
+                        listPartitionInfo.setDirectLiteralExprValues(partition.getId(), literalExprs);
+                    }
+
+                    List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(sourcePartitionId);
+                    if (multiValues != null) {
+                        listPartitionInfo.setMultiValues(partition.getId(), multiValues);
+                        List<List<LiteralExpr>> multiLiteralExprs =
+                                listPartitionInfo.getMultiLiteralExprValues().get(sourcePartitionId);
+                        listPartitionInfo.setDirectMultiLiteralExprValues(partition.getId(), multiLiteralExprs);
+                    }
+                    info = new ListPartitionPersistInfo(db.getId(), targetTable.getId(),
+                            partition, partitionInfo.getDataProperty(partition.getId()),
+                            partitionInfo.getReplicationNum(partition.getId()),
+                            partitionInfo.getIsInMemory(partition.getId()), true,
+                            values, multiValues);
+                    partitionInfoV2List.add(info);
                 } else {
                     PartitionPersistInfo info =
                             new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
@@ -112,7 +140,7 @@ public class PartitionUtils {
                 }
             }
 
-            if (targetTable.isCloudNativeTableOrMaterializedView()) {
+            if (targetTable.isCloudNativeTableOrMaterializedView() || partitionInfo instanceof ListPartitionInfo) {
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
             } else {
