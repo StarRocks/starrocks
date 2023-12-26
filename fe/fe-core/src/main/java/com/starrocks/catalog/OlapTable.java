@@ -1264,10 +1264,14 @@ public class OlapTable extends Table {
                     }
                 }
             }
-
-            return null;
+        } else {
+            Partition partition = getPartition(partitionId);
+            if (partition != null) {
+                return partition.getSubPartition(physicalPartitionId);
+            }
         }
-        return getPartition(partitionId).getSubPartition(physicalPartitionId);
+
+        return null;
     }
 
     public Collection<PhysicalPartition> getPhysicalPartitions() {
