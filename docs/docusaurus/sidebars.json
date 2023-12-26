@@ -1113,8 +1113,8 @@
       "items": [
         {
           "type": "category",
-          "label": "CSP 身份验证",
-          "description": "Use AWS, Azure, or GCP authentication",
+          "label": "CSP 认证鉴权",
+          "description": "AWS、Azure、及 GCP 资源认证鉴权",
           "link": {"type": "doc", "id": "cover_pages/csp_auth"},
           "items": [
             "integrations/authenticate_to_aws_resources",
@@ -1125,7 +1125,7 @@
         {
           "type": "category",
           "label": "查询数据湖",
-          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
+          "description": "Iceberg、Hive、Delta Lake、Hudi 等",
           "link": {"type": "doc", "id": "integrations/data_lakes"},
           "items": [
              "data_source/catalog/hive_catalog",
@@ -1136,22 +1136,22 @@
         },
         {
           "type": "category",
-          "label": "Streaming Data",
-          "description": "Stream with Kafka, Flink, and StarRocks tools",
+          "label": "实时导入",
+          "description": "通过 Kafka、Flink、或 StarRocks 工具实现数据流实时导入",
           "link": {"type": "doc", "id": "integrations/streaming"},
           "items": [
             "integrations/streaming/flink",
             {
               "type":"category",
-              "label": "Kafka",
-              "description": "Streaming from Kafka",
+              "label": "Apache Kafka",
+              "description": "从 Kafka 导入实时数据流",
               "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
               "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
             },
             {
               "type":"category",
               "label": "StarRocks Pipe",
-              "description": "Pipe: Ideal for continuous loading at scale",
+              "description": "Pipe 新特性是大规模、持续数据导入的理想工具",
               "link": {"type": "doc", "id": "integrations/streaming/pipe"},
               "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
             }
@@ -1159,8 +1159,8 @@
         },
         {
           "type": "category",
-          "label": "Batch Loading Data",
-          "description": "Batch loading and data transformation",
+          "label": "批量导入",
+          "description": "批量导入与数据转换",
           "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
           "items": [
              "integrations/batch/Spark-connector-starrocks",
@@ -1184,7 +1184,7 @@
         },
         {
           "type": "category",
-          "label": "BI 集成",
+          "label": "BI 工具",
           "link": {"type": "doc", "id": "cover_pages/bi_tools"},
           "items": [
             "integrations/BI_integrations/Superset",
@@ -1198,7 +1198,7 @@
         },
         {
           "type": "category",
-          "label": "IDE 集成",
+          "label": "IDE 工具",
           "link": {"type": "doc", "id": "cover_pages/ide_tools"},
           "items": [
             "integrations/IDE_integrations/DataGrip",
