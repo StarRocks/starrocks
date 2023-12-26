@@ -2305,6 +2305,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateMvWithSortCols() throws Exception {
+        starRocksAssert.dropMaterializedView("mv1");
         {
             String sql = "create materialized view mv1\n" +
                     "distributed by hash(s2)\n" +
