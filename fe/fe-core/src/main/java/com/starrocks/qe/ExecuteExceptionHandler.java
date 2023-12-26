@@ -104,6 +104,7 @@ public class ExecuteExceptionHandler {
                     try {
                         ExecPlan execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
                         context.execPlan = execPlan;
+                        return;
                     } catch (Exception e1) {
                         // encounter exception when re-plan, just log the new error but throw the original cause.
                         if (LOG.isDebugEnabled()) {
@@ -118,9 +119,9 @@ public class ExecuteExceptionHandler {
                     }
                 }
             }
-        } else {
-            throw e;
         }
+
+        throw e;
     }
 
     public static class RetryContext {

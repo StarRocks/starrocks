@@ -325,8 +325,8 @@ public class OlapTable extends Table {
         for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
             olapTable.indexIdToMeta.put(entry.getKey(), entry.getValue().shallowCopy());
         }
-        olapTable.indexes = this.indexes.shallowCopy();
-        olapTable.bfColumns = Sets.newHashSet(bfColumns);
+        olapTable.indexes = indexes == null ? null : indexes.shallowCopy();
+        olapTable.bfColumns = bfColumns == null ? null : Sets.newHashSet(bfColumns);
 
         olapTable.keysType = this.keysType;
         if (this.relatedMaterializedViews != null) {

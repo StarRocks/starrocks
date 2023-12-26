@@ -252,9 +252,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     public MaterializedIndexMeta shallowCopy() {
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
         indexMeta.indexId = this.indexId;
-        indexMeta.schema = Lists.newArrayList(schema);
-        indexMeta.sortKeyIdxes = Lists.newArrayList(sortKeyIdxes);
-        indexMeta.sortKeyUniqueIds = Lists.newArrayList(sortKeyUniqueIds);
+        indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
+        indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
+        indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
         indexMeta.schemaVersion = this.schemaVersion;
         indexMeta.schemaHash = this.schemaHash;
         indexMeta.shortKeyColumnCount = this.shortKeyColumnCount;
