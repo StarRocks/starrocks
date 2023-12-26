@@ -615,7 +615,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll")
-            .add(WAREHOUSE) // not available in this codebase
             .build();
 
     // Limitations
@@ -736,10 +735,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The specified resource group of this session
     @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
     private String resourceGroup = "";
-
-    // Name and id of warehouse, not visible in this codebase
-    @VarAttr(name = WAREHOUSE, flag = VariableMgr.INVISIBLE)
-    private String warehouse;
 
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
