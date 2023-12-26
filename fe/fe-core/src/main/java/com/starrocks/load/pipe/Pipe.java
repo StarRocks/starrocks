@@ -648,6 +648,10 @@ public class Pipe implements GsonPostProcessable {
         return gsonObj.toJson(properties);
     }
 
+    public String getPropertiesString() {
+        return PropertyAnalyzer.stringifyProperties(properties);
+    }
+
     @VisibleForTesting
     public void setLastPolledTime(long value) {
         this.lastPolledTime = value;

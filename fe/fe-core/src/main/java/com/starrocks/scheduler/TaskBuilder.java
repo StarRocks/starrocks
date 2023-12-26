@@ -102,7 +102,7 @@ public class TaskBuilder {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
             if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
-                Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getKey());
+                Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
                 Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
 
                 toRemove.add(entry.getKey());

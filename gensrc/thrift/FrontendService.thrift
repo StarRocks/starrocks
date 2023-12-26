@@ -409,6 +409,7 @@ struct TListPipesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
+    3: optional string properties
 
     // schema info
     10: optional string database_name
@@ -481,6 +482,7 @@ struct TTaskInfo {
     4: optional string database
     5: optional string definition
     6: optional i64 expire_time
+    7: optional string properties
 }
 
 struct TGetTaskInfoResult {

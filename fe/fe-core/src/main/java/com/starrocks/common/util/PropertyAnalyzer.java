@@ -72,6 +72,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -1137,5 +1138,25 @@ public class PropertyAnalyzer {
             throw new AnalysisException(ex.getMessage());
         }
         return periodDuration;
+    }
+
+    /**
+     * Generate a string representation of properties like ('a'='1', 'b'='2')
+     */
+    public static String stringifyProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        boolean first = true;
+        for (var entry : properties.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 }
