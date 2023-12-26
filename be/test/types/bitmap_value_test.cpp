@@ -721,8 +721,8 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     for (size_t i = 0; i < 64; i++) {
         ASSERT_EQ(array_5[i], i);
     }
-    for (size_t i = 100; i < 200; i++) {
-        ASSERT_EQ(array_5[i], i);
+    for (size_t i = 64; i < 164; i++) {
+        ASSERT_EQ(array_5[i], i + 36);
     }
 }
 
