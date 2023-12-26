@@ -102,7 +102,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_distribution_pruner_recursion_depth  | -    | 100          | The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption. |
 |enable_udf                                |  -   |    FALSE     | Whether to enable UDF .                            |
 
-
 #### Loading and unloading
 
 | Parameter                               | Unit | Default                                         | Description                                                  |
@@ -334,6 +333,7 @@ BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
+| enable_stream_load_verbose_log | false | N/A | Specifies whether to log the HTTP requests and responses for Stream Load jobs. This parameter is introduced in 2.5.17, 3.0.9, 3.1.6, and 3.2.1. |
 | report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
 | report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
 | report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |
