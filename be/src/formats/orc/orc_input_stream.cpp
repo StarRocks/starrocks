@@ -90,8 +90,7 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
-        bs_io_ranges.emplace_back(io::SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
-                                                                         .size = static_cast<int64_t>(r.size)});
+        bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size));
     }
     Status st = _sb_stream->set_io_ranges(bs_io_ranges);
     if (!st.ok()) {

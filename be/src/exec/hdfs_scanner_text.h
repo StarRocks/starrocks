@@ -34,6 +34,7 @@ public:
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
 
 private:
+    Status _setup_io_ranges() const;
     // create a reader or re init reader
     Status _create_or_reinit_reader();
     Status _build_hive_column_name_2_index();
