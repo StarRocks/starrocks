@@ -57,7 +57,7 @@ public class Utils {
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
             try {
-                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                return GlobalStateMgr.getCurrentSystemInfo().getNodeSelector().seqChooseBackendOrComputeId();
             } catch (UserException e) {
                 return null;
             }

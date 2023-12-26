@@ -21,12 +21,22 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -34,6 +44,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.threeten.extra.PeriodDuration;
 
+import java.util.List;
 import java.util.Set;
 
 public class AlterTableTest {
@@ -52,6 +63,8 @@ public class AlterTableTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
+
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @Test(expected = AnalysisException.class)
@@ -262,4 +275,156 @@ public class AlterTableTest {
         Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));
     }
 
+    @Test
+    public void testAlterTableLocationProp() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        // add label to backend
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        System.out.println(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_alter` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+
+        // ** test alter table location to rack:*
+        sql = "ALTER TABLE test.`test_location_alter` SET ('" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                connectContext);
+        Assert.assertEquals("rack", ((OlapTable) testDb.getTable("test_location_alter"))
+                .getLocation().keySet().stream().findFirst().get());
+        Assert.assertEquals("*", ((OlapTable) testDb.getTable("test_location_alter"))
+                .getLocation().get("rack").stream().findFirst().get());
+
+        // ** test alter table location to nil
+        sql = "ALTER TABLE test.`test_location_alter` SET ('" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = '');";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                connectContext);
+        Assert.assertNull(((OlapTable) testDb.getTable("test_location_alter"))
+                .getLocation());
+
+        // ** test replay from edit log: alter to rack:*
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        ModifyTablePropertyOperationLog info = (ModifyTablePropertyOperationLog)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+        OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_location_alter");
+        System.out.println(olapTable.getLocation());
+        Assert.assertEquals(1, olapTable.getLocation().size());
+        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
+
+
+        // ** test replay from edit log: alter to nil
+        info = (ModifyTablePropertyOperationLog)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_location_alter");
+        System.out.println(olapTable.getLocation());
+        Assert.assertNull(olapTable.getLocation());
+    }
+
+    @Test
+    public void testAlterColocateTableLocationProp() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        // add label to backend
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        System.out.println(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_colocate_alter1` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"cg1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+
+        OlapTable olapTable = (OlapTable) testDb.getTable("test_location_colocate_alter1");
+        Assert.assertNull(olapTable.getLocation());
+
+        sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Cannot set location for colocate table"));
+        }
+    }
+
+    @Test
+    public void testAlterLocationPropTableToColocate() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        // add label to backend
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        System.out.println(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_colocate_alter2` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+
+        OlapTable olapTable = (OlapTable) testDb.getTable("test_location_colocate_alter2");
+        Assert.assertTrue(olapTable.getLocation().containsKey("*"));
+
+        sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
+                PropertyAnalyzer.PROPERTIES_COLOCATE_WITH + "' = 'cg1');";
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+        } catch (DdlException e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("table has location property and cannot be colocated"));
+        }
+    }
 }

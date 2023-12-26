@@ -314,7 +314,7 @@ public class TabletSchedulerTest {
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             if (k == 104L) {
-                ctx.setTabletStatus(LocalTablet.TabletStatus.VERSION_INCOMPLETE);
+                ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
             }
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         });
@@ -335,11 +335,12 @@ public class TabletSchedulerTest {
         replicas.add(new Replica(4, 3003, -3, Replica.ReplicaState.NORMAL));
 
         LocalTablet localTablet = new LocalTablet(5001, replicas);
-        Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> result = localTablet.getHealthStatusWithPriority(
-                systemInfoService, 1, 3, Arrays.asList(1001L, 1002L, 1003L));
+        Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> result = TabletChecker.getTabletHealthStatusWithPriority(
+                localTablet, systemInfoService, 1, 3,
+                Arrays.asList(1001L, 1002L, 1003L), null);
         System.out.println(result);
 
-        Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
+        Assert.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
     }

@@ -260,7 +260,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MapExpr;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -3593,10 +3593,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyBackendHostClause(StarRocksParser.ModifyBackendHostClauseContext context) {
-        List<String> clusters =
+    public ParseNode visitModifyBackendClause(StarRocksParser.ModifyBackendClauseContext context) {
+        List<String> strings =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+        if (context.HOST() != null) {
+            return new ModifyBackendClause(strings.get(0), strings.get(1), createPos(context));
+        } else {
+            String backendHostPort = strings.get(0);
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new ModifyBackendClause(backendHostPort, properties, createPos(context));
+        }
     }
 
     @Override

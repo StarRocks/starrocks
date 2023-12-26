@@ -268,12 +268,12 @@ public class TransactionLoadAction extends RestBaseAction {
         if (channelIdStr == null) {
             // 2. redirect transaction op to BE
             synchronized (this) {
-                // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
+                // 2.1 save label->be hashmap when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    nodeID = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                    nodeID = GlobalStateMgr.getCurrentSystemInfo().getNodeSelector().seqChooseBackendOrComputeId();
                     // txnNodeMap is LRU cache, it atomic remove unused entry
                     txnNodeMap.put(label, nodeID);
-                } else if (channelIdStr == null) {
+                } else {
                     nodeID = txnNodeMap.get(label);
                 }
             }

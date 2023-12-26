@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -192,8 +193,9 @@ public class LocalTabletTest {
                 -1, 10, 10, ReplicaState.NORMAL, -1, 9);
         tablet.addReplica(versionIncompleteReplica, false);
         tablet.addReplica(normalReplica, false);
-        Assert.assertEquals(LocalTablet.TabletStatus.COLOCATE_REDUNDANT,
-                tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
+        Assert.assertEquals(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT,
+                TabletChecker.getColocateTabletHealthStatus(
+                        tablet, 9, 1, Sets.newHashSet(10002L)));
     }
 
 
