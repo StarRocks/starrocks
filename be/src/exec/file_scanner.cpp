@@ -21,6 +21,8 @@
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
 #include "exec/csv_scanner.h"
+#include "exec/orc_scanner.h"
+#include "exec/parquet_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
@@ -30,6 +32,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "util/compression/stream_compression.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -353,6 +356,139 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     } else {
         return Status::NotSupported("Does not support compressed random-access file");
     }
+}
+
+void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::vector<SlotDescriptor>* output) {
+    if (output == nullptr) {
+        return;
+    }
+
+    std::vector<std::shared_ptr<SlotDescriptor>> merged_schema;
+    std::map<std::string, size_t> merged_schema_index;
+    for (const auto& schema : input) {
+        for (const auto& slot : schema) {
+            auto itr = merged_schema_index.find(slot.col_name());
+            if (itr == merged_schema_index.end()) {
+                merged_schema.emplace_back(
+                        std::make_shared<SlotDescriptor>(merged_schema.size(), slot.col_name(), slot.type()));
+                merged_schema_index.insert({slot.col_name(), merged_schema.size() - 1});
+            } else {
+                auto merged_type = merged_schema[itr->second]->type().type;
+                auto slot_type = slot.type().type;
+                // handle conflicted types.
+                if (merged_type != slot_type) {
+                    if (is_integer_type(merged_type) && is_integer_type(slot_type)) {
+                        // promote integer type.
+                        merged_type = promote_integer_types(merged_type, slot_type);
+                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
+                                slot.id(), slot.col_name(), TypeDescriptor::from_logical_type(merged_type));
+                    } else if (is_float_type(merged_type) && is_float_type(slot_type)) {
+                        // promote float type as double.
+                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
+                                slot.id(), slot.col_name(), TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+                    } else {
+                        // treat other conflicted types as varchar.
+                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
+                                slot.id(), slot.col_name(),
+                                TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+                    }
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < merged_schema.size(); ++i) {
+        const auto& schema = merged_schema[i];
+        output->emplace_back(i, schema->col_name(), schema->type());
+    }
+}
+
+Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                  std::vector<SlotDescriptor>* schema) {
+    auto max_sample_file_count = scan_range.params.schema_sample_file_count;
+
+    // Use float step to get a good precision.
+    float step;
+    if (max_sample_file_count <= 0 || max_sample_file_count >= scan_range.ranges.size()) {
+        // sample all files
+        step = 1;
+    } else if (max_sample_file_count == 1 || scan_range.ranges.size() == 1) {
+        step = scan_range.ranges.size();
+    } else {
+        step = static_cast<float>(scan_range.ranges.size() - 1) / (max_sample_file_count - 1);
+    }
+
+    std::vector<std::vector<SlotDescriptor>> schemas;
+    size_t sample_file_count = 0;
+    // lowercase_name: <file_path, original_name>
+    std::map<std::string, std::pair<std::string, std::string>> unique_names;
+
+    // sample some files.
+    for (size_t i = 0; i < scan_range.ranges.size(); i = std::round(i + step)) {
+        // sample range only contains 1 file.
+        auto sample_range = scan_range;
+        sample_range.ranges = {sample_range.ranges[i]};
+
+        RuntimeProfile profile{"dummy_profile", false};
+        ScannerCounter counter{};
+        std::unique_ptr<FileScanner> p_scanner;
+
+        auto tp = sample_range.ranges[0].format_type;
+        switch (tp) {
+        case TFileFormatType::FORMAT_PARQUET:
+            p_scanner = std::make_unique<ParquetScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+        case TFileFormatType::FORMAT_ORC:
+            p_scanner = std::make_unique<ORCScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+        default:
+            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
+            LOG(WARNING) << err_msg;
+            return Status::InvalidArgument(err_msg);
+        }
+
+        RETURN_IF_ERROR_WITH_WARN(p_scanner->open(), "open file scanner failed: ");
+
+        DeferOp defer([&p_scanner] { p_scanner->close(); });
+
+        std::vector<SlotDescriptor> schema;
+        RETURN_IF_ERROR_WITH_WARN(p_scanner->get_schema(&schema), "get schema failed: ");
+
+        // Column names are case insensitive.
+        // Check duplicated column names.
+        for (const auto& slot : schema) {
+            auto name = slot.col_name();
+            auto lowercase_name = boost::algorithm::to_lower_copy(name);
+
+            auto itr = unique_names.find(lowercase_name);
+            if (itr == unique_names.end()) {
+                unique_names.emplace(lowercase_name,
+                                     std::pair<std::string, std::string>(sample_range.ranges[0].path, name));
+            } else if (name != itr->second.second) {
+                std::string err_msg;
+                // Duplicated column name in the same file.
+                if (itr->second.first == sample_range.ranges[0].path) {
+                    err_msg = fmt::format("Identical names in upper/lower cases, file: [{}], column names: [{}] [{}]",
+                                          sample_range.ranges[0].path, itr->second.second, name);
+                } else {
+                    err_msg = fmt::format("Identical names in upper/lower cases, files: [{}] [{}], names: [{}] [{}]",
+                                          sample_range.ranges[0].path, itr->second.first, name, itr->second.second);
+                }
+                LOG(WARNING) << err_msg;
+                return Status::NotSupported(err_msg);
+            }
+        }
+
+        schemas.emplace_back(std::move(schema));
+
+        if (++sample_file_count > max_sample_file_count) break;
+    }
+
+    merge_schema(schemas, schema);
+
+    return Status::OK();
 }
 
 } // namespace starrocks

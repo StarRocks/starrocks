@@ -471,6 +471,13 @@ withRowAccessPolicy
     : WITH ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     ;
 
+orReplace:
+    (OR REPLACE)?
+    ;
+ifNotExists:
+    (IF NOT EXISTS)?
+    ;
+
 createTemporaryTableStatement
     : CREATE TEMPORARY TABLE qualifiedName
         queryStatement
@@ -876,6 +883,10 @@ alterClause
     | alterLoadErrorUrlClause
     | createImageClause
     | cleanTabletSchedQClause
+    | decommissionDiskClause
+    | cancelDecommissionDiskClause
+    | disableDiskClause
+    | cancelDisableDiskClause
 
     //Alter table clause
     | createIndexClause
@@ -962,6 +973,22 @@ createImageClause
 
 cleanTabletSchedQClause
     : CLEAN TABLET SCHEDULER QUEUE
+    ;
+
+decommissionDiskClause
+    : DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDecommissionDiskClause
+    : CANCEL DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+disableDiskClause
+    : DISABLE DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDisableDiskClause
+    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------
@@ -1852,7 +1879,7 @@ showSmallFilesStatement
 // -------------------------------------------- Pipe Statement ---------------------------------------------------------
 
 createPipeStatement
-    : CREATE PIPE (IF NOT EXISTS)? qualifiedName
+    : CREATE orReplace PIPE ifNotExists qualifiedName
         properties?
         AS insertStatement
     ;
@@ -2719,7 +2746,7 @@ nonReserved
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

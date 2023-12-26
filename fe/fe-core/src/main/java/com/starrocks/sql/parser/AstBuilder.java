@@ -735,8 +735,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     partitionDescList.add(rangePartitionDesc);
                 }
             }
-            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression);
+            List<String> columnList = checkAndExtractPartitionColForRange(primaryExpression, false);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            if (primaryExpression instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) primaryExpression;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (FunctionSet.FROM_UNIXTIME.equals(functionName)
+                        || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
+                    primaryExpression = new CastExpr(TypeDef.create(PrimitiveType.DATETIME), primaryExpression);
+                }
+            }
             return new ExpressionPartitionDesc(rangePartitionDesc, primaryExpression);
         }
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -764,20 +772,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private List<String> checkAndExtractPartitionColForRange(Expr expr) {
+    private List<String> checkAndExtractPartitionColForRange(Expr expr, boolean hasCast) {
         if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
-            return checkAndExtractPartitionColForRange(castExpr.getChild(0));
+            return checkAndExtractPartitionColForRange(castExpr.getChild(0), true);
         }
         NodePosition pos = expr.getPos();
         List<String> columnList = new ArrayList<>();
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (FunctionSet.SUBSTR.equals(functionName)
-                    || FunctionSet.SUBSTRING.equals(functionName)
-                    || FunctionSet.FROM_UNIXTIME.equals(functionName)) {
+            if (FunctionSet.SUBSTR.equals(functionName) || FunctionSet.SUBSTRING.equals(functionName)) {
                 List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
+                Expr firstExpr = paramsExpr.get(0);
+                if (firstExpr instanceof SlotRef) {
+                    columnList.add(((SlotRef) firstExpr).getColumnName());
+                } else {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+            } else if (FunctionSet.FROM_UNIXTIME.equals(functionName)
+                    || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
+                List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
+                if (hasCast || paramsExpr.size() > 1) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
@@ -3950,7 +3970,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
         PipeName pipeName = resolvePipeName(context.qualifiedName());
-        boolean ifNotExists = context.IF() != null;
+        boolean ifNotExists = context.ifNotExists() != null && context.ifNotExists().IF() != null;
+        boolean replace = context.orReplace() != null && context.orReplace().OR() != null;
+
+        if (ifNotExists && replace) {
+            throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("OR REPLACE", "IF NOT EXISTS"));
+        }
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
@@ -3966,7 +3991,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         InsertStmt insertStmt = (InsertStmt) insertNode;
         int insertSqlIndex = context.insertStatement().start.getStartIndex();
 
-        return new CreatePipeStmt(ifNotExists, pipeName, insertSqlIndex, insertStmt, properties, createPos(context));
+        return new CreatePipeStmt(ifNotExists, replace, pipeName, insertSqlIndex, insertStmt, properties,
+                createPos(context));
     }
 
     @Override
@@ -6819,6 +6845,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Parameter parameter = new Parameter(placeHolderSlotId++);
         parameters.add(parameter);
         return parameter;
+    }
+
+    @Override
+    public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDecommissionDiskClause(StarRocksParser.CancelDecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitDisableDiskClause(StarRocksParser.DisableDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
+        throw new SemanticException("not support");
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
