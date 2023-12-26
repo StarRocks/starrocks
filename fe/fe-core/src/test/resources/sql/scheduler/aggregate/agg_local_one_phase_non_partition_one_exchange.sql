@@ -20,38 +20,61 @@ PLAN FRAGMENT 2(F00)
     INSTANCE(2-F00#0)
       DESTINATIONS: 1-F01#0
       BE: 10001
-      SCAN RANGES
+      DOP: 7
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1004
-          2. partitionID=1001,tabletID=1010
-          3. partitionID=1001,tabletID=1016
-          4. partitionID=1001,tabletID=1022
-          5. partitionID=1001,tabletID=1028
-          6. partitionID=1001,tabletID=1034
-          7. partitionID=1001,tabletID=1040
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1004
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1010
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1016
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1022
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1028
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1034
+          DriverSequence#6
+            7. partitionID=1001,tabletID=1040
     INSTANCE(3-F00#1)
       DESTINATIONS: 1-F01#0
       BE: 10002
-      SCAN RANGES
+      DOP: 7
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1006
-          2. partitionID=1001,tabletID=1012
-          3. partitionID=1001,tabletID=1018
-          4. partitionID=1001,tabletID=1024
-          5. partitionID=1001,tabletID=1030
-          6. partitionID=1001,tabletID=1036
-          7. partitionID=1001,tabletID=1042
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1006
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1012
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1018
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1024
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1030
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1036
+          DriverSequence#6
+            7. partitionID=1001,tabletID=1042
     INSTANCE(4-F00#2)
       DESTINATIONS: 1-F01#0
       BE: 10003
-      SCAN RANGES
+      DOP: 6
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1008
-          2. partitionID=1001,tabletID=1014
-          3. partitionID=1001,tabletID=1020
-          4. partitionID=1001,tabletID=1026
-          5. partitionID=1001,tabletID=1032
-          6. partitionID=1001,tabletID=1038
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1008
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1014
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1020
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1026
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1032
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1038
 
 [fragment]
 PLAN FRAGMENT 0
@@ -128,38 +151,61 @@ PLAN FRAGMENT 2(F00)
     INSTANCE(4-F00#0)
       DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
       BE: 10001
-      SCAN RANGES
+      DOP: 7
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1004
-          2. partitionID=1001,tabletID=1010
-          3. partitionID=1001,tabletID=1016
-          4. partitionID=1001,tabletID=1022
-          5. partitionID=1001,tabletID=1028
-          6. partitionID=1001,tabletID=1034
-          7. partitionID=1001,tabletID=1040
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1004
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1010
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1016
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1022
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1028
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1034
+          DriverSequence#6
+            7. partitionID=1001,tabletID=1040
     INSTANCE(5-F00#1)
       DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
       BE: 10002
-      SCAN RANGES
+      DOP: 7
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1006
-          2. partitionID=1001,tabletID=1012
-          3. partitionID=1001,tabletID=1018
-          4. partitionID=1001,tabletID=1024
-          5. partitionID=1001,tabletID=1030
-          6. partitionID=1001,tabletID=1036
-          7. partitionID=1001,tabletID=1042
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1006
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1012
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1018
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1024
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1030
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1036
+          DriverSequence#6
+            7. partitionID=1001,tabletID=1042
     INSTANCE(6-F00#2)
       DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
       BE: 10003
-      SCAN RANGES
+      DOP: 6
+      SCAN RANGES (per driver sequence)
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1008
-          2. partitionID=1001,tabletID=1014
-          3. partitionID=1001,tabletID=1020
-          4. partitionID=1001,tabletID=1026
-          5. partitionID=1001,tabletID=1032
-          6. partitionID=1001,tabletID=1038
+          DriverSequence#0
+            1. partitionID=1001,tabletID=1008
+          DriverSequence#1
+            2. partitionID=1001,tabletID=1014
+          DriverSequence#2
+            3. partitionID=1001,tabletID=1020
+          DriverSequence#3
+            4. partitionID=1001,tabletID=1026
+          DriverSequence#4
+            5. partitionID=1001,tabletID=1032
+          DriverSequence#5
+            6. partitionID=1001,tabletID=1038
 
 [fragment]
 PLAN FRAGMENT 0
