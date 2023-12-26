@@ -189,11 +189,13 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
-    std::unique_ptr<starrocks::lake::Rowset> rowset = std::make_unique<starrocks::lake::Rowset>(
-            *tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
-    std::vector<starrocks::lake::SegmentPtr> segments;
-    RETURN_IF_ERROR(rowset->load_segments(&segments, false));
-    uint32_t num_rows = segments[segment_id]->num_rows();
+    size_t footer_sine_hint = 16 * 1024;
+    auto fill_cache = false;
+    auto tablet_mgr = tablet->tablet_mgr();
+    auto segment_path = tablet->segment_location(op_write.rowset().segments(segment_id));
+    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_path, segment_id, &footer_sine_hint, fill_cache,
+                                                            fill_cache, tschema));
+    uint32_t num_rows = segment->num_rows();
 
     auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
@@ -204,7 +206,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     seg_options.stats = &stats;
     seg_options.chunk_size = num_rows;
 
-    auto res = segments[segment_id]->new_iterator(src_schema, seg_options);
+    auto res = segment->new_iterator(src_schema, seg_options);
     auto& itr = res.value();
 
     if (itr) {

@@ -14,7 +14,6 @@
 
 #include "storage/lake/lake_local_persistent_index.h"
 
-#include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
@@ -25,10 +24,11 @@
 namespace starrocks::lake {
 
 // TODO refactor load from lake tablet, use same path with load from local tablet.
-Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
+Status LakeLocalPersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                        int64_t base_version, const MetaFileBuilder* builder) {
-    if (!is_primary_key(metadata)) {
-        LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
+    const auto tablet_id = metadata->id();
+    if (!is_primary_key(*metadata)) {
+        LOG(WARNING) << "tablet: " << tablet_id << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
     // persistent index' minor compaction is a new strategy to decrease the IO amplification.
@@ -43,10 +43,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
 
     // persistent_index_dir has been checked
     Status status = TabletMetaManager::get_persistent_index_meta(
-            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), &index_meta);
+            StorageEngine::instance()->get_persistent_index_store(tablet_id), tablet_id, &index_meta);
     if (!status.ok() && !status.is_not_found()) {
-        LOG(ERROR) << "get tablet persistent index meta failed, tablet: " << tablet->id()
-                   << "version: " << base_version;
+        LOG(ERROR) << "get tablet persistent index meta failed, tablet: " << tablet_id << "version: " << base_version;
         return Status::InternalError("get tablet persistent index meta failed");
     }
 
@@ -82,7 +81,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                 status = load(index_meta);
             }
             if (status.ok()) {
-                LOG(INFO) << "load persistent index tablet:" << tablet->id() << " version:" << version.to_string()
+                LOG(INFO) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
                           << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
                           << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
@@ -91,7 +90,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                           << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
-                LOG(WARNING) << "load persistent index failed, tablet: " << tablet->id() << ", status: " << status;
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
                 if (index_meta.has_l0_meta()) {
                     EditVersion l0_version = index_meta.l0_meta().snapshot().version();
                     std::string l0_file_name =
@@ -121,7 +120,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     }
 
     // 1. create and set key column schema
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
@@ -167,7 +166,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
             std::string msg = strings::Substitute(
                     "load persistent index from tablet:$0 failed, insert usage and size by key size failed, key_size: "
                     "$1",
-                    tablet->id(), key_size);
+                    tablet_id, key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -207,17 +206,14 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     // 2. scan all rowsets and segments to build primary index
-    auto rowsets = tablet->get_rowsets(metadata);
-    if (!rowsets.ok()) {
-        return rowsets.status();
-    }
+    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
 
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    for (auto& rowset : *rowsets) {
+    for (auto& rowset : rowsets) {
         total_data_size += rowset->data_size();
         total_segments += rowset->num_segments();
 
@@ -289,7 +285,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     }
     // write pesistent index meta
     status = TabletMetaManager::write_persistent_index_meta(
-            StorageEngine::instance()->get_persistent_index_store(tablet->id()), tablet->id(), index_meta);
+            StorageEngine::instance()->get_persistent_index_store(tablet_id), tablet_id, index_meta);
     if (!status.ok()) {
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
@@ -302,8 +298,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     _dump_snapshot = false;
     _flushed = false;
 
-    LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
-              << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
+    LOG(INFO) << "build persistent index finish tablet: " << tablet_id << " version:" << base_version
+              << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
               << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()

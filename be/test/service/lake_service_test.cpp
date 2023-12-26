@@ -765,8 +765,6 @@ TEST_F(LakeServiceTest, test_abort) {
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
     // TxnLog`s and segments should have been deleted

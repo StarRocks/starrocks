@@ -27,6 +27,11 @@
 
 namespace starrocks::lake {
 
+PrimaryKeyRecover::PrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata)
+        : _builder(builder), _tablet(tablet), _metadata(std::move(metadata)) {}
+
+PrimaryKeyRecover::~PrimaryKeyRecover() = default;
+
 Status PrimaryKeyRecover::pre_cleanup() {
     // 1. reset delvec in metadata and clean delvec in builder
     // TODO reclaim delvec files
@@ -74,7 +79,7 @@ Status PrimaryKeyRecover::recover() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 2. scan all rowsets and segments to build primary index
-    ASSIGN_OR_RETURN(auto rowsets, _tablet->get_rowsets(*_metadata));
+    auto rowsets = _tablet->get_rowsets(_metadata);
     // 3. rebuild primary key index and generate delete maps
     for (auto& rowset : rowsets) {
         auto res = rowset->get_each_segment_iterator(_pkey_schema, &stats);

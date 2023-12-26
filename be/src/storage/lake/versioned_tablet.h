@@ -42,8 +42,6 @@ class VersionedTablet {
     using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
 
 public:
-    static RowsetList get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPB& metadata);
-
     // Default constructor. After construction, valid() is false
     VersionedTablet() : _tablet_mgr(nullptr), _metadata() {}
 
@@ -65,7 +63,7 @@ public:
     TabletSchemaPtr get_schema() const;
 
     // Prerequisite: valid() == true
-    RowsetList get_rowsets() const { return get_rowsets(_tablet_mgr, *_metadata); }
+    RowsetList get_rowsets() const;
 
     // `segment_max_rows` is used in vertical writer
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,

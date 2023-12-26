@@ -27,18 +27,19 @@ namespace lake {
 
 class Tablet;
 class MetaFileBuilder;
+class TabletManager;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
     LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() {}
+    ~LakePrimaryIndex() = default;
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
     //
     // [thread-safe]
-    Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+    Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                      const MetaFileBuilder* builder);
 
     bool is_load(int64_t base_version);
@@ -47,7 +48,7 @@ public:
     void update_data_version(int64_t version) { _data_version = version; }
 
 private:
-    Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+    Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
 
 private:
