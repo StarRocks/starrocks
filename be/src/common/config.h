@@ -789,7 +789,7 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // text reader
 // Spilt text file's scan range into io ranges of 16mb size
-CONF_Int32(text_io_range_size, "16777216");
+CONF_Int64(text_io_range_size, "16777216");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
