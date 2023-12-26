@@ -28,8 +28,8 @@ public class Daemon extends Thread {
     private static final int DEFAULT_INTERVAL_SECONDS = 30; // 30 seconds
 
     private long intervalMs;
-    private AtomicBoolean isStop;
     private Runnable runnable;
+    private AtomicBoolean isStop = new AtomicBoolean(false);
     private AtomicBoolean isStart = new AtomicBoolean(false);
 
     private MetaContext metaContext = null;
@@ -41,19 +41,6 @@ public class Daemon extends Thread {
     public Daemon() {
         super();
         intervalMs = DEFAULT_INTERVAL_SECONDS * 1000L;
-        isStop = new AtomicBoolean(false);
-    }
-
-    public Daemon(Runnable runnable) {
-        super(runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
-    }
-
-    public Daemon(ThreadGroup group, Runnable runnable) {
-        super(group, runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
     }
 
     public Daemon(String name) {
@@ -76,6 +63,7 @@ public class Daemon extends Thread {
 
     @Override
     public synchronized void start() {
+        isStop.set(false);
         if (isStart.compareAndSet(false, true)) {
             super.start();
         }
@@ -87,6 +75,10 @@ public class Daemon extends Thread {
 
     public void setStop() {
         isStop.set(true);
+    }
+
+    public boolean isRunning() {
+        return isStart.get();
     }
 
     public long getInterval() {
@@ -128,5 +120,8 @@ public class Daemon extends Thread {
             MetaContext.remove();
         }
         LOG.error("daemon thread exits. name=" + this.getName());
+        if (!isStart.compareAndSet(true, false)) {
+            LOG.warn("set daemon thread {} to stop failed", getName());
+        }
     }
 }
