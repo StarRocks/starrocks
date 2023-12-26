@@ -19,34 +19,63 @@ import com.aliyun.odps.TableSchema;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.thrift.TTableDescriptor;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mock;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
 import static org.mockito.Mockito.when;
 
-public class OdpsMetadataTests extends MockedBase {
+public class OdpsMetadataTest extends MockedBase {
 
     @Mock
-    private OdpsMetadata odpsMetadata;
+    protected static OdpsMetadata odpsMetadata;
 
-    @Before
-    public void setUp() throws IOException, ExecutionException, OdpsException {
+    @BeforeClass
+    public static void setUp() throws IOException, ExecutionException, OdpsException {
         initMock();
         odpsMetadata = new OdpsMetadata(odps, "odps", aliyunCloudCredential, odpsProperties);
     }
 
+    @Test
+    public void testInitMeta() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(OdpsProperties.ACCESS_ID, "ak");
+        properties.put(OdpsProperties.ACCESS_KEY, "sk");
+        properties.put(OdpsProperties.ENDPOINT, "http://127.0.0.1");
+        properties.put(OdpsProperties.PROJECT, "project");
+        properties.put(OdpsProperties.ENABLE_PARTITION_CACHE, "false");
+        properties.put(OdpsProperties.ENABLE_TABLE_CACHE, "false");
+        properties.put(OdpsProperties.ENABLE_TABLE_NAME_CACHE, "true");
+        OdpsMetadata metadata = new OdpsMetadata(odps, "odps", aliyunCloudCredential, new OdpsProperties(properties));
+        Assert.assertNotNull(metadata);
+    }
+
+    @Test
+    public void testGetMetadata() {
+        OdpsConnector connector = new OdpsConnector(context);
+        Assert.assertNotNull(connector);
+        ConnectorMetadata metadata = connector.getMetadata();
+        Assert.assertNotNull(metadata);
+    }
 
     @Test
     public void testListDbNames() {
@@ -126,6 +155,13 @@ public class OdpsMetadataTests extends MockedBase {
         Assert.assertEquals("ak", cloudConfiguration.getAliyunCloudCredential().getAccessKey());
         Assert.assertEquals("sk", cloudConfiguration.getAliyunCloudCredential().getSecretKey());
         Assert.assertEquals("http://127.0.0.1", cloudConfiguration.getAliyunCloudCredential().getEndpoint());
+    }
+
+    @Test
+    public void testOdpsTableToThrift() {
+        OdpsTable odpsTable = new OdpsTable("catalog", table);
+        TTableDescriptor thrift = odpsTable.toThrift(null);
+        Assert.assertNotNull(thrift);
     }
 }
 
