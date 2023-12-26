@@ -331,7 +331,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         } else {
             LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
         }
-        // Force lambda capture obj_pool to release all objects in it.
+        // Force lambda capture obj_pool to take over the ownership of the object pool.
         obj_pool->clear();
     };
 
