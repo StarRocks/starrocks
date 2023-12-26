@@ -112,6 +112,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -1094,6 +1095,41 @@ public class JournalEntity implements Writable {
                 data = PipeOpEntry.read(in);
                 isRead = true;
                 break;
+<<<<<<< HEAD
+=======
+            case OperationType.OP_CREATE_DICTIONARY:
+                data = Dictionary.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_DICTIONARY:
+                data = DropDictionaryInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MODIFY_DICTIONARY_MGR:
+                data = DictionaryMgrInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

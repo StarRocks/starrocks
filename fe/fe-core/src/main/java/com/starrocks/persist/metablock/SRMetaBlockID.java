@@ -90,6 +90,13 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
 
+<<<<<<< HEAD
+=======
+    public static final SRMetaBlockID DICTIONARY_MGR = new SRMetaBlockID(29);
+
+    public static final SRMetaBlockID REPLICATION_MGR = new SRMetaBlockID(30);
+
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
     @Override
     public String toString() {
         return String.valueOf(id);

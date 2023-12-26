@@ -145,6 +145,8 @@ public:
     std::string get_persistent_index_path() { return _path + PERSISTENT_INDEX_PREFIX; }
     Status init_persistent_index_dir();
 
+    std::string get_replication_path() { return _path + REPLICATION_PREFIX; }
+
     // for test
     size_t get_all_check_dcg_files_cnt() const { return _all_check_dcg_files.size(); }
 
