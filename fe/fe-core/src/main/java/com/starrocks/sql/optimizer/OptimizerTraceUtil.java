@@ -74,6 +74,11 @@ public class OptimizerTraceUtil {
         });
     }
 
+    public static void logRuleExhausted(OptimizerContext ctx, Rule rule) {
+        Tracers.log(Tracers.Module.OPTIMIZER,
+                args -> String.format("[TRACE QUERY %s] RULE %s exhausted \n", ctx.getQueryId(), rule));
+    }
+
     public static void logApplyRule(OptimizerContext ctx, Rule rule,
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
