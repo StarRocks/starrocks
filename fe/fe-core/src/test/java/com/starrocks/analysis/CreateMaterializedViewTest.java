@@ -2112,7 +2112,22 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMvWithImplicitColumnReorder() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_column_reorder refresh async as " +
+                "select c_1_3, c_1_4, c_1_0, c_1_1, c_1_2 from t1");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_column_reorder");
+        List<String> keys = mv.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        Assert.assertEquals(List.of("c_1_0", "c_1_1", "c_1_2", "c_1_3"), keys);
+        Assert.assertEquals(List.of(0, 4, 1, 2, 3), mv.getQueryOutputIndices());
+        String ddl = mv.getMaterializedViewDdlStmt(false);
+        Assert.assertTrue(ddl, ddl.contains("(`c_1_3`, `c_1_4`, `c_1_0`, `c_1_1`, `c_1_2`)"));
+        Assert.assertTrue(ddl, ddl.contains(" SELECT `test`.`t1`.`c_1_3`, `test`.`t1`.`c_1_4`, " +
+                "`test`.`t1`.`c_1_0`, `test`.`t1`.`c_1_1`, `test`.`t1`.`c_1_2`"));
+    }
+
+    @Test
     public void testCreateMvWithSortCols() throws Exception {
+        starRocksAssert.dropMaterializedView("mv1");
         {
             String sql = "create materialized view mv1\n" +
                     "distributed by hash(s2)\n" +
@@ -2125,6 +2140,13 @@ public class CreateMaterializedViewTest {
                     .collect(Collectors.toList());
             Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
             Assert.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
 
         {
@@ -2138,6 +2160,13 @@ public class CreateMaterializedViewTest {
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("s2"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
         {
             String sql = "create materialized view mv1\n" +
@@ -2150,6 +2179,13 @@ public class CreateMaterializedViewTest {
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("k1"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
         {
             String sql = "create materialized view mv1\n" +
