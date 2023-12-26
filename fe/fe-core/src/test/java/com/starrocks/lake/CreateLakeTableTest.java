@@ -213,6 +213,7 @@ public class CreateLakeTableTest {
         Assert.assertEquals(getPathInfo(), table.getDefaultFilePathInfo());
         Assert.assertEquals(getPathInfo().getFullPath() + "/100",
                 Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());
+        Assert.assertTrue(true);
     }
 
     @Test
