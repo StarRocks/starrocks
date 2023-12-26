@@ -113,7 +113,6 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
 
     Status status = create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms);
     if (!status.ok()) {
-        // When reopen create_client still errs, there is no chance to perform a release operation.
         if (_metrics_enabled) {
             _used_clients->increment(-1);
         }
