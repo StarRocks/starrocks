@@ -320,11 +320,7 @@ public class OlapTable extends Table {
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
-        olapTable.indexIdToMeta = Maps.newHashMap();
-        // fast schema evolution will modify indexIdToMeta in-place, hence we need shallow copy it here.
-        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
-            olapTable.indexIdToMeta.put(entry.getKey(), entry.getValue().shallowCopy());
-        }
+        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.indexes = indexes == null ? null : indexes.shallowCopy();
         olapTable.bfColumns = bfColumns == null ? null : Sets.newHashSet(bfColumns);
 
