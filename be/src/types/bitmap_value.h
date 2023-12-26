@@ -60,7 +60,7 @@ namespace starrocks {
 namespace detail {
 class Roaring64Map;
 class BitmapValueIter;
-}
+} // namespace detail
 // Represent the in-memory and on-disk structure of StarRocks's BITMAP data type.
 // Optimize for the case where the bitmap contains 0 or 1 element which is common
 // for streaming load scenario.
@@ -234,7 +234,7 @@ public:
     void reset(const BitmapValue& bitmap) {
         _bitmap = &bitmap;
         _offset = 0;
-        _cardinality =  bitmap.cardinality();
+        _cardinality = bitmap.cardinality();
         if (bitmap.type() == BitmapValue::BitmapDataType::BITMAP) {
             _bitmap_iter = std::make_unique<detail::Roaring64MapSetBitForwardIterator>(*bitmap._bitmap);
         } else {
