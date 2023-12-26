@@ -22,9 +22,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -132,6 +134,12 @@ public class HiveMetastoreTest {
             }
         }
 
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "hive");
+        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+        ConnectorContext context = new ConnectorContext("hive_catalog", "hive", properties);
+        GlobalStateMgr.getCurrentState().getConnectorMgr().createConnector(context);
+
         HiveMetaClient client = new MockedTestMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         com.starrocks.catalog.Table table = metastore.getTable("db1", "tbl1");
@@ -145,7 +153,8 @@ public class HiveMetastoreTest {
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals(ScalarType.createVarcharType(1073741824), hiveTable.getBaseSchema().get(1).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
-        // assert the table
+
+        GlobalStateMgr.getCurrentState().getConnectorMgr().removeConnector("hive_catalog");
     }
 
     @Test
