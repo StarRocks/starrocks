@@ -1,4 +1,30 @@
+<<<<<<< HEAD
 set(EXEC_FILES
+=======
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+#[[
+Currently, the unit tests for be are divided into two executable files: 
+starrocks_test_part1 and starrocks_test_part2. 
+When we try to perform all the tests with one executable file, 
+the binary size of the code exceeds the limit, which leads to linkage errors.
+]]
+
+set(EXEC_FILES_PART1
+        ./agent/agent_task_test.cpp
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -269,6 +295,7 @@ set(EXEC_FILES
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
+        ./storage/replication_txn_manager_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
@@ -286,6 +313,7 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+<<<<<<< HEAD
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -383,6 +411,14 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+=======
+        ./storage/meta_reader_test.cpp
+        ./storage/dictionary_cache_manager_test.cpp
+        ./storage/compaction_parallelization_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

@@ -87,6 +87,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->txn_slog_location(tablet_id, txn_id);
+}
+
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
     return _location_provider->txn_vlog_location(tablet_id, version);
 }
@@ -317,6 +321,11 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fi
     return get_txn_log(path, fill_cache);
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_slog");
+    return get_txn_log(path, fill_cache);
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
     if (auto ptr = _metacache->lookup_txn_log(path); ptr != nullptr) {
         TRACE("got cached txn log");
@@ -334,11 +343,15 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
+    return get_txn_log(txn_slog_location(tablet_id, txn_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
-Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
@@ -346,22 +359,26 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
     auto t0 = butil::gettimeofday_us();
-    auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
 
-    ProtobufFile file(txn_log_path);
+    ProtobufFile file(path);
     RETURN_IF_ERROR(file.save(*log));
 
-    _metacache->cache_txn_log(txn_log_path, log);
+    _metacache->cache_txn_log(path, log);
 
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
+Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+}
+
 Status TabletManager::put_txn_log(const TxnLog& log) {
     return put_txn_log(std::make_shared<TxnLog>(log));
 }
 
+<<<<<<< HEAD
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
@@ -390,6 +407,40 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     std::string prefix;
     if (filter_tablet) {
         prefix = fmt::format("{:016X}_", tablet_id);
+=======
+Status TabletManager::put_txn_slog(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_slog_location(log->tablet_id(), log->txn_id()));
+}
+
+Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path) {
+    return put_txn_log(log, path);
+}
+
+StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
+    int64_t size = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version hint: " << *version_hint
+                << ", size: " << size;
+    } else {
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version : " << metadata->version()
+                << ", size: " << size;
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
     }
 
     auto root = _location_provider->txn_log_root_location(tablet_id);

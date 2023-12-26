@@ -230,6 +230,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
@@ -545,6 +546,8 @@ public class GlobalStateMgr {
 
     private MVActiveChecker mvActiveChecker;
 
+    private ReplicationMgr replicationMgr;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
@@ -796,6 +799,7 @@ public class GlobalStateMgr {
             }
         });
 
+        this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
@@ -1034,7 +1038,15 @@ public class GlobalStateMgr {
         return connectorTableMetadataProcessor;
     }
 
+<<<<<<< HEAD
     // Use tryLock to avoid potential dead lock
+=======
+    public ReplicationMgr getReplicationMgr() {
+        return replicationMgr;
+    }
+
+    // Use tryLock to avoid potential deadlock
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
     public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
@@ -1414,6 +1426,8 @@ public class GlobalStateMgr {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
+
+        replicationMgr.start();
     }
 
     // start threads that should run on all FE
@@ -1503,11 +1517,53 @@ public class GlobalStateMgr {
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
+<<<<<<< HEAD
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadVersion(dis, checksum);
             checkOpTypeValid();
+=======
+        Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                .put(SRMetaBlockID.AUTH, auth::load)
+                .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .build();
+
+        Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
+        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())))) {
+            loadHeader(dis);
+            while (true) {
+                SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
 
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
@@ -1922,6 +1978,7 @@ public class GlobalStateMgr {
 
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
+<<<<<<< HEAD
             // ** NOTICE **: always add new code at the end
             if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
                 try {
@@ -1959,6 +2016,44 @@ public class GlobalStateMgr {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
                 }
+=======
+            try {
+                saveHeader(dos);
+                nodeMgr.save(dos);
+                localMetastore.save(dos);
+                alterJobMgr.save(dos);
+                recycleBin.save(dos);
+                VariableMgr.save(dos);
+                resourceMgr.saveResourcesV2(dos);
+                exportMgr.saveExportJobV2(dos);
+                backupHandler.saveBackupHandlerV2(dos);
+                auth.save(dos);
+                globalTransactionMgr.saveTransactionStateV2(dos);
+                colocateTableIndex.saveColocateTableIndexV2(dos);
+                routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                loadMgr.saveLoadJobsV2JsonFormat(dos);
+                smallFileMgr.saveSmallFilesV2(dos);
+                pluginMgr.save(dos);
+                deleteMgr.save(dos);
+                analyzeMgr.save(dos);
+                resourceGroupMgr.save(dos);
+                authenticationMgr.saveV2(dos);
+                authorizationMgr.saveV2(dos);
+                taskManager.saveTasksV2(dos);
+                catalogMgr.save(dos);
+                insertOverwriteJobMgr.save(dos);
+                compactionMgr.save(dos);
+                streamLoadMgr.save(dos);
+                MaterializedViewMgr.getInstance().save(dos);
+                globalFunctionMgr.save(dos);
+                storageVolumeMgr.save(dos);
+                dictionaryMgr.save(dos);
+                replicationMgr.save(dos);
+            } catch (SRMetaBlockException e) {
+                LOG.error("Save meta block failed ", e);
+                throw new IOException("Save meta block failed ", e);
+            }
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
 
                 long saveImageEndTime = System.currentTimeMillis();
                 LOG.info("Finished save meta block {} in {} ms.",

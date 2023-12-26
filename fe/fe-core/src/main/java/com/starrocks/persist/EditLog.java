@@ -83,6 +83,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
@@ -1084,6 +1085,54 @@ public class EditLog {
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
+<<<<<<< HEAD
+=======
+                case OperationType.OP_PIPE: {
+                    PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
+                    globalStateMgr.getPipeManager().getRepo().replay(opEntry);
+                    break;
+                }
+                case OperationType.OP_CREATE_DICTIONARY: {
+                    Dictionary dictionary = (Dictionary) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
+                    break;
+                }
+                case OperationType.OP_DROP_DICTIONARY: {
+                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
+                    break;
+                }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
+                    break;
+                }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2061,4 +2110,44 @@ public class EditLog {
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
+<<<<<<< HEAD
+=======
+
+    public void logReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
+    }
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
 }

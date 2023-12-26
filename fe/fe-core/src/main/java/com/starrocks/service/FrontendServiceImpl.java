@@ -237,6 +237,8 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
@@ -2165,4 +2167,54 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         return res;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TGetDictQueryParamResponse getDictQueryParam(TGetDictQueryParamRequest request) throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(request.getDb_name());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", request.getDb_name());
+        }
+        Table table = db.getTable(request.getTable_name());
+        if (table == null) {
+            throw new SemanticException("dict table %s is not found", request.getTable_name());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("dict table type is not OlapTable, type=" + table.getClass());
+        }
+        OlapTable dictTable = (OlapTable) table;
+        TupleDescriptor tupleDescriptor = new TupleDescriptor(TupleId.createGenerator().getNextId());
+        IdGenerator<SlotId> slotIdIdGenerator = SlotId.createGenerator();
+
+        for (Column column : dictTable.getBaseSchema()) {
+            SlotDescriptor slotDescriptor = new SlotDescriptor(slotIdIdGenerator.getNextId(), tupleDescriptor);
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsMaterialized(true);
+            tupleDescriptor.addSlot(slotDescriptor);
+        }
+
+        TGetDictQueryParamResponse response = new TGetDictQueryParamResponse();
+        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
+        try {
+            List<Long> allPartitions = dictTable.getAllPartitionIds();
+            response.setPartition(
+                    OlapTableSink.createPartition(db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
+                    dictTable.getAutomaticBucketSize(), allPartitions));
+            response.setLocation(OlapTableSink.createLocation(
+                    dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
+        } catch (UserException e) {
+            SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
+            semanticException.initCause(e);
+            throw semanticException;
+        }
+        return response;
+    }
+
+    @Override
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
+        return leaderImpl.startTableReplication(request);
+    }
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
 }

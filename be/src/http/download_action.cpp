@@ -75,23 +75,40 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
     if (config::enable_token_check) {
         status = check_token(req);
         if (!status.ok()) {
+<<<<<<< HEAD
             std::string error_msg = status.get_error_msg();
             HttpChannel::send_reply(req, error_msg);
+=======
+            HttpChannel::send_reply(req, status.message());
+            LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                         << " error:" << status;
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
             return;
         }
     }
 
     status = check_path_is_allowed(file_param);
     if (!status.ok()) {
+<<<<<<< HEAD
         std::string error_msg = status.get_error_msg();
         HttpChannel::send_reply(req, error_msg);
+=======
+        HttpChannel::send_reply(req, status.message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
         return;
     }
     auto is_dir = fs::is_directory(file_param);
     if (!is_dir.ok()) {
+<<<<<<< HEAD
         std::string error_msg = is_dir.status().get_error_msg();
         HttpChannel::send_reply(req, error_msg);
         return;
+=======
+        HttpChannel::send_reply(req, is_dir.status().message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                     << " error:" << is_dir.status();
+>>>>>>> c3c9fb6c5b ([Feature] Support none-pk table replication from another cluster for olap table and cloud-native table (#35042))
     }
     if (*is_dir) {
         do_dir_response(file_param, req);
