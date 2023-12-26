@@ -79,7 +79,7 @@ Status TabletReader::prepare() {
         return Status::InternalError("failed to construct tablet schema");
     }
     if (!_rowsets_inited) {
-        _rowsets = VersionedTablet::get_rowsets(_tablet_mgr, *_tablet_metadata);
+        _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
