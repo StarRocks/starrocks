@@ -129,6 +129,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
+
 /**
  * Core logic of materialized view refresh task run
  * PartitionBasedMvRefreshProcessor is not thread safe for concurrent runs of the same materialized view
@@ -359,7 +361,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 errorMsg = lastException.getMessage();
             }
             // field ERROR_MESSAGE in information_schema.task_runs length is 65535
-            errorMsg = errorMsg.substring(0, 65535);
+            if (errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH) {
+                errorMsg = errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH);
+            }
             throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
                     lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
