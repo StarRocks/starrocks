@@ -278,18 +278,12 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-<<<<<<< HEAD
-
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
-=======
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
->>>>>>> dccef9b329 ([Enhancement] Using starlet's sized input stream in FsStarlet (#37772))
-
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
