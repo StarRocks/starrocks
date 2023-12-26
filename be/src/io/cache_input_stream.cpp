@@ -51,7 +51,163 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, 
         uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
+<<<<<<< HEAD
     _buffer.reserve(BlockCache::instance()->block_size());
+=======
+    _buffer.reserve(_block_size);
+}
+
+CacheInputStream::~CacheInputStream() {
+    int64_t io_bytes = _sb_stream->shared_io_bytes();
+    if (io_bytes > 0) {
+        int64_t latency_us_per_block = (_sb_stream->shared_io_timer() / 1000 * _block_size / io_bytes);
+        _cache->record_read_remote(io_bytes, latency_us_per_block);
+    }
+}
+
+Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bool can_zero_copy) {
+    DCHECK(size <= _block_size);
+    int64_t block_id = offset / _block_size;
+
+    // check block map
+    auto iter = _block_map.find(block_id);
+    if (iter != _block_map.end()) {
+        auto& block = iter->second;
+        block.buffer.copy_to(out, size, offset - block.offset);
+        _stats.read_block_buffer_bytes += size;
+        _stats.read_block_buffer_count += 1;
+        return Status::OK();
+    }
+
+    // check shared buffer
+    int64_t block_offset = block_id * _block_size;
+    int64_t load_size = std::min(_block_size, _size - block_offset);
+    int64_t shift = offset - block_offset;
+
+    SharedBufferedInputStream::SharedBuffer* sb = nullptr;
+    if (_enable_block_buffer) {
+        auto ret = _sb_stream->find_shared_buffer(offset, size);
+        if (ret.ok()) {
+            sb = ret.value();
+            if (sb->buffer.capacity() > 0) {
+                strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
+                if (_enable_populate_cache) {
+                    _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                          block_offset, load_size);
+                }
+                return Status::OK();
+            }
+        }
+    }
+
+    // read cache
+    Status res;
+    int64_t read_cache_ns = 0;
+    BlockBuffer block;
+    ReadCacheOptions options;
+    size_t read_size = 0;
+    {
+        SCOPED_RAW_TIMER(&read_cache_ns);
+        if (_enable_block_buffer) {
+            res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
+            read_size = load_size;
+        } else {
+            StatusOr<size_t> r = _cache->read_buffer(_cache_key, offset, size, out, &options);
+            res = r.status();
+            read_size = size;
+        }
+    }
+    if (res.ok()) {
+        if (_enable_block_buffer) {
+            block.buffer.copy_to(out, size, shift);
+            block.offset = block_offset;
+            _block_map[block_id] = block;
+        }
+        _stats.read_cache_bytes += read_size;
+        _stats.read_cache_count += 1;
+        _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
+        _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
+        _stats.read_cache_ns += read_cache_ns;
+        _cache->record_read_cache(read_size, read_cache_ns / 1000);
+        return Status::OK();
+    } else if (res.is_resource_busy()) {
+        _stats.skip_read_cache_count += 1;
+        _stats.skip_read_cache_bytes += read_size;
+    }
+    if (!res.is_not_found() && !res.is_resource_busy()) return res;
+
+    // read remote
+    char* src = nullptr;
+    if (sb) {
+        // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
+        _deduplicate_shared_buffer(sb);
+        const uint8_t* buffer = nullptr;
+        RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, block_offset, load_size));
+        strings::memcpy_inlined(out, buffer + shift, size);
+        src = (char*)buffer;
+    } else {
+        if (!can_zero_copy || (shift != 0)) {
+            can_zero_copy = false;
+            src = _buffer.data();
+        } else {
+            src = out;
+        }
+
+        // if not found, read from stream and write back to cache.
+        RETURN_IF_ERROR(_sb_stream->read_at_fully(block_offset, src, load_size));
+        if (!can_zero_copy) {
+            strings::memcpy_inlined(out, src + shift, size);
+        }
+    }
+
+    if (_enable_populate_cache && res.is_not_found()) {
+        SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+        WriteCacheOptions options;
+        Status r = _cache->write_buffer(_cache_key, block_offset, load_size, src, &options);
+        if (r.ok()) {
+            _stats.write_cache_count += 1;
+            _stats.write_cache_bytes += load_size;
+            _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
+            _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
+        } else if (!r.is_already_exist()) {
+            _stats.write_cache_fail_count += 1;
+            _stats.write_cache_fail_bytes += load_size;
+            LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
+            // Failed to write cache, but we can keep processing query.
+        }
+    }
+    return Status::OK();
+}
+
+void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
+    if (sb->size == 0 || _block_map.empty()) {
+        return;
+    }
+    int64_t end_offset = sb->offset + sb->size;
+    int64_t start_block_id = sb->offset / _block_size;
+    int64_t end_block_id = (end_offset - 1) / _block_size;
+    while (start_block_id < end_block_id) {
+        if (_block_map.find(start_block_id) == _block_map.end()) {
+            break;
+        }
+        ++start_block_id;
+    }
+    while (start_block_id < end_block_id) {
+        if (_block_map.find(end_block_id) == _block_map.end()) {
+            break;
+        }
+        --end_block_id;
+    }
+    // It is impossible that all block exists in block_map because we check block map before
+    // reading remote storage.
+    for (int64_t i = start_block_id; i <= end_block_id; ++i) {
+        _block_map.erase(i);
+    }
+
+    sb->offset = std::max(start_block_id * _block_size, sb->offset);
+    int64_t end = std::min((end_block_id + 1) * _block_size, end_offset);
+    sb->size = end - sb->offset;
+>>>>>>> d138985346 ([Enhancement] Reduce IOPS in HDFS Text Reader when enable datacache (#37754))
 }
 
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
