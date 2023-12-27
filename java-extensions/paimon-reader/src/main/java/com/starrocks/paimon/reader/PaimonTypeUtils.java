@@ -31,6 +31,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
@@ -60,6 +61,10 @@ public class PaimonTypeUtils {
         }
 
         public String visit(BinaryType binaryType) {
+            return "binary";
+        }
+
+        public String visit(VarBinaryType varBinaryType) {
             return "binary";
         }
 
