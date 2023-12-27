@@ -216,6 +216,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
                 retryCount++;
                 LOG.info("testOptimizeTable is waiting for JobState retryCount:" + retryCount);
             }
+            optimizeJob.cancel("");
         } catch (AlterCancelException e) {
             optimizeJob.cancel(e.getMessage());
         }
