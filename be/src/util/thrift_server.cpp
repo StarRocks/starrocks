@@ -357,6 +357,9 @@ Status ThriftServer::start() {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
+        // Use non-detached thread mode, so the ThreadedServer can correctly wait for all client threads done and exits cleanly.
+        // Refer to https://issues.apache.org/jira/browse/THRIFT-3768
+        thread_factory->setDetached(false);
         _server = std::make_unique<apache::thrift::server::TThreadedServer>(
                 _processor, fe_server_transport, transport_factory, protocol_factory, thread_factory);
         break;
