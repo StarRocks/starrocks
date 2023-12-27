@@ -32,7 +32,7 @@ This error occurs because the web services port of the BE is occupied. Try to mo
 
 This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 1.8 or later.
 
-## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
+<!-- ## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
 
 This error occurs when Setuptools versions installed on multiple frontends (FEs) are inconsistent. To solve this problem, you can execute the following command as a root user.
 
@@ -43,37 +43,38 @@ rm /usr/lib/python2.7/site-packages/setuptool* -rf
 
 wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 ```
+-->
 
-## Can FE and BE configurations of StarRocks be modified and then take effect without restarting the cluster?
+## Can FE and BE configuration items be modified and then take effect without restarting the cluster?
 
-Yes. Perform the following steps to complete the modifications for an FE and a BE:
+Yes. Perform the following steps to complete the modifications for an FE and a BE configuration item:
 
 - FE: You can complete the modification for an FE in one of the following ways:
   - SQL
 
-```plaintext
-ADMIN SET FRONTEND CONFIG ("key" = "value");
-```
+  ```plaintext
+  ADMIN SET FRONTEND CONFIG ("key" = "value");
+  ```
 
-Example:
+  Example:
 
-```plaintext
-ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
-```
+  ```plaintext
+  ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
+  ```
 
-- Shell
+  - Shell
 
-```plaintext
-curl --location-trusted -u username:password \
-http://<ip>:<fe_http_port/api/_set_config?key=value>
-```
+  ```plaintext
+  curl --location-trusted -u username:password \
+  http://<ip>:<fe_http_port/api/_set_config?key=value>
+  ```
 
-Example:
+  Example:
 
-```plaintext
-curl --location-trusted -u <username>:<password> \
-http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
-```
+  ```plaintext
+  curl --location-trusted -u <username>:<password> \
+  http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
+  ```
 
 - BE: You can complete the modification for a BE in the following way:
 
@@ -87,7 +88,7 @@ http://<ip>:<be_http_port>/api/update_config?key=value
 ```plaintext
 CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 
-GRANT SELECT_PRIV ON . TO 'test'@'%';
+GRANT SELECT ON . TO 'test'@'%';
 ```
 
 ## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?

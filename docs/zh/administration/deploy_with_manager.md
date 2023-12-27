@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+unlisted: true
 ---
 
 # 通过 StarRocks Manager 自动部署 StarRocks 集群

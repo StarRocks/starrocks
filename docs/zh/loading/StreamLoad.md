@@ -61,7 +61,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 导入 CSV 格式的数据
 
@@ -314,7 +314,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 
 Broker Load 支持导入单个数据文件到单张表、导入多个数据文件到单张表、以及导入多个数据文件分别到多张表。这里以导入多个数据文件到单张表为例。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 数据样例
 
