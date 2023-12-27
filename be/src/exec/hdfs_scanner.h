@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/hash_joiner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
@@ -142,11 +143,14 @@ struct HdfsScannerParams {
 
     int64_t modification_time = 0;
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
+
+    // equality column slots
+    std::vector<SlotDescriptor*> equality_slots;
 
     // columns of partition info
     std::vector<SlotDescriptor*> partition_slots;
@@ -183,6 +187,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    int mor_tuple_id;
 };
 
 struct HdfsScannerContext {
@@ -334,8 +339,10 @@ private:
     std::atomic<bool> _closed = false;
     bool _keep_priority = false;
     Status _build_scanner_context();
+    Status _build_hash_joiner_for_mor_if_needed();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
+    std::atomic<bool> _prepared_probe = false;
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -351,6 +358,10 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+    std::shared_ptr<HashJoiner> _hash_joiner = nullptr;
+    std::vector<ExprContext*> _join_exprs;
+    std::unique_ptr<RowDescriptor> _build_row_desc;
+    std::unique_ptr<RowDescriptor> _probe_row_desc;
 };
 
 } // namespace starrocks
