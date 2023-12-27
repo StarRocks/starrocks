@@ -50,10 +50,6 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
-/**
- * @author xiaolong
- * @date 2023/12/08/06:52
- */
 public class CompactionSchedulerTest {
 
     private final long dbId = 9000L;
