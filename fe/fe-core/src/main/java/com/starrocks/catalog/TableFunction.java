@@ -51,6 +51,7 @@ public class TableFunction extends Function {
     private List<Type> tableFnReturnTypes;
     @SerializedName(value = "symbolName")
     private String symbolName = "";
+
     // only used for serialization
 
 
@@ -107,6 +108,10 @@ public class TableFunction extends Function {
                     Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
             functionSet.addBuiltin(func);
         }
+
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName("unnest_bitmap"),
+                Lists.newArrayList("unnest_bitmap"), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        functionSet.addBuiltin(funcUnnestBitmap);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
             // set default arguments' const expressions in order
