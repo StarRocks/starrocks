@@ -264,6 +264,7 @@ The following examples demonstrate how to partition a table by specifying START,
   );
   ```
 
+<<<<<<< HEAD
   The PARTITION BY RANGE clause in this example is equal to the following:
 
   ```SQL
@@ -361,3 +362,6 @@ The following statement displays all partitions in table `site_access`.
 ```SQL
 SHOW PARTITIONS FROM site_access;
 ```
+=======
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+>>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))

@@ -12,7 +12,12 @@ This topic describes the syntax, parameters, and examples of the CREATE ROUTINE 
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+=======
+> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../loading/RoutineLoad.md).
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+>>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
 
 ## Syntax
 
