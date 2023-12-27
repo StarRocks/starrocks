@@ -110,7 +110,9 @@ public class MvRewriteTestBase {
         // Default REFRESH DEFERRED
         Config.default_mv_refresh_immediate = false;
 
+        Config.default_replication_num = 1;
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
+
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
 
