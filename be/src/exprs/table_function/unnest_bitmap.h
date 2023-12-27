@@ -53,7 +53,7 @@ public:
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* state) const override {
         if (state->get_columns().size() != 1) {
-            state->set_status(Status::InternalError("The number of parameters of unnest_bitmap is not equal to 2"));
+            state->set_status(Status::InternalError("The number of parameters of unnest_bitmap is not equal to 1"));
             return {};
         }
 
