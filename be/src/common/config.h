@@ -898,6 +898,7 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_mBool(starlet_use_star_cache, "false");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
