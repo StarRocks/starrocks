@@ -548,6 +548,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
     如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 
+<<<<<<< HEAD
     ```SQL
     CREATE TABLE site_access (
         site_id INT DEFAULT '10',
@@ -556,6 +557,26 @@ DISTRIBUTED BY HASH(site_id,city_code);
         pv BIGINT SUM DEFAULT '0')
     AGGREGATE KEY(site_id, city_code, user_name)
     DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分桶数量可以设置为 30。
+=======
+  如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
+
+  :::
+
+  <Tabs groupId="automaticexamples2">
+  <TabItem value="example1" label="哈希分桶表" default>
+
+    ```sql
+  -- 自动设置所有分区的分桶数量
+  ALTER TABLE site_access DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置指定分区的分桶数量
+  ALTER TABLE site_access PARTITIONS (p20230101, p20230102)
+  DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置新增分区中分桶数量
+  ALTER TABLE site_access ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code);
+>>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
     ```
 
 - 新增分区时如何设置分桶数量
