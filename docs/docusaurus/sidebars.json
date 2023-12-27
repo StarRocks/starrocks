@@ -1151,7 +1151,7 @@
             {
               "type":"category",
               "label": "StarRocks Pipe",
-              "description": "Pipe 新特性是大规模、持续数据导入的理想工具",
+              "description": "Pipe 是大规模、持续数据导入的理想工具",
               "link": {"type": "doc", "id": "integrations/streaming/pipe"},
               "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
             }
