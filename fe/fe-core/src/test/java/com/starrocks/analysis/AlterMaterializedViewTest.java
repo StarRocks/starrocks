@@ -286,7 +286,7 @@ public class AlterMaterializedViewTest {
         starRocksAssert.dropTable(baseTableName);
         starRocksAssert.withTable(createTableSql);
         Assert.assertFalse(mv.isActive());
-        Thread.sleep(1000);
+        checker.runForTest(true);
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertTrue(mv.isActive());
 

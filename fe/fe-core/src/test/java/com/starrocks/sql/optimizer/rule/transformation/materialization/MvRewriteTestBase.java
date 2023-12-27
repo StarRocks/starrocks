@@ -145,7 +145,11 @@ public class MvRewriteTestBase {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
+        try {
+            PseudoCluster.getInstance().shutdown(true);
+        } catch (Exception e) {
+            // ignore exception
+        }
     }
 
     private static void setPartitionVersion(Partition partition, long version) {

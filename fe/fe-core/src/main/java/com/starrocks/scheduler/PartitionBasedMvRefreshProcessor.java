@@ -1136,10 +1136,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvRangePartitionNames;
                 } else {
-                    // If the user specifies the start and end ranges, and the non-partitioned table still changes,
-                    // it should be refreshed according to the user-specified range, not all partitions.
-                    return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
-                            mvRangePartitionNames, true);
+                    if (isAutoRefresh) {
+                        // If this refresh comes from PERIODIC/EVENT_TRIGGER, it should not respect the config to do the
+                        // refresh rather than only checking the ref table's update.
+                        // eg:
+                        //  MV: SELECT t2.k1 as k1, t2.k2 as k2, t1.k1 as k3, t1.k2 as k4 FROM t1 join t2 on t1.k1=t2.k1;
+                        //  RefTable    : t1, Partition: p0,p1,p2
+                        //  NonRefTable : t2, Partition: p0,p1,p2
+                        // when t2 is updated, it will trigger refresh of ref-table's all partitions.
+                        // if `partition_refresh_number` is 1, then:
+                        // - The 1th TaskRun: start=null,end=null,  ref-table refresh partition: p0
+                        // - The 2th TaskRun: start=p1,end=p2,      ref-table refresh partition: p1
+                        // - The 3th TaskRun: start=p2,end=p2,      ref-table refresh partition: p2
+                        // if use method below, it will break in the 2th TaskRun because ref-table has not updated in the
+                        // specific start and end ranges.
+                        return mvRangePartitionNames;
+                    } else {
+                        // If the user specifies the start and end ranges, and the non-partitioned table still changes,
+                        // it should be refreshed according to the user-specified range, not all partitions.
+                        return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
+                                mvRangePartitionNames, true);
+                    }
                 }
             }
 
