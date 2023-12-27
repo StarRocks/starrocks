@@ -3403,9 +3403,12 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                     String tt1Partition = tt1Partitions.get(i);
                                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                     taskRun.executeTaskRun();
-                                    MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
-                                    Assert.assertTrue(isEnd ? !mvContext.hasNextBatchPartition() : mvContext.hasNextBatchPartition());
-                                    PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                                    MvTaskRunContext mvContext =
+                                            ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                                    Assert.assertTrue(isEnd ? !mvContext.hasNextBatchPartition()
+                                            : mvContext.hasNextBatchPartition());
+                                    PartitionBasedMvRefreshProcessor processor =
+                                            (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                     System.out.println(processor.getMVTaskRunExtraMessage());
                                     Assert.assertEquals(Sets.newHashSet(tt1Partition),
                                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
