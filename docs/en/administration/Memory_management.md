@@ -41,13 +41,8 @@ Explanation:
 
 | Name| Default| Description|
 | --- | --- | --- |
-<<<<<<< HEAD
-| exec_mem_limit| 2147483648| Memory limit of a single instance |
-| load_mem_limit| 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
-=======
 | query_mem_limit| 0| Memory limit of a query on each BE node |
 | load_mem_limit | 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
->>>>>>> cfbe90c0ed ([Doc] Update query_mem_limit (#37893))
 
 ## View memory usage
 
