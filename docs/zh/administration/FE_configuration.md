@@ -26,7 +26,6 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 >
 > 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
-
 ## 配置 FE 动态参数
 
 您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
@@ -391,6 +390,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：60
 
+#### routine_load_unstable_threshold_second
+
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 单位：秒
+- 默认值：3600
+
 #### max_tolerable_backend_down_num
 
 - 含义：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
@@ -498,7 +503,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_auto_tablet_distribution
 
-- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量)](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
+- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
 
