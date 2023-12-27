@@ -30,11 +30,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 >
 > 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ### 配置 FE 动态参数
-=======
-## 配置 FE 动态参数
->>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810)):docs/zh/administration/FE_configuration.md
 
 您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
 
