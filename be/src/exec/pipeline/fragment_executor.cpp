@@ -290,12 +290,12 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     return Status::OK();
 }
 
-int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_dop();
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
-int32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_sink_dop();
     return exec_env->calc_pipeline_sink_dop(degree_of_parallelism);
 }
