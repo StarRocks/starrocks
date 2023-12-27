@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 
 #include <chrono>
+#include <string_view>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -369,7 +370,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -379,8 +380,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             --_total_in_flight_rpc;
 
             const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
-            std::string err_msg = fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}]",
-                                              print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port);
+            std::string err_msg =
+                    fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
+                                print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
