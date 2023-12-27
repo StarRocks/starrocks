@@ -1,4 +1,13 @@
+<<<<<<< HEAD
 # Continuously load data from AutoMQ Kafka.md
+=======
+---
+displayed_sidebar: "English"
+description: Cloud based Kafka from AutoMQ
+---
+
+# AutoMQ Kafka
+>>>>>>> ece760ea57 ([Doc] Update integrations docs (#36894))
 
 [AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog) is a cloud-native version of Kafka redesigned for cloud environments.
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.
