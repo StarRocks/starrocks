@@ -41,7 +41,7 @@ Explanation:
 
 | Name| Default| Description|
 | --- | --- | --- |
-| query_mem_limit| 0| Memory limit of a query on each backend node |
+| query_mem_limit| 0| Memory limit of a query on each BE node |
 | load_mem_limit | 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
 
 ## View memory usage
