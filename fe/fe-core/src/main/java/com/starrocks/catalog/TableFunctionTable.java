@@ -37,7 +37,6 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
@@ -86,13 +85,12 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
 
-    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv_column_separator";
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
 
-    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv_row_delimiter";
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
 
     private String path;
     private String format;
-    TFileFormatType tFormat;
     private String compressionType;
 
     private int autoDetectSampleFiles;

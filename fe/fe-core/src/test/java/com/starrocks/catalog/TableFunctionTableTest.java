@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
@@ -43,6 +44,8 @@ public class TableFunctionTableTest {
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
         properties.put("auto_detect_sample_files", "10");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
         return properties;
     }
 
@@ -139,6 +142,9 @@ public class TableFunctionTableTest {
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Load.CSVOptions csvOptions =  Deencapsulation.getField(table, "csvOptions");
+            Assert.assertEquals("\n", csvOptions.rowDelimiter);
+            Assert.assertEquals(",", csvOptions.columnSeparator);
         });
 
         // abnormal case.
