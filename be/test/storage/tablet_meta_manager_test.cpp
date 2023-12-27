@@ -23,15 +23,15 @@
 
 namespace starrocks {
 
-namespace fs = std::filesystem;
+namespace sfs = std::filesystem;
 
 class TabletMetaManagerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        fs::path tmp = fs::temp_directory_path();
-        fs::path dir = tmp / "tablet_meta_manager_test";
-        fs::remove_all(dir);
-        CHECK(fs::create_directory(dir));
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / "tablet_meta_manager_test";
+        sfs::remove_all(dir);
+        CHECK(sfs::create_directory(dir));
         _data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -39,9 +39,9 @@ protected:
 
     void TearDown() override {
         _data_dir.reset();
-        fs::path tmp = fs::temp_directory_path();
-        fs::path dir = tmp / "tablet_meta_manager_test";
-        fs::remove_all(dir);
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / "tablet_meta_manager_test";
+        sfs::remove_all(dir);
     }
 
     std::unique_ptr<DataDir> _data_dir;
@@ -318,9 +318,9 @@ protected:
     static constexpr int64_t kMaxRowset = 1000;
 
     static void SetUpTestCase() {
-        fs::path cwd = fs::current_path();
-        fs::path dir = cwd / "tablet_meta_manager_performance_test";
-        CHECK(fs::create_directory(dir));
+        sfs::path cwd = sfs::current_path();
+        sfs::path dir = cwd / "tablet_meta_manager_performance_test";
+        CHECK(sfs::create_directory(dir));
         _s_data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _s_data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -382,9 +382,9 @@ protected:
     static void TearDownTestCase() {
         LOG(INFO) << "Tear down test case";
         _s_data_dir.reset();
-        fs::path cwd = fs::current_path();
-        fs::path dir = cwd / "tablet_meta_manager_performance_test";
-        fs::remove_all(dir);
+        sfs::path cwd = sfs::current_path();
+        sfs::path dir = cwd / "tablet_meta_manager_performance_test";
+        sfs::remove_all(dir);
     }
 
     inline static std::unique_ptr<DataDir> _s_data_dir;
@@ -472,9 +472,9 @@ protected:
     static constexpr int64_t kDeleteVectorSize = 10000;
 
     static void SetUpTestCase() {
-        fs::path tmp = fs::temp_directory_path();
-        fs::path dir = tmp / kCaseName;
-        CHECK(fs::create_directory(dir));
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / kCaseName;
+        CHECK(sfs::create_directory(dir));
         _s_data_dir = std::make_unique<DataDir>(dir.string());
         Status st = _s_data_dir->init();
         CHECK(st.ok()) << st.to_string();
@@ -503,9 +503,9 @@ protected:
     static void TearDownTestCase() {
         LOG(INFO) << "Tear down test case";
         _s_data_dir.reset();
-        fs::path tmp = fs::temp_directory_path();
-        fs::path dir = tmp / kCaseName;
-        fs::remove_all(dir);
+        sfs::path tmp = sfs::temp_directory_path();
+        sfs::path dir = tmp / kCaseName;
+        sfs::remove_all(dir);
     }
 
     inline static std::unique_ptr<DataDir> _s_data_dir;
@@ -549,9 +549,9 @@ TEST_F(DeleteVectorPerformanceTest, get_del_vector) {
 
 /*
 TEST(DeleteVectorTest, delete_del_vector) {
-    fs::path dir = fs::temp_directory_path() / "delete_del_vector";
-    fs::remove_all(dir);
-    CHECK(fs::create_directory(dir));
+    sfs::path dir = sfs::temp_directory_path() / "delete_del_vector";
+    sfs::remove_all(dir);
+    CHECK(sfs::create_directory(dir));
     auto data_dir = std::make_unique<DataDir>(dir.string());
     Status st = data_dir->init();
     CHECK(st.ok()) << st.to_string();
@@ -620,7 +620,7 @@ TEST(DeleteVectorTest, delete_del_vector) {
         auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
         LOG(INFO) << "perform " << rssid_size * tablet_size << " get_del_vector " << cost.count() << "ms";
     }
-    fs::remove_all(dir);
+    sfs::remove_all(dir);
 }
 */
 
