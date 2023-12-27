@@ -137,8 +137,8 @@ public class BrokerFileGroup implements Writable {
         this.filePaths.add(table.getPath());
 
         this.fileFormat = table.getFormat();
-        this.columnSeparator = "\t";
-        this.rowDelimiter = "\n";
+        this.columnSeparator = table.getCsvOptions().columnSeparator;
+        this.rowDelimiter = table.getCsvOptions().rowDelimiter;
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         this.fileFieldNames = new ArrayList<>();
 

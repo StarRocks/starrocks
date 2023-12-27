@@ -33,11 +33,13 @@ namespace starrocks {
 class CSVScanner final : public FileScanner {
 public:
     CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               ScannerCounter* counter);
+               ScannerCounter* counter, bool schema_only = false);
 
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
+
+    Status get_schema(std::vector<SlotDescriptor>* schema) override;
 
     void close() override;
 
@@ -70,6 +72,7 @@ private:
 
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
+    Status _init_reader();
     Status _parse_csv(Chunk* chunk);
     Status _parse_csv_v2(Chunk* chunk);
 

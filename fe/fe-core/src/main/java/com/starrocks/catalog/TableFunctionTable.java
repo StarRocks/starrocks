@@ -17,11 +17,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.load.FormatOptions;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.rpc.BackendServiceClient;
@@ -55,6 +57,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -63,6 +66,13 @@ import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
+    private static final Set<String> SUPPORTED_FORMATS;
+    static {
+        SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        SUPPORTED_FORMATS.add("parquet");
+        SUPPORTED_FORMATS.add("orc");
+        SUPPORTED_FORMATS.add("csv");
+    }
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
 
@@ -76,6 +86,10 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
 
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv_column_separator";
+
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv_row_delimiter";
+
     private String path;
     private String format;
     private String compressionType;
@@ -87,6 +101,8 @@ public class TableFunctionTable extends Table {
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
+
+    private FormatOptions.CSVOptions csvOptions = new FormatOptions.CSVOptions();
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -190,7 +206,7 @@ public class TableFunctionTable extends Table {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
 
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
+        if (!SUPPORTED_FORMATS.contains(format.toLowerCase())) {
             throw new DdlException("not supported format: " + format);
         }
 
@@ -210,6 +226,14 @@ public class TableFunctionTable extends Table {
             } catch (NumberFormatException e) {
                 throw new DdlException("failed to parse auto_detect_sample_files: ", e);
             }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            csvOptions.columnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            csvOptions.rowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
         }
     }
 
@@ -250,6 +274,17 @@ public class TableFunctionTable extends Table {
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
+        if (csvOptions.columnSeparator.length() == 1) {
+            params.setColumn_separator(csvOptions.columnSeparator.getBytes()[0]);
+        } else if (csvOptions.columnSeparator.length() > 1) {
+            params.setMulti_column_separator(csvOptions.columnSeparator);
+        }
+
+        if (csvOptions.rowDelimiter.length() == 1) {
+            params.setRow_delimiter(csvOptions.rowDelimiter.getBytes()[0]);
+        } else if (csvOptions.rowDelimiter.length() > 1) {
+            params.setMulti_row_delimiter(csvOptions.rowDelimiter);
+        }
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();
@@ -270,6 +305,9 @@ public class TableFunctionTable extends Table {
                 break;
             case "orc":
                 fileFormat = TFileFormatType.FORMAT_ORC;
+                break;
+            case "csv":
+                fileFormat = TFileFormatType.FORMAT_CSV_PLAIN;
                 break;
             default:
                 throw new TException("unsupported format: " + format);
@@ -398,5 +436,9 @@ public class TableFunctionTable extends Table {
 
     public boolean isWriteSingleFile() {
         return writeSingleFile;
+    }
+
+    public FormatOptions.CSVOptions getCsvOptions() {
+        return csvOptions;
     }
 }
