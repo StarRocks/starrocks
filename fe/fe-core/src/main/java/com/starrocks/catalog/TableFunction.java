@@ -88,6 +88,10 @@ public class TableFunction extends Function {
                     Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
             functionSet.addBuiltin(func);
         }
+
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName("unnest_bitmap"),
+                Lists.newArrayList("unnest_bitmap"), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        functionSet.addBuiltin(funcUnnestBitmap);
     }
 
     public List<Type> getTableFnReturnTypes() {

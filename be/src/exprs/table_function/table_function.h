@@ -29,9 +29,9 @@ public:
 
     void set_params(Columns columns) { this->_columns = std::move(columns); }
 
-    void set_offset(int offset) { this->_offset = offset; }
+    virtual void set_offset(int64_t offset) { this->_offset = offset; }
 
-    int get_offset() { return _offset; }
+    int64_t get_offset() { return _offset; }
 
     starrocks::Columns& get_columns() { return _columns; }
 
@@ -49,7 +49,7 @@ private:
      * In order to avoid occupying a large amount of memory,
      * the result can be returned multiple times according to this offset
      */
-    int _offset;
+    int64_t _offset;
     Status _status;
 };
 
