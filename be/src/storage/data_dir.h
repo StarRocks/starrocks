@@ -56,13 +56,6 @@ class Tablet;
 class TabletManager;
 class TxnManager;
 
-enum DiskState {
-    ONLINE,
-    OFFLINE,       // detected by health_check, tablets on OFFLINE disk will be dropped.
-    DISABLED,      // set by user, tablets on DISABLED disk will be dropped.
-    DECOMMISSIONED // set by user, tablets on DECOMMISSIONED disk will be migrated to other disks.
-};
-
 // A DataDir used to manage data in same path.
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
@@ -79,9 +72,8 @@ public:
 
     const std::string& path() const { return _path; }
     int64_t path_hash() const { return _path_hash; }
-    bool is_used() const { return _state == DiskState::ONLINE || _state == DiskState::DECOMMISSIONED; }
-    DiskState get_state() const { return _state; }
-    void set_state(DiskState state) { _state = state; }
+    bool is_used() const { return _is_used; }
+    void set_is_used(bool is_used) { _is_used = is_used; }
     int32_t cluster_id() const { return _cluster_id_mgr->cluster_id(); }
 
     DataDirInfo get_dir_info() {
@@ -90,7 +82,7 @@ public:
         info.path_hash = _path_hash;
         info.disk_capacity = _disk_capacity_bytes;
         info.available = _available_bytes;
-        info.is_used = is_used();
+        info.is_used = _is_used;
         info.storage_medium = _storage_medium;
         return info;
     }
@@ -122,7 +114,6 @@ public:
     std::string get_absolute_shard_path(int64_t shard_id);
     std::string get_absolute_tablet_path(int64_t shard_id, int64_t tablet_id, int32_t schema_hash);
 
-    Status create_dir_if_path_not_exists(const std::string& path);
     void find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths);
 
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
@@ -138,8 +129,6 @@ public:
 
     void perform_path_gc_by_tablet();
 
-    void perform_delta_column_files_gc();
-
     // check if the capacity reach the limit after adding the incoming data
     // return true if limit reached, otherwise, return false.
     // TODO(cmy): for now we can not precisely calculate the capacity StarRocks used,
@@ -150,14 +139,6 @@ public:
 
     Status update_capacity();
 
-    std::string get_persistent_index_path() { return _path + PERSISTENT_INDEX_PREFIX; }
-    Status init_persistent_index_dir();
-
-    std::string get_replication_path() { return _path + REPLICATION_PREFIX; }
-
-    // for test
-    size_t get_all_check_dcg_files_cnt() const { return _all_check_dcg_files.size(); }
-
 private:
     Status _init_data_dir();
     Status _init_tmp_dir();
@@ -166,9 +147,6 @@ private:
     Status _read_and_write_test_file();
 
     void _process_garbage_path(const std::string& path);
-
-    bool _need_gc_delta_column_files(const std::string& path, int64_t tablet_id,
-                                     std::unordered_map<int64_t, std::unordered_set<std::string>>& delta_column_files);
 
     bool _stop_bg_worker = false;
 
@@ -180,7 +158,7 @@ private:
     // the actual capacity of the disk of this data dir
     int64_t _disk_capacity_bytes;
     TStorageMedium::type _storage_medium;
-    DiskState _state;
+    bool _is_used;
 
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;
@@ -200,7 +178,6 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
-    std::set<std::string> _all_check_dcg_files;
 };
 
 } // namespace starrocks

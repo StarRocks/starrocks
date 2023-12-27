@@ -44,21 +44,22 @@
 
 namespace starrocks {
 
-EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TVersion version,
-                                       uint32_t* checksum)
-        : _tablet_id(tablet_id), _version(version), _checksum(checksum) {
+EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
+                                       TVersion version, uint32_t* checksum)
+        : _tablet_id(tablet_id), _schema_hash(schema_hash), _version(version), _checksum(checksum) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
 }
 
 Status EngineChecksumTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    return _compute_checksum();
-}
+    Status res = _compute_checksum();
+    return res;
+} // execute
 
 Status EngineChecksumTask::_compute_checksum() {
     LOG(INFO) << "begin to process compute checksum."
-              << "tablet_id=" << _tablet_id << ", version=" << _version;
+              << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
 
     if (_checksum == nullptr) {
         LOG(WARNING) << "The input checksum is a null pointer";
@@ -78,14 +79,19 @@ Status EngineChecksumTask::_compute_checksum() {
     }
 
     std::vector<uint32_t> return_columns;
-    auto tablet_schema = tablet->tablet_schema();
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
 
-    size_t num_columns = tablet_schema->num_columns();
+    size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        LogicalType type = tablet_schema->column(i).type();
-        if (is_support_checksum_type(type)) {
-            return_columns.push_back(i);
+        LogicalType type = tablet_schema.column(i).type();
+        // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
+        // a fixed value, so these two types are ignored in calculating checksum.
+        // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+        if (type == TYPE_FLOAT || type == TYPE_DOUBLE || type == TYPE_HLL || type == TYPE_OBJECT ||
+            type == TYPE_PERCENTILE || type == TYPE_JSON) {
+            continue;
         }
+        return_columns.push_back(i);
     }
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema, return_columns);

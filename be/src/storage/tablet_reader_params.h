@@ -18,7 +18,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
@@ -33,8 +32,8 @@ class RuntimeState;
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
-struct ShortKeyRangesOption;
-using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
+struct ShortKeyRangeOption;
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
@@ -57,10 +56,6 @@ struct TabletReaderParams {
     //     if config::disable_storage_page_cache is false, we use page cache
     bool use_page_cache = false;
 
-    // Allow this query to cache remote data on local disk or not.
-    // Only work for cloud native tablet(LakeTablet) now.
-    bool fill_data_cache = true;
-
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
@@ -77,12 +72,11 @@ struct TabletReaderParams {
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
-    ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     bool sorted_by_keys_per_tablet = false;
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
-    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;
 
 public:

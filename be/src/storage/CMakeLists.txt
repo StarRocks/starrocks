@@ -17,10 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
@@ -30,7 +26,6 @@ add_library(Storage STATIC
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
-    delta_column_group.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -47,10 +42,7 @@ add_library(Storage STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
-    replication_txn_manager.cpp
-    replication_utils.cpp
     rowset_update_state.cpp
-    rowset_column_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
@@ -62,7 +54,6 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
-    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -85,7 +76,6 @@ add_library(Storage STATIC
     rowset/default_value_column_iterator.cpp
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
-    rowset/fill_subfield_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
@@ -109,15 +99,14 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
+    rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
-    rowset/horizontal_update_rowset_writer.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
-    task/engine_manual_compaction_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
@@ -140,9 +129,6 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
-    row_store_encoder.cpp
-    row_store_encoder_simple.cpp
-    row_store_encoder_factory.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp
@@ -180,38 +166,27 @@ add_library(Storage STATIC
     lake/compaction_task.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/vacuum.cpp
+    lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
-    lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
-    lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
-    lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
-    lake/metacache.cpp
-    lake/primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
     binlog_builder.cpp
     binlog_manager.cpp
-    binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
-    lake/lake_local_persistent_index.cpp
-    persistent_index_compaction_manager.cpp
-    lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp
-    lake/local_pk_index_manager.cpp
-    dictionary_cache_manager.cpp)
+    persistent_index_compaction_manager.cpp)

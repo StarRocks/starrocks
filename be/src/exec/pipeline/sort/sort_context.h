@@ -53,15 +53,6 @@ public:
     void incr_sinker() { ++_num_partition_sinkers; }
     const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
     void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
-    ChunksSorter* get_chunks_sorter(int32_t driver_sequence) {
-        DCHECK_LT(driver_sequence, _chunks_sorter_partitions.size());
-        return _chunks_sorter_partitions[driver_sequence].get();
-    }
-    TTopNType::type topn_type() const { return _topn_type; }
-    int64_t offset() const { return _offset; }
-    int64_t limit() const { return _limit; }
-    const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
-    const SortDescs& sort_descs() const { return _sort_desc; }
 
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
@@ -69,13 +60,13 @@ public:
     bool is_partition_ready() const;
     void cancel();
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk();
+    StatusOr<ChunkPtr> pull_chunk();
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
                                       std::unique_ptr<RuntimeFilterCollector>&& collector);
 
 private:
-    [[nodiscard]] Status _init_merger();
+    Status _init_merger();
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;

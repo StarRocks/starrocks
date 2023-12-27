@@ -18,9 +18,8 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/tablet_schema.h"
+#include "storage/lake/tablet.h"
 
 namespace starrocks {
 class Chunk;
@@ -29,22 +28,17 @@ class TabletSchema;
 
 namespace lake {
 
-class TabletManager;
-
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
-    explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id)
-            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _schema(std::move(schema)), _txn_id(txn_id) {}
+    explicit TabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
+            : _tablet(tablet), _schema(std::move(schema)), _txn_id(txn_id) {}
 
     virtual ~TabletWriter() = default;
 
-    TabletManager* tablet_manager() const { return _tablet_mgr; }
-
-    int64_t tablet_id() const { return _tablet_id; }
+    int64_t tablet_id() const { return _tablet.id(); }
 
     int64_t txn_id() const { return _txn_id; }
 
@@ -71,7 +65,7 @@ public:
     // arranged in ascending order.
     //
     // For horizontal writer.
-    virtual Status write(const Chunk& data, SegmentPB* segment = nullptr) = 0;
+    virtual Status write(const Chunk& data) = 0;
 
     // Writes partial columns data to this rowset.
     //
@@ -87,7 +81,7 @@ public:
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`
     // and the data written after it.
-    virtual Status flush(SegmentPB* segment = nullptr) = 0;
+    virtual Status flush() = 0;
 
     // Flushes partial columns data when current columns are written finished.
     //
@@ -95,7 +89,7 @@ public:
     virtual Status flush_columns() = 0;
 
     // This method is called at the end of data processing.
-    virtual Status finish(SegmentPB* segment = nullptr) = 0;
+    virtual Status finish() = 0;
 
     // This method is called at the very end of the operator's life, both in
     // the case of a successful completion of the operation, and in the case
@@ -106,12 +100,11 @@ public:
     virtual RowsetTxnMetaPB* rowset_txn_meta() = 0;
 
     // allow to set custom tablet schema for writer, used in partial update
-    void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
+    void set_tablet_schema(std::shared_ptr<const TabletSchema> schema) { _schema = std::move(schema); }
 
 protected:
-    TabletManager* _tablet_mgr;
-    int64_t _tablet_id;
-    TabletSchemaCSPtr _schema;
+    Tablet _tablet;
+    std::shared_ptr<const TabletSchema> _schema;
     int64_t _txn_id;
     std::vector<std::string> _files;
     int64_t _num_rows = 0;

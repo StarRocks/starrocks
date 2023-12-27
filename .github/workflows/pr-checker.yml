@@ -125,17 +125,6 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
-      - name: add branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.2'
-
-      - name: add branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.1'
 
       - name: add branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
@@ -149,17 +138,17 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: remove branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: actions-ecosystem/action-remove-labels@v1
+      - name: add branch-2.4 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
+        uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: '3.2'
+          labels: '2.4'
 
-      - name: remove branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
-        uses: actions-ecosystem/action-remove-labels@v1
+      - name: add branch-2.3 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
+        uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: '3.1'
+          labels: '2.3'
 
       - name: remove branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
@@ -172,6 +161,18 @@ jobs:
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: '2.5'
+
+      - name: remove branch-2.4 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.4'
+
+      - name: remove branch-2.3 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 2.3') && contains(github.event.pull_request.labels.*.name, '2.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.3'
 
       - name: check-done
         if: >

@@ -59,8 +59,6 @@ public:
         *_is_closed = true;
     }
 
-    void stop();
-
     // get a already initialized consumer from cache,
     // if not found in cache, create a new one.
     Status get_consumer(StreamLoadContext* ctx, std::shared_ptr<DataConsumer>* ret);
@@ -73,11 +71,12 @@ public:
     // return the consumers in consumer group to the pool
     void return_consumers(DataConsumerGroup* grp);
 
-    void start_bg_worker();
+    Status start_bg_worker();
 
 private:
     void _clean_idle_consumer_bg();
 
+private:
     std::mutex _lock;
     std::shared_ptr<bool> _is_closed;
     std::list<std::shared_ptr<DataConsumer>> _pool;

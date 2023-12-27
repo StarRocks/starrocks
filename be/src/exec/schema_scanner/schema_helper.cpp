@@ -28,26 +28,23 @@
 namespace starrocks {
 
 Status SchemaHelper::get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
-                                  TGetDbsResult* result, const int timeout_ms) {
+                                  TGetDbsResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&request, &result](FrontendServiceConnection& client) { client->getDbNames(*result, request); },
-            timeout_ms);
+            ip, port, [&request, &result](FrontendServiceConnection& client) { client->getDbNames(*result, request); });
 }
 
 Status SchemaHelper::get_table_names(const std::string& ip, const int32_t port, const TGetTablesParams& request,
-                                     TGetTablesResult* result, const int timeout_ms) {
+                                     TGetTablesResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &result](FrontendServiceConnection& client) { client->getTableNames(*result, request); },
-            timeout_ms);
+            [&request, &result](FrontendServiceConnection& client) { client->getTableNames(*result, request); });
 }
 
 Status SchemaHelper::list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& request,
-                                       TListTableStatusResult* result, const int timeout_ms) {
+                                       TListTableStatusResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &result](FrontendServiceConnection& client) { client->listTableStatus(*result, request); },
-            timeout_ms);
+            [&request, &result](FrontendServiceConnection& client) { client->listTableStatus(*result, request); });
 }
 
 Status SchemaHelper::list_materialized_view_status(const std::string& ip, const int32_t port,
@@ -59,46 +56,21 @@ Status SchemaHelper::list_materialized_view_status(const std::string& ip, const 
                                                        });
 }
 
-Status SchemaHelper::list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req,
-                                TListPipesResult* res) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listPipes(*res, req); });
-}
-
-Status SchemaHelper::list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
-                                     TListPipeFilesResult* res) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listPipeFiles(*res, req); });
-}
-
-Status SchemaHelper::list_object_dependencies(const std::string& ip, int32_t port, const TObjectDependencyReq& req,
-                                              TObjectDependencyRes* res) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listObjectDependencies(*res, req); });
-}
-
-Status SchemaHelper::list_fe_locks(const std::string& ip, int32_t port, const TFeLocksReq& req, TFeLocksRes* res) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeLocks(*res, req); });
-}
-
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
-                                     TGetTablesInfoResponse* response, const int timeout_ms) {
+                                     TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &response](FrontendServiceConnection& client) { client->getTablesInfo(*response, request); },
-            timeout_ms);
+            [&request, &response](FrontendServiceConnection& client) { client->getTablesInfo(*response, request); });
 }
 
 Status SchemaHelper::describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& request,
-                                    TDescribeTableResult* result, const int timeout_ms) {
+                                    TDescribeTableResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &result](FrontendServiceConnection& client) { client->describeTable(*result, request); },
-            timeout_ms);
+            [&request, &result](FrontendServiceConnection& client) { client->describeTable(*result, request); });
 }
 
-Status SchemaHelper::show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
+Status SchemaHelper::show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
                                     TShowVariableResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
@@ -165,36 +137,6 @@ Status SchemaHelper::get_loads(const std::string& ip, const int32_t port, const 
             ip, port,
             [&var_params, &var_result](FrontendServiceConnection& client) {
                 client->getLoads(*var_result, var_params);
-            },
-            timeout_ms);
-}
-
-Status SchemaHelper::get_tracking_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                        TGetTrackingLoadsResult* var_result, int timeout_ms) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port,
-            [&var_params, &var_result](FrontendServiceConnection& client) {
-                client->getTrackingLoads(*var_result, var_params);
-            },
-            timeout_ms);
-}
-
-Status SchemaHelper::get_routine_load_jobs(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                           TGetRoutineLoadJobsResult* var_result, int timeout_ms) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port,
-            [&var_params, &var_result](FrontendServiceConnection& client) {
-                client->getRoutineLoadJobs(*var_result, var_params);
-            },
-            timeout_ms);
-}
-
-Status SchemaHelper::get_stream_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                      TGetStreamLoadsResult* var_result, int timeout_ms) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(
-            ip, port,
-            [&var_params, &var_result](FrontendServiceConnection& client) {
-                client->getStreamLoads(*var_result, var_params);
             },
             timeout_ms);
 }

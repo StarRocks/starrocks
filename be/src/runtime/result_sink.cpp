@@ -61,16 +61,10 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
         _sink_type = sink.type;
     }
 
-    if (_sink_type == TResultSinkType::HTTP_PROTOCAL) {
-        _format_type = sink.format;
-    }
-
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
         _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
-
-    _is_binary_format = sink.is_binary_row;
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
@@ -100,8 +94,7 @@ Status ResultSink::prepare(RuntimeState* state) {
     // create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
-        _writer.reset(new (std::nothrow)
-                              MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
+        _writer.reset(new (std::nothrow) MysqlResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);
@@ -156,10 +149,10 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         if (_writer != nullptr) {
             _sender->update_num_written_rows(_writer->get_written_rows());
         }
-        (void)_sender->close(final_status);
+        _sender->close(final_status);
     }
-    (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                          state->fragment_instance_id());
+    state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                    state->fragment_instance_id());
     Expr::close(_output_expr_ctxs, state);
 
     _closed = true;

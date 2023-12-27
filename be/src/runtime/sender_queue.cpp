@@ -41,6 +41,11 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
     }
 
+    _chunk_meta.tuple_id_to_index.reserve(pb_chunk.tuple_id_map().size());
+    for (int i = 0; i < pb_chunk.tuple_id_map().size(); i += 2) {
+        _chunk_meta.tuple_id_to_index[pb_chunk.tuple_id_map()[i]] = pb_chunk.tuple_id_map()[i + 1];
+    }
+
     _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());
     for (int i = 0; i < pb_chunk.is_nulls().size(); ++i) {
         _chunk_meta.is_nulls[i] = pb_chunk.is_nulls()[i];
@@ -53,40 +58,26 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
-    std::set<SlotId> hit_flags;
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
-        phmap::flat_hash_map<SlotId, TypeDescriptor> slot_id_to_type;
-        std::for_each(slots.begin(), slots.end(), [&](SlotDescriptor* slot) {
-            slot_id_to_type.insert({slot->id(), slot->type()});
-        });
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
-            auto iter = slot_id_to_type.find(kv.first);
-            if (iter != slot_id_to_type.end()) {
-                _chunk_meta.types[kv.second] = iter->second;
-                ++column_index;
-                hit_flags.insert(kv.first);
+            //TODO: performance?
+            for (auto slot : slots) {
+                if (kv.first == slot->id()) {
+                    _chunk_meta.types[kv.second] = slot->type();
+                    ++column_index;
+                    break;
+                }
             }
         }
     }
+    for (const auto& kv : _chunk_meta.tuple_id_to_index) {
+        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
+        ++column_index;
+    }
 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
-        std::vector<std::pair<SlotId, size_t>> missing_pairs;
-        for (const auto& kv : _chunk_meta.slot_id_to_index) {
-            if (hit_flags.find(kv.first) == hit_flags.end()) {
-                missing_pairs.emplace_back(kv.first, kv.second);
-            }
-        }
-        std::stringstream ss;
-        ss << "build chunk meta error";
-        ss << ", fragment_instance_id=" << _recvr->fragment_instance_id();
-        ss << ", node_id=" << _recvr->_dest_node_id;
-        ss << ", missing pairs: ";
-        for (const auto& kv : missing_pairs) {
-            ss << "(slot:" << kv.first << ", index:" << kv.second << ") ";
-        }
-        std::string msg = ss.str();
-        return Status::InternalError(msg);
+        return Status::InternalError("build chunk meta error");
     }
 
     // decode extra chunk meta
@@ -171,7 +162,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const i
         // and the execution thread will call run() to let brpc continue to send packets,
         // and there will be memory release
 #ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
 
@@ -460,8 +451,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
         auto* closure = item.closure;
         if (closure != nullptr) {
 #ifndef BE_TEST
-            MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
             COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
@@ -536,9 +526,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     {
         std::lock_guard<Mutex> l(_lock);
-        if (UNLIKELY(_sender_eos_set.find(be_number) != _sender_eos_set.end())) {
-            LOG(ERROR) << "More than one EOS from " << be_number << " in fragment "
-                       << print_id(_recvr->fragment_instance_id()) << " on node " << _recvr->dest_node_id();
+        if (_sender_eos_set.find(be_number) != _sender_eos_set.end()) {
             return;
         }
         _sender_eos_set.insert(be_number);
@@ -547,7 +535,6 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
-    DCHECK(_num_remaining_senders >= 0);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
@@ -579,6 +566,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             }
         }
     }
+
     for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
@@ -621,29 +609,17 @@ void DataStreamRecvr::PipelineSenderQueue::check_leak_closure() {
 
 Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request,
                                                                      Metrics& metrics) {
-    // We only need to build chunk meta on first chunk and not use_pass_through
-    // By using pass through, chunks are transmitted in shared memory without ser/deser
-    // So there is no need to build chunk meta.
-    if (request.use_pass_through()) {
-        return Status::OK();
-    }
-    if (_is_chunk_meta_built) {
-        return Status::OK();
-    }
-
     ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
     std::lock_guard<Mutex> l(_lock);
     wait_timer.stop();
-
-    if (_is_chunk_meta_built) {
-        return Status::OK();
+    // We only need to build chunk meta on first chunk and not use_pass_through
+    // By using pass through, chunks are transmitted in shared memory without ser/deser
+    // So there is no need to build chunk meta.
+    if (_chunk_meta.types.empty() && !request.use_pass_through()) {
+        SCOPED_TIMER(metrics.deserialize_chunk_timer);
+        auto& pchunk = request.chunks(0);
+        return _build_chunk_meta(pchunk);
     }
-
-    SCOPED_TIMER(metrics.deserialize_chunk_timer);
-    auto& pchunk = request.chunks(0);
-    RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-    _is_chunk_meta_built = true;
-
     return Status::OK();
 }
 
@@ -700,8 +676,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
-        VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
-                 << (_is_cancelled ? "cancelled queue" : "ended queue");
         return Status::OK();
     }
 

@@ -20,9 +20,7 @@ namespace starrocks {
 
 class StructFunctions {
 public:
-    DEFINE_VECTORIZED_FN(new_struct);
-
-    DEFINE_VECTORIZED_FN(named_struct);
+    DEFINE_VECTORIZED_FN(row);
 };
 
 } // namespace starrocks

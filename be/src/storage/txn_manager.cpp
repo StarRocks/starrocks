@@ -297,8 +297,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
                   << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
-                  << " #uptfiles:" << rowset_ptr->num_update_files();
+                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files();
     }
     return Status::OK();
 }
@@ -314,7 +313,6 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
         }
     } else {
         auto st = tablet->add_inc_rowset(rowset, version);
-        tablet->remove_in_writing_data_size(transaction_id);
         if (!st.ok() && !st.is_already_exist()) {
             // TODO: rollback saved rowset if error?
             LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()
@@ -406,11 +404,8 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        auto st = token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
         pair_vec[i].second = dir->path();
-        if (!st.ok()) {
-            pair_vec[i].first = std::move(st);
-        }
         i++;
     }
 

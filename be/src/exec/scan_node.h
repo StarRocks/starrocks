@@ -38,7 +38,6 @@
 #include <optional>
 #include <string>
 
-#include "column/column_access_path.h"
 #include "exec/exec_node.h"
 #include "gen_cpp/InternalService_types.h"
 #include "util/runtime_profile.h"
@@ -121,15 +120,12 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
     virtual bool always_shared_scan() const { return false; }
-    virtual bool output_chunk_by_bucket() const { return false; }
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
     bool is_shared_scan_enabled() const;
-
-    const std::vector<ColumnAccessPathPtr>& column_access_paths() const { return _column_access_paths; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
@@ -148,8 +144,6 @@ protected:
     bool _enable_shared_scan = false;
     int64_t _mem_limit = 0;
     int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
-
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
 };
 
 } // namespace starrocks

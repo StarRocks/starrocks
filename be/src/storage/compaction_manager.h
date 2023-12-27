@@ -38,9 +38,7 @@ class CompactionManager {
 public:
     CompactionManager();
 
-    ~CompactionManager() = default;
-
-    void stop();
+    ~CompactionManager();
 
     void init_max_task_num(int32_t num);
 
@@ -55,9 +53,9 @@ public:
 
     bool pick_candidate(CompactionCandidate* candidate);
 
-    void update_tablet_async(const TabletSharedPtr& tablet);
+    void update_tablet_async(TabletSharedPtr tablet);
 
-    void update_tablet(const TabletSharedPtr& tablet);
+    void update_tablet(TabletSharedPtr tablet);
 
     bool register_task(CompactionTask* compaction_task);
 
@@ -65,15 +63,9 @@ public:
 
     void clear_tasks();
 
-    void get_running_status(std::string* json_result);
-
     uint16_t running_tasks_num() {
         std::lock_guard lg(_tasks_mutex);
-        size_t res = 0;
-        for (const auto& it : _running_tasks) {
-            res += it.second.size();
-        }
-        return res;
+        return _running_tasks.size();
     }
 
     bool check_if_exceed_max_task_num() {
@@ -83,11 +75,7 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        size_t running_tasks_num = 0;
-        for (const auto& it : _running_tasks) {
-            running_tasks_num += it.second.size();
-        }
-        if (running_tasks_num >= _max_task_num) {
+        if (_running_tasks.size() >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
@@ -120,14 +108,6 @@ public:
 
     int64_t cumulative_compaction_concurrency();
 
-    bool has_running_task(const TabletSharedPtr& tablet);
-
-    void stop_compaction(const TabletSharedPtr& tablet);
-
-    std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
-
-    int get_waiting_task_num();
-
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
@@ -149,7 +129,7 @@ private:
 
     std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
-    std::map<int64_t, std::unordered_set<CompactionTask*>> _running_tasks;
+    std::unordered_set<CompactionTask*> _running_tasks;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;

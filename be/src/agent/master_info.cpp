@@ -72,12 +72,4 @@ std::optional<int64_t> get_backend_id() {
     return {};
 }
 
-std::optional<TRunMode::type> get_master_run_mode() {
-    MasterInfoPtr ptr;
-    if (get_master_info(&ptr) && ptr->__isset.run_mode) {
-        return ptr->run_mode;
-    }
-    return {};
-}
-
 } // namespace starrocks

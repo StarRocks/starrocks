@@ -2,7 +2,6 @@
 
 #include <cstring>
 #include <string>
-#include <string_view>
 using std::string;
 
 #include "gutil/basictypes.h"
@@ -75,8 +74,6 @@ public:
     inline SubstituteArg(const char* value) // NOLINT(runtime/explicit)
             : text_(value), size_(value == nullptr ? 0 : strlen(text_)) {}
     inline SubstituteArg(const string& value) // NOLINT(runtime/explicit)
-            : text_(value.data()), size_(value.size()) {}
-    inline SubstituteArg(std::string_view value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}
     inline SubstituteArg(const StringPiece& value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}

@@ -25,28 +25,16 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
-#include "storage/tablet_schema.h"
-#include "util/random.h"
 
 namespace starrocks {
 
 class MemPool;
 class RuntimeState;
 
-struct OlapTableColumnParam {
-    std::vector<TabletColumn*> columns;
-    std::vector<int32_t> sort_key_uid;
-    int32_t short_key_column_count;
-
-    void to_protobuf(POlapTableColumnParam* pcolumn) const;
-};
-
 struct OlapTableIndexSchema {
     int64_t index_id;
     std::vector<SlotDescriptor*> slots;
     int32_t schema_hash;
-    OlapTableColumnParam* column_param;
-    ExprContext* where_clause = nullptr;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -56,7 +44,7 @@ public:
     OlapTableSchemaParam() = default;
     ~OlapTableSchemaParam() noexcept = default;
 
-    Status init(const TOlapTableSchemaParam& tschema, RuntimeState* state = nullptr);
+    Status init(const TOlapTableSchemaParam& tschema);
     Status init(const POlapTableSchemaParam& pschema);
 
     int64_t db_id() const { return _db_id; }
@@ -224,14 +212,12 @@ public:
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
     Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-                        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
+                        std::vector<uint8_t>* selection, int* invalid_row_index, int64_t txn_id,
                         std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     const std::map<int64_t, OlapTablePartition*>& get_partitions() const { return _partitions; }
 
     Status add_partitions(const std::vector<TOlapTablePartition>& partitions);
-
-    Status remove_partitions(const std::vector<int64_t>& partition_ids);
 
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
@@ -261,10 +247,7 @@ private:
 
     ObjectPool _obj_pool;
     std::map<int64_t, OlapTablePartition*> _partitions;
-    // one partition have multi sub partition
-    std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
-
-    Random _rand{(uint32_t)time(nullptr)};
+    std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
 };
 
 } // namespace starrocks

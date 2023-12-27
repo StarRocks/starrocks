@@ -1,3 +1,0 @@
-// detail see $JAVA_HOME/jre/lib/security/java.policy
-grant {
-};

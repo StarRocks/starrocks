@@ -46,7 +46,6 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -101,45 +100,28 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        if (query_globals.__isset.timestamp_us) {
-            _timestamp_us = query_globals.timestamp_us;
-        } else {
-            _timestamp_us = query_globals.timestamp_ms * 1000;
-        }
+        _timestamp_ms = query_globals.timestamp_ms;
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_us = timestamp * 1000000;
+        _timestamp_ms = timestamp * 1000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_us = 0;
+        _timestamp_ms = 0;
     }
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
 
-RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
-    _profile = std::make_shared<RuntimeProfile>("<unnamed>");
-    _query_options.batch_size = DEFAULT_CHUNK_SIZE;
-    _timezone = TimezoneUtils::default_time_zone;
-    _timestamp_us = 0;
-}
-
 RuntimeState::~RuntimeState() {
-    // dict exprs
-    _dict_optimize_parser.close();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
         delete _error_log_file;
         _error_log_file = nullptr;
-    }
-    // close rejected record file
-    if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
-        _rejected_record_file->close();
     }
 }
 
@@ -149,22 +131,18 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     _query_options = query_options;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        if (query_globals.__isset.timestamp_us) {
-            _timestamp_us = query_globals.timestamp_us;
-        } else {
-            _timestamp_us = query_globals.timestamp_ms * 1000;
-        }
+        _timestamp_ms = query_globals.timestamp_ms;
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_us = timestamp * 1000000;
+        _timestamp_ms = timestamp * 1000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_us = 0;
+        _timestamp_ms = 0;
     }
     if (query_globals.__isset.last_query_id) {
         _last_query_id = query_globals.last_query_id;
@@ -197,7 +175,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {
-        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+        parent = _exec_env->query_pool_mem_tracker();
     }
 
     _query_mem_tracker =
@@ -221,9 +199,10 @@ void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_me
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-void RuntimeState::init_instance_mem_tracker() {
+Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
+    return Status::OK();
 }
 
 ObjectPool* RuntimeState::global_obj_pool() const {
@@ -238,11 +217,11 @@ std::string RuntimeState::error_log() {
     return boost::algorithm::join(_error_log, "\n");
 }
 
-bool RuntimeState::log_error(std::string_view error) {
+bool RuntimeState::log_error(const std::string& error) {
     std::lock_guard<std::mutex> l(_error_log_lock);
 
     if (_error_log.size() < _query_options.max_errors) {
-        _error_log.emplace_back(error);
+        _error_log.push_back(error);
         return true;
     }
 
@@ -254,7 +233,7 @@ void RuntimeState::log_error(const Status& status) {
         return;
     }
 
-    log_error(status.message());
+    log_error(status.get_error_msg());
 }
 
 void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
@@ -276,24 +255,14 @@ bool RuntimeState::use_page_cache() {
     return true;
 }
 
-bool RuntimeState::use_column_pool() const {
-    if (config::disable_column_pool) {
-        return false;
-    }
-
-    if (_query_options.__isset.use_column_pool) {
-        return _query_options.use_column_pool;
-    }
-    return true;
-}
-
-Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
+Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
+                                            const std::string* msg) {
     DCHECK_GE(failed_allocation_size, 0);
     {
         std::lock_guard<std::mutex> l(_process_status_lock);
         if (_process_status.ok()) {
-            if (!msg.empty()) {
-                _process_status = Status::MemoryLimitExceeded(msg);
+            if (msg != nullptr) {
+                _process_status = Status::MemoryLimitExceeded(*msg);
             } else {
                 _process_status = Status::MemoryLimitExceeded("Memory limit exceeded");
             }
@@ -335,7 +304,7 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
 const int64_t MAX_ERROR_NUM = 50;
 
 Status RuntimeState::create_error_log_file() {
-    RETURN_IF_ERROR(_exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path));
+    _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
     _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
@@ -345,23 +314,6 @@ Status RuntimeState::create_error_log_file() {
         LOG(WARNING) << error_msg.str();
         return Status::InternalError(error_msg.str());
     }
-    return Status::OK();
-}
-
-Status RuntimeState::create_rejected_record_file() {
-    auto rejected_record_absolute_path = _exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
-            "", _db, _load_label, _txn_id, _fragment_instance_id);
-    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
-
-    _rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
-    if (!_rejected_record_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
-    }
-    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
-    _rejected_record_file_path = rejected_record_absolute_path;
     return Status::OK();
 }
 
@@ -382,7 +334,7 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_error_log_file == nullptr) {
         Status status = create_error_log_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.message();
+            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
             if (_error_log_file != nullptr) {
                 _error_log_file->close();
                 delete _error_log_file;
@@ -412,32 +364,6 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     }
 }
 
-void RuntimeState::append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
-                                                  const std::string& source) {
-    std::lock_guard<std::mutex> l(_rejected_record_lock);
-    // Only load job need to write rejected record
-    if (_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-
-    // If file havn't been opened, open it here
-    if (_rejected_record_file == nullptr) {
-        Status status = create_rejected_record_file();
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (_rejected_record_file != nullptr) {
-                _rejected_record_file->close();
-                _rejected_record_file.reset();
-            }
-            return;
-        }
-    }
-    _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
-
-    // TODO(meegoo): custom delimiter
-    (*_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
-}
-
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {
         return _query_options.load_mem_limit;
@@ -457,18 +383,8 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
-DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
-    return &_dict_optimize_parser;
-}
-
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
-    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
-    return Status::OK();
-}
-
-Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
-    return _dict_optimize_parser.init_dict_exprs(exprs);
+    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
@@ -499,12 +415,15 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
-std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
-    return _query_ctx->maintained_query_recv();
+bool RuntimeState::enable_query_statistic() const {
+    return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
 }
 
-std::atomic_int64_t* RuntimeState::mutable_total_spill_bytes() {
-    return _query_ctx->mutable_total_spill_bytes();
+std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
+    if (!enable_query_statistic()) {
+        return nullptr;
+    }
+    return _query_ctx->maintained_query_recv();
 }
 
 Status RuntimeState::reset_epoch() {

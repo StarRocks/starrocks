@@ -46,16 +46,9 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, ColumnPtr column,
-                                 MutableJoinRuntimeFilterPtr runtime_filter)
-            : multi_partitioned(multi_partitioned),
-              eq_null(eq_null),
-              column(std::move(column)),
-              runtime_filter(std::move(runtime_filter)) {}
-    bool multi_partitioned;
+    RuntimeBloomFilterBuildParam(bool eq_null, ColumnPtr column) : eq_null(eq_null), column(std::move(column)) {}
     bool eq_null;
     ColumnPtr column;
-    MutableJoinRuntimeFilterPtr runtime_filter;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub
@@ -177,7 +170,7 @@ public:
               _num_operators_generated(num_operators_generated),
               _rf_probe_collector(std::move(rf_probe_collector)) {}
 
-    [[nodiscard]] Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
         if ((_count.fetch_sub(1) & PREPARE_COUNTER_MASK) == _num_operators_generated) {
             RETURN_IF_ERROR(_rf_probe_collector.prepare(state, row_desc, p));
             RETURN_IF_ERROR(_rf_probe_collector.open(state));
@@ -226,17 +219,16 @@ public:
     }
 
     // mark runtime_filter as always true.
-    StatusOr<bool> set_always_true() {
+    bool set_always_true() {
         _always_true = true;
         return _try_do_merge({});
     }
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
-    [[nodiscard]] StatusOr<bool> add_partial_filters(
-            size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
-            OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
-            RuntimeBloomFilters&& bloom_filter_descriptors) {
+    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
+                                       OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
+                                       RuntimeBloomFilters&& bloom_filter_descriptors) {
         DCHECK(idx < _partial_bloom_filter_build_params.size());
         // both _ht_row_counts, _partial_in_filters, _partial_bloom_filter_build_params are reserved beforehand,
         // each HashJoinBuildOperator mutates its corresponding slot indexed by driver_sequence, so concurrent
@@ -256,7 +248,7 @@ public:
         return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
-    [[nodiscard]] Status merge_local_in_filters() {
+    Status merge_local_in_filters() {
         bool can_merge_in_filters = true;
         size_t num_rows = 0;
         ssize_t k = -1;
@@ -314,19 +306,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status merge_local_bloom_filters() {
-        if (_bloom_filter_descriptors.empty()) {
-            return Status::OK();
-        }
-        auto multi_partitioned = _bloom_filter_descriptors[0]->layout().pipeline_level_multi_partitioned();
-        if (multi_partitioned) {
-            return merge_multi_partitioned_local_bloom_filters();
-        } else {
-            return merge_singleton_local_bloom_filters();
-        }
-    }
-
-    [[nodiscard]] Status merge_singleton_local_bloom_filters() {
+    Status merge_local_bloom_filters() {
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -408,83 +388,8 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status merge_multi_partitioned_local_bloom_filters() {
-        if (_partial_bloom_filter_build_params.empty()) {
-            return Status::OK();
-        }
-        size_t row_count = 0;
-        for (auto count : _ht_row_counts) {
-            row_count += count;
-        }
-        for (auto& desc : _bloom_filter_descriptors) {
-            desc->set_is_pipeline(true);
-            // skip if it does not have consumer.
-            if (!desc->has_consumer()) continue;
-            // skip if ht.size() > limit, and it's only for local.
-            if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
-            LogicalType build_type = desc->build_expr_type();
-            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
-            if (filter == nullptr) continue;
-            if (desc->has_remote_targets() && row_count > _global_rf_limit) {
-                filter->clear_bf();
-            } else {
-                filter->init(row_count);
-            }
-            filter->set_join_mode(desc->join_mode());
-            desc->set_runtime_filter(filter);
-        }
-
-        const auto& num_bloom_filters = _bloom_filter_descriptors.size();
-
-        // remove empty params that generated in two cases:
-        // 1. the corresponding HashJoinProbeOperator is finished in short-circuit style because HashJoinBuildOperator
-        // above this operator has constructed an empty hash table.
-        // 2. the HashJoinBuildOperator is finished in advance because the fragment instance is canceled
-        _partial_bloom_filter_build_params.erase(
-                std::remove_if(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
-                               [](auto& opt_params) { return opt_params.empty(); }),
-                _partial_bloom_filter_build_params.end());
-
-        // there is no non-empty params, set all runtime filter to nullptr
-        if (_partial_bloom_filter_build_params.empty()) {
-            for (auto& desc : _bloom_filter_descriptors) {
-                desc->set_runtime_filter(nullptr);
-            }
-            return Status::OK();
-        }
-
-        // all params must have the same size as num_bloom_filters
-        DCHECK(std::all_of(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
-                           [&num_bloom_filters](auto& opt_params) { return opt_params.size() == num_bloom_filters; }));
-
-        for (auto i = 0; i < num_bloom_filters; ++i) {
-            auto& desc = _bloom_filter_descriptors[i];
-            if (desc->runtime_filter() == nullptr) {
-                continue;
-            }
-            auto can_merge =
-                    std::all_of(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
-                                [i](auto& opt_params) { return opt_params[i].has_value(); });
-            if (!can_merge) {
-                desc->set_runtime_filter(nullptr);
-                continue;
-            }
-            auto* rf = desc->runtime_filter();
-            for (auto& opt_params : _partial_bloom_filter_build_params) {
-                auto& opt_param = opt_params[i];
-                DCHECK(opt_param.has_value());
-                auto& param = opt_param.value();
-                if (param.column == nullptr || param.column->empty()) {
-                    continue;
-                }
-                rf->concat(param.runtime_filter.get());
-            }
-        }
-        return Status::OK();
-    }
-
 private:
-    StatusOr<bool> _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
+    bool _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
         if (1 == _num_active_builders--) {
             if (_always_true) {
                 _partial_in_filters.clear();
@@ -492,8 +397,8 @@ private:
                 return true;
             }
             _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
-            RETURN_IF_ERROR(merge_local_in_filters());
-            RETURN_IF_ERROR(merge_local_bloom_filters());
+            merge_local_in_filters();
+            merge_local_bloom_filters();
             return true;
         }
         return false;

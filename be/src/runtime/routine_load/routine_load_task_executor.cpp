@@ -48,39 +48,6 @@
 
 namespace starrocks {
 
-Status RoutineLoadTaskExecutor::init() {
-    REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
-        return _task_map.size();
-    })
-
-    auto st = ThreadPoolBuilder("routine_load")
-                      .set_min_threads(0)
-                      .set_max_threads(INT_MAX)
-                      .set_max_queue_size(INT_MAX)
-                      .build(&_thread_pool);
-    RETURN_IF_ERROR(st);
-
-    _data_consumer_pool.start_bg_worker();
-    return Status::OK();
-}
-
-void RoutineLoadTaskExecutor::stop() {
-    _data_consumer_pool.stop();
-
-    if (_thread_pool) {
-        _thread_pool->shutdown();
-    }
-
-    for (auto& it : _task_map) {
-        auto ctx = it.second;
-        if (ctx->unref()) {
-            delete ctx;
-        }
-    }
-    _task_map.clear();
-}
-
 Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
                                                          std::vector<int32_t>* partition_ids, int timeout_ms,
                                                          std::string* group_id) {
@@ -268,6 +235,12 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         return Status::OK();
     }
 
+    if (_task_map.size() >= config::routine_load_thread_pool_size) {
+        LOG(INFO) << "too many tasks in thread pool. reject task: " << UniqueId(task.id) << ", job id: " << task.job_id
+                  << ", queue size: " << _thread_pool.get_queue_size() << ", current tasks num: " << _task_map.size();
+        return Status::TooManyTasks(UniqueId(task.id).to_string());
+    }
+
     // create the context
     auto* ctx = new StreamLoadContext(_exec_env);
     ctx->load_type = TLoadType::ROUTINE_LOAD;
@@ -330,20 +303,15 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     _task_map[ctx->id] = ctx;
 
     // offer the task to thread pool
-    if (!_thread_pool
-                 ->submit_func([this, ctx, capture0 = &_data_consumer_pool,
-                                capture1 =
-                                        [this](StreamLoadContext* ctx) {
-                                            std::unique_lock<std::mutex> l(_lock);
-                                            _task_map.erase(ctx->id);
-                                            LOG(INFO) << "finished routine load task " << ctx->brief()
-                                                      << ", status: " << ctx->status.message()
-                                                      << ", current tasks num: " << _task_map.size();
-                                            if (ctx->unref()) {
-                                                delete ctx;
-                                            }
-                                        }] { exec_task(ctx, capture0, capture1); })
-                 .ok()) {
+    if (!_thread_pool.offer([this, ctx, capture0 = &_data_consumer_pool, capture1 = [this](StreamLoadContext* ctx) {
+            std::unique_lock<std::mutex> l(_lock);
+            _task_map.erase(ctx->id);
+            LOG(INFO) << "finished routine load task " << ctx->brief() << ", status: " << ctx->status.get_error_msg()
+                      << ", current tasks num: " << _task_map.size();
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        }] { exec_task(ctx, capture0, capture1); })) {
         // failed to submit task, clear and return
         LOG(WARNING) << "failed to submit routine load task: " << ctx->brief();
         _task_map.erase(ctx->id);
@@ -373,7 +341,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 
     // create data consumer group
     std::shared_ptr<DataConsumerGroup> consumer_grp;
-    HANDLE_ERROR(consumer_pool->get_consumer_grp(ctx, &consumer_grp), "failed to get consumers")
+    HANDLE_ERROR(consumer_pool->get_consumer_grp(ctx, &consumer_grp), "failed to get consumers");
 
     // create and set pipe
     std::shared_ptr<StreamLoadPipe> pipe;
@@ -382,7 +350,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         pipe = std::make_shared<KafkaConsumerPipe>();
         Status st = std::static_pointer_cast<KafkaDataConsumerGroup>(consumer_grp)->assign_topic_partitions(ctx);
         if (!st.ok()) {
-            err_handler(ctx, st, st.message());
+            err_handler(ctx, st, st.get_error_msg());
             cb(ctx);
             return;
         }
@@ -392,7 +360,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         pipe = std::make_shared<PulsarConsumerPipe>();
         Status st = std::static_pointer_cast<PulsarDataConsumerGroup>(consumer_grp)->assign_topic_partitions(ctx);
         if (!st.ok()) {
-            err_handler(ctx, st, st.message());
+            err_handler(ctx, st, st.get_error_msg());
             cb(ctx);
             return;
         }
@@ -409,16 +377,21 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     ctx->body_sink = pipe;
 
     // must put pipe before executing plan fragment
-    HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe")
+    HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe");
 
+#ifndef BE_TEST
     // execute plan fragment, async
-    HANDLE_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx), "failed to execute plan fragment")
+    HANDLE_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx), "failed to execute plan fragment");
+#else
+    // only for test
+    HANDLE_ERROR(_execute_plan_for_test(ctx), "test failed");
+#endif
 
     // start to consume, this may block a while
-    HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed")
+    HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed");
 
     // wait for all consumers finished
-    HANDLE_ERROR(ctx->future.get(), "consume failed")
+    HANDLE_ERROR(ctx->future.get(), "consume failed");
 
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
@@ -427,7 +400,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     consumer_pool->return_consumers(consumer_grp.get());
 
     // commit txn
-    HANDLE_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx), "commit failed")
+    HANDLE_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx), "commit failed");
 
     // commit messages
     switch (ctx->load_src_type) {
@@ -437,7 +410,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
-            LOG(WARNING) << st.message();
+            LOG(WARNING) << st.get_error_msg();
             break;
         }
 
@@ -451,7 +424,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
-            LOG(WARNING) << st.message();
+            LOG(WARNING) << st.get_error_msg();
         }
         _data_consumer_pool.return_consumer(consumer);
 
@@ -471,7 +444,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
-                LOG(WARNING) << st.message();
+                LOG(WARNING) << st.get_error_msg();
                 break;
             }
 
@@ -480,7 +453,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
-                LOG(WARNING) << st.message();
+                LOG(WARNING) << st.get_error_msg();
             }
 
             // do ack
@@ -488,7 +461,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
-                LOG(WARNING) << st.message();
+                LOG(WARNING) << st.get_error_msg();
             }
 
             // return consumer
@@ -501,16 +474,56 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     cb(ctx);
 }
 
-void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg) {
-    LOG(WARNING) << err_msg << " " << ctx->brief();
+void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg) {
+    LOG(WARNING) << err_msg;
     ctx->status = st;
     if (ctx->need_rollback) {
-        (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+        _exec_env->stream_load_executor()->rollback_txn(ctx);
         ctx->need_rollback = false;
     }
     if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel(st);
     }
+}
+
+// for test only
+Status RoutineLoadTaskExecutor::_execute_plan_for_test(StreamLoadContext* ctx) {
+    ctx->ref();
+    auto mock_consumer = [this, ctx]() {
+        std::shared_ptr<StreamLoadPipe> pipe = _exec_env->load_stream_mgr()->get(ctx->id);
+        bool eof = false;
+        std::stringstream ss;
+        while (true) {
+            char one;
+            size_t len = 1;
+            Status st = pipe->read((uint8_t*)&one, &len, &eof);
+            if (!st.ok()) {
+                LOG(WARNING) << "read failed";
+                ctx->promise.set_value(st);
+                break;
+            }
+
+            if (eof) {
+                ctx->promise.set_value(Status::OK());
+                break;
+            }
+
+            if (one == '\n') {
+                LOG(INFO) << "get line: " << ss.str();
+                ss.str("");
+                ctx->number_loaded_rows++;
+            } else {
+                ss << one;
+            }
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    };
+
+    std::thread t1(mock_consumer);
+    t1.detach();
+    return Status::OK();
 }
 
 } // namespace starrocks

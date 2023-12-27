@@ -26,34 +26,26 @@ namespace starrocks {
 // this class is a helper for getting schema info from FE
 class SchemaHelper {
 public:
-    static Status get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
-                               TGetDbsResult* result, const int timeout_ms);
+    static Status get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& db_params,
+                               TGetDbsResult* db_result);
 
     static Status get_table_names(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
-                                  TGetTablesResult* table_result, const int timeout_ms);
+                                  TGetTablesResult* table_result);
 
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
-                                    TListTableStatusResult* table_result, const int timeout_ms);
+                                    TListTableStatusResult* table_result);
 
     static Status list_materialized_view_status(const std::string& ip, const int32_t port,
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
-    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
-    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
-                                  TListPipeFilesResult* res);
-
-    static Status list_object_dependencies(const std::string& ip, int32_t port, const TObjectDependencyReq& req,
-                                           TObjectDependencyRes* res);
-    static Status list_fe_locks(const std::string& ip, int32_t port, const TFeLocksReq& req, TFeLocksRes* res);
-
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
-                                  TGetTablesInfoResponse* response, const int timeout_ms);
+                                  TGetTablesInfoResponse* response);
 
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
-                                 TDescribeTableResult* desc_result, const int timeout_ms);
+                                 TDescribeTableResult* desc_result);
 
-    static Status show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
+    static Status show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
                                  TShowVariableResult* var_result);
 
     static std::string extract_db_name(const std::string& full_name);
@@ -72,15 +64,6 @@ public:
 
     static Status get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
                             TGetLoadsResult* var_result, int timeout_ms);
-
-    static Status get_tracking_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                     TGetTrackingLoadsResult* var_result, int timeout_ms);
-
-    static Status get_routine_load_jobs(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                        TGetRoutineLoadJobsResult* var_result, int timeout_ms);
-
-    static Status get_stream_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
-                                   TGetStreamLoadsResult* var_result, int timeout_ms);
 
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);

@@ -40,6 +40,7 @@ public:
         }
 
         std::vector<ColumnPtr> element_columns(num_elements);
+        std::vector<Column*> element_raw_ptrs(num_elements);
         for (size_t i = 0; i < num_elements; i++) {
             ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
             num_rows = std::max(num_rows, col->size());
@@ -48,6 +49,7 @@ public:
 
         for (size_t i = 0; i < num_elements; i++) {
             element_columns[i] = ColumnHelper::unfold_const_column(element_type, num_rows, element_columns[i]);
+            element_raw_ptrs[i] = element_columns[i].get();
         }
 
         auto array_elements = ColumnHelper::create_column(element_type, true);
@@ -57,7 +59,7 @@ public:
         uint32_t curr_offset = 0;
         array_offsets->append(curr_offset);
         for (size_t i = 0; i < num_rows; i++) {
-            for (const auto& element : element_columns) {
+            for (const Column* element : element_raw_ptrs) {
                 array_elements->append(*element, i, 1);
             }
             curr_offset += num_elements;

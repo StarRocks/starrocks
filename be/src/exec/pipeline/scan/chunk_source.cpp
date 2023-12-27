@@ -54,7 +54,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     }
 
     int64_t time_spent_ns = 0;
-    auto [owner_id, version] = _morsel->get_lane_owner_and_version();
+    auto [tablet_id, version] = _morsel->get_lane_owner_and_version();
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
@@ -73,25 +73,25 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
-                    chunk->owner_info().set_owner_id(owner_id, true);
+                    chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 } else if (_status.is_time_out()) {
-                    chunk->owner_info().set_owner_id(owner_id, false);
+                    chunk->owner_info().set_owner_id(tablet_id, false);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
                 }
                 break;
             }
 
-            chunk->owner_info().set_owner_id(owner_id, false);
+            chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
-        if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {
+        if (time_spent_ns >= YIELD_MAX_TIME_SPENT) {
             break;
         }
 
-        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT &&
+        if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
             _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }

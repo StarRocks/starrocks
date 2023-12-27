@@ -36,7 +36,8 @@ public:
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
+                                      std::vector<GroupReaderParam::Column>& read_cols,
+                                      bool& _is_only_partition_scan) const = 0;
 
     virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
 
@@ -63,7 +64,6 @@ protected:
     GroupReaderParam::Column _build_column(int32_t field_idx_in_parquet, int32_t col_idx_in_chunk,
                                            const tparquet::Type::type& col_type_in_parquet,
                                            const TypeDescriptor& col_type_in_chunk, const SlotId& slot_id,
-                                           bool decode_needed,
                                            const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
         column.field_idx_in_parquet = field_idx_in_parquet;
@@ -72,18 +72,17 @@ protected:
         column.col_type_in_chunk = col_type_in_chunk;
         column.slot_id = slot_id;
         column.t_iceberg_schema_field = t_iceberg_schema_field;
-        column.decode_needed = decode_needed;
         return column;
     }
 
     bool _case_sensitive = false;
-    FileMetaData* _file_metadata;
+    std::shared_ptr<FileMetaData> _file_metadata;
 };
 
 class ParquetMetaHelper : public MetaHelper {
 public:
-    ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) {
-        _file_metadata = file_metadata;
+    ParquetMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive) {
+        _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
     }
     ~ParquetMetaHelper() override = default;
@@ -93,15 +92,17 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              bool& _is_only_partition_scan) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 };
 
 class IcebergMetaHelper : public MetaHelper {
 public:
-    IcebergMetaHelper(FileMetaData* file_metadata, bool case_sensitive, const TIcebergSchema* t_iceberg_schema) {
-        _file_metadata = file_metadata;
+    IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
+                      const TIcebergSchema* t_iceberg_schema) {
+        _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
@@ -115,7 +116,8 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              bool& _is_only_partition_scan) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 
 private:

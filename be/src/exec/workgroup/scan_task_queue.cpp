@@ -33,117 +33,7 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
-    }
     return _queue.try_put(std::move(task));
-}
-
-void PriorityScanTaskQueue::force_put(ScanTask task) {
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_queue.get_size());
-    }
-    _queue.force_put(std::move(task));
-}
-
-/// MultiLevelFeedScanTaskQueue.
-MultiLevelFeedScanTaskQueue::MultiLevelFeedScanTaskQueue() {
-    double factor = 1;
-    for (int i = NUM_QUEUES - 1; i >= 0; --i) {
-        _queues[i].factor_for_normal = factor;
-        factor *= RATIO_OF_ADJACENT_QUEUE;
-    }
-
-    int64_t time_slice = 0;
-    for (int i = 0; i < NUM_QUEUES; ++i) {
-        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-        _queues[i].level_time_slice = time_slice;
-    }
-}
-
-void MultiLevelFeedScanTaskQueue::close() {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
-    if (_is_closed) {
-        return;
-    }
-
-    _is_closed = true;
-    _cv.notify_all();
-}
-
-StatusOr<ScanTask> MultiLevelFeedScanTaskQueue::take() {
-    std::unique_lock<std::mutex> lock(_global_mutex);
-
-    int queue_idx = -1;
-    double target_accu_time = 0;
-
-    while (true) {
-        if (_is_closed) {
-            return Status::Cancelled("Shutdown");
-        }
-
-        // Find the queue with the smallest execution time.
-        for (int i = 0; i < NUM_QUEUES; ++i) {
-            // we just search for queue has element
-            if (!_queues[i].queue.empty()) {
-                double local_target_time = _queues[i].normalized_cost();
-                if (queue_idx < 0 || local_target_time < target_accu_time) {
-                    target_accu_time = local_target_time;
-                    queue_idx = i;
-                }
-            }
-        }
-
-        if (queue_idx >= 0) {
-            break;
-        }
-
-        _cv.wait(lock);
-    }
-
-    auto& queue = _queues[queue_idx].queue;
-    auto task = std::move(queue.front());
-    queue.pop();
-    _num_tasks--;
-    return task;
-}
-
-bool MultiLevelFeedScanTaskQueue::try_offer(ScanTask task) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_num_tasks);
-    }
-
-    int level = _compute_queue_level(task);
-    task.task_group->sub_queue_level = level;
-    _queues[level].queue.push(std::move(task));
-    _num_tasks++;
-
-    _cv.notify_one();
-    return true;
-}
-
-void MultiLevelFeedScanTaskQueue::force_put(ScanTask task) {
-    (void)try_offer(std::move(task));
-}
-
-void MultiLevelFeedScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    task.task_group->runtime_ns += runtime_ns;
-    _queues[task.task_group->sub_queue_level].incr_cost_ns(runtime_ns);
-}
-
-int MultiLevelFeedScanTaskQueue::_compute_queue_level(const ScanTask& task) const {
-    int64_t time_spent = task.task_group->runtime_ns;
-    for (int i = task.task_group->sub_queue_level; i < NUM_QUEUES; ++i) {
-        if (time_spent < _queues[i].level_time_slice) {
-            return i;
-        }
-    }
-
-    return NUM_QUEUES - 1;
 }
 
 /// WorkGroupScanTaskQueue.
@@ -207,10 +97,6 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_num_tasks);
-    }
-
     auto* wg_entity = _sched_entity(task.workgroup);
     wg_entity->set_in_queue(this);
     RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
@@ -224,28 +110,9 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     return true;
 }
 
-void WorkGroupScanTaskQueue::force_put(ScanTask task) {
+void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    if (task.peak_scan_task_queue_size_counter != nullptr) {
-        task.peak_scan_task_queue_size_counter->set(_num_tasks);
-    }
-
-    auto* wg_entity = _sched_entity(task.workgroup);
-    wg_entity->set_in_queue(this);
-    wg_entity->queue()->force_put(std::move(task));
-
-    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
-        _enqueue_workgroup(wg_entity);
-    }
-
-    _num_tasks++;
-    _cv.notify_one();
-}
-
-void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    auto* wg = task.workgroup;
     auto* wg_entity = _sched_entity(wg);
 
     // Update bandwidth control information.
@@ -260,7 +127,6 @@ void WorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_n
         _wg_entities.erase(wg_entity);
     }
     DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
-    wg_entity->queue()->update_statistics(task, runtime_ns);
     wg_entity->incr_runtime_ns(runtime_ns);
     if (is_in_queue) {
         _wg_entities.emplace(wg_entity);
@@ -379,17 +245,6 @@ const workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity
         return wg->connector_scan_sched_entity();
     } else {
         return wg->scan_sched_entity();
-    }
-}
-
-std::unique_ptr<ScanTaskQueue> create_scan_task_queue() {
-    switch (config::pipeline_scan_queue_mode) {
-    case 0:
-        return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
-    case 1:
-        return std::make_unique<MultiLevelFeedScanTaskQueue>();
-    default:
-        return std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
     }
 }
 

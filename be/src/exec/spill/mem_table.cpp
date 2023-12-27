@@ -31,6 +31,7 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
+    RACE_DETECT(mem_table, detect);
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
@@ -38,6 +39,7 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 }
 
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    RACE_DETECT(mem_table, detect);
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
@@ -51,14 +53,15 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+
     return Status::OK();
 }
 
 Status UnorderedMemTable::flush(FlushCallBack callback) {
-    while (_processed_index < _chunks.size()) {
-        RETURN_IF_ERROR(callback(_chunks[_processed_index++]));
+    RACE_DETECT(mem_table, detect);
+    for (const auto& chunk : _chunks) {
+        RETURN_IF_ERROR(callback(chunk));
     }
-    _processed_index = {};
     int64_t consumption = _tracker->consumption();
     _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
@@ -70,6 +73,7 @@ StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(b
     if (shared) {
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
+        RACE_DETECT(mem_table, detect);
         return SpillInputStream::as_stream(std::move(_chunks), _spiller);
     }
 }
@@ -79,6 +83,7 @@ bool OrderedMemTable::is_empty() {
 }
 
 Status OrderedMemTable::append(ChunkPtr chunk) {
+    RACE_DETECT(mem_table, detect);
     if (_chunk == nullptr) {
         _chunk = chunk->clone_empty();
     }
@@ -91,6 +96,7 @@ Status OrderedMemTable::append(ChunkPtr chunk) {
 }
 
 Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    RACE_DETECT(mem_table, detect);
     if (_chunk == nullptr) {
         _chunk = src.clone_empty();
     }
@@ -102,10 +108,12 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+
     return Status::OK();
 }
 
 Status OrderedMemTable::flush(FlushCallBack callback) {
+    RACE_DETECT(mem_table, detect);
     while (!_chunk_slice.empty()) {
         auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         RETURN_IF_ERROR(callback(chunk));
@@ -119,6 +127,7 @@ Status OrderedMemTable::flush(FlushCallBack callback) {
 }
 
 Status OrderedMemTable::done() {
+    RACE_DETECT(mem_table, detect);
     // do sort
     ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
     _chunk_slice.reset(_chunk);
@@ -131,16 +140,10 @@ StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
     _permutation.resize(0);
 
     auto& order_bys = segment.order_by_columns;
-    {
-        SCOPED_TIMER(_spiller->metrics().sort_chunk_timer);
-        RETURN_IF_ERROR(sort_and_tie_columns(_runtime_state->cancelled_ref(), order_bys, _sort_desc, &_permutation));
-    }
+    RETURN_IF_ERROR(sort_and_tie_columns(_runtime_state->cancelled_ref(), order_bys, _sort_desc, &_permutation));
 
     ChunkPtr sorted_chunk = _chunk->clone_empty_with_slot(_chunk->num_rows());
-    {
-        SCOPED_TIMER(_spiller->metrics().materialize_chunk_timer);
-        materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);
-    }
+    materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);
 
     return sorted_chunk;
 }

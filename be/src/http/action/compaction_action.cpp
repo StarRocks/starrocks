@@ -73,17 +73,17 @@ std::atomic_bool CompactionAction::_running = false;
 // for viewing the compaction status
 Status CompactionAction::_handle_show_compaction(HttpRequest* req, std::string* json_result) {
     const std::string& req_tablet_id = req->param(TABLET_ID_KEY);
-    if (req_tablet_id == "") {
-        std::string msg = fmt::format("The argument 'tablet_id' is required.");
-        LOG(WARNING) << msg;
-        return Status::NotSupported(msg);
+    const std::string& req_schema_hash = req->param(TABLET_SCHEMA_HASH_KEY);
+    if (req_tablet_id == "" && req_schema_hash == "") {
+        // TODO(cmy): View the overall compaction status
+        return Status::NotSupported("The overall compaction status is not supported yet");
     }
 
     uint64_t tablet_id;
     try {
         tablet_id = std::stoull(req_tablet_id);
     } catch (const std::exception& e) {
-        LOG(WARNING) << "invalid argument.tablet_id:" << req_tablet_id;
+        LOG(WARNING) << "invalid argument.tablet_id:" << req_tablet_id << ", schema_hash:" << req_schema_hash;
         return Status::InternalError(strings::Substitute("convert failed, $0", e.what()));
     }
 
@@ -115,14 +115,10 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
-    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
+    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
     if (tablet->updates() != nullptr) {
-        StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
-        DeferOp op([&] { StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1); });
-        Status res;
         if (rowset_ids_string.empty()) {
-            res = tablet->updates()->compaction(mem_tracker);
+            RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker));
         } else {
             vector<string> id_str_list = strings::Split(rowset_ids_string, ",", strings::SkipEmpty());
             vector<uint32_t> rowset_ids;
@@ -142,13 +138,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
             if (rowset_ids.empty()) {
                 return Status::InvalidArgument(fmt::format("empty argument. rowset_ids:{}", rowset_ids_string));
             }
-            res = tablet->updates()->compaction(mem_tracker, rowset_ids);
-        }
-        if (!res.ok()) {
-            StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
-            LOG(WARNING) << "failed to perform update compaction. res=" << res.message()
-                         << ", tablet=" << tablet->full_name();
-            return res;
+            RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker, rowset_ids));
         }
         return Status::OK();
     }
@@ -159,13 +149,13 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
     }
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
+        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->need_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();
                 if (compaction_task != nullptr) {
                     compaction_task->set_task_id(
                             StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
-                    compaction_task->set_is_manual_compaction(true);
                     compaction_task->start();
                     if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
                         return Status::InternalError(fmt::format("Failed to base compaction tablet={} err={}",
@@ -192,13 +182,13 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
         }
         tablet->set_last_cumu_compaction_failure_time(0);
     } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
+        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
         if (config::enable_size_tiered_compaction_strategy) {
             if (tablet->force_base_compaction()) {
                 auto compaction_task = tablet->create_compaction_task();
                 if (compaction_task != nullptr) {
                     compaction_task->set_task_id(
                             StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
-                    compaction_task->set_is_manual_compaction(true);
                     compaction_task->start();
                     if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
                         return Status::InternalError(fmt::format("Failed to base compaction tablet={} task_id={}",
@@ -334,12 +324,6 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
     return Status::OK();
 }
 
-Status CompactionAction::_handle_running_task(HttpRequest* req, std::string* json_result) {
-    CompactionManager* compaction_manager = StorageEngine::instance()->compaction_manager();
-    compaction_manager->get_running_status(json_result);
-    return Status::OK();
-}
-
 void CompactionAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
@@ -354,8 +338,6 @@ void CompactionAction::handle(HttpRequest* req) {
         st = _handle_show_repairs(req, &json_result);
     } else if (_type == CompactionActionType::SUBMIT_REPAIR) {
         st = _handle_submit_repairs(req, &json_result);
-    } else if (_type == CompactionActionType::SHOW_RUNNING_TASK) {
-        st = _handle_running_task(req, &json_result);
     } else {
         st = Status::NotSupported("Action not supported");
     }

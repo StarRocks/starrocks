@@ -129,6 +129,9 @@ void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
     }
 }
 
+static constexpr uint32_t SALT[8] = {0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d,
+                                     0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31};
+
 // For scalar version:
 void SimdBlockFilter::make_mask(uint32_t key, uint32_t* masks) const {
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
@@ -158,9 +161,8 @@ void SimdBlockFilter::clear() {
 
 size_t JoinRuntimeFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
-    auto num_partitions = _hash_partition_bf.size();
-    size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(num_partitions) + sizeof(_join_mode);
-    if (num_partitions == 0) {
+    size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(_num_hash_partitions) + sizeof(_join_mode);
+    if (_num_hash_partitions == 0) {
         size += _bf.max_serialized_size();
     } else {
         for (const auto& bf : _hash_partition_bf) {
@@ -172,17 +174,16 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
 
 size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
-    auto num_partitions = _hash_partition_bf.size();
 #define JRF_COPY_FIELD(field)                     \
     memcpy(data + offset, &field, sizeof(field)); \
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
-    JRF_COPY_FIELD(num_partitions);
+    JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
 
-    if (num_partitions == 0) {
+    if (_num_hash_partitions == 0) {
         offset += _bf.serialize(data + offset);
 
     } else {
@@ -195,20 +196,19 @@ size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const 
 
 size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
-    size_t num_partitions = 0;
 #define JRF_COPY_FIELD(field)                     \
     memcpy(&field, data + offset, sizeof(field)); \
     offset += sizeof(field);
     JRF_COPY_FIELD(_has_null);
     JRF_COPY_FIELD(_size);
-    JRF_COPY_FIELD(num_partitions);
+    JRF_COPY_FIELD(_num_hash_partitions);
     JRF_COPY_FIELD(_join_mode);
 #undef JRF_COPY_FIELD
 
-    if (num_partitions == 0) {
+    if (_num_hash_partitions == 0) {
         offset += _bf.deserialize(data + offset);
     } else {
-        for (size_t i = 0; i < num_partitions; i++) {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
             SimdBlockFilter bf;
             offset += bf.deserialize(data + offset);
             _hash_partition_bf.emplace_back(std::move(bf));
@@ -219,15 +219,13 @@ size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data
 }
 
 bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
-    auto lhs_num_partitions = _hash_partition_bf.size();
-    auto rhs_num_partitions = rf._hash_partition_bf.size();
-    bool first = (_has_null == rf._has_null && _size == rf._size && lhs_num_partitions == rhs_num_partitions &&
+    bool first = (_has_null == rf._has_null && _size == rf._size && _num_hash_partitions == rf._num_hash_partitions &&
                   _join_mode == rf._join_mode);
     if (!first) return false;
-    if (lhs_num_partitions == 0) {
+    if (_num_hash_partitions == 0) {
         if (!_bf.check_equal(rf._bf)) return false;
     } else {
-        for (size_t i = 0; i < lhs_num_partitions; ++i) {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
             if (!_hash_partition_bf[i].check_equal(rf._hash_partition_bf[i])) {
                 return false;
             }
@@ -237,10 +235,10 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
 }
 
 void JoinRuntimeFilter::clear_bf() {
-    if (_hash_partition_bf.empty()) {
+    if (_num_hash_partitions == 0) {
         _bf.clear();
     } else {
-        for (size_t i = 0; i < _hash_partition_bf.size(); i++) {
+        for (size_t i = 0; i < _num_hash_partitions; i++) {
             _hash_partition_bf[i].clear();
         }
     }

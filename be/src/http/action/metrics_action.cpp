@@ -337,7 +337,7 @@ void MetricsAction::handle(HttpRequest* req) {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
         if (config::dump_metrics_with_bvar) {
-            bvar::Variable::dump_exposed(&visitor, &_options);
+            bvar::Variable::dump_exposed(&visitor, nullptr);
         }
 #ifdef USE_STAROS
 #ifdef BE_TEST

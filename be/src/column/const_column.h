@@ -50,10 +50,7 @@ public:
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
-    bool only_null() const override {
-        DCHECK(_data->is_nullable() ? _size == 0 || _data->is_null(0) : true);
-        return _data->is_nullable();
-    }
+    bool only_null() const override { return _data->is_null(0); }
 
     bool has_null() const override { return _data->has_null(); }
 
@@ -78,12 +75,7 @@ public:
 
     void reserve(size_t n) override {}
 
-    void resize(size_t n) override {
-        if (_size == 0) {
-            _data->resize(1);
-        }
-        _size = n;
-    }
+    void resize(size_t n) override { _size = n; }
 
     // This method resize the underlying data column,
     // Because when sometimes(agg functions), we want to handle const column as normal data column
@@ -134,23 +126,13 @@ public:
         }
     }
 
-    void append_default() override {
-        if (_size == 0) {
-            _data->append_default(1);
-        }
-        _size++;
-    }
+    void append_default() override { _size++; }
 
-    void append_default(size_t count) override {
-        if (_size == 0) {
-            _data->append_default(1);
-        }
-        _size += count;
-    }
+    void append_default(size_t count) override { _size += count; }
 
     void fill_default(const Filter& filter) override;
 
-    void update_rows(const Column& src, const uint32_t* indexes) override;
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
 
@@ -194,8 +176,6 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
@@ -216,11 +196,11 @@ public:
 
     size_t container_memory_usage() const override { return _data->container_memory_usage(); }
 
-    size_t reference_memory_usage() const override { return _data->reference_memory_usage(); }
+    size_t element_memory_usage() const override { return _data->element_memory_usage(); }
 
-    size_t reference_memory_usage(size_t from, size_t size) const override {
+    size_t element_memory_usage(size_t from, size_t size) const override {
         // const column has only one element
-        return size == 0 ? 0 : reference_memory_usage();
+        return size == 0 ? 0 : element_memory_usage();
     }
 
     void swap_column(Column& rhs) override {

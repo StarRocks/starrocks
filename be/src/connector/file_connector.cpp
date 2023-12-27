@@ -57,10 +57,6 @@ FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TSc
     }
 }
 
-std::string FileDataSource::name() const {
-    return "FileDataSource";
-}
-
 Status FileDataSource::open(RuntimeState* state) {
     DCHECK(state != nullptr);
     RETURN_IF_CANCELLED(state);
@@ -75,11 +71,6 @@ Status FileDataSource::open(RuntimeState* state) {
 Status FileDataSource::_create_scanner() {
     if (_scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
-    }
-    if (_runtime_state->enable_log_rejected_record() &&
-        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
     }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
@@ -149,10 +140,6 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-const std::string FileDataSource::get_custom_coredump_msg() const {
-    return strings::Substitute("Load file path: $0", _scan_range.ranges[0].path);
-}
-
 int64_t FileDataSource::raw_rows_read() const {
     return _counter.filtered_rows_read + _counter.num_rows_filtered;
 }
@@ -174,7 +161,7 @@ void FileDataSource::_init_counter() {
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
     {
         static const char* prefix = "FileScanner";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
         RuntimeProfile* p = _runtime_profile;
         _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
         _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);

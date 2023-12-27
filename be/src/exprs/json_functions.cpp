@@ -102,7 +102,7 @@ Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContex
         return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
     }
     auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
+    _get_parsed_paths(path_exprs, parsed_paths);
 
     context->set_function_state(scope, parsed_paths);
     VLOG(10) << "prepare json path. size: " << parsed_paths->size();
@@ -205,12 +205,6 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }
 
         if (index != -1) {
-            if (tvalue.is_null()) {
-                auto msg = fmt::format("unable to find key: {}", jsonpaths_to_string(jsonpath, i));
-                VLOG(2) << msg;
-                return Status::NotFound(msg);
-            }
-
             // try to access tvalue as array.
             // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;
@@ -235,7 +229,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
     return Status::OK();
 }
 
-Status JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<SimpleJsonPath>* parsed_paths) {
+void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<SimpleJsonPath>* parsed_paths) {
     // split path by ".", and escape quota by "\"
     // eg:
     //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
@@ -244,7 +238,7 @@ Status JsonFunctions::parse_json_paths(const std::string& path_string, std::vect
     boost::tokenizer<boost::escaped_list_separator<char>> tok(path_string,
                                                               boost::escaped_list_separator<char>("\\", ".", "\""));
     std::vector<std::string> paths(tok.begin(), tok.end());
-    return _get_parsed_paths(paths, parsed_paths);
+    _get_parsed_paths(paths, parsed_paths);
 }
 
 std::string JsonFunctions::jsonpaths_to_string(const std::vector<SimpleJsonPath>& paths, size_t sub_index) {

@@ -73,7 +73,6 @@ private:
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
-            int64_t prev_reserved = _reserved_bytes;
             size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
@@ -84,7 +83,6 @@ private:
                     _cache_size = 0;
                     return true;
                 } else {
-                    _reserved_bytes = prev_reserved;
                     _cache_size -= size;
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
@@ -95,13 +93,14 @@ private:
             return true;
         }
 
-        bool try_mem_consume_with_limited_tracker(int64_t size) {
+        bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
             MemTracker* cur_tracker = _loader();
+            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
+                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size, tracker, limit);
                 if (LIKELY(limit_tracker == nullptr)) {
                     _cache_size = 0;
                     return true;
@@ -116,10 +115,10 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes) {
+        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
             DCHECK(_reserved_bytes == 0);
             DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
+            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
                 _reserved_bytes = reserve_bytes;
                 return true;
             }
@@ -213,10 +212,6 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
-    void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
-
-    const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
-
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
         release_reserved();
@@ -270,8 +265,8 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size) {
-        if (_mem_cache_manager.try_mem_reserve(size)) {
+    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
+        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
             return true;
         }
         return false;
@@ -327,7 +322,6 @@ private:
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
-    std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
@@ -440,9 +434,14 @@ private:
     SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
     auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
-#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
-    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
+#define RESET_TRACE_INFO()                              \
+    CurrentThread::current().set_pipeline_driver_id(0); \
+    CurrentThread::current().set_query_id({});          \
+    CurrentThread::current().set_fragment_instance_id({});
+
+#define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
+    SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
+    auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \

@@ -36,16 +36,13 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     _init_counter();
 
-    std::vector<SlotId> slots;
     for (const auto& [slot_id, texpr] : tnode.decode_node.string_functions) {
         ExprContext* context;
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context, state));
         _string_functions[slot_id] = std::make_pair(context, DictOptimizeContext{});
         _expr_ctxs.push_back(context);
-        slots.emplace_back(slot_id);
     }
 
-    DictOptimizeParser::set_output_slot_id(&_expr_ctxs, slots);
     for (const auto& [encode_id, decode_id] : tnode.decode_node.dict_id_to_string_ids) {
         _encode_column_cids.emplace_back(encode_id);
         _decode_column_cids.emplace_back(decode_id);
@@ -73,20 +70,20 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_children[0]->open(state));
 
     const auto& global_dict = state->get_query_global_dict_map();
-    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
-            dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
-            RETURN_IF_ERROR(dict_optimize_parser->eval_expression(expr_ctx, &dict_ctx, slot_id));
+            RETURN_IF_ERROR(_dict_optimize_parser.eval_expression(expr_ctx, &dict_ctx, slot_id));
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {
@@ -101,13 +98,6 @@ Status DictDecodeNode::open(RuntimeState* state) {
         int need_encode_cid = _encode_column_cids[i];
         auto dict_iter = global_dict.find(need_encode_cid);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
-
-        if (dict_not_contains_cid) {
-            if (dict_optimize_parser->eval_dict_expr(need_encode_cid).ok()) {
-                dict_iter = global_dict.find(need_encode_cid);
-                dict_not_contains_cid = dict_iter == global_dict.end();
-            }
-        }
 
         if (dict_not_contains_cid) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
@@ -160,12 +150,15 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     return Status::OK();
 }
 
-void DictDecodeNode::close(RuntimeState* state) {
+Status DictDecodeNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return;
+        return Status::OK();
     }
-    ExecNode::close(state);
+    RETURN_IF_ERROR(ExecNode::close(state));
     Expr::close(_expr_ctxs, state);
+    _dict_optimize_parser.close(state);
+
+    return Status::OK();
 }
 
 pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

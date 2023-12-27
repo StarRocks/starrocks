@@ -23,7 +23,30 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
+      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
+      - name: upload info
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo ${GITHUB_SHA} > head_sha.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v2
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
+          retention-days: 3
+
       - name: Check
         id: check
         if: >
@@ -33,11 +56,20 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        if: always()
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: BE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
@@ -98,7 +130,7 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: Run Clang-Format
         run: |
@@ -153,7 +185,7 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
-    timeout-minutes: 180
+    timeout-minutes: 90
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -168,7 +200,7 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 180
+        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
@@ -202,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: FE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
@@ -268,7 +300,7 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: Copy checkstyle files
         if: ${{ steps.java-file.outputs.java == 'true' }}
@@ -321,7 +353,7 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -354,39 +386,4 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-          rm -rf ${{ github.workspace }}/*
-
-  Teardown:
-    runs-on: [self-hosted, normal]
-    name: Teardown
-    needs: [ fe-ut, be-ut ]
-    if: always()
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      BRANCH: ${{ github.base_ref }}
-      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
-    steps:
-      - name: upload info
-        if: always()
-        run: |
-          echo $PR_NUMBER > pr_num.txt
-          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
-          echo ${GITHUB_SHA} > head_sha.txt
-
-      - name: Upload the PR number
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr_num
-          path: ./pr_num.txt
-          retention-days: 3
-
-      - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
-        with:
-          name: head_sha
-          path: ./head_sha.txt
-          retention-days: 3
-
-      - name: Clean
-        run: |
           rm -rf ${{ github.workspace }}/*

@@ -15,7 +15,11 @@
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
+DIAGNOSTIC_POP
+
 #include <fmt/core.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
@@ -33,8 +37,6 @@
 #include "io/input_stream.h"
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
-#include "io/throttled_output_stream.h"
-#include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
 #include "util/string_parser.hpp"
@@ -96,7 +98,7 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
     explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
-    ~StarletInputStream() override = default;
+    ~StarletInputStream() = default;
     StarletInputStream(const StarletInputStream&) = delete;
     void operator=(const StarletInputStream&) = delete;
     StarletInputStream(StarletInputStream&&) = delete;
@@ -152,21 +154,6 @@ public:
         }
     }
 
-    StatusOr<std::string> read_all() override {
-        auto stream_st = _file_ptr->stream();
-        if (!stream_st.ok()) {
-            return to_status(stream_st.status());
-        }
-        auto res = (*stream_st)->read_all();
-        if (res.ok()) {
-            g_starlet_io_num_reads << 1;
-            g_starlet_io_read << res.value().size();
-            return std::move(res).value();
-        } else {
-            return to_status(res.status());
-        }
-    }
-
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
@@ -175,16 +162,13 @@ public:
 
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(9);
+        stats->reserve(6);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
         stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
-        stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
-        stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
-        stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
         return std::move(stats);
     }
 
@@ -195,7 +179,7 @@ private:
 class StarletOutputStream : public starrocks::io::OutputStream {
 public:
     explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
-    ~StarletOutputStream() override = default;
+    ~StarletOutputStream() = default;
     StarletOutputStream(const StarletOutputStream&) = delete;
     void operator=(const StarletOutputStream&) = delete;
     StarletOutputStream(StarletOutputStream&&) = delete;
@@ -262,36 +246,22 @@ public:
     using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                       const std::string& file_name) override {
-        FileInfo info{.path = file_name};
-        return new_random_access_file(opts, info);
-    }
-
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                       const FileInfo& info) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(info.path));
+                                                                       const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
-        if (info.size.has_value()) {
-            opt.file_size = info.size.value();
-        }
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
 
         bool is_cache_hit = (*file_st)->is_cache_hit();
-        std::unique_ptr<io::SeekableInputStream> istream = std::make_unique<StarletInputStream>(std::move(*file_st));
-        if (!is_cache_hit && config::experimental_lake_wait_per_get_ms > 0) {
-            istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
-                                                                         config::experimental_lake_wait_per_get_ms);
-        }
-        return std::make_unique<RandomAccessFile>(std::move(istream), info.path, is_cache_hit);
+        auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
+        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -302,9 +272,7 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -313,7 +281,7 @@ public:
         return std::make_unique<SequentialFile>(std::move(istream), path);
     }
 
-    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) {
         return new_writable_file(WritableFileOptions(), path);
     }
 
@@ -332,11 +300,8 @@ public:
             return to_status(file_st.status());
         }
 
-        std::unique_ptr<io::OutputStream> os = std::make_unique<StarletOutputStream>(std::move(*file_st));
-        if (config::experimental_lake_wait_per_put_ms > 0) {
-            os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
-        }
-        return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
+        auto outputstream = std::make_unique<StarletOutputStream>(std::move(*file_st));
+        return std::make_unique<starrocks::OutputStreamAdapter>(std::move(outputstream), path);
     }
 
     Status delete_file(const std::string& path) override {
@@ -529,33 +494,6 @@ public:
             return to_status(fs_st.status());
         }
         return to_status((*fs_st)->drop_cache(pair.first));
-    }
-
-    Status delete_files(const std::vector<std::string>& paths) override {
-        if (paths.empty()) {
-            return Status::OK();
-        }
-
-        std::vector<std::string> parsed_paths;
-        parsed_paths.reserve(paths.size());
-        std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
-        int64_t shard_id;
-        for (auto&& path : paths) {
-            ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-            auto fs_st = get_shard_filesystem(pair.second);
-            if (!fs_st.ok()) {
-                return to_status(fs_st.status());
-            }
-            if (fs == nullptr) {
-                shard_id = pair.second;
-                fs = *fs_st;
-            }
-            if (shard_id != pair.second) {
-                return Status::InternalError("Not all paths have the same scheme");
-            }
-            parsed_paths.emplace_back(std::move(pair.first));
-        }
-        return to_status(fs->delete_files(parsed_paths));
     }
 
 private:

@@ -20,6 +20,7 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
+#include "formats/parquet/page_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
@@ -50,7 +51,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     _page_reader = std::make_unique<PageReader>(_stream, start_offset, size, num_values, _opts.stats);
 
     // seek to the first page
-    RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
+    _page_reader->seek_to_offset(start_offset);
 
     auto compress_type = convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
@@ -81,20 +82,15 @@ Status ColumnChunkReader::skip_page() {
     if (_page_parse_state != PAGE_HEADER_PARSED) {
         return Status::InternalError("Page header has not been parsed before skiping page data");
     }
-    uint64_t next_header_pos = _page_reader->get_next_header_pos();
-    RETURN_IF_ERROR(_page_reader->seek_to_offset(next_header_pos));
+    const auto& header = *_page_reader->current_header();
+    uint32_t compressed_size = header.compressed_page_size;
+    uint32_t uncompressed_size = header.uncompressed_page_size;
+    size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
+    RETURN_IF_ERROR(_page_reader->skip_bytes(size));
     _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
-}
-
-Status ColumnChunkReader::next_page() {
-    if (_page_parse_state != PAGE_DATA_PARSED) {
-        _opts.stats->page_skip += 1;
-    }
-    _page_parse_state = PAGE_DATA_PARSED;
-    return _page_reader->next_page();
 }
 
 Status ColumnChunkReader::_parse_page_header() {
@@ -103,7 +99,6 @@ Status ColumnChunkReader::_parse_page_header() {
     RETURN_IF_ERROR(_page_reader->next_header());
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
-    _opts.stats->request_bytes_read_uncompressed += (now - off);
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
@@ -139,11 +134,9 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
                                                          bool is_compressed) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
     is_compressed = is_compressed && (_compress_codec != nullptr);
-
     size_t read_size = is_compressed ? compressed_size : uncompressed_size;
     std::vector<uint8_t>& read_buffer = is_compressed ? _compressed_buf : _uncompressed_buf;
     _opts.stats->request_bytes_read += read_size;
-    _opts.stats->request_bytes_read_uncompressed += uncompressed_size;
 
     // check if we can zero copy read.
     Slice read_data;
@@ -151,7 +144,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     if (ret.ok() && ret.value().size() == read_size) {
         _opts.stats->bytes_read += read_size;
         // peek dos not advance offset.
-        RETURN_IF_ERROR(_page_reader->skip_bytes(read_size));
+        _page_reader->skip_bytes(read_size);
         read_data = Slice(ret.value().data(), read_size);
     } else {
         read_buffer.reserve(read_size);
@@ -212,8 +205,8 @@ Status ColumnChunkReader::_parse_data_page() {
         _decoders[static_cast<int>(encoding)] = std::move(decoder);
     }
 
-    _cur_decoder->set_type_length(_type_length);
-    RETURN_IF_ERROR(_cur_decoder->set_data(_data));
+    _cur_decoder->set_type_legth(_type_length);
+    _cur_decoder->set_data(_data);
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
@@ -245,8 +238,8 @@ Status ColumnChunkReader::_parse_dict_page() {
     const EncodingInfo* code_info = nullptr;
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
-    RETURN_IF_ERROR(dict_decoder->set_data(_data));
-    dict_decoder->set_type_length(_type_length);
+    dict_decoder->set_data(_data);
+    dict_decoder->set_type_legth(_type_length);
 
     // initialize decoder
     std::unique_ptr<Decoder> decoder;

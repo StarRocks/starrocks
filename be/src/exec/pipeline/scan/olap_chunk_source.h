@@ -59,14 +59,12 @@ private:
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status _init_olap_reader(RuntimeState* state);
-    TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
-    Status _init_column_access_paths(Schema* schema);
 
 private:
     TabletReaderParams _params{};
@@ -81,7 +79,6 @@ private:
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
-    std::shared_ptr<TabletSchema> _tablet_schema;
     int64_t _version = 0;
 
     RuntimeState* _runtime_state = nullptr;
@@ -100,8 +97,6 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
-
-    std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -122,20 +117,12 @@ private:
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
-    RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
-    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
-    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
-    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
-    RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;

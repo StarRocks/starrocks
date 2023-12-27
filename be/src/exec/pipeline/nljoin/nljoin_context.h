@@ -54,14 +54,13 @@ class NJJoinBuildInputChannel {
 public:
     NJJoinBuildInputChannel(size_t chunk_size) : _chunk_size(chunk_size), _accumulator(chunk_size) {}
 
-    Status add_chunk(ChunkPtr build_chunk);
+    void add_chunk(ChunkPtr build_chunk);
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
 
-    [[nodiscard]] Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
-                                                   spill::IOTaskExecutor& executor);
+    Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk, spill::IOTaskExecutor& executor);
 
     void finalize();
 
@@ -168,7 +167,7 @@ public:
 
     int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
-    Status append_build_chunk(int32_t sinker_id, const ChunkPtr& build_chunk);
+    void append_build_chunk(int32_t sinker_id, const ChunkPtr& build_chunk);
     size_t channel_num_rows(int32_t sinker_id);
     NJJoinBuildInputChannel& input_channel(int32_t sinker_id) { return *_input_channel[sinker_id]; }
 

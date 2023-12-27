@@ -23,11 +23,12 @@
 #include <thread>
 
 #include "common/status.h"
-#include "fs/fs.h"
+#include "gutil/macros.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
 #include "service/service_be/lake_service.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "testutil/sync_point.h"
 #include "util/threadpool.h"
@@ -41,16 +42,11 @@ CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, c
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
-    _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();
     _contexts.reserve(request->tablet_ids_size());
 }
 
-int64_t CompactionTaskCallback::timeout_ms() const {
-    return _request->has_timeout_ms() ? _request->timeout_ms() : kDefaultTimeoutMs;
-}
-
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
-    std::unique_lock l(_mtx);
+    std::lock_guard l(_mtx);
 
     if (!context->status.ok()) {
         // Add failed tablet for upgrade compatibility: older version FE relies on the failed tablet to determine
@@ -75,11 +71,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _request = nullptr;
         _response = nullptr;
 
-        std::vector<std::unique_ptr<CompactionTaskContext>> tmp;
-        tmp.swap(_contexts);
-
-        l.unlock();
-        _scheduler->remove_states(tmp);
+        _scheduler->remove_states(_contexts);
+        STLClearObject(&_contexts);
     }
 }
 
@@ -91,12 +84,11 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
     CHECK_GT(_task_queue_count, 0);
-    auto st = ThreadPoolBuilder("clound_native_compact")
-                      .set_min_threads(_task_queue_count)
-                      .set_max_threads(_task_queue_count)
-                      .set_max_queue_size(_task_queue_count)
-                      .build(&_threads);
-    CHECK(st.ok()) << st;
+    ThreadPoolBuilder("clound_native_compact")
+            .set_min_threads(_task_queue_count)
+            .set_max_threads(_task_queue_count)
+            .set_max_queue_size(_task_queue_count)
+            .build(&_threads);
 
     for (int i = 0; i < _task_queue_count; i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
@@ -211,9 +203,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     } else {
         auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
         if (task_or.ok()) {
-            auto should_cancel = [&]() {
-                return context->callback->has_error() || context->callback->timeout_exceeded();
-            };
+            auto should_cancel = [&]() { return context->callback->has_error(); };
             TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
             status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
         } else {
@@ -236,15 +226,6 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
                                 << " cost=" << cost << "s";
 
-        if (status.is_cancelled()) {
-            if (context->callback->has_error()) {
-                auto cause = context->callback->error();
-                status = Status::Cancelled(fmt::format("Cancelled due to another error: {}", cause.message()));
-            } else if (context->callback->timeout_exceeded()) {
-                auto timeout = context->callback->timeout_ms();
-                status = Status::Cancelled(fmt::format("Cancelled due to timeout exceeded: {}ms", timeout));
-            }
-        }
         LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
                                     << " txn_id=" << txn_id << " cost=" << cost << "s : " << status;
 
@@ -269,12 +250,11 @@ bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) cons
 }
 
 Status CompactionScheduler::abort(int64_t txn_id) {
-    std::unique_lock l(_contexts_lock);
+    std::lock_guard l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
          node = node->next()) {
         CompactionTaskContext* context = node->value();
         if (context->txn_id == txn_id) {
-            l.unlock();
             context->callback->update_status(Status::Aborted("aborted on demand"));
             return Status::OK();
         }

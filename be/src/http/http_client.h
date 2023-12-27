@@ -23,7 +23,6 @@
 #include <string>
 
 #include "common/status.h"
-#include "common/statusor.h"
 #include "http/http_headers.h"
 #include "http/http_method.h"
 #include "http/http_response.h"
@@ -111,9 +110,7 @@ public:
 
     // helper function to download a file, you can call this function to downlaod
     // a file to local_path
-    StatusOr<uint64_t> download(const std::string& local_path);
-
-    StatusOr<std::string> download();
+    Status download(const std::string& local_path);
 
     Status execute_post_request(const std::string& payload, std::string* response);
 

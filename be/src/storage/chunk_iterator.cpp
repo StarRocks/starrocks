@@ -31,15 +31,15 @@ public:
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
-    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
-        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
-        RETURN_IF_ERROR(_iter->init_encoded_schema(dict_maps));
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+        ChunkIterator::init_encoded_schema(dict_maps);
+        _iter->init_encoded_schema(dict_maps);
         return Status::OK();
     }
 
-    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
-        RETURN_IF_ERROR(_iter->init_output_schema(unused_output_column_ids));
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        ChunkIterator::init_output_schema(unused_output_column_ids);
+        _iter->init_output_schema(unused_output_column_ids);
         return Status::OK();
     }
 

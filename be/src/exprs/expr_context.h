@@ -67,14 +67,14 @@ public:
 
     /// Prepare expr tree for evaluation.
     /// Allocations from this context will be counted against 'tracker'.
-    [[nodiscard]] Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state);
 
     /// Must be called after calling Prepare(). Does not need to be called on clones.
     /// Idempotent (this allows exprs to be opened multiple times in subplans without
     /// reinitializing function state).
-    [[nodiscard]] Status open(RuntimeState* state);
+    Status open(RuntimeState* state);
 
-    [[nodiscard]] static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
+    static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
     /// clones of each FunctionContext, which share the fragment-local state of the
@@ -82,7 +82,7 @@ public:
     /// to create an ExprContext for each execution thread that needs to evaluate
     /// 'root'. Note that clones are already opened. '*new_context' must be initialized by
     /// the caller to NULL.
-    [[nodiscard]] Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
+    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
 
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);
@@ -108,12 +108,12 @@ public:
 
     bool opened() { return _opened; }
 
-    [[nodiscard]] Status get_udf_error();
+    Status get_udf_error();
 
     std::string get_error_msg() const;
 
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
 
     bool error_if_overflow() const;
 
@@ -130,17 +130,18 @@ private:
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;
 
-    RuntimeState* _runtime_state = nullptr;
     /// The expr tree this context is for.
     Expr* _root;
 
     /// True if this context came from a Clone() call. Used to manage FunctionStateScope.
-    bool _is_clone{false};
+    bool _is_clone;
+
     /// Variables keeping track of current state.
-    bool _prepared{false};
-    bool _opened{false};
+    bool _prepared;
+    bool _opened;
+    RuntimeState* _runtime_state = nullptr;
     // In operator, the ExprContext::close method will be called concurrently
-    std::atomic<bool> _closed{false};
+    std::atomic<bool> _closed;
 };
 
 #define RETURN_IF_HAS_ERROR(expr_ctxs)             \

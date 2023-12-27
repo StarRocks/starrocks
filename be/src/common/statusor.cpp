@@ -14,7 +14,6 @@
 #include "common/statusor.h"
 
 #include <cstdlib>
-#include <iostream>
 #include <utility>
 
 #include "common/status.h"

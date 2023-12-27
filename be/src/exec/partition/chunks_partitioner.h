@@ -75,7 +75,7 @@ public:
     }
 
     // Number of partitions
-    size_t num_partitions() const { return _hash_map_variant.size(); }
+    int32_t num_partitions() const { return _hash_map_variant.size(); }
 
     bool is_passthrough() const { return _is_passthrough; }
 
@@ -88,7 +88,7 @@ public:
     // @consumer: bool consumer(int32_t partition_idx, const ChunkPtr& chunk)
     //      The return value of the consumer denote whether to continue or not
     template <typename Consumer>
-    [[nodiscard]] Status consume_from_hash_map(Consumer&& consumer) {
+    Status consume_from_hash_map(Consumer&& consumer) {
         if (is_hash_map_eos()) {
             return Status::OK();
         }

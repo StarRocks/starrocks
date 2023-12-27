@@ -85,11 +85,16 @@ public:
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
+
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
               _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
 
     virtual ~Channel() {
+        if (_closure != nullptr && _closure->unref()) {
+            delete _closure;
+        }
+
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
             delete _chunk_closure;
         }
@@ -125,6 +130,8 @@ public:
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
 
+    int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
+
     std::string get_fragment_instance_id_str() { return print_id(_fragment_instance_id); }
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
@@ -157,6 +164,8 @@ private:
     TUniqueId _fragment_instance_id;
     PlanNodeId _dest_node_id;
 
+    // the number of TRowBatch.data bytes sent successfully
+    int64_t _num_data_bytes_sent{0};
     int64_t _request_seq{0};
 
     std::unique_ptr<Chunk> _chunk;
@@ -179,7 +188,8 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    PInternalService_Stub* _brpc_stub = nullptr;
+    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    RefCountClosure<PTransmitDataResult>* _closure = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -197,12 +207,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         LOG(WARNING) << "there is no brpc destination address's hostname"
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
-    }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
-    if (UNLIKELY(_brpc_stub == nullptr)) {
-        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
     }
 
     // initialize brpc request
@@ -227,6 +231,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
+    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
 
     _need_close = true;
     _is_inited = true;
@@ -298,7 +303,7 @@ Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk*
                                                      uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty();
+        _chunk = chunk->clone_empty_with_tuple();
     }
 
     if (_chunk->num_rows() + size > state->chunk_size()) {
@@ -342,7 +347,7 @@ Status DataStreamSender::Channel::close_internal() {
 }
 
 void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().message());
+    state->log_error(close_internal().get_error_msg());
 }
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
@@ -621,7 +626,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
         for (auto& _channel : _channels) {
-            (void)_channel->send_chunk_request(&_chunk_request, attachment);
+            _channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
         for (auto& _channel : _channels) {
@@ -713,6 +718,18 @@ void DataStreamSender::construct_brpc_attachment(PTransmitChunkParams* params, b
         attachment->append(chunk->data());
         chunk->clear_data();
     }
+}
+
+int64_t DataStreamSender::get_num_data_bytes_sent() const {
+    // TODO: do we need synchronization here or are reads & writes to 8-byte ints
+    // atomic?
+    int64_t result = 0;
+
+    for (auto _channel : _channels) {
+        result += _channel->num_data_bytes_sent();
+    }
+
+    return result;
 }
 
 } // namespace starrocks

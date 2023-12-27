@@ -54,7 +54,7 @@ public:
     size_t write_buffer_rows() const;
 
     // return true suggests caller should flush this memory table
-    StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     Status flush(SegmentPB* seg_info = nullptr);
 
@@ -64,18 +64,19 @@ public:
 
     void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
-    static Schema convert_schema(const TabletSchemaCSPtr& tablet_schema,
-                                 const std::vector<SlotDescriptor*>* slot_descs);
+    void set_partial_schema_with_sort_key(bool partial_schema_with_sort_key) {
+        _partial_schema_with_sort_key = partial_schema_with_sort_key;
+    }
+
+    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
 
     ChunkPtr get_result_chunk() { return _result_chunk; }
 
-    bool check_supported_column_partial_update(const Chunk& chunk);
-
 private:
-    Status _merge();
+    void _merge();
 
-    Status _sort(bool is_final, bool by_sort_key = false);
-    Status _sort_column_inc(bool by_sort_key = false);
+    void _sort(bool is_final, bool by_sort_key = false);
+    void _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _init_aggregator_if_needed();
@@ -111,7 +112,7 @@ private:
 
     int64_t _max_buffer_size = config::write_buffer_size;
     // initial value is max size
-    size_t _max_buffer_row = std::numeric_limits<size_t>::max();
+    size_t _max_buffer_row = -1;
     size_t _total_rows = 0;
     size_t _merged_rows = 0;
 
@@ -123,6 +124,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+    bool _partial_schema_with_sort_key = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

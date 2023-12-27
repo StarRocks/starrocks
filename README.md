@@ -1,5 +1,4 @@
 
- <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=e8355b6b-a9fc-4d4e-8ed8-b3157aa1827d" />
  <p align="center">
  <a href="https://starrocks.io/index">
     <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
@@ -34,7 +33,7 @@
 <div align="center"> 
 
   </div>
-StarRocks, a Linux Foundation project, is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
+StarRocks is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
 It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br>
 
 Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/introduction_to_starrocks )
@@ -70,14 +69,6 @@ Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/in
 
 StarRocks’s streamlined architecture is mainly composed of two modules: Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data.
 
-Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
-
- <p align="center">
-    <img src="images/arch-v30.png">
-   </a>
-</p>
-
-
 <br>
 
 ## Resources
@@ -87,7 +78,6 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 | Section | Description |
 |-|-|
 | [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
-| [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
@@ -106,7 +96,8 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 1. See [Contributing.md](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) to get started.
 2. Set up StarRocks development environment:
-* [IDE Setup](https://docs.starrocks.io/docs/developers/development-environment/ide-setup/) 
+* [IDEA](https://github.com/StarRocks/community/blob/main/Contributors/guide/IDEA.md) 
+* [Clion](https://github.com/StarRocks/community/blob/main/Contributors/guide/Clion.md) 
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
@@ -121,6 +112,14 @@ We welcome all kinds of contributions from the community, individuals and partne
 This project is used by the following companies. Learn more about their use cases:
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
-- [Tencent](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
-- [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
+- [Zepp Health](https://starrocks.io/blog/zeppheath) 
+- [Lenovo](https://starrocks.io/blog/lenovo_en) 
+
+<br>
+
+## Acknowledgment
+
+StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
+
+Today, only less than 20% of the code in StarRocks is from Apache® Doris™.

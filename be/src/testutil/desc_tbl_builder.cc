@@ -94,7 +94,7 @@ DescriptorTbl* DescriptorTblBuilder::build() {
     }
 
     Status status = DescriptorTbl::create(_state, _obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
-    CHECK(status.ok());
+    DCHECK(status.ok());
     return desc_tbl;
 }
 

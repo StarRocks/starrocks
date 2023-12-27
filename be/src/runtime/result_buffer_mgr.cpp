@@ -59,8 +59,7 @@ ResultBufferMgr::~ResultBufferMgr() {
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread = std::make_unique<std::thread>(
-            std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)); // NOLINT
+    _cancel_thread = std::make_unique<std::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
     Thread::set_thread_name(_cancel_thread->native_handle(), "res_buf_mgr");
     return Status::OK();
 }
@@ -165,7 +164,7 @@ void ResultBufferMgr::cancel_thread() {
 
         // cancel query
         for (auto& i : query_to_cancel) {
-            (void)cancel(i);
+            cancel(i);
         }
         nap_sleep(1, [this] { return _is_stop; });
     }

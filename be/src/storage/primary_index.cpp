@@ -131,7 +131,7 @@ public:
                         "key=$4",
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
                 LOG(ERROR) << msg;
-                return Status::AlreadyExist(msg);
+                return Status::InternalError(msg);
             }
         }
         return Status::OK();
@@ -289,7 +289,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::AlreadyExist(msg);
+                    return Status::InternalError(msg);
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
@@ -310,7 +310,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::AlreadyExist(msg);
+                    return Status::InternalError(msg);
                 }
             }
         }
@@ -572,7 +572,7 @@ public:
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                         hexdump(keys[i].data, keys[i].size));
                 LOG(ERROR) << msg;
-                return Status::AlreadyExist(msg);
+                return Status::InternalError(msg);
             }
             _total_length += keys[i].size;
         }
@@ -1025,12 +1025,12 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
-    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
-    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
@@ -1048,7 +1048,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     int64_t apply_version = 0;
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
-    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
+    RETURN_IF_ERROR(tablet->updates()->_get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
@@ -1088,8 +1088,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
-                                                  apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -1185,15 +1184,14 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
+    _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
 }
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat) {
+                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
@@ -1204,7 +1202,7 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
+                                              reinterpret_cast<IndexValue*>(old_values.data())));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
@@ -1292,12 +1290,11 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return insert(rssid, rids, pks);
 }
 
-Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
-                            IOStat* stat) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
     }
@@ -1309,7 +1306,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
@@ -1419,12 +1416,12 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     std::lock_guard<std::mutex> lg(_lock);
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
-    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
-    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);

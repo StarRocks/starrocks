@@ -1,15 +1,11 @@
+
 commands_restrictions:
   backport:
     conditions:
-      - or:
-        - sender-permission>=read
-        - sender=github-actions[bot]
-
+      - sender-permission>=read
   rebase:
     conditions:
-      - or:
-        - sender-permission>=read
-        - sender=github-actions[bot]
+      - sender-permission>=read
 
 pull_request_rules:
   - name: assign PRs with the pr author
@@ -20,6 +16,15 @@ pull_request_rules:
         add_users: 
           - "{{author}}"
 
+  - name: assign backport PRs with the pr author
+    conditions:
+      - merged
+    actions:
+      backport:
+        bot_account: "{{author}}"
+        assignees: 
+          - "{{author}}"
+  
   - name: close pr when conflict
     conditions:
       - label=conflicts

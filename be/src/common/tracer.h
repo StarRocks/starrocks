@@ -52,8 +52,6 @@ public:
     // Get the global tracer instance.
     static Tracer& Instance();
 
-    static void release_instance();
-
     // Return true if trace is enabled.
     bool is_enabled() const;
 
@@ -93,7 +91,5 @@ private:
     // The global tracer.
     opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> _tracer;
 };
-
-void shutdown_tracer();
 
 } // namespace starrocks

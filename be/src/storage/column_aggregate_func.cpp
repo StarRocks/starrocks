@@ -15,8 +15,6 @@
 #include "storage/column_aggregate_func.h"
 
 #include "column/array_column.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -161,7 +159,7 @@ public:
     }
 };
 
-struct ColumnRefState {
+struct ArrayState {
     ColumnPtr column;
     int row = 0;
 
@@ -171,9 +169,8 @@ struct ColumnRefState {
     }
 };
 
-// Array/Map/Struct
-template <typename ColumnType>
-class ReplaceAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
+template <>
+class ReplaceAggregator<ArrayColumn, ArrayState> final : public ValueColumnAggregator<ArrayColumn, ArrayState> {
 public:
     void reset() override { this->data().reset(); }
 
@@ -185,7 +182,7 @@ public:
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
 
     void append_data(Column* agg) override {
-        auto* col = down_cast<ColumnType*>(agg);
+        auto* col = down_cast<ArrayColumn*>(agg);
         if (this->data().column) {
             col->append(*this->data().column, this->data().row, 1);
         } else {
@@ -369,9 +366,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ColumnRefState)
-            CASE_REPLACE(TYPE_MAP, MapColumn, ColumnRefState)
-            CASE_REPLACE(TYPE_STRUCT, StructColumn, ColumnRefState)
+            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ArrayState)
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)

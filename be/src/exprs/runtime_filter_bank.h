@@ -25,7 +25,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
@@ -71,7 +70,7 @@ public:
 
 // how to generate & publish this runtime filter
 // it only happens in hash join node.
-class RuntimeFilterBuildDescriptor : public WithLayoutMixin {
+class RuntimeFilterBuildDescriptor {
 public:
     RuntimeFilterBuildDescriptor() = default;
     Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, RuntimeState* state);
@@ -86,6 +85,7 @@ public:
     }
     bool has_remote_targets() const { return _has_remote_targets; }
     bool has_consumer() const { return _has_consumer; }
+    int8_t join_mode() const { return _join_mode; }
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
     void set_runtime_filter(JoinRuntimeFilter* rf) { _runtime_filter = rf; }
     void set_or_intersect_filter(JoinRuntimeFilter* rf) {
@@ -100,7 +100,6 @@ public:
     JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
     void set_is_pipeline(bool flag) { _is_pipeline = flag; }
     bool is_pipeline() const { return _is_pipeline; }
-    int8_t join_mode() const { return _join_mode; };
 
 private:
     friend class HashJoinNode;
@@ -118,11 +117,10 @@ private:
     std::vector<TNetworkAddress> _merge_nodes;
     JoinRuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
-
     std::mutex _mutex;
 };
 
-class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
+class RuntimeFilterProbeDescriptor {
 public:
     RuntimeFilterProbeDescriptor() = default;
     Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, RuntimeState* state);
@@ -160,7 +158,8 @@ public:
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
     TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
-    int8_t join_mode() const { return _join_mode; };
+    const TRuntimeFilterBuildJoinMode::type join_mode() const { return _join_mode; };
+    const std::vector<int32_t>* bucketseq_to_partition() const { return &_bucketseq_to_partition; }
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
 private:
@@ -179,9 +178,10 @@ private:
     RuntimeProfile::Counter* _latency_timer = nullptr;
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
-    int8_t _join_mode;
+    TRuntimeFilterBuildJoinMode::type _join_mode;
     bool _is_topn_filter = false;
     bool _skip_wait = false;
+    std::vector<int32_t> _bucketseq_to_partition;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
 };
 
@@ -216,8 +216,6 @@ public:
                              RuntimeBloomFilterEvalContext& eval_context);
     void evaluate(Chunk* chunk);
     void evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
-    // evaluate partial chunk that may not contain slots referenced by runtime filter
-    void evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
@@ -249,7 +247,6 @@ private:
     // TODO: return a funcion call status
     void do_evaluate(Chunk* chunk);
     void do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
-    void do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;

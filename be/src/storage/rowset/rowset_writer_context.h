@@ -57,9 +57,8 @@ public:
 
     std::string rowset_path_prefix;
 
-    TabletSchemaCSPtr tablet_schema = nullptr;
-    TabletSchemaCSPtr full_tablet_schema = nullptr;
-    bool is_partial_update = false;
+    const TabletSchema* tablet_schema = nullptr;
+    std::shared_ptr<TabletSchema> partial_update_tablet_schema = nullptr;
     std::vector<int32_t> referenced_column_ids;
 
     RowsetId rowset_id{};
@@ -87,9 +86,6 @@ public:
     std::string merge_condition;
 
     bool miss_auto_increment_column = false;
-
-    // partial update mode
-    PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
 };
 
 } // namespace starrocks

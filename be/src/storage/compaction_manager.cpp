@@ -27,7 +27,7 @@ namespace starrocks {
 
 CompactionManager::CompactionManager() : _next_task_id(0) {}
 
-void CompactionManager::stop() {
+CompactionManager::~CompactionManager() {
     _stop.store(true, std::memory_order_release);
     if (_scheduler_thread.joinable()) {
         _scheduler_thread.join();
@@ -139,6 +139,7 @@ void CompactionManager::init_max_task_num(int32_t num) {
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
+    size_t erase_num = 0;
     {
         std::lock_guard lg(_candidates_mutex);
         // TODO(meegoo): This is very inefficient to implement, just to fix bug, it will refactor later
@@ -146,12 +147,8 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             bool has_erase = false;
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
-                    if (iter->type == CompactionType::BASE_COMPACTION) {
-                        StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
-                    } else {
-                        StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
-                    }
                     iter = _compaction_candidates.erase(iter);
+                    erase_num++;
                     has_erase = true;
                     break;
                 }
@@ -164,11 +161,6 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             if (candidate.tablet->enable_compaction()) {
                 VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
-                if (candidate.type == CompactionType::BASE_COMPACTION) {
-                    StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(1);
-                } else {
-                    StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(1);
-                }
                 _compaction_candidates.emplace(std::move(candidate));
             }
         }
@@ -186,11 +178,6 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     std::lock_guard lg(_candidates_mutex);
     for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
         if (tablet_id == iter->tablet->tablet_id()) {
-            if (iter->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
-            } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
-            }
             iter = _compaction_candidates.erase(iter);
             break;
         } else {
@@ -211,10 +198,16 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         return false;
     }
 
+    if (tablet->has_compaction_task()) {
+        // tablet already has a running compaction task, skip it
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because there is another running compaction task.";
+        return false;
+    }
+
     int64_t last_failure_ts = 0;
     DataDir* data_dir = tablet->data_dir();
     if (candidate.type == CUMULATIVE_COMPACTION) {
-        std::shared_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
+        std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
             return false;
@@ -281,11 +274,6 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
             *candidate = *iter;
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
-            if (candidate->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
-            } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
-            }
             return true;
         }
         iter++;
@@ -319,7 +307,7 @@ void CompactionManager::_dispatch_worker() {
     }
 }
 
-void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet) {
+void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
     std::lock_guard lock(_dispatch_mutex);
     auto iter = _dispatch_map.find(tablet->tablet_id());
     if (iter != _dispatch_map.end()) {
@@ -333,7 +321,7 @@ void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet) {
     }
 }
 
-void CompactionManager::update_tablet(const TabletSharedPtr& tablet) {
+void CompactionManager::update_tablet(TabletSharedPtr tablet) {
     if (tablet == nullptr) {
         return;
     }
@@ -357,17 +345,8 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     std::lock_guard lg(_tasks_mutex);
     TabletSharedPtr& tablet = compaction_task->tablet();
     DataDir* data_dir = tablet->data_dir();
-    bool success;
-    auto iter = _running_tasks.find(tablet->tablet_id());
-    if (iter == _running_tasks.end()) {
-        std::unordered_set<CompactionTask*> task_set;
-        task_set.emplace(compaction_task);
-        _running_tasks.emplace(tablet->tablet_id(), task_set);
-        success = true;
-    } else {
-        success = iter->second.emplace(compaction_task).second;
-    }
-    if (!success) {
+    auto p = _running_tasks.insert(compaction_task);
+    if (!p.second) {
         // duplicate task
         LOG(WARNING) << "duplicate task, compaction_task:" << compaction_task->task_id()
                      << ", tablet:" << tablet->tablet_id();
@@ -376,13 +355,9 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _data_dir_to_cumulative_task_num_map[data_dir]++;
         _cumulative_compaction_concurrency++;
-        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
     } else {
         _data_dir_to_base_task_num_map[data_dir]++;
         _base_compaction_concurrency++;
-        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
     }
     return true;
 }
@@ -391,30 +366,19 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
     if (!compaction_task) {
         return;
     }
-    {
-        std::lock_guard lg(_tasks_mutex);
-        auto iter = _running_tasks.find(compaction_task->tablet()->tablet_id());
-        if (iter != _running_tasks.end()) {
-            auto size = iter->second.erase(compaction_task);
-            if (size > 0) {
-                TabletSharedPtr& tablet = compaction_task->tablet();
-                DataDir* data_dir = tablet->data_dir();
-                if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
-                    _data_dir_to_cumulative_task_num_map[data_dir]--;
-                    _cumulative_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(-1);
-                } else {
-                    _data_dir_to_base_task_num_map[data_dir]--;
-                    _base_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
-                }
-            }
-            if (iter->second.empty()) {
-                _running_tasks.erase(iter);
-            }
+    std::lock_guard lg(_tasks_mutex);
+    auto size = _running_tasks.erase(compaction_task);
+    if (size > 0) {
+        TabletSharedPtr& tablet = compaction_task->tablet();
+        DataDir* data_dir = tablet->data_dir();
+        if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
+            _data_dir_to_cumulative_task_num_map[data_dir]--;
+            _cumulative_compaction_concurrency--;
+        } else {
+            _data_dir_to_base_task_num_map[data_dir]--;
+            _base_compaction_concurrency--;
         }
     }
-    compaction_task->tablet()->reset_compaction_status();
 }
 
 void CompactionManager::clear_tasks() {
@@ -424,141 +388,6 @@ void CompactionManager::clear_tasks() {
     _data_dir_to_base_task_num_map.clear();
     _base_compaction_concurrency = 0;
     _cumulative_compaction_concurrency = 0;
-}
-
-// for http action
-void CompactionManager::get_running_status(std::string* json_result) {
-    int32_t max_task_num;
-    int64_t base_task_num;
-    int64_t cumulative_task_num;
-    int64_t running_task_num;
-    int64_t candidate_num;
-    std::unordered_map<std::string, uint16_t> data_dir_to_base_task_num;
-    std::unordered_map<std::string, uint16_t> data_dir_to_cumulative_task_num;
-    vector<int64_t> running_tablet_ids;
-    {
-        std::lock_guard lg(_tasks_mutex);
-        max_task_num = _max_task_num;
-        base_task_num = _base_compaction_concurrency;
-        cumulative_task_num = _cumulative_compaction_concurrency;
-        running_task_num = 0;
-        running_tablet_ids.reserve(_running_tasks.size());
-        for (const auto& it : _running_tasks) {
-            running_tablet_ids.push_back(it.first);
-            running_task_num += it.second.size();
-        }
-        for (auto it : _data_dir_to_base_task_num_map) {
-            data_dir_to_base_task_num[it.first->path()] = it.second;
-        }
-        for (auto it : _data_dir_to_cumulative_task_num_map) {
-            data_dir_to_cumulative_task_num[it.first->path()] = it.second;
-        }
-        candidate_num = candidates_size();
-    }
-
-    rapidjson::Document root;
-    root.SetObject();
-
-    rapidjson::Value max_task_num_value;
-    max_task_num_value.SetInt(max_task_num);
-    root.AddMember("max_task_num", max_task_num_value, root.GetAllocator());
-
-    rapidjson::Value base_task_num_value;
-    base_task_num_value.SetInt64(base_task_num);
-    root.AddMember("base_task_num", base_task_num_value, root.GetAllocator());
-
-    rapidjson::Value cumulative_task_num_value;
-    cumulative_task_num_value.SetInt64(cumulative_task_num);
-    root.AddMember("cumulative_task_num", cumulative_task_num_value, root.GetAllocator());
-
-    rapidjson::Value running_task_num_value;
-    running_task_num_value.SetInt64(running_task_num);
-    root.AddMember("running_task_num", running_task_num_value, root.GetAllocator());
-
-    rapidjson::Value base_task_num_detail;
-    base_task_num_detail.SetArray();
-    for (const auto& it : data_dir_to_base_task_num) {
-        rapidjson::Value value;
-        value.SetObject();
-
-        rapidjson::Value path;
-        path.SetString(it.first.c_str(), it.first.size(), root.GetAllocator());
-        value.AddMember("path", path, root.GetAllocator());
-
-        rapidjson::Value task_num;
-        task_num.SetUint64(it.second);
-        value.AddMember("base_task_num", task_num, root.GetAllocator());
-
-        base_task_num_detail.PushBack(value, root.GetAllocator());
-    }
-    root.AddMember("base_task_num_detail", base_task_num_detail, root.GetAllocator());
-
-    rapidjson::Value cumulative_task_num_detail;
-    cumulative_task_num_detail.SetArray();
-    for (const auto& it : data_dir_to_cumulative_task_num) {
-        rapidjson::Value value;
-        value.SetObject();
-
-        rapidjson::Value path;
-        path.SetString(it.first.c_str(), it.first.size(), root.GetAllocator());
-        value.AddMember("path", path, root.GetAllocator());
-
-        rapidjson::Value task_num;
-        task_num.SetUint64(it.second);
-        value.AddMember("cumulative_task_num", task_num, root.GetAllocator());
-
-        cumulative_task_num_detail.PushBack(value, root.GetAllocator());
-    }
-    root.AddMember("cumulative_task_num_detail", cumulative_task_num_detail, root.GetAllocator());
-
-    rapidjson::Value tablet_num;
-    tablet_num.SetInt(running_tablet_ids.size());
-    root.AddMember("tablet_num", tablet_num, root.GetAllocator());
-
-    rapidjson::Value running_tablet_list;
-    running_tablet_list.SetArray();
-    for (auto it : running_tablet_ids) {
-        rapidjson::Value value;
-        value.SetInt64(it);
-        running_tablet_list.PushBack(value, root.GetAllocator());
-    }
-    root.AddMember("running_tablet_list", running_tablet_list, root.GetAllocator());
-
-    rapidjson::Value candidate_num_value;
-    candidate_num_value.SetInt64(candidate_num);
-    root.AddMember("candidate_num", candidate_num_value, root.GetAllocator());
-
-    // to json string
-    rapidjson::StringBuffer strbuf;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
-    root.Accept(writer);
-    *json_result = std::string(strbuf.GetString());
-}
-
-bool CompactionManager::has_running_task(const TabletSharedPtr& tablet) {
-    std::lock_guard lg(_tasks_mutex);
-    auto iter = _running_tasks.find(tablet->tablet_id());
-    return iter != _running_tasks.end() && !iter->second.empty();
-}
-
-void CompactionManager::stop_compaction(const TabletSharedPtr& tablet) {
-    std::lock_guard lg(_tasks_mutex);
-    auto iter = _running_tasks.find(tablet->tablet_id());
-    if (iter != _running_tasks.end()) {
-        for (auto task : iter->second) {
-            task->stop();
-        }
-    }
-}
-
-std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const TabletSharedPtr& tablet) {
-    std::lock_guard lg(_tasks_mutex);
-    std::unordered_set<CompactionTask*> res;
-    auto iter = _running_tasks.find(tablet->tablet_id());
-    if (iter != _running_tasks.end()) {
-        res = iter->second;
-    }
-    return res;
 }
 
 Status CompactionManager::update_max_threads(int max_threads) {
@@ -591,10 +420,6 @@ int64_t CompactionManager::base_compaction_concurrency() {
 int64_t CompactionManager::cumulative_compaction_concurrency() {
     std::lock_guard lg(_tasks_mutex);
     return _cumulative_compaction_concurrency;
-}
-
-int CompactionManager::get_waiting_task_num() {
-    return _compaction_candidates.size();
 }
 
 } // namespace starrocks

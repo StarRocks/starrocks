@@ -18,7 +18,7 @@ RefCountedBase::RefCountedBase()
         = default;
 #endif
 
-RefCountedBase::~RefCountedBase() { // NOLINT
+RefCountedBase::~RefCountedBase() {
 #ifndef NDEBUG
     DCHECK(in_dtor_) << "RefCounted object deleted without calling Release()";
 #endif
@@ -54,13 +54,13 @@ bool RefCountedThreadSafeBase::HasOneRef() const {
     return base::RefCountIsOne(&const_cast<RefCountedThreadSafeBase*>(this)->ref_count_);
 }
 
-RefCountedThreadSafeBase::RefCountedThreadSafeBase() { // NOLINT
+RefCountedThreadSafeBase::RefCountedThreadSafeBase() {
 #ifndef NDEBUG
     in_dtor_ = false;
 #endif
 }
 
-RefCountedThreadSafeBase::~RefCountedThreadSafeBase() { // NOLINT
+RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
 #ifndef NDEBUG
     DCHECK(in_dtor_) << "RefCountedThreadSafe object deleted without "
                         "calling Release()";

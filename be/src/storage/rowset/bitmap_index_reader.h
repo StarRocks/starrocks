@@ -39,7 +39,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -48,6 +47,7 @@ namespace starrocks {
 
 class FileSystem;
 class TypeInfo;
+class SparseRange;
 class BitmapIndexIterator;
 class IndexedColumnReader;
 class IndexedColumnIterator;
@@ -71,7 +71,7 @@ public:
 
     // create a new column iterator. Client should delete returned iterator
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    Status new_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator);
+    Status new_iterator(BitmapIndexIterator** iterator, const IndexReadOptions& opts);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
@@ -80,7 +80,10 @@ public:
 
     bool loaded() const { return invoked(_load_once); }
 
-    size_t mem_usage() const {
+private:
+    friend class BitmapIndexIterator;
+
+    size_t _mem_usage() const {
         size_t size = sizeof(BitmapIndexReader);
         if (_dict_column_reader != nullptr) {
             size += _dict_column_reader->mem_usage();
@@ -90,9 +93,6 @@ public:
         }
         return size;
     }
-
-private:
-    friend class BitmapIndexIterator;
 
     void _reset();
 
@@ -147,7 +147,7 @@ public:
     // for (size_t i = 0; i < range.size(); i++) {
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
-    Status read_union_bitmap(const SparseRange<>& range, Roaring* result);
+    Status read_union_bitmap(const SparseRange& range, Roaring* result);
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 

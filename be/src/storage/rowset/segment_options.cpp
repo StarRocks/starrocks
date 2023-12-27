@@ -46,7 +46,6 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;
-    dst->is_first_split_of_segment = is_first_split_of_segment;
 
     return Status::OK();
 }
@@ -76,7 +75,7 @@ std::string SegmentReadOptions::debug_string() const {
         ss << "]}";
     }
     ss << "],delete_predicates={";
-    ss << "},unsafe_tablet_schema_ref={";
+    ss << "},tablet_schema={";
     ss << "},use_page_cache=" << use_page_cache;
     return ss.str();
 }

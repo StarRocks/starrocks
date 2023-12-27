@@ -44,8 +44,7 @@ public:
         return column;
     }
 
-    static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable,
-                                          size_t min_length = 0) {
+    static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
@@ -65,7 +64,7 @@ public:
                 "abcdefghijklmnopqrstuvwxyz";
 
         auto gen_rand_str = [&]() {
-            int str_len = uniform_int(rng) % 20 + min_length;
+            int str_len = uniform_int(rng) % 20;
             int str_start = std::min(poisson_int(rng) % alphanum.size(), alphanum.size() - str_len);
             Slice rand_str(alphanum.c_str() + str_start, str_len);
             return rand_str;

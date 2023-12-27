@@ -32,7 +32,7 @@ class StreamAggregateOperator : public pipeline::SourceOperator {
 public:
     StreamAggregateOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                             StreamAggregatorPtr aggregator)
-            : pipeline::SourceOperator(factory, id, "stream_aggregate", plan_node_id, false, driver_sequence),
+            : pipeline::SourceOperator(factory, id, "stream_aggregate", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -42,17 +42,17 @@ public:
     bool has_output() const override;
     bool need_input() const override { return !is_finished(); }
     bool is_finished() const override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
-    [[nodiscard]] Status set_finished(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
     bool is_epoch_finished() const override;
-    [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override;
-    [[nodiscard]] Status set_epoch_finished(RuntimeState* state) override;
-    [[nodiscard]] Status reset_epoch(RuntimeState* state) override;
+    Status set_epoch_finishing(RuntimeState* state) override;
+    Status set_epoch_finished(RuntimeState* state) override;
+    Status reset_epoch(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:

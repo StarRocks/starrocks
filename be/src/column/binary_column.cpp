@@ -171,17 +171,11 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 
     size_t offset = bytes->size();
     bytes->resize(size + copy_length);
-
-    size_t rows = strs.size();
-    size_t length = offsets->size();
-    raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
-
-    for (size_t i = 0; i < rows; ++i) {
-        memcpy(&(*bytes)[offset], strs[i].get_data(), copy_length);
-        offset += strs[i].get_size();
-        (*offsets)[length++] = offset;
+    for (const auto& s : strs) {
+        strings::memcpy_inlined(&(*bytes)[offset], s.data, copy_length);
+        offset += s.size;
+        offsets->emplace_back(offset);
     }
-
     bytes->resize(offset);
 }
 
@@ -325,7 +319,7 @@ void BinaryColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
@@ -363,6 +357,8 @@ void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes
         }
         swap_column(*new_binary_column);
     }
+
+    return Status::OK();
 }
 
 template <typename T>

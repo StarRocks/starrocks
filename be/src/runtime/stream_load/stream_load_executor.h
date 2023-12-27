@@ -37,8 +37,8 @@
 namespace starrocks {
 
 class ExecEnv;
-class Status;
 class StreamLoadContext;
+class Status;
 class TTxnCommitAttachment;
 
 class StreamLoadExecutor {

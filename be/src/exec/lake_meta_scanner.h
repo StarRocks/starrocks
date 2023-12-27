@@ -21,22 +21,14 @@
 #include "exec/olap_utils.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake_meta_reader.h"
-
-#ifdef BE_TEST
-// remove final declaration for UT
-#define DECL_FINAL
-#else
-#define DECL_FINAL final
-#endif
-
 namespace starrocks {
 
 class LakeMetaScanNode;
 
-class LakeMetaScanner DECL_FINAL : public MetaScanner {
+class LakeMetaScanner final : public MetaScanner {
 public:
     LakeMetaScanner(LakeMetaScanNode* parent);
-    ~LakeMetaScanner() DECL_FINAL = default;
+    ~LakeMetaScanner() final = default;
 
     LakeMetaScanner(const LakeMetaScanner&) = delete;
     LakeMetaScanner(LakeMetaScanner&) = delete;
@@ -53,15 +45,16 @@ public:
 
     bool has_more() override;
 
-protected:
-    Status _lazy_init(RuntimeState* runtime_state, const MetaScannerParams& params);
-    Status _real_init();
+private:
+    Status _get_tablet(const TInternalScanRange* scan_range) override;
+    Status _init_meta_reader_params() override;
 
     LakeMetaScanNode* _parent;
-    int64_t _tablet_id;
-    std::unique_ptr<LakeMetaReader> _reader;
+    StatusOr<lake::Tablet> _tablet;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
+
+    LakeMetaReaderParams _reader_params;
+    std::shared_ptr<LakeMetaReader> _reader;
 };
 
 } // namespace starrocks
-
-#undef DECL_FINAL

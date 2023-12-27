@@ -51,9 +51,9 @@ Status AggregateBaseNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void AggregateBaseNode::close(RuntimeState* state) {
+Status AggregateBaseNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return;
+        return Status::OK();
     }
     if (_aggregator != nullptr) {
         if (_aggregator->is_hash_set()) {
@@ -65,7 +65,7 @@ void AggregateBaseNode::close(RuntimeState* state) {
         _aggregator->close(state);
         _aggregator.reset();
     }
-    ExecNode::close(state);
+    return ExecNode::close(state);
 }
 
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {

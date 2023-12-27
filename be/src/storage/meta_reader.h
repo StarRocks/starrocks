@@ -20,7 +20,9 @@
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -30,15 +32,15 @@ class RuntimeState;
 
 namespace starrocks {
 
-class ColumnIterator;
+class Tablet;
 class SegmentMetaCollecter;
 
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
     MetaReaderParams() = default;
-
-    int64_t tablet_id;
+    ;
+    TabletSharedPtr tablet;
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
@@ -47,8 +49,6 @@ struct MetaReaderParams {
     const DescriptorTbl* desc_tbl = nullptr;
 
     int chunk_size = config::vector_chunk_size;
-
-    void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
 };
 
 struct SegmentMetaCollecterParams {
@@ -56,8 +56,7 @@ struct SegmentMetaCollecterParams {
     std::vector<ColumnId> cids;
     std::vector<bool> read_page;
     std::vector<LogicalType> field_type;
-    bool use_page_cache;
-    TabletSchemaCSPtr tablet_schema;
+    int32_t max_cid;
 };
 
 // MetaReader will implements
@@ -83,6 +82,8 @@ public:
     };
 
 protected:
+    Version _version;
+    int _chunk_size;
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;

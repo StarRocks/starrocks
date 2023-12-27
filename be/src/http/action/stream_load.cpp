@@ -153,15 +153,15 @@ void StreamLoadAction::handle(HttpRequest* req) {
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
         if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
-            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.message()
-                         << " " << ctx->brief();
+            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id
+                         << " errmsg=" << ctx->status.get_error_msg();
         }
     }
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
     if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
         if (ctx->need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+            _exec_env->stream_load_executor()->rollback_txn(ctx);
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
@@ -194,7 +194,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip();
-            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
+            ctx->body_sink->append(std::move(ctx->buffer));
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
@@ -249,7 +249,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+            _exec_env->stream_load_executor()->rollback_txn(ctx);
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
@@ -541,15 +541,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
         request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
     }
-    if (!http_req->header(HTTP_PARTIAL_UPDATE_MODE).empty()) {
-        if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "row") {
-            request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "auto") {
-            request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
-            request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
-        }
-    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
@@ -561,22 +552,10 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid load_dop format");
         }
     }
-    if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
-        try {
-            auto log_rejected_record_num = std::stoll(http_req->header(HTTP_LOG_REJECTED_RECORD_NUM));
-            if (log_rejected_record_num < -1) {
-                return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
-            }
-            request.__set_log_rejected_record_num(log_rejected_record_num);
-        } catch (const std::invalid_argument& e) {
-            return Status::InvalidArgument("Invalid log_rejected_record_num format");
-        }
-    }
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000, config::txn_commit_rpc_timeout_ms);
     }
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     // plan this load
@@ -597,7 +576,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
 #endif
     Status plan_status(ctx->put_result.status);
     if (!plan_status.ok()) {
-        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << ctx->brief();
+        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << ctx->brief();
         return plan_status;
     }
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);

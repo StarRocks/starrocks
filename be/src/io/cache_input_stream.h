@@ -17,9 +17,7 @@
 #include <memory>
 #include <string>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/io_buffer.h"
-#include "io/shared_buffered_input_stream.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks::io {
 
@@ -30,26 +28,16 @@ public:
         int64_t write_cache_ns = 0;
         int64_t read_cache_count = 0;
         int64_t write_cache_count = 0;
-        int64_t write_mem_cache_bytes = 0;
-        int64_t write_disk_cache_bytes = 0;
         int64_t read_cache_bytes = 0;
-        int64_t read_mem_cache_bytes = 0;
-        int64_t read_disk_cache_bytes = 0;
         int64_t write_cache_bytes = 0;
-        int64_t skip_read_cache_count = 0;
-        int64_t skip_read_cache_bytes = 0;
-        int64_t skip_write_cache_count = 0;
-        int64_t skip_write_cache_bytes = 0;
         int64_t write_cache_fail_count = 0;
         int64_t write_cache_fail_bytes = 0;
-        int64_t read_block_buffer_bytes = 0;
-        int64_t read_block_buffer_count = 0;
     };
 
-    explicit CacheInputStream(const std::shared_ptr<SharedBufferedInputStream>& stream, const std::string& filename,
-                              size_t size, int64_t modification_time);
+    explicit CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size,
+                              int64_t modification_time);
 
-    ~CacheInputStream() override;
+    ~CacheInputStream() override = default;
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
@@ -65,39 +53,26 @@ public:
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
-    void set_enable_block_buffer(bool v) { _enable_block_buffer = v; }
-
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
 
     Status skip(int64_t count) override {
         _offset += count;
-        return _sb_stream->skip(count);
+        return _stream->skip(count);
     }
 
 private:
-    struct BlockBuffer {
-        int64_t offset;
-        IOBuffer buffer;
-    };
-
-    Status _read_block(int64_t offset, int64_t size, char* out, bool single_read);
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
-    void _deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb);
 
     std::string _cache_key;
     std::string _filename;
-    std::shared_ptr<SharedBufferedInputStream> _sb_stream;
+    std::shared_ptr<SeekableInputStream> _stream;
     int64_t _offset;
     std::string _buffer;
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
-    bool _enable_block_buffer = false;
-    BlockCache* _cache = nullptr;
-    int64_t _block_size = 0;
-    std::unordered_map<int64_t, BlockBuffer> _block_map;
 };
 
 } // namespace starrocks::io

@@ -51,7 +51,6 @@ public:
     arrow::Result<int64_t> Tell() const override;
     arrow::Status Close() override;
     bool closed() const override;
-    const std::string& filename() const;
 
 private:
     std::shared_ptr<starrocks::RandomAccessFile> _file;
@@ -66,30 +65,26 @@ public:
 
     void close();
     Status size(int64_t* size);
-    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs);
+    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
     int64_t num_rows() { return _num_rows; }
-
-    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
-    // _init_parquet_reader initializes the underlying parquets reader.
-    Status _init_parquet_reader();
 
     const int32_t _num_of_columns_from_file;
     int64_t _num_rows = 0;
-    ::parquet::ReaderProperties _properties;
+    parquet::ReaderProperties _properties;
     std::shared_ptr<arrow::io::RandomAccessFile> _parquet;
 
     // parquet file reader object
     std::shared_ptr<::arrow::RecordBatchReader> _rb_batch;
     std::shared_ptr<arrow::RecordBatch> _batch;
-    std::unique_ptr<::parquet::arrow::FileReader> _reader;
-    std::shared_ptr<::parquet::FileMetaData> _file_metadata;
+    std::unique_ptr<parquet::arrow::FileReader> _reader;
+    std::shared_ptr<parquet::FileMetaData> _file_metadata;
 
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;
@@ -104,7 +99,7 @@ private:
     int64_t _read_offset;
     int64_t _read_size;
 
-    std::string _filename;
+    std::string _timezone;
 };
 
 // Reader of broker parquet file
@@ -117,7 +112,6 @@ public:
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
     int64_t total_num_rows() const;
-    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     std::shared_ptr<ParquetReaderWrap> _parquet_reader;

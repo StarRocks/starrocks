@@ -119,7 +119,7 @@ public:
 
     ~FrameOfReferencePageDecoder() override = default;
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
         bool result = _decoder.init();
         if (result) {
@@ -131,7 +131,7 @@ public:
         }
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init() firstly";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -146,7 +146,7 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
         bool found = _decoder.seek_at_or_after_value(value, exact_match);
         if (!found) {
@@ -156,16 +156,16 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
-        SparseRange<> read_range;
+    Status next_batch(size_t* n, Column* dst) override {
+        SparseRange read_range;
         uint32_t begin = current_index();
-        read_range.add(Range<>(begin, begin + *n));
+        read_range.add(Range(begin, begin + *n));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *n = current_index() - begin;
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+    Status next_batch(const SparseRange& range, Column* dst) override {
         DCHECK(_parsed) << "Must call init() firstly";
         if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
             return Status::OK();
@@ -189,10 +189,10 @@ public:
         // clang-format on
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-        SparseRangeIterator<> iter = range.new_iterator();
+        SparseRangeIterator iter = range.new_iterator();
         while (to_read > 0 && _cur_index < _num_elements) {
-            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
-            Range<> r = iter.next(to_read);
+            seek_to_position_in_page(iter.begin());
+            Range r = iter.next(to_read);
             const size_t ori_size = dst->size();
             dst->resize(ori_size + r.span_size());
             auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;

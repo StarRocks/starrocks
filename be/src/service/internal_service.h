@@ -126,9 +126,6 @@ public:
     void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
 
-    void get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
-                         PGetFileSchemaResult* response, google::protobuf::Closure* done) override;
-
     void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
                                     const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
                                     google::protobuf::Closure* done) override;
@@ -156,20 +153,6 @@ public:
     void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
                          ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
 
-    void update_fail_point_status(google::protobuf::RpcController* controller,
-                                  const PUpdateFailPointStatusRequest* request,
-                                  PUpdateFailPointStatusResponse* response, google::protobuf::Closure* done) override;
-
-    void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
-                         PListFailPointResponse* response, google::protobuf::Closure* done) override;
-
-    void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
-                            PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
-
-    void process_dictionary_cache(google::protobuf::RpcController* controller,
-                                  const PProcessDictionaryCacheRequest* request,
-                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
-
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
@@ -193,16 +176,14 @@ private:
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
 
-    void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
-                        int timeout_ms);
+    void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
 
     void _get_pulsar_info_impl(const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-                               google::protobuf::Closure* done, int timeout_ms);
+                               GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
+                               int timeout_ms);
 
-    void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
-                          PGetFileSchemaResult* response, google::protobuf::Closure* done);
-
-    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request);
+    Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
@@ -214,12 +195,17 @@ private:
     Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
     Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
-    // short circuit
-    Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
-                               PExecShortCircuitResult* response);
-
 protected:
     ExecEnv* _exec_env;
+
+    // The BRPC call is executed by bthread.
+    // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
+    // In this way, the available pthread become less and the scheduling of bthread would be influenced.
+    // So, we should execute the function that may use pthread block primitive in a specific thread pool.
+    // More detail: https://github.com/apache/brpc/blob/master/docs/cn/bthread.md
+
+    // Thread pool for executing task  asynchronously in BRPC call.
+    PriorityThreadPool _async_thread_pool;
 };
 
 } // namespace starrocks

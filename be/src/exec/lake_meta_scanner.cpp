@@ -15,46 +15,44 @@
 #include "exec/lake_meta_scanner.h"
 
 #include "exec/lake_meta_scan_node.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
 Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
-    return _lazy_init(runtime_state, params);
-}
-
-Status LakeMetaScanner::_lazy_init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     _runtime_state = runtime_state;
-    _tablet_id = params.scan_range->tablet_id;
-    _version = strtoul(params.scan_range->version.c_str(), nullptr, 10);
+    RETURN_IF_ERROR(_get_tablet(params.scan_range));
+    RETURN_IF_ERROR(_init_meta_reader_params());
+    _reader = std::make_shared<LakeMetaReader>();
+
+    if (_reader == nullptr) {
+        return Status::InternalError("Failed to allocate meta reader.");
+    }
+
+    RETURN_IF_ERROR(_reader->init(_reader_params));
     return Status::OK();
 }
 
-Status LakeMetaScanner::_real_init() {
-    LakeMetaReaderParams reader_params;
-    reader_params.tablet_id = _tablet_id;
-    reader_params.version = Version(0, _version);
-    reader_params.runtime_state = _runtime_state;
-    reader_params.chunk_size = _runtime_state->chunk_size();
-    reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
-    reader_params.desc_tbl = &_parent->_desc_tbl;
+Status LakeMetaScanner::_init_meta_reader_params() {
+    _reader_params.tablet = _tablet;
+    _reader_params.tablet_schema = _tablet_schema;
+    _reader_params.version = Version(0, _version);
+    _reader_params.runtime_state = _runtime_state;
+    _reader_params.chunk_size = _runtime_state->chunk_size();
+    _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+    _reader_params.desc_tbl = &_parent->_desc_tbl;
 
-    _reader = std::make_unique<LakeMetaReader>();
-    TEST_SYNC_POINT_CALLBACK("lake_meta_scanner:open_mock_reader", &_reader);
-    // possible invoke heavy remote IO operations if local cache missed
-    RETURN_IF_ERROR(_reader->init(reader_params));
     return Status::OK();
 }
 
 Status LakeMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (state->is_cancelled()) {
-        return Status::Cancelled("canceled state of LakeMetaScanner");
+        return Status::Cancelled("canceled state");
     }
 
     if (!_is_open) {
-        return Status::InternalError("LakeMetaScanner::open() has not been called or has failed");
+        return Status::InternalError("OlapMetaScanner Not open.");
     }
     return _reader->do_get_next(chunk);
 }
@@ -62,11 +60,8 @@ Status LakeMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeMetaScanner::open(RuntimeState* state) {
     DCHECK(!_is_closed);
     if (!_is_open) {
-        if (!_reader) {
-            RETURN_IF_ERROR(_real_init());
-        }
-        RETURN_IF_ERROR(_reader->open());
         _is_open = true;
+        RETURN_IF_ERROR(_reader->open());
     }
     return Status::OK();
 }
@@ -81,6 +76,13 @@ void LakeMetaScanner::close(RuntimeState* state) {
 
 bool LakeMetaScanner::has_more() {
     return _reader->has_more();
+}
+
+Status LakeMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
+    _version = strtoul(scan_range->version.c_str(), nullptr, 10);
+    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(scan_range->tablet_id));
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
+    return Status::OK();
 }
 
 } // namespace starrocks

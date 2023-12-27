@@ -56,7 +56,7 @@ class TColumnValue;
 class TExpr;
 class TExprNode;
 class Literal;
-struct UserFunctionCacheEntry;
+class UserFunctionCacheEntry;
 
 class Chunk;
 class ColumnRef;
@@ -139,19 +139,16 @@ public:
     // Returns the number of slots added to the vector
     virtual int get_slot_ids(std::vector<SlotId>* slot_ids) const;
 
-    virtual int get_subfields(std::vector<std::vector<std::string>>* subfields) const;
-
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.
-    [[nodiscard]] static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx,
-                                                 RuntimeState* state);
+    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state);
 
     /// Creates vector of ExprContexts containing exprs from the given vector of
     /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
     /// an error, otherwise OK.
-    [[nodiscard]] static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs,
-                                                  std::vector<ExprContext*>* ctxs, RuntimeState* state);
+    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                                    RuntimeState* state);
 
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
@@ -163,25 +160,23 @@ public:
     ///   root_expr: out: root of constructed expr tree
     ///   ctx: out: context of constructed expr tree
     /// return
-    ///   [[nodiscard]] Status.ok() if successful
-    ///   ![[nodiscard]] Status.ok() if tree is inconsistent or corrupt
-    [[nodiscard]] static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes,
-                                                        Expr* parent, int* node_idx, Expr** root_expr,
-                                                        ExprContext** ctx, RuntimeState* state);
+    ///   status.ok() if successful
+    ///   !status.ok() if tree is inconsistent or corrupt
+    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
 
     /// Convenience function for preparing multiple expr trees.
-    [[nodiscard]] static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
+    static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
 
     /// Convenience function for opening multiple expr trees.
-    [[nodiscard]] static Status open(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
+    static Status open(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
 
     /// Clones each ExprContext for multiple expr trees. 'new_ctxs' must be non-NULL.
     /// Idempotent: if '*new_ctxs' is empty, a clone of each context in 'ctxs' will be added
     /// to it, and if non-empty, it is assumed CloneIfNotExists() was already called and the
     /// call is a no-op. The new ExprContexts are created in provided object pool.
-    [[nodiscard]] static Status clone_if_not_exists(RuntimeState* state, ObjectPool* pool,
-                                                    const std::vector<ExprContext*>& ctxs,
-                                                    std::vector<ExprContext*>* new_ctxs);
+    static Status clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
+                                      std::vector<ExprContext*>* new_ctxs);
 
     /// Convenience function for closing multiple expr trees.
     static void close(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
@@ -196,21 +191,17 @@ public:
     static Expr* copy(ObjectPool* pool, Expr* old_expr);
 
     // for vector query engine
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
+    virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
-    // TODO: check error in expression and return error [[nodiscard]] Status, instead of return null column
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) = 0;
-    [[nodiscard]] virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter);
+    // TODO: check error in expression and return error status, instead of return null column
+    virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) = 0;
+    virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter);
 
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
     // get the first column ref in expr
     ColumnRef* get_column_ref();
-
-#if BE_TEST
-    void set_type(TypeDescriptor t) { _type = t; }
-#endif
 
 protected:
     friend class MathFunctions;
@@ -233,7 +224,7 @@ protected:
     ///
     /// Subclasses overriding this function should call Expr::Prepare() to recursively call
     /// Prepare() on the expr tree.
-    [[nodiscard]] virtual Status prepare(RuntimeState* state, ExprContext* context);
+    virtual Status prepare(RuntimeState* state, ExprContext* context);
 
     /// Initializes 'context' for execution. If scope if FRAGMENT_LOCAL, both fragment- and
     /// thread-local state should be initialized. Otherwise, if scope is THREAD_LOCAL, only
@@ -241,12 +232,11 @@ protected:
     //
     /// Subclasses overriding this function should call Expr::Open() to recursively call
     /// Open() on the expr tree.
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context) {
+    Status open(RuntimeState* state, ExprContext* context) {
         return open(state, context, FunctionContext::FRAGMENT_LOCAL);
     }
 
-    [[nodiscard]] virtual Status open(RuntimeState* state, ExprContext* context,
-                                      FunctionContext::FunctionStateScope scope);
+    virtual Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope);
 
     /// Subclasses overriding this function should call Expr::Close().
     //
@@ -304,8 +294,8 @@ protected:
 
 private:
     // Create a new vectorized expr
-    [[nodiscard]] static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
-                                                       RuntimeState* state);
+    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
+                                         RuntimeState* state);
 };
 
 } // namespace starrocks

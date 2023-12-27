@@ -23,11 +23,11 @@ using StreamAggregatorPtr = std::shared_ptr<stream::StreamAggregator>;
 using StreamAggregatorFactory = AggregatorFactoryBase<stream::StreamAggregator>;
 using StreamAggregatorFactoryPtr = std::shared_ptr<StreamAggregatorFactory>;
 
-class StreamAggregateNode final : public ExecNode {
+class StreamAggregateNode final : public starrocks::ExecNode {
 public:
     StreamAggregateNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : ExecNode(pool, tnode, descs), _tnode(tnode) {}
-    ~StreamAggregateNode() override = default;
+    ~StreamAggregateNode() override {}
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     std::vector<std::shared_ptr<pipeline::OperatorFactory> > decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;

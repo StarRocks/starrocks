@@ -36,9 +36,8 @@
 namespace starrocks::pipeline {
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
-    _join_builder->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+    HashJoinBuildOperator::prepare(state);
+    _join_builder->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     RETURN_IF_ERROR(_join_builder->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
@@ -94,25 +93,21 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return _join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        auto& spiller = _join_builder->spiller();
-        return spiller->set_flush_all_call_back(
+        return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
-    WARN_IF_ERROR(publish_runtime_filters(state),
-                  fmt::format("spillable hash join operator of query {} publish runtime filter failed, ignore it...",
-                              print_id(state->query_id())));
+    publish_runtime_filters(state);
     SpillProcessTasksBuilder task_builder(state, io_executor);
     task_builder.then(flush_function).finally(set_call_back_function);
 
@@ -130,10 +125,8 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
     auto merged = _partial_rf_merger->set_always_true();
-    // for spillable operator, this interface never returns error status because we skip building rf here
-    DCHECK(merged.ok());
 
-    if (merged.value()) {
+    if (merged) {
         RuntimeInFilterList in_filters;
         RuntimeBloomFilterList bloom_filters;
         // publish empty runtime bloom-filters
@@ -166,7 +159,7 @@ Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* sta
     if (ht.get_row_count() > 0) {
         // We estimate the size of the hash table to be twice the size of the already input hash table
         auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
-        _join_builder->spiller()->set_partition(state, num_partitions);
+        RETURN_IF_ERROR(_join_builder->spiller()->set_partition(state, num_partitions));
     }
     return Status::OK();
 }

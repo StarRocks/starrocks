@@ -28,7 +28,7 @@
 #include "block_cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/statusor.h"
-#include "starcache/common/types.h"
+#include "thirdparty/starcache/src/common/config.h"
 #include "util/logging.h"
 #include "util/random.h"
 #include "util/time.h"
@@ -126,7 +126,7 @@ public:
             DCHECK(false) << "Unsupported cache engine: " << params.cache_engine;
         }
         Status st = _cache->init(options);
-        DCHECK(st.ok()) << st.message();
+        DCHECK(st.ok()) << st.get_error_msg();
         _ctx = new BenchContext();
     }
 
@@ -207,7 +207,7 @@ public:
                 std::string v = gen_obj_value(index, obj_value_size, _ctx);
                 start_us = MonotonicMicros();
                 Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), obj_value_size, 0);
-                ASSERT_TRUE(st.ok()) << "write cache failed: " << st.message();
+                ASSERT_TRUE(st.ok()) << "write cache failed: " << st.get_error_msg();
                 *(_ctx->write_latency) << MonotonicMicros() - start_us;
                 *(_ctx->write_bytes) << v.size();
                 *(_ctx->write_op_count) << 1;
@@ -216,7 +216,7 @@ public:
                 auto res = _cache->read_cache(_ctx->obj_keys[index], read_value, 0, _params->read_size);
                 delete[] read_value;
             } else {
-                ASSERT_TRUE(false) << "read cache failed: " << res.status().message();
+                ASSERT_TRUE(false) << "read cache failed: " << res.status().get_error_msg();
             }
             delete[] value;
         }
@@ -304,6 +304,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB});
     options.block_size = 4 * MB;
     options.checksum = false;
+    starcache::config::FLAGS_enable_disk_checksum = false;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -323,6 +324,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -342,6 +344,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 4 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;
@@ -364,6 +367,7 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB});
     options.block_size = 1 * MB;
     options.checksum = true;
+    starcache::config::FLAGS_enable_disk_checksum = true;
 
     BlockCacheBenchSuite::BenchParams params;
     params.obj_count = 1000;

@@ -23,7 +23,6 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
-#include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
@@ -34,6 +33,7 @@ class BlockCompressionCodec;
 
 namespace starrocks::parquet {
 
+class PageReader;
 struct ColumnReaderOptions;
 
 class ColumnChunkReader {
@@ -49,12 +49,6 @@ public:
     Status load_page();
 
     Status skip_page();
-
-    Status skip_values(size_t num) { return _cur_decoder->skip(num); }
-
-    Status next_page();
-
-    bool is_last_page() { return _page_reader->is_last_page(); }
 
     bool current_page_is_dict();
 
@@ -78,7 +72,7 @@ public:
         return _rep_level_decoder.decode_batch(n, levels);
     }
 
-    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];

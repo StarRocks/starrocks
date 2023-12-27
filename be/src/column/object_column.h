@@ -22,7 +22,6 @@
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 
@@ -43,7 +42,6 @@ class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
 
 public:
     using ValueType = T;
-    using Container = Buffer<ValueType*>;
 
     ObjectColumn() = default;
 
@@ -123,7 +121,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    void update_rows(const Column& src, const uint32_t* indexes) override;
+    Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override;
     uint32_t serialize_default(uint8_t* pos) override;
@@ -173,9 +171,9 @@ public:
 
     size_t container_memory_usage() const override { return _pool.capacity() * type_size(); }
 
-    size_t reference_memory_usage() const override { return byte_size(); }
+    size_t element_memory_usage() const override { return byte_size(); }
 
-    size_t reference_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
+    size_t element_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<ObjectColumn&>(rhs);

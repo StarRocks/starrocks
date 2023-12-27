@@ -19,12 +19,11 @@
 
 namespace starrocks {
 
-Status HashJoinProber::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
+void HashJoinProber::push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     DCHECK(!_probe_chunk);
     _probe_chunk = std::move(chunk);
     _current_probe_has_remain = true;
-    RETURN_IF_ERROR(_hash_joiner.prepare_probe_key_columns(&_key_columns, _probe_chunk));
-    return Status::OK();
+    _hash_joiner.prepare_probe_key_columns(&_key_columns, _probe_chunk);
 }
 
 StatusOr<ChunkPtr> HashJoinProber::probe_chunk(RuntimeState* state, JoinHashTable* hash_table) {
@@ -74,15 +73,15 @@ void HashJoinBuilder::reset_probe(RuntimeState* state) {
     _ht.reset_probe_state(state);
 }
 
-Status HashJoinBuilder::append_chunk(const ChunkPtr& chunk) {
+Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     if (UNLIKELY(_ht.get_row_count() + chunk->num_rows() >= max_hash_table_element_size)) {
         return Status::NotSupported(strings::Substitute("row count of right table in hash join > $0", UINT32_MAX));
     }
 
-    RETURN_IF_ERROR(_hash_joiner.prepare_build_key_columns(&_key_columns, chunk));
+    _hash_joiner.prepare_build_key_columns(&_key_columns, chunk);
     // copy chunk of right table
     SCOPED_TIMER(_hash_joiner.build_metrics().copy_right_table_chunk_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(chunk, _key_columns));
+    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
     return Status::OK();
 }
 

@@ -23,7 +23,7 @@
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    SourceOperator::prepare(state);
     auto query_statistic_recv = state->query_recv();
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,

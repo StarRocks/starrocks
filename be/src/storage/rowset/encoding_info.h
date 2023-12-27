@@ -39,7 +39,6 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <utility>
 
 #include "exec/aggregator.h"
@@ -26,7 +25,7 @@ class AggregateBlockingSinkOperator : public Operator {
 public:
     AggregateBlockingSinkOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                   int32_t driver_sequence, const char* name = "aggregate_blocking_sink")
-            : Operator(factory, id, name, plan_node_id, false, driver_sequence), _aggregator(std::move(aggregator)) {
+            : Operator(factory, id, name, plan_node_id, driver_sequence), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
     }
@@ -36,14 +35,14 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 protected:
     // It is used to perform aggregation algorithms shared by
@@ -55,7 +54,7 @@ protected:
 
 private:
     // Whether prev operator has no output
-    std::atomic_bool _is_finished = false;
+    bool _is_finished = false;
     // whether enable aggregate group by limit optimize
     bool _agg_group_by_with_limit = false;
 };
@@ -69,7 +68,7 @@ public:
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

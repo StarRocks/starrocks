@@ -59,8 +59,8 @@ public:
         DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
+                const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
 
                 std::string& result = this->data(state).intermediate_string;
 
@@ -79,7 +79,7 @@ public:
                 }
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
-                const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+                const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
                 Slice val = column_val->get_slice(row_num);
@@ -98,7 +98,7 @@ public:
                 }
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             std::string& result = this->data(state).intermediate_string;
 
             Slice val = column_val->get_slice(row_num);
@@ -120,9 +120,9 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
                                                               column_sep->get_bytes().size());
             } else {
@@ -132,7 +132,7 @@ public:
                                                               sep.get_size() * chunk_size);
             }
         } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
+            const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
         }
 
@@ -368,7 +368,11 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            auto arg_type = ctx->get_arg_type(i);
+            state.data_columns->emplace_back(
+                    ColumnHelper::create_column(TypeDescriptor::from_logical_type(arg_type->type, arg_type->len,
+                                                                                  arg_type->precision, arg_type->scale),
+                                                true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }

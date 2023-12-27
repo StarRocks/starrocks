@@ -21,9 +21,11 @@
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/metadata_iterator.h"
+#include "storage/lake/rowset.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/types_fwd.h"
+#include "storage/lake/update_manager.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -62,47 +64,52 @@ public:
 
     [[nodiscard]] std::string root_location() const;
 
-    [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
+    Status put_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
+    Status put_metadata(TabletMetadataPtr metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    [[nodiscard]] Status delete_metadata(int64_t version);
+    Status delete_metadata(int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
-
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_log(TxnLogPtr log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
-    StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
-
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
+
+    Status delete_txn_log(int64_t txn_id);
+
+    Status delete_txn_vlog(int64_t version);
+
+    Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
+
+    Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
 
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0);
 
+    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, Schema schema);
+
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
-    StatusOr<std::shared_ptr<const TabletSchema>> get_schema_by_index_id(int64_t index_id);
-
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
-    std::vector<RowsetPtr> get_rowsets(const TabletMetadataPtr& metadata);
+    StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
+
+    StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+                                      bool fill_cache);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
     [[nodiscard]] std::string metadata_root_location() const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
-
-    [[nodiscard]] std::string txn_slog_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string txn_vlog_location(int64_t version) const;
 
@@ -112,13 +119,13 @@ public:
 
     [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
-    [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
-    UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
+    UpdateManager* update_mgr() { return _mgr->update_mgr(); }
 
-    TabletManager* tablet_mgr() const { return _mgr; }
+    TabletManager* tablet_mgr() { return _mgr; }
 
     // Many tablet operations need to fetch the tablet schema information
     // stored in the object storage, if the cache does not hit. In order to
@@ -130,7 +137,7 @@ public:
     // NOTE: Some methods of Tablet will internally update this value automatically.
     void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
 
-    int64_t data_size();
+    int64_t version_hint() const { return _version_hint; }
 
 private:
     TabletManager* _mgr;

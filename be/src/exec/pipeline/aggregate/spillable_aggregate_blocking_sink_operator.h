@@ -18,11 +18,11 @@
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
-#include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+// TODO: implements reset_state
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>
@@ -34,15 +34,14 @@ public:
 
     bool need_input() const override;
     bool is_finished() const override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status prepare(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
-
     void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
@@ -58,38 +57,15 @@ public:
         return 0;
     }
 
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
-
-    // only the prepare/open phase calls are valid.
-    SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
-
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
-    [[nodiscard]] Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
-
-    [[nodiscard]] Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
-
-    [[nodiscard]] Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
-
-    void _add_streaming_chunk(ChunkPtr chunk);
-
-    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
+    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
-    std::queue<ChunkPtr> _streaming_chunks;
-    size_t _streaming_rows = 0;
-    size_t _streaming_bytes = 0;
-
-    int32_t _continuous_low_reduction_chunk_num = 0;
-
     bool _is_finished = false;
-
-    RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
-
-    static constexpr double HT_LOW_REDUCTION_THRESHOLD = 0.5;
-    static constexpr int32_t HT_LOW_REDUCTION_CHUNK_LIMIT = 5;
 };
 
 class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
@@ -103,7 +79,7 @@ public:
 
     ~SpillableAggregateBlockingSinkOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

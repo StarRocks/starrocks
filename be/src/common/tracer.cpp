@@ -36,10 +36,6 @@ Tracer& Tracer::Instance() {
     return global_tracer;
 }
 
-void Tracer::release_instance() {
-    Instance().shutdown();
-}
-
 void Tracer::init(const std::string& service_name) {
     if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
@@ -68,14 +64,7 @@ void Tracer::init(const std::string& service_name) {
 }
 
 void Tracer::shutdown() {
-    if (_tracer) {
-        _tracer->CloseWithMicroseconds(1);
-        _tracer = nullptr;
-    }
-}
-
-void shutdown_tracer() {
-    Tracer::release_instance();
+    _tracer->CloseWithMicroseconds(1);
 }
 
 bool Tracer::is_enabled() const {

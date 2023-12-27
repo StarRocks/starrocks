@@ -26,7 +26,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include "common/compiler_util.h"
 #include "gutil/integral_types.h"
 #include "gutil/port.h"
 
@@ -100,7 +99,7 @@ inline int fastmemcmp_inlined(const void* a_void, const void* b_void, size_t n) 
     return 0;
 }
 
-ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __restrict _src, size_t size) {
+inline void memcpy_inlined(void* __restrict _dst, const void* __restrict _src, size_t size) {
     auto dst = static_cast<uint8_t*>(_dst);
     auto src = static_cast<const uint8_t*>(_src);
 

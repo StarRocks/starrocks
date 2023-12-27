@@ -20,7 +20,8 @@
 namespace starrocks {
 
 CurrentThread::~CurrentThread() {
-    if (!GlobalEnv::is_init()) {
+    StorageEngine* storage_engine = StorageEngine::instance();
+    if (UNLIKELY(storage_engine != nullptr && storage_engine->bg_worker_stopped())) {
         tls_is_thread_status_init = false;
         return;
     }
@@ -29,14 +30,12 @@ CurrentThread::~CurrentThread() {
 }
 
 starrocks::MemTracker* CurrentThread::mem_tracker() {
-    if (LIKELY(GlobalEnv::is_init())) {
-        if (UNLIKELY(tls_mem_tracker == nullptr)) {
-            tls_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    if (UNLIKELY(tls_mem_tracker == nullptr)) {
+        if (ExecEnv::is_init()) {
+            tls_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
         }
-        return tls_mem_tracker;
-    } else {
-        return nullptr;
     }
+    return tls_mem_tracker;
 }
 
 starrocks::MemTracker* CurrentThread::operator_mem_tracker() {

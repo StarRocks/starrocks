@@ -44,19 +44,14 @@
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
-#include "runtime/dictionary_cache_sink.h"
 #include "runtime/export_sink.h"
-#include "runtime/hive_table_sink.h"
-#include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
-#include "runtime/table_function_table_sink.h"
 
 namespace starrocks {
 
@@ -147,41 +142,6 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing schema table sink.");
         }
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
-        break;
-    }
-    case TDataSinkType::ICEBERG_TABLE_SINK: {
-        if (!thrift_sink.__isset.iceberg_table_sink) {
-            return Status::InternalError("Missing iceberg table sink");
-        }
-        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
-        break;
-    }
-    case TDataSinkType::HIVE_TABLE_SINK: {
-        if (!thrift_sink.__isset.hive_table_sink) {
-            return Status::InternalError("Missing hive table sink");
-        }
-        *sink = std::make_unique<HiveTableSink>(state->obj_pool(), output_exprs);
-        break;
-    }
-    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK: {
-        if (!thrift_sink.__isset.table_function_table_sink) {
-            return Status::InternalError("Missing table function table sink");
-        }
-        *sink = std::make_unique<TableFunctionTableSink>(state->obj_pool(), output_exprs);
-        break;
-    }
-    case TDataSinkType::BLACKHOLE_TABLE_SINK: {
-        *sink = std::make_unique<BlackHoleTableSink>(state->obj_pool());
-        break;
-    }
-    case TDataSinkType::DICTIONARY_CACHE_SINK: {
-        if (!thrift_sink.__isset.dictionary_cache_sink) {
-            return Status::InternalError("Missing dictionary cache sink");
-        }
-        if (!state->enable_pipeline_engine()) {
-            return Status::InternalError("dictionary cache only support pipeline engine");
-        }
-        *sink = std::make_unique<DictionaryCacheSink>();
         break;
     }
 

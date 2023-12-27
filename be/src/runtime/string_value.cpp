@@ -39,11 +39,11 @@
 namespace starrocks {
 
 std::string StringValue::debug_string() const {
-    return {ptr, len};
+    return std::string(ptr, len);
 }
 
 std::string StringValue::to_string() const {
-    return {ptr, len};
+    return std::string(ptr, len);
 }
 
 std::ostream& operator<<(std::ostream& os, const StringValue& string_value) {

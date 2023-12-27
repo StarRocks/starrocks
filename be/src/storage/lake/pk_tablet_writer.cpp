@@ -20,21 +20,20 @@
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                   std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
-        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id),
+HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                                   int64_t txn_id)
+        : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->del_location(_tablet_id, name)));
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
     _files.emplace_back(std::move(name));
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
@@ -46,7 +45,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     return Status::OK();
 }
 
-Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
+Status HorizontalPkTabletWriter::flush_segment_writer() {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
         uint64_t index_size = 0;
@@ -57,20 +56,14 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         partial_rowset_footer->set_position(footer_position);
         partial_rowset_footer->set_size(segment_size - footer_position);
         _data_size += segment_size;
-        if (segment) {
-            segment->set_data_size(segment_size);
-            segment->set_index_size(index_size);
-            segment->set_path(_seg_writer->segment_path());
-        }
         _seg_writer.reset();
     }
     return Status::OK();
 }
 
-VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                               std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                               uint32_t max_rows_per_segment)
-        : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment) {}
+VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                               int64_t txn_id, uint32_t max_rows_per_segment)
+        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 

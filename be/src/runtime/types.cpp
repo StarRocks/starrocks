@@ -149,8 +149,8 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
         DCHECK_EQ(field_names.size(), children.size());
-        for (const auto& field_name : field_names) {
-            node->add_struct_fields()->set_name(field_name);
+        for (size_t i = 0; i < field_names.size(); i++) {
+            node->add_struct_fields()->set_name(field_names[i]);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -261,26 +261,18 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
-        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
-    }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
 }
 
 bool TypeDescriptor::support_orderby() const {
-    if (type == TYPE_ARRAY) {
-        return children[0].support_orderby();
-    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
-    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
-        return std::all_of(children.begin(), children.end(),
-                           [](const TypeDescriptor& t) { return t.support_groupby(); });
-    }
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
@@ -379,21 +371,6 @@ int TypeDescriptor::get_slot_size() const {
     }
     // For llvm complain
     return -1;
-}
-
-size_t TypeDescriptor::get_flat_size() const {
-    if (is_unknown_type()) {
-        return 0;
-    }
-    if (!is_complex_type()) {
-        return 1;
-    } else {
-        int size = 0;
-        for (const auto& type : children) {
-            size += type.get_flat_size();
-        }
-        return size;
-    }
 }
 
 size_t TypeDescriptor::get_array_depth_limit() const {

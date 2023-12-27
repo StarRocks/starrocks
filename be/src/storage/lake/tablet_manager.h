@@ -16,7 +16,6 @@
 
 #include <bthread/types.h>
 
-#include <shared_mutex>
 #include <variant>
 
 #include "common/statusor.h"
@@ -27,6 +26,8 @@
 #include "storage/lake/types_fwd.h"
 
 namespace starrocks {
+class Cache;
+class CacheKey;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -41,12 +42,11 @@ using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
 class CompactionScheduler;
-class Metacache;
-class VersionedTablet;
 
 class TabletManager {
     friend class Tablet;
     friend class MetaFileBuilder;
+    friend class MetaFileReader;
 
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
@@ -59,17 +59,23 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
-    [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
+    Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
+    Status delete_tablet(int64_t tablet_id);
+
+    // Returns the compaction score of the newly created tablet metadata
+    StatusOr<double> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
+                                     int txns_size);
+
+    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
+    Status put_tablet_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadataPtr& metadata);
+    Status put_tablet_metadata(TabletMetadataPtr metadata);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -79,33 +85,36 @@ public:
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
-    [[nodiscard]] Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
-
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
-
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
-
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_log(TxnLogPtr log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
-
-    StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
-
-    StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
-
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
-    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
-#ifdef USE_STAROS
-    bool is_tablet_in_worker(int64_t tablet_id);
-#endif // USE_STAROS
+    StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
+
+    Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
+
+    Status delete_txn_vlog(int64_t tablet_id, int64_t version);
+
+    Status delete_segment(int64_t tablet_id, std::string_view segment_name);
+
+    // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
+    Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
+
+    Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+
+    Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+
+    // put tablet_metadata and delvec to meta file. Only in PK table
+    Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
+                                      const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
 
     void prune_metacache();
 
@@ -124,8 +133,6 @@ public:
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
-    std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
-
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
@@ -134,7 +141,14 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
+
     const LocationProvider* location_provider() const { return _location_provider; }
+
+    void start_gc();
+
+    // Return a set of tablet that owned by this TabletManager.
+    std::set<int64_t> owned_tablets();
 
     UpdateManager* update_mgr();
 
@@ -142,49 +156,42 @@ public:
 
     void update_metacache_limit(size_t limit);
 
-    // The return value will never be null.
-    Metacache* metacache() { return _metacache.get(); }
-
-    StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
-
-    int64_t in_writing_data_size(int64_t tablet_id);
-
-    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
-
-    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
-
-    // only for TEST purpose
-    void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
-
-    // update cache size of the segment with the given key, optionally provide the segment address hint.
-    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
-    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
-    // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
-
-    StatusOr<SegmentPtr> load_segment(const std::string& segment_path, int segment_id, size_t* footer_size_hint,
-                                      bool fill_data_cache, bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
-
 private:
+    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
+
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
+    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
-    StatusOr<TabletSchemaPtr> get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id);
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
 
+    /// Cache operations
+    bool fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void erase_metacache(std::string_view key);
+
+    TabletMetadataPtr lookup_tablet_metadata(std::string_view key);
+    TxnLogPtr lookup_txn_log(std::string_view key);
+    TabletSchemaPtr lookup_tablet_schema(std::string_view key);
+    SegmentPtr lookup_segment(std::string_view key);
+    void cache_segment(std::string_view key, SegmentPtr segment);
+    DelVectorPtr lookup_delvec(std::string_view key);
+    void cache_delvec(std::string_view key, DelVectorPtr delvec);
+    // only store tablet's latest metadata
+    TabletMetadataPtr lookup_tablet_latest_metadata(std::string_view key);
+    void cache_tablet_latest_metadata(TabletMetadataPtr metadata);
+
     LocationProvider* _location_provider;
-    std::unique_ptr<Metacache> _metacache;
+    std::unique_ptr<Cache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
 
-    std::shared_mutex _meta_lock;
-    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
+    bthread_t _gc_checker_tid;
 };
 
 } // namespace starrocks::lake

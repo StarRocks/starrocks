@@ -216,10 +216,10 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
 
     /*
      * Because compute thread couldn't blocking in pipeline, and merge-sort is
-     * accept chunks from network in default, so if chunk hasn't come, this process
-     * should exit get back when data is arrived.
-     * STEP 0 denotes the process of collecting merged result.
-     * STEP 1 denotes the process to driving cursor move to next row then execute STEP 0.
+     * accept chunks from network in default, so if chunk hasn't come compute thread
+     * should exit this operator and come back when you have data.
+     * STEP 0 as the process to collect merged result.
+     * STEP 1 as the process to drive cursor move to next row then execute STEP 0.
      * STEP 2 is almost like STEP 1 except it is executed when data is ready. 
      * 
      */
@@ -301,7 +301,7 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : ChunkMerger(state), _sort_exprs(nullptr) {}
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : _state(state), _sort_exprs(nullptr) {}
 
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                 const std::vector<ExprContext*>* sort_exprs, const SortDescs& sort_desc) {
@@ -344,53 +344,6 @@ Status CascadeChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* e
     }
     *output = _current_chunk.cutoff(_state->chunk_size());
 
-    return Status::OK();
-}
-
-ConstChunkMerger::ConstChunkMerger(RuntimeState* state) : ChunkMerger(state) {}
-
-Status ConstChunkMerger::init(const std::vector<ChunkProvider>& providers, const std::vector<ExprContext*>* sort_exprs,
-                              const SortDescs& sort_desc) {
-    for (const auto& expr : *sort_exprs) {
-        DCHECK(expr->root()->is_constant());
-    }
-    _providers = providers;
-    return Status::OK();
-}
-Status ConstChunkMerger::init(const std::vector<ChunkProvider>& providers, const std::vector<ExprContext*>* sort_exprs,
-                              const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) {
-    for (const auto& expr : *sort_exprs) {
-        DCHECK(expr->root()->is_constant());
-    }
-    _providers = providers;
-    return Status::OK();
-}
-
-bool ConstChunkMerger::is_data_ready() {
-    for (const auto& p : _providers) {
-        if (p(nullptr, nullptr)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-Status ConstChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* eos, bool* should_exit) {
-    bool all = true;
-    bool c = false;
-    for (const auto& p : _providers) {
-        c = false;
-        if (p(output, &c)) {
-            *eos = false;
-            return Status::OK();
-        }
-        all &= c;
-    }
-
-    *eos = all;
-    if (*eos) {
-        *should_exit = true;
-    }
     return Status::OK();
 }
 

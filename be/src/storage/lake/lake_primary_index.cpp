@@ -14,94 +14,39 @@
 
 #include "storage/lake/lake_primary_index.h"
 
-#include <bvar/bvar.h>
-
 #include "storage/chunk_helper.h"
-#include "storage/lake/lake_local_persistent_index.h"
-#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
-#include "testutil/sync_point.h"
-#include "util/trace.h"
 
-namespace starrocks::lake {
+namespace starrocks {
+namespace lake {
 
-static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
-
-Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
     }
-    _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
-    TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
-    if (_status.ok()) {
-        // update data version when memory index or persistent index load finish.
-        _data_version = base_version;
-    }
-    _tablet_id = metadata->id();
+    _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
-    TRACE("end load pk index");
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
     return _status;
 }
 
-bool LakePrimaryIndex::is_load(int64_t base_version) {
-    std::lock_guard<std::mutex> lg(_lock);
-    return _loaded && _data_version >= base_version;
-}
-
-Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                       int64_t base_version, const MetaFileBuilder* builder) {
+Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+                                       const MetaFileBuilder* builder) {
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
     _set_schema(pkey_schema);
-
-    // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-
-    if (metadata->enable_persistent_index() && (fix_size <= 128)) {
-        DCHECK(_persistent_index == nullptr);
-
-        switch (metadata->persistent_index_type()) {
-        case PersistentIndexTypePB::LOCAL: {
-            // Even if `enable_persistent_index` is enabled,
-            // it may not take effect if is as compute node without any storage path.
-            if (StorageEngine::instance()->get_persistent_index_store(metadata->id()) == nullptr) {
-                LOG(WARNING) << "lake_persistent_index_type of LOCAL will not take effect when as cn without any "
-                                "storage path";
-                return Status::InternalError(
-                        "lake_persistent_index_type of LOCAL will not take effect when as cn without any storage "
-                        "path");
-            }
-            std::string path = strings::Substitute(
-                    "$0/$1/",
-                    StorageEngine::instance()->get_persistent_index_store(metadata->id())->get_persistent_index_path(),
-                    metadata->id());
-
-            RETURN_IF_ERROR(StorageEngine::instance()
-                                    ->get_persistent_index_store(metadata->id())
-                                    ->create_dir_if_path_not_exists(path));
-            _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
-            return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
-                    ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
-        }
-        default:
-            LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
-            return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
-        }
-    }
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
@@ -116,10 +61,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     // 2. scan all rowsets and segments to build primary index
-    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
+    auto rowsets = tablet->get_rowsets(metadata);
+    if (!rowsets.ok()) {
+        return rowsets.status();
+    }
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    for (auto& rowset : rowsets) {
+    for (auto& rowset : *rowsets) {
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
             return res.status();
@@ -148,17 +96,23 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    RETURN_IF_ERROR(insert(rowset->id() + i, rowids, *pkc));
+                    auto st = insert(rowset->id() + i, rowids, *pkc);
+                    if (!st.ok()) {
+                        return st;
+                    }
                 }
             }
             itr->close();
         }
     }
-    auto cost_ns = watch.elapsed_time();
-    g_load_pk_index_latency << cost_ns / 1000;
-    LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
-            << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
+    _tablet_id = tablet->id();
+    _data_version = base_version;
+    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+        LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
+    }
     return Status::OK();
 }
 
-} // namespace starrocks::lake
+} // namespace lake
+
+} // namespace starrocks

@@ -40,7 +40,6 @@
 #include <utility>
 
 #include "column/column.h"
-#include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
@@ -64,43 +63,43 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, const Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+ColumnReader::ColumnReader(const private_type&, const Segment* segment) : _segment(segment) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 ColumnReader::~ColumnReader() {
     if (_segment_zone_map != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                  _segment_zone_map->SpaceUsedLong());
         _segment_zone_map.reset(nullptr);
     }
     if (_ordinal_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset(nullptr);
     }
     if (_zonemap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta) {
@@ -126,9 +125,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
-                _meta_mem_usage.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 break;
             case ZONE_MAP_INDEX:
@@ -144,28 +142,24 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                     delete _segment_zone_map->release_min();
                     delete _segment_zone_map->release_max();
                 }
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
-                _meta_mem_usage.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                          _segment_zone_map->SpaceUsedLong())
-                _meta_mem_usage.fetch_add(_segment_zone_map->SpaceUsedLong(), std::memory_order_relaxed);
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
-                _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
-                _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
             case UNKNOWN_INDEX_TYPE:
@@ -278,9 +272,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     }
 }
 
-Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
-    RETURN_IF_ERROR(_load_bitmap_index(opts));
-    RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
+Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator) {
+    RETURN_IF_ERROR(_load_bitmap_index(options));
+    RETURN_IF_ERROR(_bitmap_index->new_iterator(iterator, options));
     return Status::OK();
 }
 
@@ -295,12 +289,12 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.verify_checksum = true;
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
-    opts.kept_in_memory = false;
+    opts.kept_in_memory = keep_in_memory();
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
 
-Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges) {
+Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange* row_ranges) {
     for (auto i : page_indexes) {
         ordinal_t page_first_id = _ordinal_index->get_first_ordinal(i);
         ordinal_t page_last_id = _ordinal_index->get_last_ordinal(i);
@@ -324,17 +318,17 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail)
 }
 
 // prerequisite: at least one predicate in |predicates| support bloom filter.
-Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
-                                  const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange<> bf_row_ranges;
+Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange* row_ranges,
+                                  bool skip_fill_local_cache) {
+    RETURN_IF_ERROR(_load_bloom_filter_index(skip_fill_local_cache));
+    SparseRange bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(&bf_iter));
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
     for (int i = 0; i < range_size; ++i) {
-        Range<> r = (*row_ranges)[i];
+        Range r = (*row_ranges)[i];
         int64_t idx = r.begin();
         auto iter = _ordinal_index->seek_at_or_before(r.begin());
         while (idx < r.end()) {
@@ -349,7 +343,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
         for (const auto* pred : predicates) {
             if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
                 bf_row_ranges.add(
-                        Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+                        Range(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }
         }
     }
@@ -357,66 +351,76 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
     return Status::OK();
 }
 
-Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
+Status ColumnReader::load_ordinal_index(bool skip_fill_local_cache) {
+    return _load_ordinal_index(skip_fill_local_cache);
+}
+
+Status ColumnReader::_load_ordinal_index(bool skip_fill_local_cache) {
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+    IndexReadOptions opts;
+    opts.fs = file_system();
+    opts.file_name = file_name();
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.kept_in_memory = keep_in_memory();
+    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
         _ordinal_index_meta.reset();
-        _segment->update_cache_size();
     }
     return Status::OK();
 }
 
-Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
+Status ColumnReader::_load_zonemap_index(bool skip_fill_local_cache) {
     if (_zonemap_index == nullptr || _zonemap_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+    IndexReadOptions opts;
+    opts.fs = file_system();
+    opts.file_name = file_name();
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.kept_in_memory = keep_in_memory();
+    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
         _zonemap_index_meta.reset();
-        _segment->update_cache_size();
     }
     return Status::OK();
 }
 
-Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
+Status ColumnReader::_load_bitmap_index(const IndexReadOptions& options) {
     if (_bitmap_index == nullptr || _bitmap_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _bitmap_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
+    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(options, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
         _bitmap_index_meta.reset();
-        _segment->update_cache_size();
     }
     return Status::OK();
 }
 
-Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
+Status ColumnReader::_load_bloom_filter_index(bool skip_fill_local_cache) {
     if (_bloom_filter_index == nullptr || _bloom_filter_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+    IndexReadOptions opts;
+    opts.fs = file_system();
+    opts.file_name = file_name();
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.kept_in_memory = keep_in_memory();
+    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
         _bloom_filter_index_meta.reset();
-        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -439,9 +443,9 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
 
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
-                                     std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                     SparseRange<>* row_ranges, const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_zonemap_index(opts));
+                                     std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
+                                     bool skip_fill_local_cache) {
+    RETURN_IF_ERROR(_load_zonemap_index(skip_fill_local_cache));
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -457,7 +461,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(zm, &detail));
+        _parse_zone_map(zm, &detail);
         bool matched = true;
         for (const auto* predicate : predicates) {
             if (!predicate->zone_map_filter(detail)) {
@@ -482,32 +486,17 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
         return true;
     }
     ZoneMapDetail detail;
-    auto st = _parse_zone_map(*_segment_zone_map, &detail);
-    CHECK(st.ok()) << st;
+    _parse_zone_map(*_segment_zone_map, &detail);
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path) {
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
     if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-
-        ColumnAccessPath* value_path = nullptr;
-        if (path != nullptr && !path->children().empty()) {
-            // must be OFFSET or INDEX or ALL
-            if (UNLIKELY(path->children().size() != 1)) {
-                LOG(WARNING) << "bad access path on column: " << *path;
-            } else {
-                auto* p = path->children()[0].get();
-                if (p->is_index() || p->is_all()) {
-                    value_path = p;
-                }
-            }
-        }
-
-        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path));
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator());
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
@@ -515,34 +504,19 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         }
         ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        return std::make_unique<ArrayColumnIterator>(this, std::move(null_iterator), std::move(array_size_iterator),
-                                                     std::move(element_iterator), path);
+        return std::make_unique<ArrayColumnIterator>(std::move(null_iterator), std::move(array_size_iterator),
+                                                     std::move(element_iterator));
     } else if (_column_type == LogicalType::TYPE_MAP) {
         size_t col = 0;
-
-        ColumnAccessPath* value_path = nullptr;
-        if (path != nullptr && !path->children().empty()) {
-            // must be OFFSET or INDEX or ALL or KEY
-            if (UNLIKELY(path->children().size() != 1)) {
-                LOG(WARNING) << "bad access path on column: " << *path;
-            } else {
-                auto* p = path->children()[0].get();
-                if (p->is_index() || p->is_all()) {
-                    value_path = p;
-                }
-            }
-        }
-
-        // key must scalar type now
         ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
-        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path));
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator());
         std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
         }
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
-        return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values), path);
+        return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
+                                                   std::move(values));
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         auto num_fields = _sub_readers->size();
 
@@ -551,35 +525,15 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             num_fields -= 1;
             ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[num_fields]->new_iterator());
         }
-
-        std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
-        if (path != nullptr && !path->children().empty()) {
-            for (const auto& child : path->children()) {
-                child_paths[child->index()] = child.get();
-            }
-        }
-
         std::vector<std::unique_ptr<ColumnIterator>> field_iters;
         for (int i = 0; i < num_fields; ++i) {
-            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator(child_paths[i]));
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator());
             field_iters.emplace_back(std::move(iter));
         }
-        return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
+        return create_struct_iter(std::move(null_iter), std::move(field_iters));
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
-}
-
-size_t ColumnReader::mem_usage() const {
-    size_t size = sizeof(ColumnReader) + _meta_mem_usage.load(std::memory_order_relaxed);
-
-    if (_sub_readers != nullptr) {
-        for (auto& reader : *_sub_readers) {
-            size += reader->mem_usage();
-        }
-    }
-
-    return size;
 }
 
 } // namespace starrocks

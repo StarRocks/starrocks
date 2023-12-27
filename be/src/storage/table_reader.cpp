@@ -29,9 +29,9 @@
 
 namespace starrocks {
 
-TableReader::TableReader() = default;
+TableReader::TableReader() {}
 
-TableReader::~TableReader() = default;
+TableReader::~TableReader() {}
 
 Status TableReader::init(const LocalTableReaderParams& local_params) {
     if (_local_params || _params) {
@@ -111,8 +111,9 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     std::vector<uint8_t> validate_selection;
     std::vector<uint32_t> validate_select_idx;
     validate_selection.assign(num_rows, 1);
-    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection, nullptr, 0,
-                                                   nullptr));
+    int invalid_row_index = 0;
+    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection,
+                                                   &invalid_row_index, 0, nullptr));
     // Arrange selection_idx by merging _validate_selection
     // If chunk num_rows is 6
     // _validate_selection is [1, 0, 0, 0, 1, 1]
@@ -156,12 +157,12 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     }
     // TODO: parallel get
     // a cache var to init chunk_meta only once
-    SchemaPtr& value_schema = values.schema();
+    std::unique_ptr<serde::ProtobufChunkMeta> chunk_meta;
     for (auto multi_get : multi_gets) {
         multi_get->values = values.clone_empty();
         vector<bool> found;
         RETURN_IF_ERROR(_tablet_multi_get(multi_get->tablet_id, multi_get->version, *multi_get->keys, value_columns,
-                                          found, *multi_get->values, value_schema));
+                                          found, *multi_get->values, chunk_meta));
         multi_get->found_idxs.clear();
         DCHECK(multi_get->keys->num_rows() == found.size());
         for (size_t i = 0; i < found.size(); ++i) {
@@ -192,7 +193,7 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
 
 Status TableReader::_tablet_multi_get(int64_t tablet_id, int64_t version, Chunk& keys,
                                       const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                      Chunk& values, SchemaPtr& value_schema) {
+                                      Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     // get from local tablet
     // TODO: if local tablet's version is missing, switch to remote replica
@@ -202,12 +203,12 @@ Status TableReader::_tablet_multi_get(int64_t tablet_id, int64_t version, Chunk&
         RETURN_IF_ERROR(local_tablet_reader->multi_get(keys, value_columns, found, values));
         return Status::OK();
     }
-    return _tablet_multi_get_remote(tablet_id, version, keys, value_columns, found, values, value_schema);
+    return _tablet_multi_get_remote(tablet_id, version, keys, value_columns, found, values, chunk_meta);
 }
 
 Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version, Chunk& keys,
                                              const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                             Chunk& values, SchemaPtr& value_schema) {
+                                             Chunk& values, std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
     auto location = _location_param->find_tablet(tablet_id);
     if (location == nullptr) {
         return Status::InternalError(strings::Substitute("tablet $0 not found in OlapTableLocationParam", tablet_id));
@@ -220,7 +221,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
-            PInternalService_Stub* stub =
+            doris::PBackendService_Stub* stub =
                     ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
@@ -228,7 +229,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
                 LOG(WARNING) << msg;
                 st = Status::InternalError(msg);
             } else {
-                st = _tablet_multi_get_rpc(stub, tablet_id, version, keys, value_columns, found, values, value_schema);
+                st = _tablet_multi_get_rpc(stub, tablet_id, version, keys, value_columns, found, values, chunk_meta);
                 if (st.ok()) {
                     break;
                 }
@@ -238,14 +239,15 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
     return st;
 }
 
-Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
-                                          const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                                          Chunk& values, SchemaPtr& value_schema) {
+Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version,
+                                          Chunk& keys, const std::vector<std::string>& value_columns,
+                                          std::vector<bool>& found, Chunk& values,
+                                          std::unique_ptr<serde::ProtobufChunkMeta>& chunk_meta) {
     PTabletReaderMultiGetRequest request;
     request.set_tablet_id(tablet_id);
     request.set_version(version);
-    for (const auto& value_column : value_columns) {
-        request.add_values_columns(value_column);
+    for (size_t i = 0; i < value_columns.size(); ++i) {
+        request.add_values_columns(value_columns[i]);
     }
     StatusOr<ChunkPB> keys_pb;
     TRY_CATCH_BAD_ALLOC(keys_pb = serde::ProtobufChunkSerde::serialize(keys, nullptr));
@@ -277,8 +279,14 @@ Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t t
         found[i] = result.found(i);
     }
     auto& values_pb = result.values();
+    if (!chunk_meta) {
+        StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, values_pb);
+        if (!res.ok()) return res.status();
+        chunk_meta.reset(new serde::ProtobufChunkMeta(std::move(res).value()));
+    }
     TRY_CATCH_BAD_ALLOC({
-        StatusOr<Chunk> res = serde::deserialize_chunk_pb_with_schema(*value_schema, values_pb.data());
+        serde::ProtobufChunkDeserializer des(*chunk_meta);
+        StatusOr<Chunk> res = des.deserialize(values_pb.data());
         if (!res.ok()) return res.status();
         values.columns().swap(res.value().columns());
     });

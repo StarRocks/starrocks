@@ -44,7 +44,6 @@ QueryContext::QueryContext()
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
-    _lifetime_sw.start();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -85,7 +84,7 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        (void)query_trace->dump();
+        query_trace->dump();
     }
 }
 
@@ -97,22 +96,44 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
+int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
+                                              size_t pipeline_dop, int64_t option_query_mem_limit) {
+    // no mem_limit
+    if (per_instance_mem_limit <= 0 && option_query_mem_limit <= 0) {
+        return -1;
+    }
+
+    int64_t mem_limit;
+    if (option_query_mem_limit > 0) {
+        mem_limit = option_query_mem_limit;
+    } else {
+        mem_limit = per_instance_mem_limit;
+        // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
+        static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
+        if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
+            mem_limit *= static_cast<int64_t>(total_fragments()) * pipeline_dop;
+        } else {
+            mem_limit = MEM_LIMIT_MAX;
+        }
+    }
+
+    // query's mem_limit never exceeds its parent's limit if it exists
+    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
+}
+
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg) {
+                                    workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         mem_tracker_counter->set(query_mem_limit);
-        if (wg != nullptr && big_query_mem_limit > 0 &&
-            (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
+        if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
-            _mem_tracker->set_reserve_limit(spill_mem_limit);
         }
 
         MemTracker* p = parent;
@@ -126,12 +147,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
-Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
-        std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
+        std::call_once(_init_query_once, [this, &st, wg]() {
             this->init_query_begin_time();
-            auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
+            auto maybe_token = wg->acquire_running_query_token();
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
                 _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
@@ -189,7 +210,6 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
-    res->add_spill_bytes(get_spill_bytes());
 
     {
         std::lock_guard l(_scan_stats_lock);
@@ -499,7 +519,6 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_scan_rows(scan_rows);
             query_statistics->set_scan_bytes(scan_bytes);
             query_statistics->set_mem_usage_bytes(mem_usage_bytes);
-            query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
         }
     }
 }
@@ -608,8 +627,6 @@ void QueryContextManager::report_fragments(
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
-                        LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
-                                     << rpc_status.message();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);

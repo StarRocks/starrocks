@@ -47,12 +47,8 @@
 namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
-                                     bool is_binary_format, RuntimeProfile* parent_profile)
-        : _sinker(sinker),
-          _output_expr_ctxs(output_expr_ctxs),
-          _row_buffer(nullptr),
-          _is_binary_format(is_binary_format),
-          _parent_profile(parent_profile) {}
+                                     RuntimeProfile* parent_profile)
+        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _row_buffer(nullptr), _parent_profile(parent_profile) {}
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
@@ -64,7 +60,7 @@ Status MysqlResultWriter::init(RuntimeState* state) {
         return Status::InternalError("sinker is NULL pointer.");
     }
 
-    _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
+    _row_buffer = new (std::nothrow) MysqlRowBuffer();
 
     if (nullptr == _row_buffer) {
         return Status::InternalError("no memory to alloc.");
@@ -138,9 +134,6 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
         SCOPED_TIMER(_convert_tuple_timer);
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
-            if (_is_binary_format) {
-                _row_buffer->start_binary_row(num_columns);
-            };
             for (auto& result_column : result_columns) {
                 result_column->put_mysql_row_buffer(_row_buffer, i);
             }
@@ -183,9 +176,6 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
 
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
-            if (_is_binary_format) {
-                _row_buffer->start_binary_row(num_columns);
-            }
             for (auto& result_column : result_columns) {
                 result_column->put_mysql_row_buffer(_row_buffer, i);
             }

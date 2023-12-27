@@ -62,6 +62,7 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_nulls;
     std::vector<bool> is_consts;
     Chunk::SlotHashMap slot_id_to_index;
+    Chunk::TupleHashMap tuple_id_to_index;
     // extra data meta
     std::vector<ChunkExtraColumnsMeta> extra_data_metas;
 };

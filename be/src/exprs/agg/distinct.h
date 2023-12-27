@@ -257,7 +257,6 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
         return sum;
     }
 
-    // NOLINTBEGIN
     ~DistinctAggregateStateV2() {
 #ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
         const auto& info = set.infoz();
@@ -265,7 +264,6 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
                   << ", insert probe length = " << info.insert_probe_length << ", # of rehash = " << info.rehash_number;
 #endif
     }
-    // NOLINTEND
 
     MyHashSet set;
 };
@@ -284,7 +282,7 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage;
         if constexpr (IsSlice<T>) {
             mem_usage = this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
@@ -299,7 +297,7 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
 
@@ -329,7 +327,7 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
 
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
@@ -400,7 +398,7 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = dst_column->get_bytes();
 
-        const auto* src_column = down_cast<const ColumnType*>(src[0].get());
+        const ColumnType* src_column = down_cast<const ColumnType*>(src[0].get());
         if constexpr (IsSlice<T>) {
             bytes.reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
         } else {

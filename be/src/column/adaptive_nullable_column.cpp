@@ -239,9 +239,9 @@ void AdaptiveNullableColumn::update_has_null() {
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
-void AdaptiveNullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+Status AdaptiveNullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     materialized_nullable();
-    NullableColumn::update_rows(src, indexes);
+    return NullableColumn::update_rows(src, indexes);
 }
 
 int AdaptiveNullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {

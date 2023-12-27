@@ -17,11 +17,16 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
-#include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/utils/threading/Executor.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
+#include <aws/s3/model/CreateBucketRequest.h>
+#include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/DeleteObjectsResult.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -56,7 +61,7 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     case Aws::S3::S3Errors::NO_SUCH_UPLOAD:
         return Status::NotFound(fmt::format("no such upload: {}", msg));
     default:
-        return Status::InternalError(msg);
+        return Status::InternalError(fmt::format(msg));
     }
 }
 
@@ -85,8 +90,6 @@ public:
 
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
-
-    void close();
 
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
@@ -126,45 +129,33 @@ private:
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
-// Get an AWSCredentialsProvider based on CloudCredential
+// Get a AWSCredentialsProvider based on CloudCredential
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
         const AWSCloudCredential& aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
-    // Create a base credentials provider
     if (aws_cloud_credential.use_aws_sdk_default_behavior) {
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
-    } else if (aws_cloud_credential.use_instance_profile) {
-        credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
-    } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
-        credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
     } else {
-        DCHECK(false) << "Unreachable!";
-        credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
-    }
+        // Create a base credentials provider
+        if (aws_cloud_credential.use_instance_profile) {
+            credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+        } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
+            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
+                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key);
+        } else {
+            DCHECK(false) << "Unreachable!";
+            credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
+        }
 
-    if (!aws_cloud_credential.iam_role_arn.empty()) {
-        // Do assume role
-        Aws::Client::ClientConfiguration clientConfiguration{};
-        if (!aws_cloud_credential.sts_region.empty()) {
-            clientConfiguration.region = aws_cloud_credential.sts_region;
+        if (!aws_cloud_credential.iam_role_arn.empty()) {
+            // Do assume role
+            auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+            credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
+                    aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
+                    Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
         }
-        if (!aws_cloud_credential.sts_endpoint.empty()) {
-            clientConfiguration.endpointOverride = aws_cloud_credential.sts_endpoint;
-        }
-        auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider, clientConfiguration);
-        credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
-                aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
-                Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
     }
     return credential_provider;
-}
-
-void S3ClientFactory::close() {
-    std::lock_guard l(_lock);
-    for (auto& item : _clients) {
-        item.reset();
-    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
@@ -347,9 +338,6 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                       const FileInfo& file_info) override;
-
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& path) override;
 
@@ -419,20 +407,6 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     auto client = new_s3client(uri, _options);
     auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
-                                                                                 const FileInfo& file_info) {
-    S3URI uri;
-    if (!uri.parse(file_info.path)) {
-        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
-    }
-    auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    if (file_info.size.has_value()) {
-        input_stream->set_size(file_info.size.value());
-    }
-    return std::make_unique<RandomAccessFile>(std::move(input_stream), file_info.path);
 }
 
 StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
@@ -840,10 +814,6 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
-}
-
-void close_s3_clients() {
-    S3ClientFactory::instance().close();
 }
 
 } // namespace starrocks

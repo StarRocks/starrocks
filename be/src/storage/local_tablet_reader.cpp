@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-LocalTabletReader::LocalTabletReader() = default;
+LocalTabletReader::LocalTabletReader() {}
 
 Status LocalTabletReader::init(TabletSharedPtr& tablet, int64_t version) {
     if (tablet->updates() == nullptr) {
@@ -90,7 +90,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<std::st
     const auto& tablet_schema = _tablet->tablet_schema();
     std::vector<uint32_t> value_column_ids;
     for (const auto& name : value_columns) {
-        auto cid = tablet_schema->field_index(name);
+        auto cid = tablet_schema.field_index(name);
         if (cid == -1) {
             return Status::InvalidArgument(strings::Substitute("multi_get value_column $0 not found", name));
         }
@@ -111,20 +111,20 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     // convert keys to pk single column format
     const auto& tablet_schema = _tablet->tablet_schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(*tablet_schema.schema(), &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get());
+    PrimaryKeyEncoder::encode(*tablet_schema.schema(), keys, 0, keys.num_rows(), pk_column.get());
 
     // search pks in pk index to get rowids
     EditVersion edit_version;
     std::vector<uint64_t> rowids(n);
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *pk_column, &edit_version, &rowids));
-    if (edit_version.major_number() != _version) {
+    if (edit_version.major() != _version) {
         return Status::InternalError(
                 strings::Substitute("multi_get version not match tablet:$0 current_version:$1 read_version:$2",
                                     _tablet->tablet_id(), edit_version.to_string(), _version));
@@ -144,8 +144,8 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
-    RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids, _version, false, rowids_by_rssid,
-                                                          &read_columns, nullptr, tablet_schema));
+    RETURN_IF_ERROR(
+            _tablet->updates()->get_column_values(value_column_ids, false, rowids_by_rssid, &read_columns, nullptr));
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();
@@ -163,7 +163,7 @@ StatusOr<ChunkIteratorPtr> LocalTabletReader::scan(const std::vector<std::string
                                                    const std::vector<const ColumnPredicate*>& predicates) {
     TabletReaderParams tablet_reader_params;
     tablet_reader_params.predicates = predicates;
-    auto& full_schema = *_tablet->tablet_schema()->schema();
+    auto& full_schema = *_tablet->tablet_schema().schema();
     vector<ColumnId> column_ids;
     for (auto& cname : value_columns) {
         auto idx = full_schema.get_field_index_by_name(cname);
@@ -194,19 +194,19 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
     const auto& tablet_schema = tablet->tablet_schema();
     const auto& keys_pb = request.keys();
     vector<ColumnId> key_column_ids;
-    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
         key_column_ids.push_back(i);
     }
-    Schema key_schema(tablet_schema->schema(), key_column_ids);
+    Schema key_schema(tablet_schema.schema(), key_column_ids);
     std::vector<uint32_t> value_column_ids;
     for (const auto& name : value_columns) {
-        auto cid = tablet_schema->field_index(name);
+        auto cid = tablet_schema.field_index(name);
         if (cid == -1) {
             return Status::InvalidArgument(strings::Substitute("multi_get value_column $0 not found", name));
         }
         value_column_ids.push_back(cid);
     }
-    Schema values_schema(tablet_schema->schema(), value_column_ids);
+    Schema values_schema(tablet->tablet_schema().schema(), value_column_ids);
     auto keys_st = serde::deserialize_chunk_pb_with_schema(key_schema, keys_pb.data());
     if (!keys_st.ok()) {
         return keys_st.status();
@@ -220,7 +220,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
         found_pb->Add(f);
     }
     StatusOr<ChunkPB> values_pb;
-    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize_without_meta(*values, nullptr));
+    TRY_CATCH_BAD_ALLOC(values_pb = serde::ProtobufChunkSerde::serialize(*values, nullptr));
     if (!values_pb.ok()) {
         return values_pb.status();
     }

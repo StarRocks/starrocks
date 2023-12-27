@@ -116,8 +116,6 @@ public:
 
     bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
 
-    void prune();
-
 private:
     static StoragePageCache* _s_instance;
 
@@ -136,7 +134,7 @@ public:
         if (_handle != nullptr) {
 #ifndef BE_TEST
             MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->page_cache_mem_tracker());
+                    tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->page_cache_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
             _cache->release(_handle);

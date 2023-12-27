@@ -34,7 +34,7 @@ class MemTracker;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-struct DeltaWriterOptions;
+class DeltaWriterOptions;
 
 using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 
@@ -69,7 +69,7 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
-    PInternalService_Stub* _stub = nullptr;
+    doris::PBackendService_Stub* _stub = nullptr;
     MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;

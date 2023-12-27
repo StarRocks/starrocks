@@ -20,7 +20,6 @@
 
 #include "common/status.h"
 #include "runtime/global_dict/types_fwd_decl.h"
-#include "storage/range.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -28,6 +27,7 @@ class SlotDescriptor;
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
+class SparseRange;
 
 struct UnarrivedRuntimeFilterList {
     std::vector<const RuntimeFilterProbeDescriptor*> unarrived_runtime_filters;

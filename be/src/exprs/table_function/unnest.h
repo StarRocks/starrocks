@@ -29,14 +29,13 @@ namespace starrocks {
  */
 class Unnest final : public TableFunction {
 public:
-    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
-                                                  TableFunctionState* state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override {
+        *eos = true;
         if (state->get_columns().empty()) {
             return {};
         }
         Column* arg0 = state->get_columns()[0].get();
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
-        state->set_processed_rows(arg0->size());
         Columns result;
         if (arg0->has_null()) {
             auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
@@ -79,18 +78,16 @@ public:
          */
     };
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* state) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        return Status::OK();
-    };
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    [[nodiscard]] Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }

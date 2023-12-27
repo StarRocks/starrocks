@@ -96,11 +96,11 @@ Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-void SelectNode::close(RuntimeState* state) {
+Status SelectNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return;
+        return Status::OK();
     }
-    ExecNode::close(state);
+    return ExecNode::close(state);
 }
 
 pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

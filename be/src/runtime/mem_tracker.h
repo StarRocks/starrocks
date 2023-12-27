@@ -222,7 +222,7 @@ public:
     }
 
     WARN_UNUSED_RESULT
-    MemTracker* try_consume_with_limited(int64_t bytes) {
+    MemTracker* try_consume_with_limited(int64_t bytes, MemTracker* limited_tracker, int64_t high_limit) {
         if (UNLIKELY(bytes <= 0)) return nullptr;
         int64_t i;
         // Walk the tracker tree top-down.
@@ -231,9 +231,9 @@ public:
             if (tracker->limit() < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                int64_t limit = tracker->reserve_limit();
-                if (limit == -1) {
-                    limit = tracker->limit();
+                int64_t limit = tracker->limit();
+                if (tracker == limited_tracker) {
+                    limit = high_limit;
                 }
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
                     continue;
@@ -304,12 +304,6 @@ public:
 
     bool has_limit() const { return _limit >= 0; }
 
-    void set_reserve_limit(int64_t reserve_limit) { _reserve_limit = reserve_limit; }
-
-    int64_t reserve_limit() const { return _reserve_limit; }
-
-    bool has_reserve_limit() const { return _reserve_limit >= 0; }
-
     const std::string& label() const { return _label; }
 
     /// Returns the lowest limit for this tracker and its ancestors. Returns
@@ -343,7 +337,6 @@ public:
     std::string debug_string() {
         std::stringstream msg;
         msg << "limit: " << _limit << "; "
-            << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
             << "allocation: " << _allocation->value() << "; "
             << "deallocation: " << _deallocation->value() << "; "
@@ -362,10 +355,6 @@ public:
 
     Type type() const { return _type; }
 
-    std::list<MemTracker*> _child_trackers;
-
-    std::list<MemTracker*> getChild() { return _child_trackers; }
-
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
@@ -378,8 +367,7 @@ private:
 
     Type _type{NO_SET};
 
-    int64_t _limit;              // in bytes
-    int64_t _reserve_limit = -1; // only used in spillable query
+    int64_t _limit; // in bytes
 
     std::string _label;
     MemTracker* _parent;
@@ -410,6 +398,7 @@ private:
     // All the child trackers of this tracker. Used for error reporting only.
     // i.e., Updating a parent tracker does not update the children.
     mutable std::mutex _child_trackers_lock;
+    std::list<MemTracker*> _child_trackers;
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;

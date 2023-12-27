@@ -16,8 +16,7 @@
 
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
-#include "starcache/star_cache.h"
-#include "starcache/time_based_cache_adaptor.h"
+#include "thirdparty/starcache/src/star_cache.h"
 
 namespace starrocks {
 
@@ -28,29 +27,21 @@ public:
 
     Status init(const CacheOptions& options) override;
 
-    Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
+    Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                       bool overwrite) override;
 
-    Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
-                        CacheHandle* handle, WriteCacheOptions* options) override;
+    StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) override;
 
-    Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                       ReadCacheOptions* options) override;
+    Status remove_cache(const std::string& key) override;
 
-    Status read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) override;
-
-    Status remove(const std::string& key) override;
-
-    const DataCacheMetrics cache_metrics() override;
-
-    void record_read_remote(size_t size, int64_t lateny_us) override;
-
-    void record_read_cache(size_t size, int64_t lateny_us) override;
+    std::unordered_map<std::string, double> cache_stats() override;
 
     Status shutdown() override;
 
 private:
+    void _load_starcache_conf();
+
     std::unique_ptr<starcache::StarCache> _cache;
-    std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
 };
 
 // In order to split the starcache library to a separate registry for other users such as the cloud team,
@@ -71,8 +62,6 @@ inline Status to_status(const butil::Status& st) {
         return Status::IOError(st.error_str());
     case ENOMEM:
         return Status::MemoryLimitExceeded(st.error_str());
-    case EBUSY:
-        return Status::ResourceBusy(st.error_str());
     default:
         return Status::InternalError(st.error_str());
     }

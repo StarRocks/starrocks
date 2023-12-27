@@ -158,14 +158,9 @@ void EvHttpServer::stop() {
 
     // shutdown the socket to wake up the epoll_wait
     shutdown(_server_fd, SHUT_RDWR);
-}
 
-void EvHttpServer::join() {
-    for (auto& thread : _workers) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
+    // join the thread before close the socket
+    join();
 
     // close the socket at last
     close(_server_fd);
@@ -177,6 +172,14 @@ void EvHttpServer::join() {
 
     for (auto base : _event_bases) {
         event_base_free(base);
+    }
+}
+
+void EvHttpServer::join() {
+    for (auto& thread : _workers) {
+        if (thread.joinable()) {
+            thread.join();
+        }
     }
 }
 

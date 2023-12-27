@@ -241,7 +241,7 @@ class BitShufflePageDecoder final : public PageDecoder {
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
 
-    [[nodiscard]] Status init() override {
+    Status init() override {
         CHECK(!_parsed);
         if (_data.size < BITSHUFFLE_PAGE_HEADER_SIZE) {
             std::stringstream ss;
@@ -300,18 +300,19 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
-        DCHECK_LE(pos, _num_elements);
-        if (pos > _num_elements) {
-            std::string msg = strings::Substitute("invalid pos:$0, num_elements:$1", pos, _num_elements);
-            return Status::InternalError(msg);
+        if (PREDICT_FALSE(_num_elements == 0)) {
+            DCHECK_EQ(0, pos);
+            return Status::InvalidArgument("invalid pos");
         }
+
+        DCHECK_LE(pos, _num_elements);
         _cur_index = pos;
         return Status::OK();
     }
 
-    [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elements == 0) {
@@ -343,9 +344,9 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
+    Status next_batch(size_t* count, Column* dst) override;
 
-    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     uint32_t count() const override { return _num_elements; }
 
@@ -378,26 +379,26 @@ private:
 
 template <LogicalType Type>
 inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, Column* dst) {
-    SparseRange<> read_range;
+    SparseRange read_range;
     uint32_t begin = current_index();
-    read_range.add(Range<>(begin, begin + *count));
+    read_range.add(Range(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
+inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_index >= _num_elements)) {
         return Status::OK();
     }
 
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-    SparseRangeIterator<> iter = range.new_iterator();
+    SparseRangeIterator iter = range.new_iterator();
     while (to_read > 0) {
         _cur_index = iter.begin();
-        Range<> r = iter.next(to_read);
+        Range r = iter.next(to_read);
         int n = dst->append_numbers(get_data(_cur_index * SIZE_OF_TYPE), r.span_size() * SIZE_OF_TYPE);
         DCHECK_EQ(r.span_size(), n);
         _cur_index += r.span_size();

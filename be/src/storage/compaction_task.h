@@ -68,8 +68,6 @@ struct CompactionTaskInfo {
     size_t filtered_rows{0};
     size_t output_num_rows{0};
     CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
-    bool is_shortcut_compaction{false};
-    bool is_manual_compaction{false};
 
     // for vertical compaction
     size_t column_group_size{0};
@@ -119,8 +117,6 @@ struct CompactionTaskInfo {
         ss << ", total_output_num_rows:" << total_output_num_rows;
         ss << ", total_merged_rows:" << total_merged_rows;
         ss << ", total_del_filtered_rows:" << total_del_filtered_rows;
-        ss << ", is_shortcut_compaction:" << is_shortcut_compaction;
-        ss << ", is_manual_compaction:" << is_manual_compaction;
         ss << ", progress:" << get_progress();
         return ss.str();
     }
@@ -193,8 +189,6 @@ public:
 
     void set_start_time(int64_t start_time) { _task_info.start_time = start_time; }
 
-    int64_t get_start_time() { return _task_info.start_time; }
-
     void set_end_time(int64_t end_time) { _task_info.end_time = end_time; }
 
     void set_output_segments_num(uint32_t output_segments_num) { _task_info.output_segments_num = output_segments_num; }
@@ -209,27 +203,19 @@ public:
 
     void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
 
-    void set_tablet_schema(TabletSchemaCSPtr& tablet_schema) { _tablet_schema = tablet_schema; }
-
     std::string get_task_info() {
         _task_info.elapsed_time = _watch.elapsed_time() / 1000;
         return _task_info.to_string();
     }
-
-    bool is_shortcut_compaction() const { return _task_info.is_shortcut_compaction; }
-
-    bool is_manual_compaction() const { return _task_info.is_manual_compaction; }
-
-    void set_is_manual_compaction(bool is_manual_compaction) { _task_info.is_manual_compaction = is_manual_compaction; }
 
 protected:
     virtual Status run_impl() = 0;
 
     void _try_lock() {
         if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
-            _compaction_lock = std::shared_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
+            _compaction_lock = std::unique_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
         } else {
-            _compaction_lock = std::shared_lock(_tablet->get_base_lock(), std::try_to_lock);
+            _compaction_lock = std::unique_lock(_tablet->get_base_lock(), std::try_to_lock);
         }
     }
 
@@ -265,10 +251,6 @@ protected:
                 }
             }
 
-            // after one success compaction, low cardinality dict will be generated.
-            // so we can enable shortcut compaction.
-            _tablet->tablet_meta()->set_enable_shortcut_compaction(true);
-
             for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
                 input_stream_info << _input_rowsets[i]->version() << ";";
             }
@@ -295,16 +277,13 @@ protected:
 
     void _failure_callback(const Status& st);
 
-    Status _shortcut_compact(Statistics* statistics);
-
 protected:
     CompactionTaskInfo _task_info;
     RuntimeProfile _runtime_profile;
     std::vector<RowsetSharedPtr> _input_rowsets;
     TabletSharedPtr _tablet;
-    TabletSchemaCSPtr _tablet_schema;
     RowsetSharedPtr _output_rowset;
-    std::shared_lock<std::shared_mutex> _compaction_lock;
+    std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
 };

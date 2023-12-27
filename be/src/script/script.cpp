@@ -20,7 +20,6 @@
 
 #include "common/greplog.h"
 #include "common/logging.h"
-#include "common/prof/heap_prof.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
@@ -84,7 +83,7 @@ static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
 }
 
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
-    return tablet.unsafe_tablet_schema_ref();
+    return tablet.tablet_schema();
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -99,12 +98,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major_number(EditVersion& self) {
-    return self.major_number();
+static uint64_t get_major(EditVersion& self) {
+    return self.major();
 }
 
-static uint64_t get_minor_number(EditVersion& self) {
-    return self.minor_number();
+static uint64_t get_minor(EditVersion& self) {
+    return self.minor();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -129,7 +128,7 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
-std::string exec(const std::string& cmd) {
+static std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
@@ -200,51 +199,16 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
-    }
-    {
-        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
-        REG_STATIC_METHOD(GlobalEnv, GetInstance);
-
-        // level 0
-        REG_METHOD(GlobalEnv, process_mem_tracker);
-
-        // level 1
-        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, load_mem_tracker);
-        REG_METHOD(GlobalEnv, metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, compaction_mem_tracker);
-        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
-        REG_METHOD(GlobalEnv, column_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
-        REG_METHOD(GlobalEnv, update_mem_tracker);
-        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
-        REG_METHOD(GlobalEnv, clone_mem_tracker);
-        REG_METHOD(GlobalEnv, consistency_mem_tracker);
-
-        // level 2
-        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
-
-        // level 3
-        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
-        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
-        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
-    }
-    {
-        auto& cls = m.klass<HeapProf>("HeapProf");
-        REG_STATIC_METHOD(HeapProf, getInstance);
-        REG_METHOD(HeapProf, enable_prof);
-        REG_METHOD(HeapProf, disable_prof);
-        REG_METHOD(HeapProf, has_enable);
-        REG_METHOD(HeapProf, snapshot);
-        REG_METHOD(HeapProf, to_dot_format);
-        REG_METHOD(HeapProf, dump_dot_snapshot);
+        REG_METHOD(ExecEnv, process_mem_tracker);
+        REG_METHOD(ExecEnv, query_pool_mem_tracker);
+        REG_METHOD(ExecEnv, load_mem_tracker);
+        REG_METHOD(ExecEnv, metadata_mem_tracker);
+        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
+        REG_METHOD(ExecEnv, compaction_mem_tracker);
+        REG_METHOD(ExecEnv, update_mem_tracker);
+        REG_METHOD(ExecEnv, clone_mem_tracker);
     }
 }
 
@@ -391,7 +355,6 @@ public:
             REG_METHOD(Tablet, compaction_score);
             REG_METHOD(Tablet, schema_debug_string);
             REG_METHOD(Tablet, debug_string);
-            REG_METHOD(Tablet, support_binlog);
             REG_METHOD(Tablet, updates);
             REG_METHOD(Tablet, save_meta);
             REG_METHOD(Tablet, verify);
@@ -417,8 +380,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major_number>("major_number");
-            cls.funcExt<&get_minor_number>("minor_number");
+            cls.funcExt<&get_major>("major");
+            cls.funcExt<&get_minor>("minor");
             cls.func<&EditVersion::to_string>("toString");
         }
         {
@@ -438,7 +401,7 @@ public:
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
-            REG_METHOD(Rowset, schema_ref);
+            REG_METHOD(Rowset, schema);
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);
@@ -512,7 +475,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

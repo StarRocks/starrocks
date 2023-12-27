@@ -81,8 +81,7 @@ ColumnPtr ShuffleChunkPerf::init_src_column(const TypeDescriptor& type) {
         if (v % 100 < _null_percent) {
             nullable_col->append_default();
         } else {
-            auto val = "str123" + std::to_string(v);
-            nullable_col->append_datum(Datum(Slice(val)));
+            nullable_col->append_datum(Datum("str123" + std::to_string(v)));
         }
     }
     return c1;
@@ -94,8 +93,7 @@ ColumnPtr ShuffleChunkPerf::init_src_key_column(const TypeDescriptor& type) {
     auto* nullable_col = down_cast<NullableColumn*>(c1.get());
     for (int k = 0; k < _src_chunk_size; k++) {
         int v = rand();
-        auto val = "str123" + std::to_string(v);
-        nullable_col->append_datum(Datum(Slice(val)));
+        nullable_col->append_datum(Datum("str123" + std::to_string(v)));
     }
     return c1;
 }

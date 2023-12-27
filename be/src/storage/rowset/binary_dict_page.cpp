@@ -133,7 +133,7 @@ uint32_t BinaryDictPageBuilder::count() const {
 }
 
 uint64_t BinaryDictPageBuilder::size() const {
-    return _data_page_builder->size();
+    return _pool.total_allocated_bytes() + _data_page_builder->size();
 }
 
 faststring* BinaryDictPageBuilder::get_dictionary_page() {
@@ -219,16 +219,16 @@ void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
-    SparseRange<> read_range;
+    SparseRange read_range;
     uint32_t begin = current_index();
-    read_range.add(Range<>(begin, begin + *n));
+    read_range.add(Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
     }
@@ -246,18 +246,17 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
     using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
-    raw::stl_vector_resize_uninitialized(&slices, nread);
-
+    slices.reserve(nread);
     if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
             element.size = strnlen(element.data, element.size);
-            slices[i] = element;
+            slices.emplace_back(element);
         }
     } else {
         for (int i = 0; i < nread; ++i) {
-            slices[i] = _dict_decoder->string_at_index(codewords[i]);
+            slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
         }
     }
 
@@ -273,7 +272,7 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange& range, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);

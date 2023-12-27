@@ -92,36 +92,32 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                                       uint32_t next_unique_id,
-                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                       TabletMetaSharedPtr* tablet_meta);
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
-
-    static RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets);
 
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
-               TTabletType::type tabletType, TCompressionType::type compression_type,
-               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type);
+               TTabletType::type tabletType, TCompressionType::type compression_type);
 
     virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    [[nodiscard]] Status create_from_file(const std::string& file_path);
-    [[nodiscard]] Status create_from_memory(std::string_view data);
-    [[nodiscard]] Status save(const std::string& file_path);
-    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
+    Status create_from_file(const std::string& file_path);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    [[nodiscard]] Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir);
 
-    [[nodiscard]] Status serialize(std::string* meta_binary);
-    [[nodiscard]] Status deserialize(std::string_view data);
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
@@ -157,10 +153,9 @@ public:
 
     const TabletSchema& tablet_schema() const;
 
-    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
-    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
+    void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
 
-    TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
+    std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -185,7 +180,7 @@ public:
     bool version_for_delete_predicate(const Version& version);
     std::string full_name() const;
 
-    void set_partition_id(int64_t partition_id);
+    Status set_partition_id(int64_t partition_id);
 
     // used when create new tablet
     void create_inital_updates_meta();
@@ -195,34 +190,36 @@ public:
         return _updatesPB.release();
     }
 
-    std::string get_storage_type() const { return _storage_type; }
-
     bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;
     }
 
-    int32_t get_primary_index_cache_expire_sec() const { return _primary_index_cache_expire_sec; }
-    void set_primary_index_cache_expire_sec(int32_t primary_index_cache_expire_sec) {
-        _primary_index_cache_expire_sec = primary_index_cache_expire_sec;
-    }
-
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
-    void set_binlog_config(const BinlogConfig& new_config) {
-        _binlog_config = std::make_shared<BinlogConfig>();
-        _binlog_config->update(new_config);
+    void set_binlog_config(const TBinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
+                         << _binlog_config->version << ", update version is " << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
     }
 
-    BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
-
-    void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
-
-    bool enable_shortcut_compaction() const { return _enable_shortcut_compaction; }
-
-    void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
-        _enable_shortcut_compaction = enable_shortcut_compaction;
+    void set_binlog_config(const BinlogConfig& binlog_config) {
+        if (_binlog_config == nullptr) {
+            _binlog_config = std::make_shared<BinlogConfig>();
+        } else if (_binlog_config->version > binlog_config.version) {
+            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
+                         << _binlog_config->version << ", update version is " << binlog_config.version;
+            return;
+        }
+        _binlog_config->update(binlog_config);
+        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
     }
 
 private:
@@ -242,14 +239,13 @@ private:
     int64_t _creation_time = 0;
     int64_t _cumulative_layer_point = 0;
     bool _enable_persistent_index = false;
-    int32_t _primary_index_cache_expire_sec = 0;
     TabletUid _tablet_uid;
     TabletTypePB _tablet_type = TabletTypePB::TABLET_TYPE_DISK;
 
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
-    TabletSchemaCSPtr _schema = nullptr;
+    std::shared_ptr<const TabletSchema> _schema = nullptr;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;
@@ -270,21 +266,6 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
-
-    // The minimum lsn of binlog that is valid. It will be updated when deleting expired
-    // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
-    // useless binlog when recovery in Tablet#finish_load_rowsets. We can not only depend
-    // on _inc_rs_metas for recovery because _inc_rs_metas may contain rowsets that doest
-    // not have binlog in the following cases
-    // 1. _inc_rs_metas already contains some rowsets before enable binlog, so there is no
-    //    binlog for these data
-    // 2. config::inc_rowset_expired_sec is larger than the expired time of binlog, so
-    //    a rowset will not be removed from _inc_rs_metas if only the binlog is expired
-    BinlogLsn _binlog_min_lsn;
-
-    bool _enable_shortcut_compaction = true;
-
-    std::string _storage_type;
 
     std::shared_mutex _meta_lock;
 };

@@ -28,6 +28,3 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
----
-Language: Proto
-BasedOnStyle: Google

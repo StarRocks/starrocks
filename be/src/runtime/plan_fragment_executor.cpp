@@ -87,11 +87,12 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     DCHECK(_runtime_state->chunk_size() > 0);
 
     _runtime_state->set_be_number(request.backend_num);
+    if (request.__isset.load_job_id) {
+        _runtime_state->set_load_job_id(request.load_job_id);
+    }
+
     if (request.query_options.__isset.enable_profile) {
         enable_profile = request.query_options.enable_profile;
-    }
-    if (request.query_options.__isset.load_profile_collect_second) {
-        load_profile_collect_second = request.query_options.load_profile_collect_second;
     }
 
     // set up desc tbl
@@ -108,10 +109,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     if (request.fragment.__isset.query_global_dicts) {
         RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
-    }
-
-    if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {
@@ -145,7 +142,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        (void)scan_node->set_scan_ranges(scan_ranges);
+        scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
     }
 
@@ -209,7 +206,7 @@ Status PlanFragmentExecutor::open() {
         // Log error message in addition to returning in Status. Queries that do not
         // fetch results (e.g. insert) may not receive the message directly and can
         // only retrieve the log.
-        _runtime_state->log_error(status.message());
+        _runtime_state->log_error(status.get_error_msg());
     }
 
     update_status(status);
@@ -287,7 +284,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
 void PlanFragmentExecutor::collect_query_statistics() {
     _query_statistics->clear();
-    (void)_plan->collect_query_statistics(_query_statistics.get());
+    _plan->collect_query_statistics(_query_statistics.get());
 }
 
 void PlanFragmentExecutor::send_report(bool done) {
@@ -312,12 +309,6 @@ void PlanFragmentExecutor::send_report(bool done) {
     // This may happen when the query limit reached and
     // a internal cancellation being processed
     if (!enable_profile && !_is_report_on_cancel) {
-        return;
-    }
-
-    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
-    auto now = std::time(nullptr);
-    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
         return;
     }
 
@@ -356,7 +347,7 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
         // if current `_status` is ok, set it to `new_status` to record the error.
         if (_status.ok()) {
             if (new_status.is_mem_limit_exceeded()) {
-                (void)_runtime_state->set_mem_limit_exceeded(new_status.message());
+                _runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
@@ -399,8 +390,13 @@ void PlanFragmentExecutor::cancel() {
         }
         _stream_load_contexts.resize(0);
     }
+
+    if (_sink != nullptr) {
+        _sink->cancel();
+    }
+
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
-    (void)_runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
+    _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
@@ -477,9 +473,9 @@ void PlanFragmentExecutor::close() {
                     std::lock_guard<std::mutex> l(_status_lock);
                     status = _status;
                 }
-                (void)_sink->close(runtime_state(), status);
+                _sink->close(runtime_state(), status);
             } else {
-                (void)_sink->close(runtime_state(), Status::InternalError("prepare failed"));
+                _sink->close(runtime_state(), Status::InternalError("prepare failed"));
             }
         }
 

@@ -32,9 +32,8 @@ public:
     SeekTuple(Schema schema, std::vector<Datum> values) : _schema(std::move(schema)), _values(std::move(values)) {
 #ifndef NDEBUG
         if (_schema.sort_key_idxes().empty()) {
-            // Ensure the key columns are continuous and started from zero.
-            // But the value columns may not be continuous in delta column.
-            for (size_t i = 0; i < _schema.num_key_fields(); i++) {
+            // Ensure the columns are continuous and started from zero.
+            for (size_t i = 0; i < _schema.num_fields(); i++) {
                 CHECK_EQ(ColumnId(i), _schema.field(i)->id());
             }
         }
@@ -86,8 +85,7 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, uint8_t pa
 inline std::string SeekTuple::short_key_encode(size_t num_short_keys, std::vector<uint32_t> sort_key_idxes,
                                                uint8_t padding) const {
     std::string output;
-    DCHECK(num_short_keys <= sort_key_idxes.size())
-            << "num short key: " << num_short_keys << " vs " << sort_key_idxes.size();
+    DCHECK(num_short_keys <= sort_key_idxes.size());
     size_t n = std::min(num_short_keys, _values.size());
     size_t val_num = _values.size();
     for (auto i = 0; i < n; i++) {

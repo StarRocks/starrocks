@@ -14,11 +14,6 @@
 
 #include "exec/pipeline/scan/morsel.h"
 
-#include <fmt/compile.h>
-
-#include <memory>
-
-#include "common/statusor.h"
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
@@ -32,52 +27,12 @@
 namespace starrocks::pipeline {
 
 /// Morsel.
-
-const std::vector<RowsetSharedPtr> Morsel::kEmptyRowsets;
-
-class PhysicalSplitScanMorsel final : public ScanMorsel {
-public:
-    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
-            : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
-
-    ~PhysicalSplitScanMorsel() override = default;
-
-    void init_tablet_reader_params(TabletReaderParams* params) override;
-
-    const std::unordered_set<std::string>& skip_min_max_metrics() const override {
-        static const std::unordered_set<std::string> metrics{"ShortKeyFilterRows", "SegmentZoneMapFilterRows"};
-        return metrics;
-    }
-
-private:
-    RowidRangeOptionPtr _rowid_range_option;
-};
-
-class LogicalSplitScanMorsel final : public ScanMorsel {
-public:
-    LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
-                           ShortKeyRangesOptionPtr short_key_ranges_option)
-            : ScanMorsel(plan_node_id, scan_range), _short_key_ranges_option(std::move(short_key_ranges_option)) {}
-
-    ~LogicalSplitScanMorsel() override = default;
-
-    void init_tablet_reader_params(TabletReaderParams* params) override;
-
-    const std::unordered_set<std::string>& skip_min_max_metrics() const override {
-        static const std::unordered_set<std::string> metrics{"ShortKeyFilterRows", "SegmentZoneMapFilterRows"};
-        return metrics;
-    }
-
-private:
-    ShortKeyRangesOptionPtr _short_key_ranges_option;
-};
-
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
 }
 
 void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
-    params->short_key_ranges_option = _short_key_ranges_option;
+    params->short_key_ranges = _short_key_ranges;
 }
 
 /// MorselQueueFactory.
@@ -113,34 +68,6 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
-BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                                   bool could_local_shuffle)
-        : _could_local_shuffle(could_local_shuffle) {
-    if (queue_per_driver_seq.empty()) {
-        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
-        return;
-    }
-
-    _queue_per_driver_seq.reserve(queue_per_driver_seq.size());
-    int max_dop = queue_per_driver_seq.rbegin()->first;
-    for (int i = 0; i <= max_dop; ++i) {
-        auto it = queue_per_driver_seq.find(i);
-        if (it == queue_per_driver_seq.end()) {
-            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
-        } else {
-            _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
-        }
-    }
-}
-
-size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
-    size_t total = 0;
-    for (const auto& queue : _queue_per_driver_seq) {
-        total += queue->num_original_morsels();
-    }
-    return total;
-}
-
 /// MorselQueue.
 std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
@@ -173,72 +100,12 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     idx = _pop_index.fetch_add(1);
     if (idx < _num_morsels) {
         if (!_tablet_rowsets.empty()) {
-            _morsels[idx]->set_rowsets(_tablet_rowsets[idx]);
+            _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
         }
         return std::move(_morsels[idx]);
     } else {
         return nullptr;
     }
-}
-
-BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
-        : _morsel_queue(std::move(morsel_queue)) {}
-
-std::vector<TInternalScanRange*> BucketSequenceMorselQueue::olap_scan_ranges() const {
-    return _morsel_queue->olap_scan_ranges();
-}
-
-bool BucketSequenceMorselQueue::empty() const {
-    return _unget_morsel == nullptr && _morsel_queue->empty();
-}
-
-StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
-    if (_unget_morsel != nullptr) {
-        return std::move(_unget_morsel);
-    }
-    if (_morsel_queue->empty()) {
-        return nullptr;
-    }
-    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
-    auto* m = down_cast<ScanMorsel*>(morsel.get());
-    auto owner_id = m->owner_id();
-    ASSIGN_OR_RETURN(int64_t next_owner_id, _peek_sequence_id());
-    _ticket_checker->enter(owner_id, next_owner_id != owner_id);
-    _current_sequence = owner_id;
-    return morsel;
-}
-
-std::string BucketSequenceMorselQueue::name() const {
-    return fmt::format("partition_morsel_queue({})", _morsel_queue->name());
-}
-
-StatusOr<bool> BucketSequenceMorselQueue::ready_for_next() const {
-    if (_current_sequence < 0) {
-        return true;
-    }
-
-    ASSIGN_OR_RETURN(int64_t next_sequence_id, _peek_sequence_id());
-    if (next_sequence_id == _current_sequence) {
-        return true;
-    }
-
-    if (_ticket_checker->are_all_left(_current_sequence)) {
-        return true;
-    }
-
-    return false;
-}
-
-StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
-    int64_t next_owner_id = -1;
-    if (!_morsel_queue->empty()) {
-        ASSIGN_OR_RETURN(auto next_morsel, _morsel_queue->try_get());
-        if (auto* next_scan_morsel = down_cast<ScanMorsel*>(next_morsel.get())) {
-            next_owner_id = next_scan_morsel->owner_id();
-            _morsel_queue->unget(std::move(next_morsel));
-        }
-    }
-    return next_owner_id;
 }
 
 std::vector<TInternalScanRange*> PhysicalSplitMorselQueue::olap_scan_ranges() const {
@@ -261,71 +128,6 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
     }
 }
 
-StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_single_tablet() {
-    size_t num_taken_rows = 0;
-    RowidRangeOptionPtr rowid_range = nullptr;
-    auto has_taken_from_tablet = [&rowid_range]() { return rowid_range != nullptr; };
-
-    while (num_taken_rows < _splitted_scan_rows) {
-        if (_tablet_idx >= _tablets.size()) {
-            return rowid_range;
-        }
-
-        // When it hasn't initialized any segment,
-        // or _segment_idx exceeds the segments of the current rowset,
-        // or current segment is empty or finished,
-        // we should pick up the next segment and init it.
-        while (!_has_init_any_segment || _cur_segment() == nullptr || _cur_segment()->num_rows() == 0 ||
-               !_segment_range_iter.has_more()) {
-            // Only pick up the segment in the same tablet.
-            if (has_taken_from_tablet() && _is_last_split_of_current_morsel()) {
-                return rowid_range;
-            }
-
-            if (!_next_segment()) {
-                return rowid_range;
-            }
-
-            if (auto status = _init_segment(); !status.ok()) {
-                // Morsel_queue cannot generate morsels after errors occurring.
-                _tablet_idx = _tablets.size();
-                return status;
-            }
-        }
-
-        if (rowid_range == nullptr) {
-            rowid_range = std::make_shared<RowidRangeOption>();
-        }
-
-        SparseRange<> taken_range;
-        _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
-        _num_segment_rest_rows -= taken_range.span_size();
-        if (_num_segment_rest_rows < _splitted_scan_rows) {
-            // If there are too few rows left in the segment, take them all this time.
-            _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
-            _num_segment_rest_rows = 0;
-        }
-
-        VLOG_ROW << "PhysicalSplitMorselQueue::_try_get_split_from_single_tablet "
-                 << "[rowid_range_addr=" << rowid_range.get() << "] "
-                 << "[tablet_idx=" << _tablet_idx << "] "
-                 << "[rowset_idx=" << _rowset_idx << "] "
-                 << "[segment_idx=" << _segment_idx << "] "
-                 << "[range=" << taken_range.to_string() << "] ";
-
-        num_taken_rows += taken_range.span_size();
-        rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)),
-                         _is_first_split_of_segment);
-        _is_first_split_of_segment = false;
-
-        if (_is_last_split_of_current_morsel()) {
-            return rowid_range;
-        }
-    }
-
-    return rowid_range;
-}
-
 StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     std::lock_guard<std::mutex> lock(_mutex);
     if (_unget_morsel != nullptr) {
@@ -335,12 +137,41 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
 
-    ASSIGN_OR_RETURN(auto rowid_range, _try_get_split_from_single_tablet());
-    if (rowid_range == nullptr) {
+    if (_tablet_idx >= _tablets.size()) {
         return nullptr;
     }
 
+    // When it hasn't initialized any segment,
+    // or _segment_idx exceeds the segments of the current rowset,
+    // or current segment is empty or finished,
+    // we should pick up the next segment and init it.
+    while (!_has_init_any_segment || _cur_segment() == nullptr || _cur_segment()->num_rows() == 0 ||
+           !_segment_range_iter.has_more()) {
+        if (!_next_segment()) {
+            return nullptr;
+        }
+
+        if (auto status = _init_segment(); !status.ok()) {
+            // Morsel_queue cannot generate morsels after errors occurring.
+            _tablet_idx = _tablets.size();
+            return status;
+        }
+    }
+
+    SparseRange taken_range;
+    _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
+    _num_segment_rest_rows -= taken_range.span_size();
+    if (_num_segment_rest_rows < _splitted_scan_rows) {
+        // If there are too few rows left in the segment, take them all this time.
+        _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
+        _num_segment_rest_rows = 0;
+    }
+
     auto* scan_morsel = _cur_scan_morsel();
+    auto* rowset = _cur_rowset();
+    auto rowid_range = std::make_shared<RowidRangeOption>(rowset->rowset_id(), rowset->segments()[_segment_idx]->id(),
+                                                          std::move(taken_range));
+
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
@@ -393,32 +224,8 @@ Segment* PhysicalSplitMorselQueue::_cur_segment() {
 }
 
 bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
-    if (_num_segment_rest_rows > 0) {
-        return false;
-    }
-
-    // Check if all tablets are processed.
-    if (_tablet_idx >= _tablet_rowsets.size()) {
-        return true;
-    }
-    // Check if all rowsets of the current tablet are processed.
-    const size_t num_rowsets = _tablet_rowsets[_tablet_idx].size();
-    if (_rowset_idx >= num_rowsets) {
-        return true;
-    }
-
-    // Check if reach the last rowset of the current tablet.
-    if (_rowset_idx + 1 < num_rowsets) {
-        return false;
-    }
-
-    // Check if reach the last segment of the current rowset.
-    const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->segments().size();
-    if (_segment_idx + 1 < num_segments) {
-        return false;
-    }
-
-    return true;
+    return _has_init_any_segment && _cur_segment() != nullptr && _cur_segment()->num_rows() != 0 &&
+           !_segment_range_iter.has_more();
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
@@ -442,17 +249,15 @@ bool PhysicalSplitMorselQueue::_next_segment() {
 }
 
 Status PhysicalSplitMorselQueue::_init_segment() {
-    _is_first_split_of_segment = true;
-
     // Load the meta of the new rowset and the index of the new segment。
     if (0 == _segment_idx) {
         // Read a new tablet.
         if (0 == _rowset_idx) {
             _tablet_seek_ranges.clear();
             _mempool.clear();
-            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                           _range_end_op, _range_start_key, _range_end_key,
-                                                           &_tablet_seek_ranges, &_mempool));
+            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
+                                                           _range_start_key, _range_end_key, &_tablet_seek_ranges,
+                                                           &_mempool));
         }
         // Read a new rowset.
         RETURN_IF_ERROR(_cur_rowset()->load());
@@ -469,7 +274,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
 
     // Find the rowid range of each key range in this segment.
     if (_tablet_seek_ranges.empty()) {
-        _segment_scan_range.add(Range<>(0, segment->num_rows()));
+        _segment_scan_range.add(Range(0, segment->num_rows()));
     } else {
         RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {
@@ -629,9 +434,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
 
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
-            scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()),
-            std::make_shared<ShortKeyRangesOption>(std::move(short_key_ranges), _is_first_split_of_tablet));
-    _is_first_split_of_tablet = false;
+            scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
@@ -773,13 +576,12 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     _block_ranges_per_seek_range.clear();
     _num_rest_blocks_per_seek_range.clear();
     _range_idx = 0;
-    _is_first_split_of_tablet = true;
 
     if (_tablet_idx == 0) {
         // All the tablets have the same schema, so parse seek range with the first table schema.
-        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                       _range_end_op, _range_start_key, _range_end_key,
-                                                       &_tablet_seek_ranges, &_mempool));
+        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
+                                                       _range_start_key, _range_end_key, &_tablet_seek_ranges,
+                                                       &_mempool));
     }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);

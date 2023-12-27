@@ -15,13 +15,11 @@
 #include "column/map_column.h"
 
 #include <cstdint>
-#include <set>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -72,7 +70,7 @@ size_t MapColumn::byte_size(size_t from, size_t size) const {
                             _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
            _values->byte_size(_offsets->get_data()[from],
                               _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
-           _offsets->byte_size(from, size);
+           _offsets->Column::byte_size(from, size);
 }
 
 size_t MapColumn::byte_size(size_t idx) const {
@@ -176,7 +174,7 @@ void MapColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
-void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
+Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& map_column = down_cast<const MapColumn&>(src);
 
     const UInt32Column& src_offsets = map_column.offsets();
@@ -199,8 +197,8 @@ void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
                 element_idxes.emplace_back(element_offset + j);
             }
         }
-        _keys->update_rows(map_column.keys(), element_idxes.data());
-        _values->update_rows(map_column.values(), element_idxes.data());
+        RETURN_IF_ERROR(_keys->update_rows(map_column.keys(), element_idxes.data()));
+        RETURN_IF_ERROR(_values->update_rows(map_column.values(), element_idxes.data()));
     } else {
         MutableColumnPtr new_map_column = clone_empty();
         size_t idx_begin = 0;
@@ -216,47 +214,19 @@ void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
         }
         swap_column(*new_map_column.get());
     }
-}
 
-void MapColumn::remove_first_n_values(size_t count) {
-    if (count >= _offsets->size()) {
-        count = _offsets->size() - 1;
-    }
-
-    size_t offset = _offsets->get_data()[count];
-    _keys->remove_first_n_values(offset);
-    _values->remove_first_n_values(offset);
-    _offsets->remove_first_n_values(count);
-
-    for (size_t i = 0; i < _offsets->size(); i++) {
-        _offsets->get_data()[i] -= offset;
-    }
+    return Status::OK();
 }
 
 uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
-    DCHECK(!_keys->is_map());
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     strings::memcpy_inlined(pos, &map_size, sizeof(map_size));
     size_t ser_size = sizeof(map_size);
-
-    // unstable sort keys, map keys must be unique
-    SmallPermutation perm(map_size);
-    {
-        for (uint32_t i = 0; i < map_size; i++) {
-            perm[i].index_in_chunk = offset + i;
-        }
-        Tie tie(map_size, 1);
-        std::pair<int, int> range{0, map_size};
-        auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
-        DCHECK(st.ok());
-    }
-
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t index = perm[i].index_in_chunk;
-        ser_size += _keys->serialize(index, pos + ser_size);
-        ser_size += _values->serialize(index, pos + ser_size);
+        ser_size += _keys->serialize(offset + i, pos + ser_size);
+        ser_size += _values->serialize(offset + i, pos + ser_size);
     }
     return static_cast<uint32_t>(ser_size);
 }
@@ -409,7 +379,7 @@ int MapColumn::compare_at(size_t left, size_t right, const Column& right_column,
     return -1;
 }
 
-int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) const {
     const auto& rhs_map = down_cast<const MapColumn&>(rhs);
 
     size_t lhs_offset = _offsets->get_data()[left];
@@ -421,75 +391,48 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
         return false;
     }
 
-    // process the null key at last if exists, so non-nullable keys can exactly identify equal one or not.
-    // if any non-nullable key does not match, return false;
-    // else if all non-nullable key are matched (true or null), check the last nullable keys.
-    // if the last nullable key is not matched, return false; else if there is null result from all keys matching,
-    // return null, else return true.
+    auto lhs_keys = ColumnHelper::get_data_column(_keys.get());
+    auto lhs_values = ColumnHelper::get_data_column(_values.get());
+    auto rhs_keys = ColumnHelper::get_data_column(rhs_map._keys.get());
+    auto rhs_values = ColumnHelper::get_data_column(rhs_map._values.get());
 
-    bool has_null_eq = false;
-    uint32_t null_id = 0;
-    std::vector<uint32_t> index;
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
-        if (_keys->is_null(i)) {
-            null_id = i;
-            continue;
-        }
-        index.push_back(i);
-    }
-    if (index.size() < (lhs_end - lhs_offset)) {
-        index.push_back(null_id);
-    }
-    std::set<uint32_t> right_index;
-    for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
-        right_index.insert(j);
-    }
-
-    for (auto i : index) {
-        bool real_eq = false;
-        bool null_eq = false;
-        uint32_t eq_id = 0;
-        for (unsigned int j : right_index) {
-            int key_res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
-            if (key_res == EQUALS_FALSE) {
-                continue;
-            }
-            // So two keys are the same or right key is null
-            int val_res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
-
-            // case 1: key_res == EQUALS_TRUE
-            if (key_res == EQUALS_TRUE) {
-                if (val_res == EQUALS_FALSE) {
-                    return EQUALS_FALSE;
-                } else if (val_res == EQUALS_NULL) {
-                    null_eq = true;
-                } else if (val_res == EQUALS_TRUE) {
-                    null_eq = false;
-                    real_eq = true;
+        bool found = false;
+        for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
+            if (_keys->is_null(i)) {
+                if (!rhs_map._keys->is_null(i)) {
+                    continue;
                 }
-                eq_id = j;
-                break;
+            } else {
+                if (rhs_map._keys->is_null(i)) {
+                    continue;
+                }
+                if (!lhs_keys->equals(i, *rhs_keys, j)) {
+                    continue;
+                }
             }
-            // case 2: key_res == EQUALS_NULL, continue
-            if (val_res != EQUALS_FALSE) {
-                eq_id = j;
-                null_eq = true;
+            // So two keys is the same
+            if (_values->is_null(i)) {
+                if (!rhs_map._values->is_null(i)) {
+                    return false;
+                }
+            } else {
+                if (rhs_map._values->is_null(i)) {
+                    return false;
+                }
+                if (!lhs_values->equals(i, *rhs_values, j)) {
+                    return false;
+                }
             }
+            found = true;
+            break;
         }
-        if (null_eq || real_eq) {
-            right_index.erase(eq_id);
-            has_null_eq |= (!real_eq && null_eq);
-        } else {
-            return EQUALS_FALSE;
+        if (!found) {
+            return false;
         }
     }
 
-    DCHECK(right_index.empty()); // all matched return null or true
-
-    // unsafe eq && has null eq, should return NULL
-    // unsafe eq && none null eq, should return TRUE
-    // safe eq, should return TRUE
-    return !safe_eq && has_null_eq ? EQUALS_NULL : EQUALS_TRUE;
+    return true;
 }
 
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
@@ -499,15 +442,10 @@ void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     *hash = HashUtil::fnv_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
         uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _keys->fnv_hash_at(&pair_hash, ele_offset);
-        _values->fnv_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
+        _keys->fnv_hash_at(hash, ele_offset);
+        _values->fnv_hash_at(hash, ele_offset);
     }
 }
 
@@ -518,15 +456,10 @@ void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
         uint32_t ele_offset = offset + i;
-        _keys->crc32_hash_at(&pair_hash, ele_offset);
-        _values->crc32_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
+        _keys->crc32_hash_at(hash, ele_offset);
+        _values->crc32_hash_at(hash, ele_offset);
     }
 }
 
@@ -612,12 +545,12 @@ bool MapColumn::set_null(size_t idx) {
     return false;
 }
 
-size_t MapColumn::reference_memory_usage(size_t from, size_t size) const {
+size_t MapColumn::element_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t start_offset = _offsets->get_data()[from];
     size_t elements_num = _offsets->get_data()[from + size] - start_offset;
-    return _keys->reference_memory_usage(start_offset, elements_num) +
-           _values->reference_memory_usage(start_offset, elements_num) + _offsets->reference_memory_usage(from, size);
+    return _keys->element_memory_usage(start_offset, elements_num) +
+           _values->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
 }
 
 void MapColumn::swap_column(Column& rhs) {
@@ -694,41 +627,26 @@ Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
 }
 
 // keep the last identical key
-void MapColumn::remove_duplicated_keys(bool need_recursive) {
-    // recursively distinct keys
-    if (need_recursive && _values->is_map()) {
-        down_cast<MapColumn*>(ColumnHelper::get_data_column(_values.get()))->remove_duplicated_keys(true);
-    }
+void MapColumn::remove_duplicated_keys() {
     Filter filter(_keys->size(), 1);
-    // compute hash for all keys
-    auto hash = std::make_unique<uint32_t[]>(_keys->size());
-    memset(hash.get(), 0, _keys->size() * sizeof(uint32_t));
-    _keys->fnv_hash(hash.get(), 0, _keys->size());
 
     bool has_duplicated_keys = false;
-    size_t size = this->size();
     UInt32Column::Ptr new_offsets = UInt32Column::create();
-    new_offsets->reserve(size + 1);
     auto& offsets_vec = new_offsets->get_data();
     offsets_vec.push_back(0);
 
     uint32_t new_offset = 0;
+    size_t size = this->size();
     for (auto i = 0; i < size; ++i) {
-        std::unordered_multimap<uint32_t, uint32_t> key_hash_to_offsets;
-        key_hash_to_offsets.reserve(_offsets->get_data()[i + 1] - _offsets->get_data()[i]);
-        for (int32_t j = _offsets->get_data()[i + 1] - 1; j >= 0 && j >= _offsets->get_data()[i]; --j) {
-            auto same_hash_offsets = key_hash_to_offsets.equal_range(hash[j]);
-            for (auto it = same_hash_offsets.first; it != same_hash_offsets.second; ++it) {
-                if (_keys->equals(j, *_keys, it->second)) {
+        for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
+            for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
+                if (_keys->equals(j, *_keys, k)) {
                     filter[j] = 0;
                     has_duplicated_keys = true;
                     break;
                 }
             }
             new_offset += filter[j];
-            if (filter[j] != 0) {
-                key_hash_to_offsets.emplace(hash[j], (uint32_t)j);
-            }
         }
         offsets_vec.push_back(new_offset);
     }

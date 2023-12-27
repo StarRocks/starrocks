@@ -16,7 +16,6 @@
 
 #include "gen_cpp/parquet_types.h"
 #include "util/int96.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

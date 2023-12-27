@@ -19,7 +19,6 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
-#include "util/slice.h"
 
 namespace starrocks::spill {
 
@@ -61,7 +60,6 @@ struct AcquireBlockOptions {
     TUniqueId query_id;
     int32_t plan_node_id;
     std::string name;
-    bool direct_io = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

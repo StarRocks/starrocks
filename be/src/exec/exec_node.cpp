@@ -72,7 +72,6 @@
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
-#include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -125,8 +124,8 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
-            WARN_IF_ERROR((*iter)->prepare(state), "prepare expression failed");
-            WARN_IF_ERROR((*iter)->open(state), "open expression failed");
+            (*iter)->prepare(state);
+            (*iter)->open(state);
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
         } else {
@@ -322,28 +321,34 @@ Status ExecNode::reset(RuntimeState* state) {
 Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
     for (auto child_node : _children) {
-        (void)child_node->collect_query_statistics(statistics);
+        child_node->collect_query_statistics(statistics);
     }
     return Status::OK();
 }
 
-void ExecNode::close(RuntimeState* state) {
+Status ExecNode::close(RuntimeState* state) {
     if (_is_closed) {
-        return;
+        return Status::OK();
     }
     _is_closed = true;
-    (void)exec_debug_action(TExecNodePhase::CLOSE);
+    exec_debug_action(TExecNodePhase::CLOSE);
 
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
 
+    Status result;
     for (auto& i : _children) {
-        i->close(state);
+        auto st = i->close(state);
+        if (result.ok() && !st.ok()) {
+            result = st;
+        }
     }
 
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
+
+    return result;
 }
 
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
@@ -552,7 +557,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         }
         default:
             return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
-        }
+        };
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector_name;
         new_node.connector_scan_node = connector_scan_node;
@@ -609,7 +614,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* 
     int zero_count = 0;
 
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -673,7 +678,7 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
     Filter* raw_filter = filter.get();
 
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk))
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -716,7 +721,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()))
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {

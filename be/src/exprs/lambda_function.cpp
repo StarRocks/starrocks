@@ -70,14 +70,14 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     int valid_id = 0;
     for (int& _captured_slot_id : _captured_slot_ids) {
         if (!captured_mask[_captured_slot_id]) { // not duplicated
-            for (const auto& arguments_id : _arguments_ids) {
-                if (_captured_slot_id == arguments_id) {
+            for (int arg_id = 0; arg_id < _arguments_ids.size(); ++arg_id) {
+                if (_captured_slot_id == _arguments_ids[arg_id]) {
                     captured_mask[_captured_slot_id] = true;
                 }
             }
             if (!captured_mask[_captured_slot_id] && _common_sub_expr_num > 0) {
-                for (const auto& common_sub_expr_id : _common_sub_expr_ids) {
-                    if (_captured_slot_id == common_sub_expr_id) {
+                for (int arg_id = 0; arg_id < _common_sub_expr_ids.size(); ++arg_id) {
+                    if (_captured_slot_id == _common_sub_expr_ids[arg_id]) {
                         captured_mask[_captured_slot_id] = true;
                     }
                 }

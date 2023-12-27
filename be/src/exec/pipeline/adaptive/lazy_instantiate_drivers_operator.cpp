@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 LazyInstantiateDriversOperator::LazyInstantiateDriversOperator(OperatorFactory* factory, int32_t id,
                                                                int32_t plan_node_id, const int32_t driver_sequence,
                                                                const PipelineGroupMap& unready_pipeline_group_mapping)
-        : SourceOperator(factory, id, "lazy_instantiate_drivers", plan_node_id, true, driver_sequence) {
+        : SourceOperator(factory, id, "lazy_instantiate_drivers", plan_node_id, driver_sequence) {
     std::vector<PipelineGroup> unready_pipeline_groups;
     unready_pipeline_groups.reserve(unready_pipeline_groups.size());
     for (const auto& [leader_source_op, pipes] : unready_pipeline_group_mapping) {
@@ -94,7 +94,8 @@ StatusOr<ChunkPtr> LazyInstantiateDriversOperator::pull_chunk(RuntimeState* stat
         }
     }
 
-    auto* executor = state->exec_env()->wg_driver_executor();
+    auto* executor = fragment_ctx->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                           : state->exec_env()->driver_executor();
     for (const auto& pipe : ready_pipelines) {
         for (const auto& driver : pipe->drivers()) {
             DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
@@ -109,16 +110,14 @@ void LazyInstantiateDriversOperator::close(RuntimeState* state) {
     auto* fragment_ctx = state->fragment_ctx();
     for (auto& pipeline_group : _unready_pipeline_groups) {
         for (auto& pipeline : pipeline_group.pipelines) {
-            auto sink_factory = pipeline->sink_operator_factory();
-            if (typeid(*sink_factory) != typeid(ResultSinkOperatorFactory)) {
-                fragment_ctx->count_down_pipeline();
+            if (typeid(*pipeline->sink_operator_factory()) != typeid(ResultSinkOperatorFactory)) {
+                fragment_ctx->count_down_pipeline(state);
             } else {
                 // Closing ResultSinkOperator notifies FE not to wait fetch_data anymore.
                 pipeline->source_operator_factory()->set_degree_of_parallelism(1);
                 pipeline->instantiate_drivers(state);
                 for (auto& driver : pipeline->drivers()) {
-                    WARN_IF_ERROR(driver->prepare(state), fmt::format("prepare pipeline driver error [driver={}]",
-                                                                      driver->to_readable_string()));
+                    driver->prepare(state);
                 }
                 for (auto& driver : pipeline->drivers()) {
                     driver->finalize(state, DriverState::FINISH, 0, 0);

@@ -34,8 +34,6 @@
 
 #include "runtime/stream_load/stream_load_context.h"
 
-#include <fmt/format.h>
-
 namespace starrocks {
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
@@ -59,9 +57,8 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         break;
     }
     // msg
-    std::string_view msg = st.message();
     writer.Key("Message");
-    writer.String(msg.data(), msg.size());
+    writer.String(st.get_error_msg().c_str());
 
     if (st.ok()) {
         // label
@@ -117,10 +114,6 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         writer.Key("ErrorURL");
         writer.String(error_url.c_str());
     }
-    if (!rejected_record_path.empty()) {
-        writer.Key("RejectedRecordPath");
-        writer.String(rejected_record_path.c_str());
-    }
     writer.EndObject();
     return s.GetString();
 }
@@ -161,8 +154,7 @@ std::string StreamLoadContext::to_json() const {
     if (status.ok()) {
         writer.String("OK");
     } else {
-        std::string_view msg = status.message();
-        writer.String(msg.data(), msg.size());
+        writer.String(status.get_error_msg().c_str());
     }
     // number_load_rows
     writer.Key("NumberTotalRows");
@@ -191,10 +183,6 @@ std::string StreamLoadContext::to_json() const {
     if (!error_url.empty()) {
         writer.Key("ErrorURL");
         writer.String(error_url.c_str());
-    }
-    if (!rejected_record_path.empty()) {
-        writer.Key("RejectedRecordPath");
-        writer.String(rejected_record_path.c_str());
     }
     writer.EndObject();
     return s.GetString();
@@ -241,7 +229,7 @@ std::string StreamLoadContext::brief(bool detail) const {
 }
 
 bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
-    _http_limiter_guard = std::make_unique<ConcurrentLimiterGuard>();
+    _http_limiter_guard.reset(new ConcurrentLimiterGuard());
     return _http_limiter_guard->set_limiter(limiter);
 }
 
