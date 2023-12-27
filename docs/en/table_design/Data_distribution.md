@@ -598,4 +598,3 @@ Buckets reflect how data files are actually organized in StarRocks.
     ALTER TABLE <table_name> 
     SET ("dynamic_partition.buckets"="xxx");
     ```
-
