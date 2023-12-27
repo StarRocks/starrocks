@@ -187,7 +187,11 @@
     {
       "type": "category",
       "label": "Data Unloading",
+<<<<<<< HEAD
       "link": { "type": "generated-index" },
+=======
+      "link": {"type": "doc", "id": "unloading/unloading"},
+>>>>>>> bb0ab452e0 ([Doc] move the location of unloading with export within the chapter (#37865))
       "items": [
         "unloading/Export",
         "unloading/Spark_connector",
@@ -884,7 +888,11 @@
     {
       "type": "category",
       "label": "导出数据",
+<<<<<<< HEAD
       "link": { "type": "generated-index" },
+=======
+      "link": {"type": "doc", "id": "unloading/unloading"},
+>>>>>>> bb0ab452e0 ([Doc] move the location of unloading with export within the chapter (#37865))
       "items": [
         "unloading/Export",
         "unloading/Spark_connector",
