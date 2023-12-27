@@ -322,7 +322,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         options.setMemoryPool(*getOrcMemoryPool());
         reader = orc::createReader(std::move(input_stream), options);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
+        auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0, file size is $1", e.what(),
+                                     _file->get_size().value());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }

@@ -52,6 +52,9 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
         body.read(static_cast<char*>(out), count);
         _offset += body.gcount();
+        if (UNLIKELY(body.gcount() != count)) {
+            return Status::IOError("BE access S3 file get uncorrected length");
+        }
         return body.gcount();
     } else {
         return make_error_status(outcome.GetError());
