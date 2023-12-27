@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 sidebar_label: Microsoft Azure Storage
+description: "This topic describes how to authenticate with Azure"
 ---
 
 # Authenticate to Microsoft Azure Storage

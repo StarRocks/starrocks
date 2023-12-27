@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 sidebar_label: Google Cloud Storage (GCS)
+description: "This topic describes how to authenticate with GCS"
 ---
 
 # Authenticate to Google Cloud Storage

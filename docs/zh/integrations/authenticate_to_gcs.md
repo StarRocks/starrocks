@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
 sidebar_label: Google Cloud Storage (GCS)
+description: "本文介绍如何如何实现 StarRocks 与 GCS 之间的认证鉴权"
 ---
 
 # 配置 GCS 认证信息
