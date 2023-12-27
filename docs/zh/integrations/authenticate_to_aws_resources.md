@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
 sidebar_label: AWS
-description: "本文介绍如何如何实现 StarRocks 与 AWS 之间的认证鉴权"
+description: "本文介绍如何认证 AWS 资源"
 ---
 
 # 配置 AWS 认证信息
