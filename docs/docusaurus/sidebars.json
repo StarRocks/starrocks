@@ -200,8 +200,9 @@
     {
       "type": "category",
       "label": "Data Unloading",
-      "link": {"type": "doc", "id": "unloading/Export"},
+      "link": {"type": "doc", "id": "unloading/unloading"},
       "items": [
+        "unloading/Export",
         "unloading/Spark_connector",
         "unloading/Flink_connector",
         "unloading/unload_using_insert_into_files"
@@ -954,8 +955,9 @@
     {
       "type": "category",
       "label": "导出数据",
-      "link": {"type": "doc", "id": "unloading/Export"},
+      "link": {"type": "doc", "id": "unloading/unloading"},
       "items": [
+        "unloading/Export",
         "unloading/Spark_connector",
         "unloading/Flink_connector",
         "unloading/unload_using_insert_into_files"
