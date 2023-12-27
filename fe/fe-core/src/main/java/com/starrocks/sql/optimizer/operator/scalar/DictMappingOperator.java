@@ -29,7 +29,7 @@ public class DictMappingOperator extends ScalarOperator {
     // dict expression
     private ScalarOperator originScalaOperator;
     // input string expression
-    private ScalarOperator stringScalarOperator;
+    private ScalarOperator stringProvideOperator;
 
     public DictMappingOperator(ColumnRefOperator dictColumn, ScalarOperator originScalaOperator, Type retType) {
         super(OperatorType.DICT_MAPPING, retType);
@@ -42,7 +42,7 @@ public class DictMappingOperator extends ScalarOperator {
         super(OperatorType.DICT_MAPPING, type);
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
-        this.stringScalarOperator = stringScalarOperator;
+        this.stringProvideOperator = stringScalarOperator;
     }
 
     public ColumnRefOperator getDictColumn() {
@@ -53,8 +53,8 @@ public class DictMappingOperator extends ScalarOperator {
         return originScalaOperator;
     }
 
-    public ScalarOperator getStringScalarOperator() {
-        return stringScalarOperator;
+    public ScalarOperator getStringProvideOperator() {
+        return stringProvideOperator;
     }
 
     @Override
@@ -78,7 +78,7 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        String stringOperator = stringScalarOperator == null ? "" : ", " + stringScalarOperator;
+        String stringOperator = stringProvideOperator == null ? "" : ", " + stringProvideOperator;
         return "DictMapping(" + dictColumn + ", " + originScalaOperator + stringOperator + ")";
     }
 
@@ -99,7 +99,7 @@ public class DictMappingOperator extends ScalarOperator {
         DictMappingOperator that = (DictMappingOperator) o;
         return Objects.equals(dictColumn, that.dictColumn) &&
                 Objects.equals(originScalaOperator, that.originScalaOperator) &&
-                Objects.equals(stringScalarOperator, that.stringScalarOperator);
+                Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
 
     @Override
@@ -115,8 +115,8 @@ public class DictMappingOperator extends ScalarOperator {
     @Override
     public void getColumnRefs(List<ColumnRefOperator> columns) {
         dictColumn.getColumnRefs(columns);
-        if (stringScalarOperator != null) {
-            stringScalarOperator.getColumnRefs(columns);
+        if (stringProvideOperator != null) {
+            stringProvideOperator.getColumnRefs(columns);
         } else {
             originScalaOperator.getColumnRefs(columns);
         }
@@ -127,8 +127,8 @@ public class DictMappingOperator extends ScalarOperator {
         DictMappingOperator clone = (DictMappingOperator) super.clone();
         clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
         clone.originScalaOperator = this.originScalaOperator.clone();
-        if (this.stringScalarOperator != null) {
-            clone.stringScalarOperator = this.stringScalarOperator.clone();
+        if (this.stringProvideOperator != null) {
+            clone.stringProvideOperator = this.stringProvideOperator.clone();
         }
         return clone;
     }

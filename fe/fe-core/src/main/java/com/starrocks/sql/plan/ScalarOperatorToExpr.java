@@ -595,8 +595,8 @@ public class ScalarOperatorToExpr {
                 context.colRefToExpr.put(key, old);
             }
             Expr result;
-            if (operator.getStringScalarOperator() != null) {
-                final Expr stringExpr = buildExpr.build(operator.getStringScalarOperator(), context);
+            if (operator.getStringProvideOperator() != null) {
+                final Expr stringExpr = buildExpr.build(operator.getStringProvideOperator(), context);
                 result = new DictMappingExpr(dictExpr, callExpr, stringExpr);
             } else {
                 result = new DictMappingExpr(dictExpr, callExpr);

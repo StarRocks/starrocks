@@ -35,6 +35,9 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
         return get_child(1)->evaluate_checked(context, ptr);
     }
 
+    // children == 2: DictExpr(string column, string expression) or DictExpr(array column, array column)
+    // children == 3: DictExpr(array column, string expression, array expression)
+    // do array-expresion first, then string expression
     if (_children.size() == 2) {
         auto target_column = ptr->get_column_by_slot_id(slot_id());
         auto data_column = ColumnHelper::get_data_column(target_column.get());

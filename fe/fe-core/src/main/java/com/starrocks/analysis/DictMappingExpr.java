@@ -35,11 +35,11 @@ public class DictMappingExpr extends Expr {
         this.addChild(call);
     }
 
-    public DictMappingExpr(Expr ref, Expr call, Expr stringExpr) {
+    public DictMappingExpr(Expr ref, Expr call, Expr stringProvideExpr) {
         super(ref);
         this.addChild(ref);
         this.addChild(call);
-        this.addChild(stringExpr);
+        this.addChild(stringProvideExpr);
     }
 
     protected DictMappingExpr(DictMappingExpr other) {
