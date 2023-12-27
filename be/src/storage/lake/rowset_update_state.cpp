@@ -43,7 +43,8 @@ RowsetUpdateState::~RowsetUpdateState() {
 }
 
 Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
-                               Tablet* tablet, const MetaFileBuilder* builder, bool need_resolve_conflict) {
+                               Tablet* tablet, const MetaFileBuilder* builder, bool need_resolve_conflict,
+                               bool need_lock) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
@@ -52,7 +53,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
         _base_version = base_version;
         _builder = builder;
         _tablet_id = metadata.id();
-        _status = _do_load(op_write, metadata, tablet);
+        _status = _do_load(op_write, metadata, tablet, need_lock);
         if (!_status.ok()) {
             if (!_status.is_uninitialized()) {
                 LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
@@ -69,10 +70,17 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
     return _status;
 }
 
+<<<<<<< HEAD
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     std::unique_ptr<Rowset> rowset_ptr =
             std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+=======
+Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
+                                   bool need_lock) {
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
+    Rowset rowset(tablet->tablet_mgr(), tablet->id(), &op_write.rowset(), -1 /*unused*/, tablet_schema);
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
 
     RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, *tablet_schema, tablet, rowset_ptr.get()));
 
@@ -80,10 +88,18 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const Table
         return Status::OK();
     }
     if (!op_write.txn_meta().partial_update_column_ids().empty()) {
+<<<<<<< HEAD
         RETURN_IF_ERROR(_prepare_partial_update_states(op_write, metadata, tablet, *tablet_schema));
     }
     if (op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
         RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(op_write, metadata, tablet, *tablet_schema));
+=======
+        RETURN_IF_ERROR(_prepare_partial_update_states(op_write, metadata, tablet, tablet_schema, need_lock));
+    }
+    if (op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
+        RETURN_IF_ERROR(
+                _prepare_auto_increment_partial_update_states(op_write, metadata, tablet, tablet_schema, need_lock));
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
     }
     return Status::OK();
 }
@@ -260,7 +276,12 @@ static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                                         const TabletMetadata& metadata, Tablet* tablet,
+<<<<<<< HEAD
                                                                         const TabletSchema& tablet_schema) {
+=======
+                                                                        const TabletSchemaCSPtr& tablet_schema,
+                                                                        bool need_lock) {
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
     const auto& txn_meta = op_write.txn_meta();
     size_t num_segments = op_write.rowset().segments_size();
     _auto_increment_partial_update_states.resize(num_segments);
@@ -306,7 +327,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
+    RETURN_IF_ERROR(
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids, need_lock));
 
     for (size_t i = 0; i < num_segments; i++) {
         std::vector<uint32_t> rowids;
@@ -385,7 +407,11 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
 
 Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                          const TabletMetadata& metadata, Tablet* tablet,
+<<<<<<< HEAD
                                                          const TabletSchema& tablet_schema) {
+=======
+                                                         const TabletSchemaCSPtr& tablet_schema, bool need_lock) {
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
     int64_t t_start = MonotonicMillis();
     std::vector<uint32_t> read_column_ids = get_read_columns_ids(op_write, tablet_schema);
 
@@ -415,7 +441,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
+    RETURN_IF_ERROR(
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids, need_lock));
 
     int64_t t_read_values = MonotonicMillis();
     size_t total_rows = 0;
@@ -550,7 +577,7 @@ Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, co
         new_rss_rowids_vec[segment_id].resize(_upserts[segment_id]->size());
     }
     RETURN_IF_ERROR(
-            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &new_rss_rowids_vec));
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &new_rss_rowids_vec, false));
 
     size_t total_conflicts = 0;
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());

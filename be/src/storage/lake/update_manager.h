@@ -67,9 +67,9 @@ public:
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
-                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+                                   std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
-                                   std::vector<std::vector<uint64_t>>* rss_rowids);
+                                   std::vector<std::vector<uint64_t>>* rss_rowids, bool need_lock);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
@@ -130,8 +130,14 @@ public:
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     // get or create primary index, and prepare primary index state
+<<<<<<< HEAD
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
                                                 MetaFileBuilder* builder, int64_t base_version, int64_t new_version);
+=======
+    StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                                int64_t base_version, int64_t new_version,
+                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
 
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
@@ -162,7 +168,8 @@ private:
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
-    Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
+    Status _handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
+                            const std::function<void(LakePrimaryIndex&)>& op);
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
 

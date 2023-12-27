@@ -290,8 +290,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         new_metadata->set_version(version + 1);
         std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, new_metadata);
         // update primary table state, such as primary index
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(
                                                   *new_metadata, &tablet, builder.get(), version, version + 1));
+=======
+        std::unique_ptr<std::lock_guard<std::mutex>> lock = nullptr;
+        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(new_metadata, builder.get(),
+                                                                                     version, version + 1, lock));
+>>>>>>> bf2c0cce37 ([BugFix] Fix race condition between preloading partial update state and publish (#37624))
         ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), txn_log->txn_id(), *new_metadata,
                                                                   &tablet, index_entry, builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry
