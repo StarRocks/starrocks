@@ -4,17 +4,13 @@ displayed_sidebar: "Chinese"
 
 # SHOW ROUTINE LOAD TASK
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
-
 ## 功能
 
 查看 Routine Load 导入作业下属导入任务的执行情况。
 
 :::note
 
-- <RoutineLoadPrivNote />
-
-- Routine Load 中导入作业和导入任务的关系，参见[使用 Routine Load 导入数据](../../../loading/RoutineLoad.md#基本原理)。
+Routine Load 中导入作业和导入任务的关系，参见[使用 Routine Load 导入数据](../../../loading/RoutineLoad.md#基本原理)。
 
 :::
 
