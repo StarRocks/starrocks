@@ -35,7 +35,7 @@ public:
 
     Columns& get_columns() { return _columns; }
 
-    void set_offset(int64_t offset) { this->_offset = offset; }
+    virtual void set_offset(int64_t offset) { this->_offset = offset; }
 
     int64_t get_offset() { return _offset; }
 
