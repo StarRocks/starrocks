@@ -390,15 +390,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：60
 
-<<<<<<< HEAD
-=======
 #### routine_load_unstable_threshold_second
 
 - 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
 - 单位：秒
 - 默认值：3600
 
->>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
 #### max_tolerable_backend_down_num
 
 - 含义：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
