@@ -170,6 +170,83 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
             (void)thread_pool->update_max_threads(config::release_snapshot_worker_count);
         });
+<<<<<<< HEAD
+=======
+        _config_callback.emplace("pipeline_connector_scan_thread_num_per_cpu", [&]() {
+            LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
+                      << config::pipeline_connector_scan_thread_num_per_cpu;
+            ExecEnv::GetInstance()->connector_scan_executor()->change_num_threads(
+                    config::pipeline_connector_scan_thread_num_per_cpu);
+        });
+        _config_callback.emplace("create_tablet_worker_count", [&]() {
+            LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
+            (void)thread_pool->update_max_threads(config::create_tablet_worker_count);
+        });
+        _config_callback.emplace("number_tablet_writer_threads", [&]() {
+            LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
+            bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
+                    StorageEngine::instance()->async_delta_writer_executor());
+            (void)executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
+        });
+#ifdef USE_STAROS
+        _config_callback.emplace("starlet_cache_thread_num", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_threadpool_size";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_low_water", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_low_water";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_high_water", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_high_water";
+            }
+        });
+        _config_callback.emplace("starlet_fs_stream_buffer_size_bytes", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes", value).empty()) {
+                LOG(WARNING) << "Failed to update fs_stream_buffer_size_bytes";
+            }
+        });
+        _config_callback.emplace("starlet_fs_read_prefetch_enable", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", value).empty()) {
+                LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
+            }
+        });
+        _config_callback.emplace("starlet_fs_read_prefetch_threadpool_size", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_buffer_prefetch_threadpool_size", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fs_buffer_prefetch_threadpool_size";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_interval", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_interval";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
+                                                                      value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
+            }
+        });
+#endif // USE_STAROS
+>>>>>>> 80af80aec2 ([Enhancement] Exposed some starlet configurations (#37799))
     });
 
     Status s = config::set_config(name, value);
