@@ -283,4 +283,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
     }
+
+    @Override
+    public List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
+        return normal.getChangedPartitionInfo(table, mvSnapShotID);
+    }
 }
