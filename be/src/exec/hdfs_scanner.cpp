@@ -81,7 +81,14 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
+
+    RETURN_IF_ERROR(_build_hash_joiner_for_mor_if_needed());
     Status status = do_init(runtime_state, scanner_params);
+
+    if (!scanner_params.equality_slots.empty()) {
+        RETURN_IF_ERROR(_hash_joiner->build_ht(runtime_state));
+        _hash_joiner->enter_probe_phase();
+    }
     return status;
 }
 
@@ -146,6 +153,49 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
+Status HdfsScanner::_build_hash_joiner_for_mor_if_needed() {
+    if (_scanner_params.equality_slots.empty()) {
+        return Status::OK();
+    }
+
+    THashJoinNode hash_join_node;
+    hash_join_node.__set_join_op(TJoinOp::LEFT_ANTI_JOIN);
+    hash_join_node.__set_distribution_mode(TJoinDistributionMode::PARTITIONED);
+    hash_join_node.__set_is_push_down(false);
+    hash_join_node.__set_build_runtime_filters_from_planner(false);
+    hash_join_node.__set_output_columns(std::vector<SlotId>());
+
+    std::set<SlotId> probe_output_slot_ids;
+    for (const auto slot_desc : _scanner_params.tuple_desc->slots()) {
+        probe_output_slot_ids.insert(slot_desc->id());
+    }
+
+    for (const SlotDescriptor* slot_desc : _scanner_params.equality_slots) {
+        const auto column_ref = _runtime_state->obj_pool()->add(new ColumnRef(slot_desc));
+        auto expr_context = _runtime_state->obj_pool()->add(new ExprContext(column_ref));
+        _join_exprs.emplace_back(expr_context);
+    }
+
+    RETURN_IF_ERROR(Expr::prepare(_join_exprs, _runtime_state));
+    RETURN_IF_ERROR(Expr::open(_join_exprs, _runtime_state));
+
+    _build_row_desc = std::make_unique<RowDescriptor>(
+            _runtime_state->desc_tbl().get_tuple_descriptor(_scanner_params.mor_tuple_id), false);
+    _probe_row_desc = std::make_unique<RowDescriptor>(_scanner_params.tuple_desc, false);
+
+    auto param = _runtime_state->obj_pool()->add(
+            new HashJoinerParam(_runtime_state->obj_pool(), hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
+                                std::vector<bool>(_scanner_params.equality_slots.size(), false), _join_exprs,
+                                _join_exprs, std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc,
+                                *_probe_row_desc, *_probe_row_desc, TPlanNodeType::HDFS_SCAN_NODE,
+                                TPlanNodeType::HDFS_SCAN_NODE, true, std::list<RuntimeFilterBuildDescriptor*>(),
+                                std::set<SlotId>(), probe_output_slot_ids, TJoinDistributionMode::PARTITIONED, true));
+    _hash_joiner = std::make_shared<HashJoiner>(*param);
+
+    RETURN_IF_ERROR(_hash_joiner->prepare_builder(_runtime_state, _scanner_params.profile->runtime_profile));
+    return Status::OK();
+}
+
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
@@ -155,6 +205,15 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
+        }
+
+        if (!_scanner_params.equality_slots.empty()) {
+            if (!_prepared_probe.load()) {
+                RETURN_IF_ERROR(_hash_joiner->prepare_prober(runtime_state, _scanner_params.profile->runtime_profile));
+                _prepared_probe.store(true);
+            }
+            RETURN_IF_ERROR(_hash_joiner->push_chunk(runtime_state, std::move(*chunk)));
+            *chunk = std::move(_hash_joiner->pull_chunk(runtime_state)).value();
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -195,6 +254,13 @@ void HdfsScanner::close() noexcept {
     _file.reset(nullptr);
     if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
+    }
+
+    if (_hash_joiner && !_scanner_params.equality_slots.empty()) {
+        _hash_joiner->enter_eos_phase();
+        _hash_joiner->set_prober_finished();
+        _hash_joiner->close(_runtime_state);
+        Expr::close(_join_exprs, _runtime_state);
     }
 }
 

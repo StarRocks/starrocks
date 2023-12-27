@@ -250,6 +250,25 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
     }
 
+    if (_scan_range.__isset.delete_column_slot_ids && !_scan_range.delete_column_slot_ids.empty()) {
+        int32_t delete_column_index = slots.size();
+        auto* delete_column_tuple_desc =
+                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+        std::vector<SlotId> materialize_slot_ids;
+        std::ranges::transform(_materialize_slots.begin(), _materialize_slots.end(),
+                               std::back_inserter(materialize_slot_ids),
+                               [](const SlotDescriptor* slot_desc) { return slot_desc->id(); });
+
+        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+            _equality_delete_slots.emplace_back(d_slot_desc);
+            if (std::ranges::find(materialize_slot_ids.begin(), materialize_slot_ids.end(), d_slot_desc->id()) ==
+                materialize_slot_ids.end()) {
+                _materialize_slots.push_back(d_slot_desc);
+                _materialize_index_in_chunk.push_back(delete_column_index++);
+            }
+        }
+    }
+
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
@@ -709,9 +728,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
+
+    if (!_equality_delete_slots.empty()) {
+        scanner_params.equality_slots = _equality_delete_slots;
+        scanner_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
+    }
+
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
+
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
