@@ -517,9 +517,6 @@ private:
     // object, but occasionally allocated in the constructor.
     std::unique_ptr<ObjectPool> _pool;
 
-    // True if we have to delete the _pool on destruction.
-    bool _own_pool;
-
     // Name for this runtime profile.
     std::string _name;
 
