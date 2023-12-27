@@ -16,6 +16,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gutil/macros.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"

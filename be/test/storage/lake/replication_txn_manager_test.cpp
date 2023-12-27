@@ -234,13 +234,11 @@ TEST_F(LakeReplicationTxnManagerTest, test_publish_failed) {
     EXPECT_TRUE(status.ok());
 
     const int64_t txn_ids[] = {_transaction_id};
-    auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
-    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_ids, 1, 0);
     EXPECT_TRUE(!status_or.ok());
 
     const int32_t txn_types[] = {TxnTypePB::TXN_REPLICATION};
-    auto txn_type_span = std::span<const int32_t>(txn_types, 1);
-    lake::abort_txn(_tablet_manager.get(), _tablet_id, txn_id_span, txn_type_span);
+    lake::abort_txn(_tablet_manager.get(), _tablet_id, txn_ids, txn_types, 1);
 }
 
 TEST_F(LakeReplicationTxnManagerTest, test_run_normal) {
@@ -291,8 +289,7 @@ TEST_F(LakeReplicationTxnManagerTest, test_run_normal) {
     EXPECT_TRUE(status.ok());
 
     const int64_t txn_ids[] = {_transaction_id};
-    auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
-    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_ids, 1, 0);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());

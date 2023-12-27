@@ -87,7 +87,7 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
     if (!status.ok()) {
         std::string error_msg = status.get_error_msg();
         HttpChannel::send_reply(req, error_msg);
-        OG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
         return;
     }
     auto is_dir = fs::is_directory(file_param);

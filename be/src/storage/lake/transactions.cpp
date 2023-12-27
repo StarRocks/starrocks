@@ -219,7 +219,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
     }
 }
 
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int32_t* txn_types, size_t txn_size) {
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types,
+               size_t txn_size) {
     std::vector<std::string> files_to_delete;
     for (size_t i = 0; i < txn_size; ++i) {
         auto txn_id = txn_ids[i];

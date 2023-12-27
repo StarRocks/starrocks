@@ -627,6 +627,7 @@ void StorageEngine::stop() {
         JOIN_THREADS(_path_gc_threads);
     }
 
+    JOIN_THREAD(_clear_expired_replcation_snapshots_thread)
 #undef JOIN_THREADS
 #undef JOIN_THREAD
 

@@ -74,6 +74,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 // - tablet_id The ID of the tablet where the transaction will be aborted.
 // - txn_types transaction types
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types, size_t txn_size);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types,
+               size_t txn_size);
 
 } // namespace starrocks::lake

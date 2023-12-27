@@ -833,7 +833,7 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
 
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req,
                               ExecEnv* exec_env) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     const TRemoteSnapshotRequest& remote_snapshot_req = agent_task_req->task_req;
@@ -882,7 +882,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
                                  ExecEnv* exec_env) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     const TReplicateSnapshotRequest& replicate_snapshot_req = agent_task_req->task_req;
