@@ -89,8 +89,13 @@ private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
+<<<<<<< HEAD
     void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
     void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
+=======
+    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                                                   ObjectPool* obj_pool);
+>>>>>>> 12e7fba6a2 ([BugFix] Fix memory leak of runtime profile when executing long query (#37823))
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 

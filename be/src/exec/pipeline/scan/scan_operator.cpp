@@ -520,7 +520,12 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     }
     RuntimeProfile::merge_isomorphic_profiles(profiles);
 
+<<<<<<< HEAD
     RuntimeProfile* merged_profile = profiles[0];
+=======
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
+>>>>>>> 12e7fba6a2 ([BugFix] Fix memory leak of runtime profile when executing long query (#37823))
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
