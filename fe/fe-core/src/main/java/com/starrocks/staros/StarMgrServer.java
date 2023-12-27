@@ -17,6 +17,7 @@ package com.starrocks.staros;
 
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
+import com.staros.metrics.MetricsSystem;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
@@ -24,6 +25,8 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.Checkpoint;
+import com.starrocks.metric.MetricVisitor;
+import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -240,6 +243,13 @@ public class StarMgrServer {
         }
 
         return true;
+    }
+
+    public void visitMetrics(MetricVisitor visitor) {
+        if (starMgrServer == null) {
+            return;
+        }
+        PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
     }
 
     public long getMaxJournalId() {
