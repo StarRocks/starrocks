@@ -247,8 +247,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             insertStmt =
                     analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
             execPlan = StatementPlanner.plan(insertStmt, ctx);
-<<<<<<< HEAD
-=======
             if (mvContext.getCtx().getSessionVariable().isEnableOptimizerTraceLog()) {
                 StringBuffer sb = new StringBuffer();
                 sb.append(String.format("[TRACE QUERY] MV: %s\n", materializedView.getName()));
@@ -261,7 +259,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.info("[MV FINAL PLAN] Materialized view {} partitions to refresh:{}, ref base partitions:{}, query_id:{}",
                     materializedView.getName(), Joiner.on(",").join(mvToRefreshedPartitions, ctx.getQueryId()),
                     refTablePartitionNames);
->>>>>>> 36e3cfcaee ([BugFix] Reset thread local ConnectContext for each materialized view's refresh (#37551))
         } catch (Throwable e) {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
             throw e;
@@ -1048,13 +1045,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } finally {
-<<<<<<< HEAD
-=======
             LOG.info("finished to refresh materialized view {}, query_id:{}", materializedView.getName(),
                     ctx.getQueryId());
-            QeProcessorImpl.INSTANCE.unregisterQuery(ctx.getExecutionId());
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
->>>>>>> 36e3cfcaee ([BugFix] Reset thread local ConnectContext for each materialized view's refresh (#37551))
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
