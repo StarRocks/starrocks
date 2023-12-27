@@ -4,22 +4,14 @@ displayed_sidebar: "Chinese"
 
 # ALTER ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
-
 ## 功能
 
-<<<<<<< HEAD
-该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PAUSE](../data-manipulation/PAUSE_ROUTINE_LOAD.md) 命令可以暂停导入的任务，进行 ALTER ROUTINE LOAD 操作。
-=======
 该语法用于修改 Routine Load 导入作业。注意，只能修改处于 `PAUSED` 状态的作业。您可以通过 [PAUSE ROUTINE LOAD](./PAUSE_ROUTINE_LOAD.md) 暂停 Routine Load 导入作业。
->>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
 
 修改成功后，您可以：
 
 - 通过 [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) 检查修改后的作业详情。
 - 通过 [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md) 重启该导入作业。
-
-<RoutineLoadPrivNote />
 
 ## **语法**
 
