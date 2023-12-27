@@ -1,0 +1,90 @@
+-- name: test_partition_by_expr_basic
+CREATE TABLE `bill_detail` (
+  `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`bill_code`)
+PARTITION BY RANGE(cast(substring(bill_code, 3, 13) as bigint))
+(PARTITION p1 VALUES [('0'), ('5000000')),
+PARTITION p2 VALUES [('5000000'), ('10000000')),
+PARTITION p3 VALUES [('10000000'), ('15000000')),
+PARTITION p4 VALUES [('15000000'), ('20000000')),
+PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
+)
+DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+-- result:
+-- !result
+insert into bill_detail values('JT2921712368984');
+-- result:
+-- !result
+desc bill_detail;
+-- result:
+bill_code	varchar(200)	NO	true		
+-- !result
+explain select * from bill_detail where bill_code='JT2921712368984';
+select * from bill_detail where bill_code='JT2921712368984';
+-- result:
+JT2921712368984
+-- !result
+drop table bill_detail;
+-- result:
+-- !result
+CREATE TABLE `bill_detail` (
+  `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`bill_code`)
+PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))
+(PARTITION p1 VALUES [('0'), ('5000000')),
+PARTITION p2 VALUES [('5000000'), ('10000000')),
+PARTITION p3 VALUES [('10000000'), ('15000000')),
+PARTITION p4 VALUES [('15000000'), ('20000000')),
+PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
+)
+DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+-- result:
+-- !result
+insert into bill_detail values('JT2921712368984');
+-- result:
+-- !result
+select * from bill_detail where 'JT2921712368984'=bill_code;
+-- result:
+JT2921712368984
+-- !result
+drop table bill_detail;
+-- result:
+-- !result
+CREATE TABLE `bill_detail` (
+  `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`bill_code`)
+PARTITION BY RANGE(cast(substr(bill_code, 3) as bigint))
+(PARTITION p1 VALUES [('0'), ('5000000')),
+PARTITION p2 VALUES [('5000000'), ('10000000')),
+PARTITION p3 VALUES [('10000000'), ('15000000')),
+PARTITION p4 VALUES [('15000000'), ('20000000')),
+PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
+)
+DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+-- result:
+-- !result
+insert into bill_detail values('JT2921712368984');
+-- result:
+-- !result
+select * from bill_detail where bill_code>='JT2921712368984';
+-- result:
+JT2921712368984
+-- !result

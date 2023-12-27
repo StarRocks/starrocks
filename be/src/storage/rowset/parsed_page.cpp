@@ -100,7 +100,11 @@ public:
             pos_in_data = offset_in_data + skips - skip_nulls;
         }
 
-        _data_decoder->seek_to_position_in_page(pos_in_data);
+#if BE_TEST
+        WARN_IF_ERROR(_data_decoder->seek_to_position_in_page(pos_in_data), "BE_TEST");
+#else
+        RETURN_IF_ERROR(_data_decoder->seek_to_position_in_page(pos_in_data));
+#endif
         _offset_in_page = offset;
         return Status::OK();
     }
@@ -131,13 +135,13 @@ public:
         return Status::OK();
     }
 
-    Status read(Column* column, const SparseRange& range) override {
+    Status read(Column* column, const SparseRange<>& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
-            SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator<> iter = range.new_iterator();
             size_t to_read = range.span_size();
             while (to_read > 0) {
-                Range r = iter.next(to_read);
+                Range<> r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read(column, &n));
@@ -184,13 +188,13 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(Column* column, const SparseRange& range) override {
+    Status read_dict_codes(Column* column, const SparseRange<>& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
             size_t to_read = range.span_size();
-            SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator<> iter = range.new_iterator();
             while (to_read > 0) {
-                Range r = iter.next(to_read);
+                Range<> r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read_dict_codes(column, &n));
@@ -238,7 +242,7 @@ public:
         return Status::OK();
     }
 
-    Status read(Column* column, const SparseRange& range) override {
+    Status read(Column* column, const SparseRange<>& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
@@ -247,11 +251,11 @@ public:
         } else {
             auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column().get()));
-            SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
-                Range r = iter.next(size);
+                Range<> r = iter.next(size);
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
                 size -= r.span_size();
@@ -274,7 +278,7 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(Column* column, const SparseRange& range) override {
+    Status read_dict_codes(Column* column, const SparseRange<>& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
 
@@ -284,11 +288,11 @@ public:
         } else {
             auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column().get()));
-            SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
-                Range r = iter.next(size);
+                Range<> r = iter.next(size);
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
             }

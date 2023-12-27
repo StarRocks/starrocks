@@ -1,0 +1,43 @@
+-- name: testParquetLZOFormat
+[UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_parquet_compression/${uuid0}/lzo_format/"
+-- result:
+0
+oss://starrocks-env-s3-unit-test/test_parquet_compression/7307370ecb4f41659005a1c86e458221/lzo_format/
+-- !result
+shell: ossutil64 mkdir ${lzo_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/lzo_compression.parquet ${lzo_prefix[1]} | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 752,197. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE test_parquet_lzo_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${lzo_prefix[1]}",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select * from test_parquet_lzo_format where a = '100';
+-- result:
+100	101
+-- !result
+select * from test_parquet_lzo_format where a = '99999';
+-- result:
+99999	100000
+-- !result
+shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

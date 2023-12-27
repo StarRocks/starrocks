@@ -20,11 +20,12 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::pipeline {
+
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                    AggregatorPtr aggregator)
-            : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)),
               _auto_state(AggrAutoState::INIT_PREAGG) {
         _aggregator->set_aggr_phase(AggrPhase1);
@@ -33,30 +34,36 @@ public:
     ~AggregateStreamingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return !is_finished() && !_aggregator->is_chunk_buffer_full(); }
+    bool need_input() const override {
+        return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
+    }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
-    Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
+    [[nodiscard]] Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
+    [[nodiscard]] Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
-    Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
+    [[nodiscard]] Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
 
-    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
+    [[nodiscard]] Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size,
+                                                                 bool need_build);
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
+    [[nodiscard]] Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
@@ -68,6 +75,7 @@ private:
     bool _is_finished = false;
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
+    LimitedMemAggState _limited_mem_state;
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {

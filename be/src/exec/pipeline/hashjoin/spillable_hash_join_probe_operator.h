@@ -81,7 +81,7 @@ public:
 private:
     bool spilled() const { return _join_builder->spiller()->spilled(); }
 
-    SpillableHashJoinProbeOperator* raw() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
+    SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
     // acquire next build-side partitions
     void _acquire_next_partitions();
@@ -93,8 +93,8 @@ private:
 
     Status _load_all_partition_build_side(RuntimeState* state);
 
-    Status _load_partition_build_side(RuntimeState* state, const std::shared_ptr<spill::SpillerReader>& reader,
-                                      size_t idx);
+    Status _load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
+                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx, int* yield);
 
     void _update_status(Status&& status) const;
 

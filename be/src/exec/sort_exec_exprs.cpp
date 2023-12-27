@@ -107,4 +107,13 @@ SortExecExprs::~SortExecExprs() {
     }
 }
 
+bool SortExecExprs::is_constant_lhs_ordering() const {
+    for (const auto& expr : _lhs_ordering_expr_ctxs) {
+        if (!expr->root()->is_constant()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } //namespace starrocks

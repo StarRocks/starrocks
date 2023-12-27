@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <sstream>
 #include <string>
 
@@ -38,6 +39,7 @@ namespace starrocks {
 class LoadChannel;
 class OlapTableSchemaParam;
 class PTabletWriterOpenRequest;
+class PTabletWriterOpenResult;
 class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
@@ -48,10 +50,10 @@ public:
     TabletsChannel() = default;
     virtual ~TabletsChannel() = default;
 
-    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
+    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                       std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
 
-    virtual Status incremental_open(const PTabletWriterOpenRequest& params,
+    virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -62,6 +64,15 @@ public:
     virtual void abort() = 0;
 
     virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
+
+    // timeout: in microseconds
+    virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
+
+protected:
+    // counter of remaining senders
+    std::atomic<int> _num_remaining_senders = 0;
+
+    std::unordered_map<int64_t, std::atomic<int>> _tablet_id_to_num_remaining_senders;
 };
 
 struct TabletsChannelKey {

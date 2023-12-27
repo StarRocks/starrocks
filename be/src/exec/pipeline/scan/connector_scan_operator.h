@@ -82,6 +82,7 @@ public:
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
     size_t buffer_capacity() const override;
+    size_t buffer_memory_usage() const override;
     size_t default_buffer_capacity() const override;
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
@@ -106,19 +107,27 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const std::string get_custom_coredump_msg() const override;
+
+    bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
+
+protected:
+    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
+    Status _open_data_source(RuntimeState* state);
+
+    connector::DataSourcePtr _data_source;
+    [[maybe_unused]] ConnectorScanNode* _scan_node;
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
-    connector::DataSourcePtr _data_source;
-    [[maybe_unused]] ConnectorScanNode* _scan_node;
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
-    const RuntimeFilterProbeCollector* _runtime_bloom_filters;
+    RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
     // copied from scan node and merge predicates from runtime filter.
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -126,7 +135,6 @@ private:
     // =========================
     RuntimeState* _runtime_state = nullptr;
     ChunkPipelineAccumulator _ck_acc;
-    Status _status = Status::OK();
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;

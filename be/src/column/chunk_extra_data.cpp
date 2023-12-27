@@ -75,24 +75,24 @@ size_t ChunkExtraColumnsData::bytes_usage(size_t from, size_t size) const {
 int64_t ChunkExtraColumnsData::max_serialized_size(const int encode_level) {
     DCHECK_EQ(encode_level, 0);
     int64_t serialized_size = 0;
-    for (auto i = 0; i < _columns.size(); ++i) {
-        serialized_size += serde::ColumnArraySerde::max_serialized_size(*_columns[i], 0);
+    for (auto& column : _columns) {
+        serialized_size += serde::ColumnArraySerde::max_serialized_size(*column, 0);
     }
     return serialized_size;
 }
 
 uint8_t* ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, const int encode_level) {
     DCHECK_EQ(encode_level, 0);
-    for (auto i = 0; i < _columns.size(); ++i) {
-        buff = serde::ColumnArraySerde::serialize(*_columns[i], buff, sorted, encode_level);
+    for (auto& column : _columns) {
+        buff = serde::ColumnArraySerde::serialize(*column, buff, sorted, encode_level);
     }
     return buff;
 }
 
 const uint8_t* ChunkExtraColumnsData::deserialize(const uint8_t* buff, bool sorted, const int encode_level) {
     DCHECK_EQ(encode_level, 0);
-    for (auto i = 0; i < _columns.size(); ++i) {
-        buff = serde::ColumnArraySerde::deserialize(buff, _columns[i].get(), sorted, encode_level);
+    for (auto& column : _columns) {
+        buff = serde::ColumnArraySerde::deserialize(buff, column.get(), sorted, encode_level);
     }
     return buff;
 }

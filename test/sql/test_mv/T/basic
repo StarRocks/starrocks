@@ -1,0 +1,14 @@
+-- name: test_mv_basic
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+insert into ss values('2020-01-14', 2);
+insert into ss values('2020-01-14', 3);
+insert into ss values('2020-01-15', 2);
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+[UC]REFRESH MATERIALIZED VIEW mv1;
+SELECT * FROM mv1;
+
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
+DROP TABLE ss;
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';

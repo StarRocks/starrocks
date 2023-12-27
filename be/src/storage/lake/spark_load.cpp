@@ -54,7 +54,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     DeferOp defer([&]() { writer->close(); });
 
     ASSIGN_OR_RETURN(auto tablet_schema, cur_tablet.get_schema());
-    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
+    Schema schema = ChunkHelper::convert_schema(tablet_schema);
     ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
@@ -96,7 +96,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
                     break;
                 }
 
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
                 RETURN_IF_ERROR(writer->write(*chunk));
                 chunk->reset();
             }

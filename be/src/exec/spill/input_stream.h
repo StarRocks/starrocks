@@ -23,6 +23,7 @@
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
+#include "exec/workgroup/scan_task_queue.h"
 
 namespace starrocks::spill {
 
@@ -41,6 +42,8 @@ public:
     virtual bool is_ready() = 0;
     virtual void close() = 0;
 
+    virtual void get_io_stream(std::vector<SpillInputStream*>* io_stream) {}
+
     virtual bool enable_prefetch() const { return false; }
     virtual Status prefetch(SerdeContext& ctx) { return Status::NotSupported("input stream doesn't support prefetch"); }
 
@@ -56,6 +59,18 @@ private:
     std::atomic_bool _eof = false;
 };
 
+class YieldableRestoreTask {
+public:
+    YieldableRestoreTask(InputStreamPtr input_stream) : _input_stream(std::move(input_stream)) {
+        _input_stream->get_io_stream(&_sub_stream);
+    }
+    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context, int* yield);
+
+private:
+    InputStreamPtr _input_stream;
+    std::vector<SpillInputStream*> _sub_stream;
+};
+
 // Note: not thread safe
 class BlockGroup {
 public:
@@ -67,6 +82,8 @@ public:
 
     StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                const SortExecExprs* sort_exprs, const SortDescs* sort_descs);
+
+    void clear() { _blocks.clear(); }
 
 private:
     std::vector<BlockPtr> _blocks;

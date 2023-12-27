@@ -219,6 +219,7 @@ public:
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
                                                                                    filter.data(), batch_size);
@@ -230,7 +231,6 @@ public:
                                             ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
                                             args.size());
         }
-        helper.getEnv()->PopLocalFrame(nullptr);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
@@ -241,6 +241,7 @@ public:
         std::vector<DirectByteBuffer> buffers;
         int num_cols = ctx->get_num_args();
         env->PushLocalFrame(num_cols * 3 + 1);
+        auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
             auto st =
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
@@ -250,7 +251,6 @@ public:
             auto state_handle = this->data(state).handle;
             helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
-        env->PopLocalFrame(nullptr);
     }
 
     // This is only used to get portion of the entire binary column

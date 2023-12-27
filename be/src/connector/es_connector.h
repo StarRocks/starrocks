@@ -57,6 +57,7 @@ public:
     ~ESDataSource() override = default;
 
     ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range);
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
@@ -79,6 +80,7 @@ private:
     std::map<std::string, std::string> _docvalue_context;
     std::map<std::string, std::string> _fields_context;
     std::vector<std::string> _column_names;
+    std::string _timezone;
 
     // predicate index in the conjuncts
     std::vector<int> _predicate_idx;

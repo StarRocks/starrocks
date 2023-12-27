@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "exprs/expr.h"
@@ -39,6 +40,7 @@ struct TabletScannerParams {
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
     const std::vector<std::string>* unused_output_columns = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
@@ -58,7 +60,7 @@ public:
     Status init(RuntimeState* runtime_state, const TabletScannerParams& params);
     Status open([[maybe_unused]] RuntimeState* runtime_state);
     Status get_chunk([[maybe_unused]] RuntimeState* state, Chunk* chunk);
-    Status close(RuntimeState* state);
+    void close(RuntimeState* state);
 
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }
@@ -102,6 +104,7 @@ private:
     std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;
+    TabletSchemaSPtr _tablet_schema;
     int64_t _version = 0;
 
     // output columns of `this` TabletScanner, i.e, the final output columns of `get_chunk`.

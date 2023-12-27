@@ -72,8 +72,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+    [[nodiscard]] Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                                            const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -118,7 +118,7 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    PInternalService_Stub* _brpc_stub = nullptr;
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
@@ -242,6 +242,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
                                                        _parent->_is_pipeline_level_shuffle ? driver_sequence : -1));
             _current_request_bytes += chunk_size;
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
+            COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
         } else {
             if (_parent->_is_pipeline_level_shuffle) {
                 _chunk_request->add_driver_sequences(driver_sequence);
@@ -298,7 +299,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     DeferOp op([&res, &fragment_ctx]() {
         if (!res.ok()) {
             LOG(WARNING) << fmt::format("fragment id {} close channel error: {}",
-                                        print_id(fragment_ctx->fragment_instance_id()), res.get_error_msg());
+                                        print_id(fragment_ctx->fragment_instance_id()), res.message());
         }
     });
 
@@ -316,7 +317,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
 
 Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
     auto status = _close_internal(state, fragment_ctx);
-    state->log_error(status.get_error_msg());
+    state->log_error(status.message());
     return status;
 }
 
@@ -327,7 +328,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
         const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
         bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
-        : Operator(factory, id, "exchange_sink", plan_node_id, driver_sequence),
+        : Operator(factory, id, "exchange_sink", plan_node_id, false, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
@@ -339,6 +340,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _output_columns(output_columns) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
+
     PassThroughChunkBuffer* pass_through_chunk_buffer =
             state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
@@ -436,11 +438,15 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
+
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
     _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
+    _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
 
     for (auto& [_, channel] : _instance_id2channel) {
         RETURN_IF_ERROR(channel->init(state));
@@ -556,7 +562,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()));
+                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()))
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 
@@ -619,6 +625,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
     return Status::OK();
 }
 
+void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
+}
+
 Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
@@ -627,7 +639,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
+            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -645,7 +657,9 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
-    _buffer->update_profile(_unique_metrics.get());
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
     Operator::close(state);
 }
 

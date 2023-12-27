@@ -126,10 +126,17 @@ public:
     static auto MakeMaxByAggregateFunction();
 
     template <LogicalType LT>
+    static auto MakeMinByAggregateFunction();
+
+    template <LogicalType LT>
     static auto MakeMinAggregateFunction();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() {
+        return std::make_shared<AnyValueSemiAggregateFunction>();
+    }
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr>
@@ -194,6 +201,10 @@ public:
 
     static AggregateFunctionPtr MakeRowNumberWindowFunction();
 
+    static AggregateFunctionPtr MakeCumeDistWindowFunction();
+
+    static AggregateFunctionPtr MakePercentRankWindowFunction();
+
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
     template <LogicalType LT, bool ignoreNulls>
@@ -209,6 +220,11 @@ public:
     template <LogicalType LT, bool ignoreNulls, bool isLag>
     static AggregateFunctionPtr MakeLeadLagWindowFunction() {
         return std::make_shared<LeadLagWindowFunction<LT, ignoreNulls, isLag>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
+        return std::make_shared<SessionNumberWindowFunction<LT>>();
     }
 
     template <LogicalType LT>
@@ -274,7 +290,13 @@ auto AggregateFactory::MakeMaxAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMaxByAggregateFunction() {
     return std::make_shared<
-            MaxByAggregateFunction<LT, MaxByAggregateData<LT>, MaxByElement<LT, MaxByAggregateData<LT>>>>();
+            MaxMinByAggregateFunction<LT, MaxByAggregateData<LT>, MaxByElement<LT, MaxByAggregateData<LT>>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMinByAggregateFunction() {
+    return std::make_shared<
+            MaxMinByAggregateFunction<LT, MinByAggregateData<LT>, MinByElement<LT, MinByAggregateData<LT>>>>();
 }
 
 template <LogicalType LT>
@@ -362,14 +384,14 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<LT>>();
 }
 
-template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
-    return std::make_shared<BitmapAggAggregateFunction<LT>>();
-}
-
 template <LogicalType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 // Stream MV Retractable Aggregate Functions

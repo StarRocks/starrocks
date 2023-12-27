@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
 
 namespace starrocks::connector {
@@ -51,9 +52,15 @@ public:
     ~HiveDataSource() override = default;
 
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    const std::string get_custom_coredump_msg() const override;
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
+        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+    }
+    int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -68,21 +75,28 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
+    void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
+    void _init_rf_counters();
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
-    HdfsScanner* _create_hudi_jni_scanner();
+    HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
+    // for hiveTable/fileTable with avro/rcfile/sequence format
+    HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
-    bool _use_block_cache = false;
-    bool _enable_populate_block_cache = false;
+    bool _use_datacache = false;
+    bool _enable_populate_datacache = false;
+    bool _enable_dynamic_prune_scan_range = true;
+    bool _use_file_metacache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
@@ -93,7 +107,12 @@ private:
     // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
     // 2. conjuncts that column is materialized, are evaled in group reader.
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _conjunct_slots;
+    std::unordered_set<SlotId> _slots_in_conjunct;
+
+    // used for reader to decide decode or not
+    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
+    // there is no need to decode.
+    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
@@ -120,7 +139,12 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
+    bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
+
+    bool _has_scan_range_indicate_const_column = false;
+    bool _use_partition_column_value_only = false;
 
     // ======================================
     // The following are profile metrics

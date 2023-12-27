@@ -53,24 +53,26 @@ public:
 
     // Restore intermediate state if needed by using last run state table's results from
     // result/intermediate state table.
-    Status allocate_intermediate_state(size_t chunk_size, const std::vector<uint8_t>& keys_not_in_map,
-                                       const StateTableResult* state_result,
-                                       const Buffer<AggGroupStatePtr>& agg_group_state) const;
+    [[nodiscard]] Status allocate_intermediate_state(size_t chunk_size, const std::vector<uint8_t>& keys_not_in_map,
+                                                     const StateTableResult* state_result,
+                                                     const Buffer<AggGroupStatePtr>& agg_group_state) const;
 
     // Restore detail state if needed by using last run state's result from
     // detail state table
-    Status allocate_detail_state(size_t chunk_size, const Column* raw_column, const StateTableResult* state_result,
-                                 const Buffer<AggGroupStatePtr>& agg_group_state) const;
+    [[nodiscard]] Status allocate_detail_state(size_t chunk_size, const Column* raw_column,
+                                               const StateTableResult* state_result,
+                                               const Buffer<AggGroupStatePtr>& agg_group_state) const;
 
-    Status process_chunk(size_t chunk_size, const StreamRowOp* ops,
-                         std::vector<std::vector<const Column*>>& raw_columns,
-                         const Buffer<AggDataPtr>& agg_group_state) const;
+    [[nodiscard]] Status process_chunk(size_t chunk_size, const StreamRowOp* ops,
+                                       std::vector<std::vector<const Column*>>& raw_columns,
+                                       const Buffer<AggDataPtr>& agg_group_state) const;
 
-    Status output_result(size_t chunk_size, const Columns& group_by_columns, const Buffer<AggDataPtr>& agg_group_data,
-                         const StateTable* detail_state_table, Column* to) const;
+    [[nodiscard]] Status output_result(size_t chunk_size, const Columns& group_by_columns,
+                                       const Buffer<AggDataPtr>& agg_group_data, const StateTable* detail_state_table,
+                                       Column* to) const;
 
-    Status output_detail(size_t chunk_size, const Buffer<AggDataPtr>& agg_group_state, const Columns& to,
-                         Column* count) const;
+    [[nodiscard]] Status output_detail(size_t chunk_size, const Buffer<AggDataPtr>& agg_group_state, const Columns& to,
+                                       Column* count) const;
 
     const AggregateFunction* agg_function() const { return _agg_function; }
     FunctionContext* agg_fn_ctx() const { return _agg_fn_ctx; }

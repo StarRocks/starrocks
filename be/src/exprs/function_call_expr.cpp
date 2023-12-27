@@ -24,10 +24,11 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
-VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node), _fn_desc(nullptr) {}
+VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
 Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
@@ -83,6 +84,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     }
 
     if (_fn_desc->prepare_function != nullptr) {
+        FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
@@ -108,10 +110,10 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
                                        FunctionContext::FunctionStateScope scope) {
     if (_fn_desc != nullptr && _fn_desc->close_function != nullptr) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        _fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
+        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
 
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            _fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
+            (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
     }
 

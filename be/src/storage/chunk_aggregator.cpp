@@ -35,9 +35,6 @@ ChunkAggregator::ChunkAggregator(const starrocks::Schema* schema, uint32_t reser
     for (size_t i = 0; i < _schema->num_key_fields(); i++) {
         CHECK(_schema->field(i)->is_key());
     }
-    for (size_t i = 0; i + 1 < _schema->num_key_fields(); i++) {
-        CHECK_LT(_schema->field(i)->id(), _schema->field(i + 1)->id());
-    }
 #endif
     _key_fields = _schema->num_key_fields();
     _num_fields = _schema->num_fields();
@@ -202,8 +199,8 @@ void ChunkAggregator::aggregate_reset() {
     }
     _has_aggregate = false;
 
-    _element_memory_usage = 0;
-    _element_memory_usage_num_rows = 0;
+    _reference_memory_usage = 0;
+    _reference_memory_usage_num_rows = 0;
     _bytes_usage = 0;
     _bytes_usage_num_rows = 0;
 }
@@ -232,16 +229,16 @@ size_t ChunkAggregator::memory_usage() {
     }
     --num_rows;
 
-    if (_element_memory_usage_num_rows == num_rows) {
-        return container_memory_usage + _element_memory_usage;
-    } else if (_element_memory_usage_num_rows > num_rows) {
-        _element_memory_usage_num_rows = 0;
-        _element_memory_usage = 0;
+    if (_reference_memory_usage_num_rows == num_rows) {
+        return container_memory_usage + _reference_memory_usage;
+    } else if (_reference_memory_usage_num_rows > num_rows) {
+        _reference_memory_usage_num_rows = 0;
+        _reference_memory_usage = 0;
     }
-    _element_memory_usage += _aggregate_chunk->element_memory_usage(_element_memory_usage_num_rows,
-                                                                    num_rows - _element_memory_usage_num_rows);
-    _element_memory_usage_num_rows = num_rows;
-    return container_memory_usage + _element_memory_usage;
+    _reference_memory_usage += _aggregate_chunk->reference_memory_usage(_reference_memory_usage_num_rows,
+                                                                        num_rows - _reference_memory_usage_num_rows);
+    _reference_memory_usage_num_rows = num_rows;
+    return container_memory_usage + _reference_memory_usage;
 }
 
 size_t ChunkAggregator::bytes_usage() {

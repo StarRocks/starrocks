@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "util/dynamic_cache.h"
@@ -34,6 +35,7 @@ using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
 class KVStore;
 class RowsetUpdateState;
+class RowsetColumnUpdateState;
 class Tablet;
 class PersistentIndexCompactionManager;
 
@@ -41,6 +43,18 @@ class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    KVStore* _meta = nullptr;
+};
+
+class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
+public:
+    LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                DeltaColumnGroupList* pdcgs);
+    KVStore* meta() const { return _meta; }
 
 private:
     KVStore* _meta = nullptr;
@@ -56,9 +70,13 @@ public:
 
     Status init();
 
+    void stop();
+
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
+
+    int64_t get_index_cache_expire_ms(const Tablet& tablet) const;
 
     Status get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
                                int64_t* latest_version);
@@ -83,11 +101,27 @@ public:
 
     DynamicCache<string, RowsetUpdateState>& update_state_cache() { return _update_state_cache; }
 
+    DynamicCache<string, RowsetColumnUpdateState>& update_column_state_cache() { return _update_column_state_cache; }
+
+    Status get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                  DeltaColumnGroupList* dcgs);
+
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
+
+    Status set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, const DeltaColumnGroupPtr& dcg);
+
+    Status set_cached_empty_delta_column_group(KVStore* meta, const TabletSegmentId& tsid);
+
+    bool get_cached_delta_column_group(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* dcgs);
 
     void clear_cache();
 
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
+
+    void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
+
+    StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+                                                             int64_t min_readable_version);
 
     void expire_cache();
 
@@ -108,6 +142,13 @@ public:
         return Status::OK();
     }
 
+    bool keep_pindex_bf() { return _keep_pindex_bf; }
+    void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
+
+    // Used in UT only
+    bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
@@ -118,6 +159,7 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
 
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
+    DynamicCache<string, RowsetColumnUpdateState> _update_column_state_cache;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
 
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
@@ -129,9 +171,16 @@ private:
     std::unordered_map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
     std::unique_ptr<MemTracker> _del_vec_cache_mem_tracker;
 
+    // Delta Column Group cache, dcg is short for `Delta Column Group`
+    std::mutex _delta_column_group_cache_lock;
+    std::map<TabletSegmentId, DeltaColumnGroupList> _delta_column_group_cache;
+    std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+
     std::unique_ptr<ThreadPool> _apply_thread_pool;
     std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
     std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
+
+    bool _keep_pindex_bf = true;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;

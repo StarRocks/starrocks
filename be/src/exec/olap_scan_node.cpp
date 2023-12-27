@@ -32,6 +32,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "glog/logging.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -65,6 +66,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
     }
 
+    if (tnode.olap_scan_node.__isset.output_chunk_by_bucket) {
+        _output_chunk_by_bucket = tnode.olap_scan_node.output_chunk_by_bucket;
+    }
+
     // desc hint related optimize only takes effect when there is no order requirement
     if (!_sorted_by_keys_per_tablet) {
         if (tnode.olap_scan_node.__isset.output_asc_hint) {
@@ -88,6 +93,15 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         // The parallel scan num will be restricted by the io_tasks_per_scan_operator.
         _io_tasks_per_scan_operator =
                 std::min(_olap_scan_node.max_parallel_scan_instance_num, _io_tasks_per_scan_operator);
+    }
+
+    if (_olap_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
+            auto path = std::make_unique<ColumnAccessPath>();
+            if (path->init(_olap_scan_node.column_access_paths[i], state, _pool).ok()) {
+                _column_access_paths.emplace_back(std::move(path));
+            }
+        }
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -120,13 +134,13 @@ Status OlapScanNode::prepare(RuntimeState* state) {
 Status OlapScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
+    DictOptimizeParser::disable_open_rewrite(&_conjunct_ctxs);
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
@@ -190,7 +204,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -214,11 +228,11 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return status.is_end_of_file() ? Status::OK() : status;
 }
 
-Status OlapScanNode::close(RuntimeState* state) {
+void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
@@ -236,8 +250,6 @@ Status OlapScanNode::close(RuntimeState* state) {
         chunk.reset();
     }
 
-    _dict_optimize_parser.close(state);
-
     if (runtime_state() != nullptr) {
         // Reduce the memory usage if the the average string size is greater than 512.
         release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
@@ -247,7 +259,7 @@ Status OlapScanNode::close(RuntimeState* state) {
         Rowset::release_readers(rowsets_per_tablet);
     }
 
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 OlapScanNode::~OlapScanNode() {
@@ -409,6 +421,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         });
     }
 
+    if (output_chunk_by_bucket()) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
+    }
+
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
@@ -476,7 +495,7 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
 StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const {
     // Keys type needn't merge or aggregate.
     ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
-    KeysType keys_type = first_tablet->tablet_schema().keys_type();
+    KeysType keys_type = first_tablet->tablet_schema()->keys_type();
     const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
     bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
                                 ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
@@ -540,6 +559,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
+    _get_delta_column_group_timer = ADD_TIMER(_scan_profile, "GetDeltaColumnGroup");
 
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
@@ -635,7 +655,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&conjunct_ctxs));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {
@@ -692,7 +712,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));

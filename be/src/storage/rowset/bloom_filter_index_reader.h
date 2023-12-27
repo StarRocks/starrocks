@@ -70,24 +70,24 @@ public:
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    Status new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator);
+    Status new_iterator(const IndexReadOptions& opts, std::unique_ptr<BloomFilterIndexIterator>* iterator);
 
     const TypeInfoPtr& type_info() const { return _typeinfo; }
 
     bool loaded() const { return invoked(_load_once); }
 
-private:
-    Status _do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
-
-    void _reset();
-
-    size_t _mem_usage() const {
+    size_t mem_usage() const {
         size_t size = sizeof(BloomFilterIndexReader);
         if (_bloom_filter_reader != nullptr) {
             size += _bloom_filter_reader->mem_usage();
         }
         return size;
     }
+
+private:
+    Status _do_load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta);
+
+    void _reset();
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;

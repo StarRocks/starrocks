@@ -42,7 +42,7 @@ public:
 
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -60,7 +60,6 @@ private:
 
     std::vector<ExprContext*> _expr_ctxs;
     std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
-    DictOptimizeParser _dict_optimize_parser;
 
     // profile
     RuntimeProfile::Counter* _decode_timer = nullptr;

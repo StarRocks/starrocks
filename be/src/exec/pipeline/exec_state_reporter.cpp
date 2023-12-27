@@ -42,11 +42,11 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
+                                                                            RuntimeProfile* profile,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto* profile = runtime_state->runtime_profile();
     DCHECK(profile != nullptr);
     auto* exec_env = fragment_ctx->runtime_state()->exec_env();
     DCHECK(exec_env != nullptr);
@@ -66,7 +66,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->is_report_profile()) {
+        if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
         }
@@ -93,6 +93,9 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
+        if (!runtime_state->get_rejected_record_file_path().empty()) {
+            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
+        }
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();
@@ -102,6 +105,13 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             params.commitInfos.reserve(runtime_state->tablet_commit_infos().size());
             for (auto& info : runtime_state->tablet_commit_infos()) {
                 params.commitInfos.push_back(info);
+            }
+        }
+        if (!runtime_state->sink_commit_infos().empty()) {
+            params.__isset.sink_commit_infos = true;
+            params.sink_commit_infos.reserve(runtime_state->sink_commit_infos().size());
+            for (auto& info : runtime_state->sink_commit_infos()) {
+                params.sink_commit_infos.push_back(info);
             }
         }
 
@@ -290,7 +300,7 @@ ExecStateReporter::ExecStateReporter() {
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    _thread_pool->submit_func(std::move(report_task));
+    (void)_thread_pool->submit_func(std::move(report_task));
 }
 
 } // namespace starrocks::pipeline

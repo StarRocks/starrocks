@@ -23,6 +23,7 @@
 #include "formats/csv/default_value_converter.h"
 #include "formats/csv/float_converter.h"
 #include "formats/csv/json_converter.h"
+#include "formats/csv/map_converter.h"
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
 #include "formats/csv/string_converter.h"
@@ -78,6 +79,14 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
         return std::make_unique<JsonConverter>();
     case TYPE_VARBINARY:
         return std::make_unique<VarBinaryConverter>();
+    case TYPE_MAP: {
+        auto key_con = get_converter(t.children[0], true);
+        auto value_con = get_converter(t.children[1], true);
+        if (key_con == nullptr || value_con == nullptr) {
+            return nullptr;
+        }
+        return std::make_unique<MapConverter>(std::move(key_con), std::move(value_con));
+    }
     default:
         break;
     }

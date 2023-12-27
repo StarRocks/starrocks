@@ -16,6 +16,8 @@
 
 #include <variant>
 
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
@@ -25,6 +27,10 @@ bool AggregateStreamingSourceOperator::has_output() const {
         // case2: streaming mode is 'AUTO'
         //     case 2.1: very poor aggregation
         //     case 2.2: middle cases, first aggregate locally and output by stream
+        return true;
+    }
+
+    if (_aggregator->is_streaming_all_states()) {
         return true;
     }
 
@@ -43,7 +49,7 @@ bool AggregateStreamingSourceOperator::has_output() const {
 }
 
 bool AggregateStreamingSourceOperator::is_finished() const {
-    return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
+    return _aggregator->is_sink_complete() && !has_output();
 }
 
 Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
@@ -71,6 +77,9 @@ StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* st
     return std::move(chunk);
 }
 
+// used to verify https://github.com/StarRocks/starrocks/issues/30078
+DEFINE_FAIL_POINT(force_reset_aggregator_after_agg_streaming_sink_finish);
+
 Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_map_variant().visit(
@@ -79,6 +88,22 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
     }
 
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+
+    auto need_reset_aggregator = _aggregator->is_streaming_all_states() && _aggregator->is_ht_eos();
+
+    FAIL_POINT_TRIGGER_EXECUTE(force_reset_aggregator_after_agg_streaming_sink_finish, {
+        if (_aggregator->is_sink_complete()) {
+            need_reset_aggregator = true;
+        }
+    });
+
+    if (need_reset_aggregator) {
+        if (!_aggregator->is_sink_complete()) {
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
+        }
+        _aggregator->set_streaming_all_states(false);
+    }
+
     return Status::OK();
 }
 

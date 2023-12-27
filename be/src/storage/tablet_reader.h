@@ -26,6 +26,7 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -33,12 +34,14 @@ class ColumnPredicate;
 
 class TabletReader final : public ChunkIterator {
 public:
-    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                 const TabletSchemaCSPtr& tablet_schema = nullptr);
     // *captured_rowsets* is captured forward before creating TabletReader.
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                 const std::vector<RowsetSharedPtr>& captured_rowsets);
+                 std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+                 RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
+    TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema, Schema schema);
     ~TabletReader() override { close(); }
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
@@ -55,11 +58,9 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
-    void set_delete_predicates_version(Version version) { _delete_predicates_version = version; }
-
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
-    static Status parse_seek_range(const TabletSharedPtr& tablet,
+    static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
                                    TabletReaderParams::RangeEndOperation range_end_op,
                                    const std::vector<OlapTuple>& range_start_key,
@@ -78,16 +79,14 @@ private:
     Status _init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
     Status _init_collector(const TabletReaderParams& read_params);
 
-    static Status _to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
+    static Status _to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
 
     TabletSharedPtr _tablet;
+    TabletSchemaCSPtr _tablet_schema;
     Version _version;
-    // version of delete predicates, equal as _version by default
-    // _delete_predicates_version will be set as max_version of tablet in schema change vectorized
-    Version _delete_predicates_version;
 
     MemPool _mempool;
     ObjectPool _obj_pool;

@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
+#include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -96,6 +97,17 @@ public:
 
     static std::unique_ptr<Expr> create_array_expr(const TypeDescriptor& type) {
         return create_array_expr(type.to_thrift());
+    }
+
+    static std::unique_ptr<Expr> create_map_expr(const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::MAP_EXPR);
+        node.__set_is_nullable(true);
+        node.__set_type(type.to_thrift());
+        node.__set_num_children(0);
+
+        auto* expr = MapExprFactory::from_thrift(node);
+        return std::unique_ptr<Expr>(expr);
     }
 
     static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc t_type, bool is_nullable) {

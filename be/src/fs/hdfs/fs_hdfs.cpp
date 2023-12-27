@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
 
-#include <atomic>
+#include <exception>
 #include <utility>
 
 #include "fs/fs_util.h"
@@ -56,7 +56,8 @@ public:
                 if (errno == ENOENT) {
                     return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
                 } else {
-                    return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::InternalError(
+                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
                 }
             }
         }
@@ -289,18 +290,18 @@ public:
 
     Status close() override;
 
-    Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate"); }
+    Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate not supported"); }
 
     Status flush(FlushMode mode) override {
         int status = hdfsHFlush(_fs, _file);
         return status == 0 ? Status::OK()
-                           : Status::InternalError(strings::Substitute("HDFS file flush error $0", _path));
+                           : Status::IOError(fmt::format("Fail to flush {}: {}", _path, get_hdfs_err_msg()));
     }
 
     Status sync() override {
         int status = hdfsHSync(_fs, _file);
         return status == 0 ? Status::OK()
-                           : Status::InternalError(strings::Substitute("HDFS file sync error $0", _path));
+                           : Status::IOError(fmt::format("Fail to sync {}: {}", _path, get_hdfs_err_msg()));
     }
 
     uint64_t size() const override { return _offset; }
@@ -317,6 +318,11 @@ private:
 
 Status HDFSWritableFile::append(const Slice& data) {
     tSize r = hdfsWrite(_fs, _file, data.data, data.size);
+    if (r == -1) { // error
+        auto error_msg = fmt::format("Fail to append {}: {}", _path, get_hdfs_err_msg());
+        LOG(WARNING) << error_msg;
+        return Status::IOError(error_msg);
+    }
     if (r != data.size) {
         auto error_msg =
                 fmt::format("Fail to append {}, expect written size: {}, actual written size {} ", _path, data.size, r);
@@ -341,16 +347,20 @@ Status HDFSWritableFile::close() {
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
-        if (r != 0) {
-            return Status::IOError(fmt::format("sync error, file: {}", _path));
+        if (r == -1) {
+            auto error_msg = fmt::format("Fail to sync file {}: {}", _path, get_hdfs_err_msg());
+            LOG(WARNING) << error_msg;
+            return Status::IOError(error_msg);
         }
 
         r = hdfsCloseFile(_fs, _file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError(fmt::format("close error, file: {}", _path));
+        if (r == -1) {
+            auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
+            LOG(WARNING) << error_msg;
+            return Status::IOError(error_msg);
         }
+
+        return Status::OK();
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
@@ -509,7 +519,7 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
         int32_t dir_size;
         std::string mName(fileinfo[i].mName);
-        std::size_t found = mName.rfind("/");
+        std::size_t found = mName.rfind('/');
         if (found == std::string::npos) {
             dir_size = 0;
         } else {
@@ -549,7 +559,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     int flags = O_WRONLY;
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path=", path));
+            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
         }
     } else if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
@@ -583,7 +593,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         if (errno == ENOENT) {
             return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
         } else {
-            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+            return Status::InternalError(
+                    fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
     return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);

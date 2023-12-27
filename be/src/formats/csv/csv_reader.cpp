@@ -518,7 +518,7 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
-    while ((d = _buff.find(_parse_options.row_delimiter, pos)) == nullptr) {
+    while ((d = _find_line_delimiter(_buff, pos)) == nullptr) {
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {

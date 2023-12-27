@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -50,6 +51,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dict/parser.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -96,6 +98,8 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    explicit RuntimeState(ExecEnv* exec_env);
+
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
 
@@ -109,7 +113,7 @@ public:
     void init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker);
 
     // for ut only
-    Status init_instance_mem_tracker();
+    void init_instance_mem_tracker();
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
@@ -122,8 +126,10 @@ public:
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
+    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
-    int64_t timestamp_ms() const { return _timestamp_ms; }
+    int64_t timestamp_ms() const { return _timestamp_us / 1000; }
+    int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
     const std::string& user() const { return _user; }
@@ -149,13 +155,13 @@ public:
     RuntimeProfile* runtime_profile() { return _profile.get(); }
     std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
-    Status query_status() {
+    [[nodiscard]] Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
 
     // Appends error to the _error_log if there is space
-    bool log_error(const std::string& error);
+    bool log_error(std::string_view error);
 
     // If !status.ok(), appends the error to the _error_log
     void log_error(const Status& status);
@@ -204,19 +210,21 @@ public:
     // If 'failed_allocation_size' is not 0, then it is the size of the allocation (in
     // bytes) that would have exceeded the limit allocated for 'tracker'.
     // This value and tracker are only used for error reporting.
-    // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
+    // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
-    Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                  const std::string* msg = nullptr);
+    [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
+                                                std::string_view msg = {});
 
-    Status set_mem_limit_exceeded(const std::string& msg) { return set_mem_limit_exceeded(nullptr, 0, &msg); }
+    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
+        return set_mem_limit_exceeded(nullptr, 0, msg);
+    }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
     // doesn't continue if the query terminates abnormally.
-    Status check_query_state(const std::string& msg);
+    [[nodiscard]] Status check_query_state(const std::string& msg);
 
-    Status check_mem_limit(const std::string& msg);
+    [[nodiscard]] Status check_mem_limit(const std::string& msg);
 
     std::vector<std::string>& output_files() { return _output_files; }
 
@@ -224,16 +232,36 @@ public:
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
 
-    void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
+    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
-    int64_t load_job_id() const { return _load_job_id; }
+    int64_t load_job_id() const { return _txn_id; }
+
+    void set_db(const std::string& db) { _db = db; }
+
+    const std::string& db() const { return _db; }
+
+    void set_load_label(const std::string& label) { _load_label = label; }
+
+    const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
+
+    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
     // is_summary is true, means we are going to write the summary line
     void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
+
+    [[nodiscard]] Status create_rejected_record_file();
+
+    bool enable_log_rejected_record() {
+        return _query_options.log_rejected_record_num == -1 ||
+               _query_options.log_rejected_record_num > _num_log_rejected_rows;
+    }
+
+    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
+                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -273,6 +301,8 @@ public:
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
     }
 
+    std::atomic_int64_t* mutable_total_spill_bytes();
+
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
     int per_fragment_instance_idx() const { return _per_fragment_instance_idx; }
@@ -309,15 +339,25 @@ public:
 
     int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
 
+    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    bool spill_enable_direct_io() const {
+        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+    }
+
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
+    bool enable_hyperscan_vec() const {
+        return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -339,6 +379,16 @@ public:
         _tablet_fail_infos.emplace_back(std::move(fail_info));
     }
 
+    std::vector<TSinkCommitInfo>& sink_commit_infos() {
+        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
+        return _sink_commit_infos;
+    }
+
+    void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
+        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
+        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
+    }
+
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -349,11 +399,15 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    DictOptimizeParser* mutable_dict_optimize_parser();
+
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
-    Status init_query_global_dict(const GlobalDictLists& global_dict_list);
-    Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+    [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
+    [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+
+    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -361,11 +415,9 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    bool enable_query_statistic() const;
-
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    Status reset_epoch();
+    [[nodiscard]] Status reset_epoch();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
@@ -383,10 +435,10 @@ private:
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    Status create_error_log_file();
+    [[nodiscard]] Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
-                              phmap::flat_hash_map<uint32_t, int64_t>* version);
+    [[nodiscard]] Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                                            phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -403,6 +455,10 @@ private:
     // Logs error messages.
     std::vector<std::string> _error_log;
 
+    std::mutex _rejected_record_lock;
+    std::string _rejected_record_file_path;
+    std::unique_ptr<std::ofstream> _rejected_record_file;
+
     // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
     int _unreported_error_idx;
 
@@ -410,7 +466,7 @@ private:
     std::string _user;
 
     //Query-global timestamp_ms
-    int64_t _timestamp_ms = 0;
+    int64_t _timestamp_us = 0;
     std::string _timezone;
     cctz::time_zone _timezone_obj;
 
@@ -474,16 +530,22 @@ private:
     std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
 
     std::atomic<int64_t> _num_print_error_rows{0};
+    std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
 
     std::vector<std::string> _export_output_files;
 
-    int64_t _load_job_id = 0;
+    int64_t _txn_id = 0;
+    std::string _load_label;
+    std::string _db;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
     std::mutex _tablet_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+
+    std::mutex _sink_commit_infos_lock;
+    std::vector<TSinkCommitInfo> _sink_commit_infos;
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;
@@ -493,6 +555,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    DictOptimizeParser _dict_optimize_parser;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

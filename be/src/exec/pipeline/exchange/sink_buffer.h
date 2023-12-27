@@ -49,7 +49,7 @@ struct TransmitChunkInfo {
     // a same exchange source fragment instance, so we should use fragment_instance_id
     // of the destination as the key of destination instead of channel_id.
     TUniqueId fragment_instance_id;
-    doris::PBackendService_Stub* brpc_stub;
+    PInternalService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
     int64_t attachment_physical_bytes;
@@ -111,7 +111,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
+    [[nodiscard]] Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // send by rpc or http
     Status _send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure, const TransmitChunkInfo& req);
@@ -175,7 +175,6 @@ private:
     std::atomic<int64_t> _rpc_cumulative_time = 0;
 
     // RuntimeProfile counters
-    std::atomic_bool _is_profile_updated = false;
     std::atomic<int64_t> _bytes_enqueued = 0;
     std::atomic<int64_t> _request_enqueued = 0;
     std::atomic<int64_t> _bytes_sent = 0;

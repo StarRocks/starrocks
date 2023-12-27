@@ -80,6 +80,15 @@ LoadChannelMgr::~LoadChannelMgr() {
     }
 }
 
+void LoadChannelMgr::close() {
+    std::lock_guard l(_lock);
+    for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
+        iter->second->cancel();
+        iter->second->abort();
+        iter = _load_channels.erase(iter);
+    }
+}
+
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
@@ -90,6 +99,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
+    int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard l(_lock);
@@ -104,7 +114,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id,
+            channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id, txn_id,
                                           request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
         } else {
@@ -246,6 +256,14 @@ std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& 
     return (it != _load_channels.end()) ? it->second : nullptr;
 }
 
+std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(int64_t txn_id) {
+    std::lock_guard l(_lock);
+    for (auto&& [load_id, channel] : _load_channels) {
+        if (channel->txn_id() == txn_id) return channel;
+    }
+    return nullptr;
+}
+
 std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
     std::lock_guard l(_lock);
     if (auto it = _load_channels.find(load_id); it != _load_channels.end()) {
@@ -254,6 +272,16 @@ std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId&
         return ret;
     }
     return nullptr;
+}
+
+void LoadChannelMgr::abort_txn(int64_t txn_id) {
+    auto channel = _find_load_channel(txn_id);
+    if (channel != nullptr) {
+        LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << channel->load_id()
+                  << " txn_id=" << txn_id;
+        channel->cancel();
+        channel->abort();
+    }
 }
 
 } // namespace starrocks

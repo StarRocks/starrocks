@@ -20,6 +20,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/tablet.h"
@@ -63,6 +64,9 @@ struct DeltaWriterOptions {
     std::string merge_condition;
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
+    PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    POlapTableSchemaParam ptable_schema_param;
+    int64_t immutable_tablet_size = 0;
 };
 
 enum State {
@@ -100,6 +104,8 @@ public:
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
     [[nodiscard]] Status commit();
+
+    [[nodiscard]] Status flush_memtable_async(bool eos = false);
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
@@ -144,12 +150,22 @@ public:
 
     Status get_err_status() const;
 
+    const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
+
+    bool is_immutable() const { return _is_immutable.load(std::memory_order_relaxed); }
+
+    int64_t last_write_ts() const { return _last_write_ts; }
+
+    int64_t write_buffer_size() const { return _write_buffer_size; }
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
-    Status _flush_memtable_async(bool eos = false);
     Status _flush_memtable();
+    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
+                                        const TabletSchemaCSPtr& ori_tablet_schema);
+
     const char* _state_name(State state) const;
     const char* _replica_state_name(ReplicaState state) const;
     Status _fill_auto_increment_id(const Chunk& chunk);
@@ -177,14 +193,22 @@ private:
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
-    const TabletSchema* _tablet_schema;
+    // tablet schema owned by delta writer, all write will use this tablet schema
+    // it's build from unsafe_tablet_schema_ref（stored when create tablet） and OlapTableSchema
+    // every request will have it's own tablet schema so simple schema change can work
+    TabletSchemaSPtr _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
     // initial value is max value
-    size_t _memtable_buffer_row = -1;
+    size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key = false;
+    std::atomic<bool> _is_immutable = false;
+
+    int64_t _last_write_ts = 0;
+    // for concurrency issue, we can't get write_buffer_size from memtable directly
+    int64_t _write_buffer_size = 0;
 };
 
 } // namespace starrocks

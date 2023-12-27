@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -48,7 +49,7 @@ struct ScannerCounter {
 class FileScanner {
 public:
     FileScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                ScannerCounter* counter);
+                ScannerCounter* counter, bool schema_only = false);
     virtual ~FileScanner();
 
     virtual Status init_expr_ctx();
@@ -59,12 +60,20 @@ public:
 
     virtual void close();
 
+    virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
+
+    static Status sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                std::vector<SlotDescriptor>* schema);
+
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
                                      std::shared_ptr<RandomAccessFile>* file);
 
     Status create_sequential_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                   const TBrokerScanRangeParams& params, std::shared_ptr<SequentialFile>* file);
+
+    // only for test
+    RuntimeState* TEST_runtime_state() { return _state; }
 
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
@@ -95,5 +104,9 @@ protected:
     // index: destination slot id
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
+
+    bool _case_sensitive = true;
+
+    bool _schema_only;
 };
 } // namespace starrocks

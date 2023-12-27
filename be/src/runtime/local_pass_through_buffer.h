@@ -62,6 +62,7 @@ public:
     void init();
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    int64_t total_bytes() const;
 
 private:
     // hold this chunk buffer to avoid early deallocation.
@@ -80,6 +81,7 @@ public:
     void open_fragment_instance(const TUniqueId& query_id);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
+    void close();
 
 private:
     std::mutex _mutex;

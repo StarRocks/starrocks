@@ -21,6 +21,8 @@
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -64,7 +66,10 @@ struct ResourceMemTrackerGuard {
         return true;
     }
 
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    void scoped_end() const {
+        tls_thread_status.set_mem_tracker(old_tracker);
+        captured = {};
+    }
 
 private:
     auto capture(const std::tuple<WeakPtrs...>& weak_tup) const
@@ -86,12 +91,15 @@ private:
 };
 
 struct IOTaskExecutor {
-    IOTaskExecutor(PriorityThreadPool* pool_) : pool(pool_) {}
-    PriorityThreadPool* pool;
+    workgroup::ScanExecutor* pool;
+    workgroup::WorkGroupPtr wg;
+
+    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(std::move(wg_)) {}
+
     template <class Func>
     Status submit(Func&& func) {
-        PriorityThreadPool::WorkFunction wf = std::move(func);
-        if (pool->offer(wf)) {
+        workgroup::ScanTask task(wg.get(), func);
+        if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");
@@ -102,14 +110,57 @@ struct IOTaskExecutor {
 struct SyncTaskExecutor {
     template <class Func>
     Status submit(Func&& func) {
-        std::forward<Func>(func)();
+        workgroup::YieldContext yield_ctx;
+        do {
+            std::forward<Func>(func)(yield_ctx);
+        } while (!yield_ctx.is_finished());
         return Status::OK();
     }
 };
+
+#define BREAK_IF_YIELD(wg, yield, time_spent_ns)                                                \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        break;                                                                                  \
+    }
+
+#define RETURN_IF_NEED_YIELD(wg, yield, time_spent_ns)                                          \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        return Status::Yield();                                                                 \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        return Status::Yield();                                                                 \
+    }
+
+#define RETURN_IF_ERROR_EXCEPT_YIELD(stmt)                                                            \
+    do {                                                                                              \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok() && !status__.is_yield())) {                                       \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        }                                                                                             \
+    } while (false)
+
+#define RETURN_IF_YIELD(yield) \
+    if (*yield) {              \
+        return Status::OK();   \
+    }
 
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
     spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
+
+#define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
+
+#define TRACKER_WITH_SPILLER_READER_GUARD(state, spiller) \
+    RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this(), std::weak_ptr((spiller)->reader()))
 
 } // namespace starrocks::spill

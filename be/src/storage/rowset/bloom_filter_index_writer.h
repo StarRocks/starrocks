@@ -46,7 +46,7 @@ namespace starrocks {
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
-class BloomFilterOptions;
+struct BloomFilterOptions;
 class WritableFile;
 
 class BloomFilterIndexWriter {

@@ -26,7 +26,6 @@
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
@@ -60,13 +59,15 @@ public:
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table
-    virtual Status append(ChunkPtr chunk) = 0;
-    virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
+    [[nodiscard]] virtual Status append(ChunkPtr chunk) = 0;
+    [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
+                                                  uint32_t size) = 0;
     // all of data has been added
     // done will be called in pipeline executor threads
     virtual Status done() = 0;
     // flush all data to callback, then release the memory in memory table
     // flush will be called in IO threads
+    // flush needs to be designed to be reentrant. Because callbacks can return Status::Yield.
     virtual Status flush(FlushCallBack callback) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
@@ -89,16 +90,17 @@ public:
     ~UnorderedMemTable() override = default;
 
     bool is_empty() override;
-    Status append(ChunkPtr chunk) override;
-    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+    [[nodiscard]] Status append(ChunkPtr chunk) override;
+    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
+                                          uint32_t size) override;
     Status done() override { return Status::OK(); };
     Status flush(FlushCallBack callback) override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
 private:
+    size_t _processed_index{};
     std::vector<ChunkPtr> _chunks;
-    DECLARE_RACE_DETECTOR(mem_table);
 };
 
 class OrderedMemTable final : public SpillableMemTable {
@@ -109,8 +111,9 @@ public:
     ~OrderedMemTable() override = default;
 
     bool is_empty() override;
-    Status append(ChunkPtr chunk) override;
-    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+    [[nodiscard]] Status append(ChunkPtr chunk) override;
+    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
+                                          uint32_t size) override;
     Status done() override;
     Status flush(FlushCallBack callback) override;
 
@@ -122,6 +125,5 @@ private:
     Permutation _permutation;
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
-    DECLARE_RACE_DETECTOR(mem_table);
 };
 } // namespace starrocks::spill

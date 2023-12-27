@@ -1,0 +1,149 @@
+-- name: test conditional functions: coalesce, case...when.., if, ifnull, nullif on nested types
+CREATE TABLE `tc` (   `i` int(11) NULL COMMENT "",   `ai` array<int(11)> NULL COMMENT "",   `ass` array<varchar(100)> NULL COMMENT "",   `mi` map<int(11),int> NULL COMMENT "",   `ms` map<int(11),varchar(100)> NULL COMMENT "" ) ENGINE=OLAP DUPLICATE KEY(`i`) COMMENT "OLAP" DISTRIBUTED BY HASH(`i`) BUCKETS 2 PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+insert into tc values (4, null,null, null,null);
+-- result:
+-- !result
+insert into tc values (3, null,['a','b'], null,map{1:null,null:null});
+-- result:
+-- !result
+insert into tc values (1, [1,2],null, map{1:1,null:2},null);
+-- result:
+-- !result
+insert into tc values (2, [1,2],['a','b'], map{1:1,null:2},map{1:'b',null:null});
+-- result:
+-- !result
+select case i when 1 then ai when 3 then ass else ai end from tc order by i;
+-- result:
+["1","2"]
+["1","2"]
+["a","b"]
+None
+-- !result
+select case i when 1 then ai when 3 then ass end from tc order by i;
+-- result:
+["1","2"]
+None
+["a","b"]
+None
+-- !result
+select case i when 1 then mi when 3 then ms else mi end from tc order by i;
+-- result:
+{1:"1",null:"2"}
+{1:"1",null:"2"}
+{1:null,null:null}
+None
+-- !result
+select case i when 1 then mi when 3 then ms end from tc order by i;
+-- result:
+{1:"1",null:"2"}
+None
+{1:null,null:null}
+None
+-- !result
+select case  when i = 1 then ai when i=3 then ass end from tc order by i;
+-- result:
+["1","2"]
+None
+["a","b"]
+None
+-- !result
+select case  when i = 1 then ai when i=3 then ass else ai end from tc order by i;
+-- result:
+["1","2"]
+["1","2"]
+["a","b"]
+None
+-- !result
+select case  when i = 1 then mi when i=3 then ms end from tc order by i;
+-- result:
+{1:"1",null:"2"}
+None
+{1:null,null:null}
+None
+-- !result
+select case  when i = 1 then mi when i=3 then ms else ms end from tc order by i;
+-- result:
+{1:"1",null:"2"}
+{1:"b",null:null}
+{1:null,null:null}
+None
+-- !result
+select coalesce(ai, ass) from tc order by i;
+-- result:
+["1","2"]
+["1","2"]
+["a","b"]
+None
+-- !result
+select coalesce(mi, ms) from tc order by i;
+-- result:
+{1:"1",null:"2"}
+{1:"1",null:"2"}
+{1:null,null:null}
+None
+-- !result
+select coalesce(null,ms, mi) from tc order by i;
+-- result:
+{1:"1",null:"2"}
+{1:"b",null:null}
+{1:null,null:null}
+None
+-- !result
+select ifnull(ms, mi), ms,mi from tc order by i;
+-- result:
+{1:"1",null:"2"}	None	{1:1,null:2}
+{1:"b",null:null}	{1:"b",null:null}	{1:1,null:2}
+{1:null,null:null}	{1:null,null:null}	None
+None	None	None
+-- !result
+select ifnull(ass, ai), ass,ai from tc order by i;
+-- result:
+["1","2"]	None	[1,2]
+["a","b"]	["a","b"]	[1,2]
+["a","b"]	["a","b"]	None
+None	None	None
+-- !result
+select ifnull(ai, null) from tc order by i;
+-- result:
+[1,2]
+[1,2]
+None
+None
+-- !result
+select if(i>2, ms, mi) from tc order by i;
+-- result:
+{1:"1",null:"2"}
+{1:"1",null:"2"}
+{1:null,null:null}
+None
+-- !result
+select if(i>2, ass, ai) from tc order by i;
+-- result:
+["1","2"]
+["1","2"]
+["a","b"]
+None
+-- !result
+select if(ai is not null, map_from_arrays(['a', 'b'], [1, 2]), null) from tc order by i;
+-- result:
+{"a":1,"b":2}
+{"a":1,"b":2}
+None
+None
+-- !result
+select nullif(ms, mi), ms,mi from tc order by i;
+-- result:
+None	None	{1:1,null:2}
+{1:"b",null:null}	{1:"b",null:null}	{1:1,null:2}
+{1:null,null:null}	{1:null,null:null}	None
+None	None	None
+-- !result
+select nullif(ai, ass), ai, ass from tc order by i;
+-- result:
+["1","2"]	[1,2]	None
+["1","2"]	[1,2]	["a","b"]
+None	None	["a","b"]
+None	None	None
+-- !result

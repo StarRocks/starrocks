@@ -27,7 +27,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
     // NOTE: use lowest() because float and double needed.
     DIAGNOSTIC_PUSH
 #if defined(__clang__)
-    DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+    DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
     return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
     DIAGNOSTIC_POP

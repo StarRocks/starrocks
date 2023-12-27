@@ -14,12 +14,17 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 add_library(Column STATIC
         array_column.cpp
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp
         column.cpp
+        column_access_path.cpp
         column_helper.cpp
         column_viewer.cpp
         const_column.cpp

@@ -22,6 +22,7 @@
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/countdown_latch.h"
 
 namespace brpc {
@@ -44,13 +45,13 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+    Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
-    Status incremental_open(const PTabletWriterOpenRequest& params,
+    Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -63,10 +64,6 @@ public:
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
-
-    void incr_num_ref_senders() { _num_ref_senders.fetch_add(1); }
-
-    int num_ref_senders() { return _num_ref_senders.load(std::memory_order_acquire); }
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -174,10 +171,12 @@ private:
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
-                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+                         const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
 
     void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
+
+    void _flush_stale_memtables();
 
     LoadChannel* _load_channel;
 
@@ -192,15 +191,14 @@ private:
     std::shared_ptr<OlapTableSchemaParam> _schema;
     TupleDescriptor* _tuple_desc = nullptr;
 
-    // next sequence we expect
-    std::atomic<int> _num_remaining_senders = 0;
     std::vector<Sender> _senders;
     size_t _max_sliding_window_size = config::max_load_dop * 3;
-    std::atomic<int> _num_ref_senders = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
 
+    // rw mutex to protect the following two maps
+    mutable bthreads::BThreadSharedMutex _rw_mtx;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
@@ -219,6 +217,8 @@ private:
 
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
+
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

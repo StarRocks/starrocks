@@ -1,0 +1,9 @@
+-- name: testCreateStorageVolume
+CREATE STORAGE VOLUME storage_volume_create type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="false", "aws.s3.secret_key"="secret_key", "aws.s3.access_key"="access_key");
+SHOW STORAGE VOLUMES like 'storage_volume_create';
+CREATE STORAGE VOLUME storage_volume_create type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_create type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
+SHOW STORAGE VOLUMES like 'storage_volume_create';
+DESC STORAGE VOLUME 'storage_volume_create';
+DROP STORAGE VOLUME IF EXISTS storage_volume_create;
+SHOW STORAGE VOLUMES like 'storage_volume_create';

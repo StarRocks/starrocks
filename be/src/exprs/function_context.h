@@ -22,7 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "exprs/function_context.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -45,6 +44,13 @@ public:
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
         int len = 0;
+
+        // only valid if type is nested type
+        // array's element: children[0].
+        // map's key: children[0]; map's value: children[1].
+        // struct's types: keep order with field_names.
+        std::vector<TypeDesc> children;
+        std::vector<std::string> field_names;
     };
 
     enum FunctionStateScope {
@@ -137,6 +143,8 @@ public:
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
 
+    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
+
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
     static FunctionContext* create_test_context();
@@ -172,18 +180,18 @@ private:
 
     // We use the query's runtime state to report errors and warnings. NULL for test
     // contexts.
-    RuntimeState* _state;
+    RuntimeState* _state{nullptr};
 
     // Empty if there's no error
     mutable std::mutex _error_msg_mutex;
     std::string _error_msg;
 
     // The number of warnings reported.
-    int64_t _num_warnings;
+    int64_t _num_warnings{0};
 
     /// The function state accessed via FunctionContext::Get/SetFunctionState()
-    void* _thread_local_fn_state;
-    void* _fragment_local_fn_state;
+    void* _thread_local_fn_state{nullptr};
+    void* _fragment_local_fn_state{nullptr};
 
     // Type descriptor for the return type of the function.
     FunctionContext::TypeDesc _return_type;

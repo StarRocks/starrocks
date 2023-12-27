@@ -32,10 +32,13 @@ Status BaseCompaction::compact() {
         return Status::InvalidArgument("base compaction input parameter error.");
     }
 
+    StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
+    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
     std::unique_lock lock(_tablet->get_base_lock(), std::try_to_lock);
     if (!lock.owns_lock()) {
         return Status::OK();
     }
+    int64_t start_time = UnixMillis();
     TRACE("got base compaction lock");
 
     // 1. pick rowsets to compact
@@ -44,7 +47,10 @@ Status BaseCompaction::compact() {
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
+    });
 
     // 2. do base compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());
@@ -54,8 +60,13 @@ Status BaseCompaction::compact() {
     _state = CompactionState::SUCCESS;
 
     // 4. add metric to base compaction
+    int64_t end_time = UnixMillis();
+    int64_t cost_time = end_time - start_time;
     StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
     StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_input_rowsets_size);
+    StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+    StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_input_rowsets_size /
+                                                                                 (cost_time / 1000.0 + 1));
     TRACE("save base compaction metrics");
 
     return Status::OK();

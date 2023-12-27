@@ -50,6 +50,7 @@ public:
             _num_levels -= num_decoded;
             return num_decoded;
         } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
+            DCHECK(false);
         }
         return 0;
     }

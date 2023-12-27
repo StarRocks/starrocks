@@ -153,7 +153,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
-                consumer->cancel(ctx);
+                (void)consumer->cancel(ctx);
             }
 
             // waiting all threads finished
@@ -175,7 +175,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
                 for (auto& item : cmt_offset) {
                     if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
-                        kafka_pipe->finish();
+                        RETURN_IF_ERROR(kafka_pipe->finish());
                         ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                         ctx->receive_bytes = 0;
                         return Status::OK();
@@ -185,7 +185,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
-                kafka_pipe->finish();
+                RETURN_IF_ERROR(kafka_pipe->finish());
                 ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 return Status::OK();
@@ -233,8 +233,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
                     // failed to append this msg, we must stop
-                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id
-                                 << ", errmsg=" << st.get_error_msg();
+                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
                     eos = true;
                     {
                         std::unique_lock<std::mutex> lock(_mutex);
@@ -371,7 +370,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
-                consumer->cancel(ctx);
+                (void)consumer->cancel(ctx);
             }
 
             // waiting all threads finished
@@ -390,7 +389,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
-                pulsar_pipe->finish();
+                RETURN_IF_ERROR(pulsar_pipe->finish());
                 ctx->pulsar_info->ack_offset = std::move(ack_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 get_backlog_nums(ctx);
@@ -418,7 +417,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 VLOG(3) << "consume partition" << partition << " - " << msg_id;
             } else {
                 // failed to append this msg, we must stop
-                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.get_error_msg();
+                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
                 eos = true;
                 {
                     std::unique_lock<std::mutex> lock(_mutex);
@@ -452,7 +451,7 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         int64_t backlog_num;
         Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog_num);
         if (!st.ok()) {
-            LOG(WARNING) << st.get_error_msg();
+            LOG(WARNING) << st.message();
         } else {
             ctx->pulsar_info
                     ->partition_backlog[std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition()] =

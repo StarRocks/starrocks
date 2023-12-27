@@ -12,22 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/math_functions.h"
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
 
 #include <runtime/decimalv3.h>
 #include <types/logical_type.h>
 #include <util/decimal_types.h>
 
 #include <cmath>
+#include <random>
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
+#include "exprs/math_functions.h"
 #include "util/time.h"
 
 namespace starrocks {
 
 static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
+
+static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+static thread_local std::mt19937_64 generator{std::random_device{}()};
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -222,7 +229,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
     do {
         result[--index] = '0' + (n & 1);
     } while (n >>= 1);
-    return std::string(result + index, max_bits - index);
+    return {result + index, max_bits - index};
 }
 
 StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& columns) {
@@ -403,7 +410,7 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
     // Max number of digits of any base (base 2 gives max digits), plus sign.
     const size_t max_digits = sizeof(uint64_t) * 8 + 1;
     char buf[max_digits];
-    int32_t result_len = 0;
+    size_t result_len = 0;
     int32_t buf_index = max_digits - 1;
     uint64_t temp_num;
     if (dest_base < 0) {
@@ -426,7 +433,7 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
         buf[buf_index] = '-';
         ++result_len;
     }
-    return std::string(buf + max_digits - result_len, result_len);
+    return {buf + max_digits - result_len, result_len};
 }
 
 template <DecimalRoundRule rule, bool keep_scale>
@@ -684,18 +691,8 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
-    for (int i = 0; i < num_rows; ++i) {
-        seed = ::rand_r(&seed);
-        // Normalize to [0,1].
-        result->append(static_cast<double>(seed) / RAND_MAX);
-    }
-    return seed;
-}
-
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -712,11 +709,8 @@ Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::Fu
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            seed = seed_value;
-        } else {
-            seed = GetCurrentTimeNanos();
+            generator.seed(seed_value);
         }
-        context->set_function_state(scope, reinterpret_cast<void*>(seed));
     }
     return Status::OK();
 }
@@ -727,12 +721,10 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
 
 StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
-
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
-    state = reinterpret_cast<void*>(res);
-    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
+    for (int i = 0; i < num_rows; ++i) {
+        result.append(distribution(generator));
+    }
 
     return result.build(false);
 }
@@ -746,6 +738,17 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
 
     return rand(context, columns);
 }
+
+#ifdef __AVX2__
+static float sum_m256(__m256 v) {
+    __m256 hadd = _mm256_hadd_ps(v, v);
+    __m256 hadd2 = _mm256_hadd_ps(hadd, hadd);
+    __m128 vlow = _mm256_castps256_ps128(hadd2);
+    __m128 vhigh = _mm256_extractf128_ps(hadd2, 1);
+    __m128 result = _mm_add_ss(vlow, vhigh);
+    return _mm_cvtss_f32(result);
+}
+#endif
 
 template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
@@ -827,13 +830,41 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType target_sum = 0;
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
-        for (size_t j = 0; j < dim_size; j++) {
+        size_t j = 0;
+#ifdef __AVX2__
+        if (std::is_same_v<CppType, float>) {
+            __m256 sum_vec = _mm256_setzero_ps();
+            __m256 base_sum_vec = _mm256_setzero_ps();
+            __m256 target_sum_vec = _mm256_setzero_ps();
+            for (; j + 7 < dim_size; j += 8) {
+                __m256 base_data_vec = _mm256_loadu_ps(base_data + j);
+                __m256 target_data_vec = _mm256_loadu_ps(target_data + j);
+
+                __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
+                sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+
+                if constexpr (!isNorm) {
+                    __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
+                    base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
+                    __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
+                    target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+                }
+            }
+            sum += sum_m256(sum_vec);
+            if constexpr (!isNorm) {
+                base_sum += sum_m256(base_sum_vec);
+                target_sum += sum_m256(target_sum_vec);
+            }
+        }
+#endif
+        for (; j < dim_size; j++) {
             sum += base_data[j] * target_data[j];
             if constexpr (!isNorm) {
                 base_sum += base_data[j] * base_data[j];
                 target_sum += target_data[j] * target_data[j];
             }
         }
+
         if constexpr (!isNorm) {
             result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
         } else {

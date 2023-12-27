@@ -79,32 +79,24 @@ void PipelineDriverPoller::run_internal() {
                     //
                     // If the fragment is expired when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
-                    LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                    size_t expired_log_count = driver->fragment_ctx()->expired_log_count();
+                    if (expired_log_count <= 10) {
+                        LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
+                        driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
+                    }
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
                                                          driver->query_ctx()->get_query_expire_seconds())));
-                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                    if (driver->is_still_pending_finish()) {
-                        driver->set_driver_state(DriverState::PENDING_FINISH);
-                        ++driver_it;
-                    } else {
-                        driver->set_driver_state(DriverState::FINISH);
-                        remove_blocked_driver(_local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
+                    on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (driver->fragment_ctx()->is_canceled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
-                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                    if (driver->is_still_pending_finish()) {
-                        driver->set_driver_state(DriverState::PENDING_FINISH);
-                        ++driver_it;
-                    } else {
-                        driver->set_driver_state(DriverState::CANCELED);
-                        remove_blocked_driver(_local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
+                    on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
+                } else if (driver->need_report_exec_state()) {
+                    // If the runtime profile is enabled, the driver should be rescheduled after the timeout for triggering
+                    // the profile report prcessing.
+                    remove_blocked_driver(_local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
                 } else if (driver->pending_finish()) {
                     if (driver->is_still_pending_finish()) {
                         ++driver_it;
@@ -135,12 +127,18 @@ void PipelineDriverPoller::run_internal() {
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
-                } else if (driver->is_not_blocked()) {
-                    driver->set_driver_state(DriverState::READY);
-                    remove_blocked_driver(_local_blocked_drivers, driver_it);
-                    ready_drivers.emplace_back(driver);
                 } else {
-                    ++driver_it;
+                    auto status_or_is_not_blocked = driver->is_not_blocked();
+                    if (!status_or_is_not_blocked.ok()) {
+                        driver->fragment_ctx()->cancel(status_or_is_not_blocked.status());
+                        on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
+                    } else if (status_or_is_not_blocked.value()) {
+                        driver->set_driver_state(DriverState::READY);
+                        remove_blocked_driver(_local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    } else {
+                        ++driver_it;
+                    }
                 }
             }
         }
@@ -157,6 +155,14 @@ void PipelineDriverPoller::run_internal() {
         if (spin_count != 0 && spin_count % 64 == 0) {
 #ifdef __x86_64__
             _mm_pause();
+#elif defined __aarch64__
+            // A "yield" instruction in aarch64 is essentially a nop, and does
+            // not cause enough delay to help backoff. "isb" is a barrier that,
+            // especially inside a loop, creates a small delay without consuming
+            // ALU resources.  Experiments shown that adding the isb instruction
+            // improves stability and reduces result jitter. Adding more delay
+            // to the UT_RELAX_CPU than a single isb reduces performance.
+            asm volatile("isb" ::: "memory");
 #else
             // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
             sched_yield();
@@ -174,6 +180,7 @@ void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     _blocked_drivers.push_back(driver);
     _blocked_driver_queue_len++;
     driver->_pending_timer_sw->reset();
+    driver->driver_acct().clean_local_queue_infos();
     _cond.notify_one();
 }
 
@@ -224,6 +231,19 @@ void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drive
     driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
     local_blocked_drivers.erase(driver_it++);
     _blocked_driver_queue_len--;
+}
+
+void PipelineDriverPoller::on_cancel(DriverRawPtr driver, std::vector<DriverRawPtr>& ready_drivers,
+                                     DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
+    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+    if (driver->is_still_pending_finish()) {
+        driver->set_driver_state(DriverState::PENDING_FINISH);
+        ++driver_it;
+    } else {
+        driver->set_driver_state(DriverState::CANCELED);
+        remove_blocked_driver(local_blocked_drivers, driver_it);
+        ready_drivers.emplace_back(driver);
+    }
 }
 
 void PipelineDriverPoller::iterate_immutable_driver(const IterateImmutableDriverFunc& call) const {

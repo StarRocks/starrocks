@@ -63,7 +63,6 @@ namespace starrocks {
 class DescriptorTbl;
 class DataStreamRecvr;
 class RuntimeState;
-class PRowBatch;
 class PUniqueId;
 class PTransmitChunkParams;
 
@@ -85,6 +84,7 @@ class PTransmitChunkParams;
 class DataStreamMgr {
 public:
     DataStreamMgr();
+    ~DataStreamMgr();
 
     // Create a receiver for a specific fragment_instance_id/node_id destination;
     // If is_merging is true, the receiver maintains a separate queue of incoming row
@@ -98,11 +98,10 @@ public:
                                                   std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
                                                   bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
 
-    Status transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done);
-
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
+    void close();
 
     void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);
@@ -130,7 +129,7 @@ private:
     std::shared_ptr<DataStreamRecvr> find_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     // Remove receiver block for fragment_instance_id/node_id from the map.
-    Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+    void deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
 

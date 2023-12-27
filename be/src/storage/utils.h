@@ -159,6 +159,9 @@ bool valid_datetime(const std::string& value_str);
 
 bool valid_bool(const std::string& value_str);
 
+std::string parent_name(const std::string& fullpath);
+std::string file_name(const std::string& fullpath);
+
 // Util used to get string name of thrift enum item
 #define EnumToString(enum_type, index, out)                   \
     do {                                                      \

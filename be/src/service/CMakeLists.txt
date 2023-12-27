@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
 add_subdirectory(service_be)
-add_subdirectory(service_cn)
 
 set(EXEC_FILES
     backend_options.cpp
@@ -26,7 +29,6 @@ set(EXEC_FILES
     internal_service.cpp
     staros_worker.cpp
     mem_hook.cpp
-    service.cpp
 )
 
 add_library(Service

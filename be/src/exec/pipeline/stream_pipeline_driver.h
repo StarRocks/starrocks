@@ -39,13 +39,13 @@ public:
     bool is_query_never_expired() override { return true; }
 
     void epoch_finalize(RuntimeState* runtime_state, DriverState state);
-    Status reset_epoch(RuntimeState* state);
+    [[nodiscard]] Status reset_epoch(RuntimeState* state);
 
 private:
     StatusOr<DriverState> _handle_finish_operators(RuntimeState* runtime_state);
 
-    Status _mark_operator_epoch_finishing(OperatorPtr& op, RuntimeState* state);
-    Status _mark_operator_epoch_finished(OperatorPtr& op, RuntimeState* state);
+    [[nodiscard]] Status _mark_operator_epoch_finishing(OperatorPtr& op, RuntimeState* state);
+    [[nodiscard]] Status _mark_operator_epoch_finished(OperatorPtr& op, RuntimeState* state);
 
 private:
     // index of the first epoch-unfisheded operator

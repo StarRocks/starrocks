@@ -21,6 +21,11 @@
 namespace starrocks::pipeline {
 
 /// OlapScanContext.
+
+const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() const {
+    return &_scan_node->column_access_paths();
+}
+
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
@@ -119,9 +124,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
     return Status::OK();
 }

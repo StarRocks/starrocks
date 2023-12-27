@@ -168,6 +168,10 @@ private:
 
     bool enable_profile;
 
+    // If load_profile_collect_second is set and time cost of load is less than the value,
+    // then profile will not be reported to FE even though enable_profile=true
+    int32_t load_profile_collect_second = -1;
+
     // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;

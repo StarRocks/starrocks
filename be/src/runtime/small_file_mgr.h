@@ -48,21 +48,21 @@ public:
     ~SmallFileMgr();
 
     // call init() when BE start up. load all local files
-    Status init();
+    [[nodiscard]] Status init();
 
     // get file by specified file_id, return 'file_path'
     // if file does not exist, it will be downloaded from FE
-    Status get_file(int64_t file_id, const std::string& md5, std::string* file_path);
+    [[nodiscard]] Status get_file(int64_t file_id, const std::string& md5, std::string* file_path);
 
 private:
-    Status _load_local_files();
+    [[nodiscard]] Status _load_local_files();
 
     // load one single local file
-    Status _load_single_file(const std::string& path, const std::string& file_name);
+    [[nodiscard]] Status _load_single_file(const std::string& path, const std::string& file_name);
 
-    Status _check_file(const CacheEntry& entry, const std::string& md5);
+    [[nodiscard]] Status _check_file(const CacheEntry& entry, const std::string& md5);
 
-    Status _download_file(int64_t file_id, const std::string& md5, std::string* file_path);
+    [[nodiscard]] Status _download_file(int64_t file_id, const std::string& md5, std::string* file_path);
 
 private:
     std::mutex _lock;

@@ -117,8 +117,6 @@ private:
     EncodingTypePB _encoding_type;
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
-    // TODO(zc): rethink about this mem pool
-    MemPool _pool;
     faststring _first_value;
 };
 
@@ -127,13 +125,13 @@ class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data);
 
-    Status init() override;
+    [[nodiscard]] Status init() override;
 
-    Status seek_to_position_in_page(uint32_t pos) override;
+    [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override;
 
-    Status next_batch(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -143,9 +141,9 @@ public:
 
     void set_dict_decoder(PageDecoder* dict_decoder);
 
-    Status next_dict_codes(size_t* n, Column* dst) override;
+    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const SparseRange& range, Column* dst) override;
+    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
 private:
     Slice _data;

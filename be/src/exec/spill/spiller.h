@@ -43,10 +43,12 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
+public:
     SpillProcessMetrics() = default;
-    SpillProcessMetrics(RuntimeProfile* profile);
+    SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
 
-    std::shared_ptr<RuntimeProfile> _spiller_metrics;
+    // For query statistics
+    std::atomic_int64_t* total_spill_bytes;
 
     // time spent to append data into Spiller
     RuntimeProfile::Counter* append_data_timer = nullptr;
@@ -74,6 +76,10 @@ struct SpillProcessMetrics {
     RuntimeProfile::HighWaterMarkCounter* mem_table_peak_memory_usage = nullptr;
     // peak memory usage of input stream
     RuntimeProfile::HighWaterMarkCounter* input_stream_peak_memory_usage = nullptr;
+    // time spent to sort chunk before flush
+    RuntimeProfile::Counter* sort_chunk_timer = nullptr;
+    // time spent to materialize chunk by permutation
+    RuntimeProfile::Counter* materialize_chunk_timer = nullptr;
 
     // time spent to shuffle data to the corresponding partition, only used in join operator
     RuntimeProfile::Counter* shuffle_timer = nullptr;
@@ -85,10 +91,18 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
+
+    // the number of blocks created
+    RuntimeProfile::Counter* block_count = nullptr;
+    // flush/restore task count
+    RuntimeProfile::Counter* flush_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
+    RuntimeProfile::Counter* restore_io_task_count = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
 };
 
 // major spill interfaces
-class Spiller {
+class Spiller : public std::enable_shared_from_this<Spiller> {
 public:
     Spiller(SpilledOptions opts, const std::shared_ptr<SpillerFactory>& factory)
             : _opts(std::move(opts)), _parent(factory) {}
@@ -102,9 +116,9 @@ public:
     const SpillProcessMetrics& metrics() { return _metrics; }
 
     // set partitions for spiller only works when spiller has partitioned spill writer
-    Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
     // init partition by `num_partitions`
-    Status set_partition(RuntimeState* state, size_t num_partitions);
+    void set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
@@ -136,6 +150,8 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+            auto defer = DeferOp([&]() { guard.scoped_end(); });
+            RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
@@ -156,7 +172,7 @@ public:
 
     bool restore_finished() const { return _reader->restore_finished(); }
 
-    bool is_cancel() { return _is_cancel; }
+    bool is_cancel() const { return _is_cancel; }
 
     void cancel() {
         _is_cancel = true;
@@ -182,10 +198,13 @@ public:
             const std::vector<const SpillPartitionInfo*>& parititons);
 
     const std::unique_ptr<SpillerWriter>& writer() { return _writer; }
+    const std::shared_ptr<SpillerReader>& reader() { return _reader; }
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
+
+    Status reset_state(RuntimeState* state);
 
 private:
     Status _acquire_input_stream(RuntimeState* state);
@@ -198,7 +217,7 @@ private:
     std::weak_ptr<SpillerFactory> _parent;
 
     std::unique_ptr<SpillerWriter> _writer;
-    std::unique_ptr<SpillerReader> _reader;
+    std::shared_ptr<SpillerReader> _reader;
 
     std::mutex _mutex;
 

@@ -25,17 +25,19 @@
 namespace starrocks {
 
 Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
-    if (_jni_env->ExceptionCheck()) {
+    if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {
+        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
         _jni_env->ExceptionDescribe();
         _jni_env->ExceptionClear();
-        return Status::InternalError(message);
+        _jni_env->DeleteLocalRef(thr);
+        return Status::InternalError(message + " java exception details: " + jni_error_message);
     }
     return Status::OK();
 }
 
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _init_profile(scanner_params);
-    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to ensure the local capacity."));
@@ -47,7 +49,7 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams&
 
 Status JniScanner::do_open(RuntimeState* state) {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to open the off-heap table scanner."));
     return Status::OK();
@@ -116,10 +118,13 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
-        message.append(it.first);
-        message.append("->");
-        message.append(it.second);
-        message.append(", ");
+        // skip encoded object
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.first);
+            message.append("->");
+            message.append(it.second);
+            message.append(", ");
+        }
 
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
         _jni_env->DeleteLocalRef(key);
@@ -131,7 +136,6 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     int fetch_size = runtime_state->chunk_size();
     _jni_scanner_obj = _jni_env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
     _jni_env->DeleteLocalRef(hashmap_object);
-
     DCHECK(_jni_scanner_obj != nullptr);
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to initialize a scanner instance."));
 
@@ -139,19 +143,20 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
 }
 
 Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
-    SCOPED_RAW_TIMER(&_stats.column_read_ns);
-    SCOPED_RAW_TIMER(&_stats.io_ns);
-    _stats.io_count += 1;
+    SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+    SCOPED_RAW_TIMER(&_app_stats.io_ns);
+    _app_stats.io_count += 1;
     *chunk_meta = _jni_env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
     RETURN_IF_ERROR(
             _check_jni_exception(_jni_env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
     return Status::OK();
 }
 
-template <LogicalType type, typename CppType>
+template <LogicalType type>
 Status JniScanner::_append_primitive_data(const FillColumnArgs& args) {
     char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
     using ColumnType = typename starrocks::RunTimeColumnType<type>;
+    using CppType = typename starrocks::RunTimeCppType<type>;
     auto* runtime_column = down_cast<ColumnType*>(args.column);
     runtime_column->resize_uninitialized(args.num_rows);
     memcpy(runtime_column->get_data().data(), column_ptr, args.num_rows * sizeof(CppType));
@@ -175,36 +180,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
     memcpy(bytes.data(), column_ptr, total_length);
-    return Status::OK();
-}
-
-template <LogicalType type, typename CppType>
-Status JniScanner::_append_decimal_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<type>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    CppType* runtime_data = runtime_column->get_data().data();
-
-    int precision = args.slot_type.precision;
-    int scale = args.slot_type.scale;
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string decimal_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            CppType cpp_val;
-            if (DecimalV3Cast::from_string<CppType>(&cpp_val, precision, scale, decimal_str.data(),
-                                                    decimal_str.size())) {
-                return Status::DataQualityError(
-                        fmt::format("Invalid value occurs in column[{}], value is [{}]", args.slot_name, decimal_str));
-            }
-            runtime_data[i] = cpp_val;
-        }
-    }
     return Status::OK();
 }
 
@@ -374,37 +349,41 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
         pargs->column = data_column;
         pargs->nulls = null_data.data();
     } else {
-        // otherwise we skil this chunk meta, because in Java side
-        // we assume every column starswith `null_column`.
+        // otherwise we skip this chunk meta, because in Java side
+        // we assume every column starts with `null_column`.
     }
 
     LogicalType column_type = args.slot_type.type;
     if (column_type == LogicalType::TYPE_BOOLEAN) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN, uint8_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_BOOLEAN>(args)));
+    } else if (column_type == LogicalType::TYPE_TINYINT) {
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_TINYINT>(args)));
     } else if (column_type == LogicalType::TYPE_SMALLINT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT>(args)));
     } else if (column_type == LogicalType::TYPE_INT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_INT, int32_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_INT>(args)));
     } else if (column_type == LogicalType::TYPE_FLOAT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT, float>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_FLOAT>(args)));
     } else if (column_type == LogicalType::TYPE_BIGINT) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT, int64_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_BIGINT>(args)));
     } else if (column_type == LogicalType::TYPE_DOUBLE) {
-        RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE, double>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DOUBLE>(args)));
     } else if (column_type == LogicalType::TYPE_VARCHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(args)));
     } else if (column_type == LogicalType::TYPE_CHAR) {
         RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(args)));
+    } else if (column_type == LogicalType::TYPE_VARBINARY) {
+        RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
         RETURN_IF_ERROR((_append_date_data(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
         RETURN_IF_ERROR((_append_datetime_data(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL64>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL128) {
-        RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL128>(args)));
     } else if (column_type == LogicalType::TYPE_ARRAY) {
         RETURN_IF_ERROR((_append_array_data(args)));
     } else if (column_type == LogicalType::TYPE_MAP) {
@@ -417,15 +396,15 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
-Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
-    SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+    SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
     if (num_rows == 0) {
         return Status::EndOfFile("");
     }
-    _stats.raw_rows_read += num_rows;
-    auto slot_desc_list = _scanner_params.tuple_desc->slots();
+    _app_stats.raw_rows_read += num_rows;
+
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
         const std::string& slot_name = slot_desc->col_name();
@@ -453,19 +432,47 @@ Status JniScanner::_release_off_heap_table(JNIEnv* _jni_env) {
 }
 
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    long chunk_meta;
-    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
-    reset_chunk_meta(chunk_meta);
-    Status status = _fill_chunk(_jni_env, chunk);
-    RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
+    // fill chunk with all wanted column(include partition columns)
+    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.tuple_desc->slots());
 
     // ====== conjunct evaluation ======
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-    _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+
+    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    return status;
+}
+
+Status JniScanner::fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
+                                    const std::vector<SlotDescriptor*>& slot_desc_list) {
+    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
+    long chunk_meta;
+    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
+    reset_chunk_meta(chunk_meta);
+    Status status = _fill_chunk(_jni_env, chunk, slot_desc_list);
+    RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
+
+    return status;
+}
+
+Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    // fill chunk with all wanted column exclude partition columns
+    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.materialize_slots);
+    size_t chunk_size = (*chunk)->num_rows();
+    if (!_scanner_params.materialize_slots.empty()) {
+        // when the chunk has partition column and non partition column
+        // fill_empty_chunk will only fill partition column for HiveJniScanner
+        // In this situation, Chunk.num_rows() is not reliable  temporally
+        auto slot_desc = _scanner_params.materialize_slots[0];
+        ColumnPtr& first_non_partition_column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        chunk_size = first_non_partition_column->size();
+    }
+
+    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
+    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
 }

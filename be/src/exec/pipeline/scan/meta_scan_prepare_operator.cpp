@@ -27,7 +27,7 @@ namespace starrocks::pipeline {
 MetaScanPrepareOperator::MetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                  int32_t driver_sequence, const std::string& operator_name,
                                                  MetaScanContextPtr scan_ctx)
-        : SourceOperator(factory, id, operator_name, plan_node_id, driver_sequence), _scan_ctx(scan_ctx) {}
+        : SourceOperator(factory, id, operator_name, plan_node_id, true, driver_sequence), _scan_ctx(scan_ctx) {}
 
 Status MetaScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));

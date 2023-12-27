@@ -50,16 +50,16 @@ public:
     ~StreamEpochManager() = default;
 
     // Start the new epoch from input epoch info
-    Status start_epoch(ExecEnv* exec_env, const QueryContext* query_ctx,
-                       const std::vector<FragmentContext*>& fragment_ctxs, const EpochInfo& epoch_info,
-                       const ScanRangeInfo& scan_info);
-    Status prepare(const MVMaintenanceTaskInfo& maintenance_task_info,
-                   const std::vector<FragmentContext*>& fragment_ctxs);
-    Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id, int64_t tablet_id,
-                                BinlogOffset binlog_offset);
-    Status activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id, int64_t expected_num_drivers,
-                                  bool enable_resource_group);
-    Status set_finished(ExecEnv* exec_env, const QueryContext* query_ctx);
+    [[nodiscard]] Status start_epoch(ExecEnv* exec_env, const QueryContext* query_ctx,
+                                     const std::vector<FragmentContext*>& fragment_ctxs, const EpochInfo& epoch_info,
+                                     const ScanRangeInfo& scan_info);
+    [[nodiscard]] Status prepare(const MVMaintenanceTaskInfo& maintenance_task_info,
+                                 const std::vector<FragmentContext*>& fragment_ctxs);
+    [[nodiscard]] Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id,
+                                              int64_t tablet_id, BinlogOffset binlog_offset);
+    [[nodiscard]] Status activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id,
+                                                int64_t expected_num_drivers, bool enable_resource_group);
+    [[nodiscard]] Status set_finished(ExecEnv* exec_env, const QueryContext* query_ctx);
 
     const BinlogOffset* get_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id,
                                           int64_t tablet_id) const;

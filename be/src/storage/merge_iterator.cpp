@@ -29,9 +29,9 @@ namespace starrocks {
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
 inline int compare_chunk(size_t key_columns, const std::vector<uint32_t>& sort_key_idxes, const Chunk& lhs, size_t m,
                          const Chunk& rhs, size_t n, const std::string& merge_condition) {
-    for (size_t i = 0; i < sort_key_idxes.size(); i++) {
-        const ColumnPtr& lc = lhs.get_column_by_index(sort_key_idxes[i]);
-        const ColumnPtr& rc = rhs.get_column_by_index(sort_key_idxes[i]);
+    for (unsigned int sort_key_idx : sort_key_idxes) {
+        const ColumnPtr& lc = lhs.get_column_by_index(sort_key_idx);
+        const ColumnPtr& rc = rhs.get_column_by_index(sort_key_idx);
         if (int r = lc->compare_at(m, n, *rc, -1); r != 0) {
             return r;
         }
@@ -149,15 +149,16 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
-    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
-        ChunkIterator::init_encoded_schema(dict_maps);
+    [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& i : _children) {
             RETURN_IF_ERROR(i->init_encoded_schema(dict_maps));
         }
         return Status::OK();
     }
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
+
+    [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         for (auto& i : _children) {
             RETURN_IF_ERROR(i->init_output_schema(unused_output_column_ids));
         }
@@ -317,8 +318,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
-        _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), std::move(_schema.sort_key_idxes()),
-                                   merge_condition});
+        _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), merge_condition});
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);

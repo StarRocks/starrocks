@@ -51,7 +51,7 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
     while (iter != std::end(_pool)) {
         if ((*iter)->match(ctx)) {
             VLOG(3) << "get an available data consumer from pool: " << (*iter)->id();
-            (*iter)->reset();
+            (void)(*iter)->reset();
             *ret = *iter;
             iter = _pool.erase(iter);
             return Status::OK();
@@ -137,7 +137,7 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {
     std::unique_lock<std::mutex> l(_lock);
 
-    consumer->reset();
+    (void)consumer->reset();
 
     if (_pool.size() == _max_pool_size) {
         VLOG(3) << "data consumer pool is full: " << _pool.size() << "-" << _max_pool_size
@@ -155,7 +155,16 @@ void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {
     }
 }
 
-Status DataConsumerPool::start_bg_worker() {
+void DataConsumerPool::stop() {
+    std::unique_lock<std::mutex> l(_lock);
+    *_is_closed = true;
+
+    if (_clean_idle_consumer_thread.joinable()) {
+        _clean_idle_consumer_thread.join();
+    }
+}
+
+void DataConsumerPool::start_bg_worker() {
     std::shared_ptr<bool> is_closed = _is_closed;
 
     _clean_idle_consumer_thread = std::thread([=] {
@@ -172,8 +181,6 @@ Status DataConsumerPool::start_bg_worker() {
         }
     });
     Thread::set_thread_name(_clean_idle_consumer_thread, "clean_idle_cm");
-    _clean_idle_consumer_thread.detach();
-    return Status::OK();
 }
 
 void DataConsumerPool::_clean_idle_consumer_bg() {

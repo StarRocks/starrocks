@@ -82,16 +82,12 @@ public:
 };
 
 struct SequentialFileOptions {
-    SequentialFileOptions() = default;
-
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
 };
 
 struct RandomAccessFileOptions {
-    RandomAccessFileOptions() = default;
-
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
@@ -102,6 +98,11 @@ struct DirEntry {
     std::optional<int64_t> mtime;
     std::optional<int64_t> size; // Undefined if "is_dir" is true
     std::optional<bool> is_dir;
+};
+
+struct FileInfo {
+    std::string path;
+    std::optional<int64_t> size;
 };
 
 struct FileWriteStat {
@@ -163,8 +164,18 @@ public:
         return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const FileInfo& file_info) {
+        return new_random_access_file(RandomAccessFileOptions(), file_info);
+    }
+
     virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                const std::string& fname) = 0;
+
+    // Implementations may make use of the file info to make some optimizations, such as getting the file size directly.
+    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                               const FileInfo& file_info) {
+        return new_random_access_file(opts, file_info.path);
+    }
 
     // Create an object that writes to a new file with the specified
     // name.  Deletes any existing file with the same name and creates a
@@ -269,6 +280,19 @@ public:
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
     virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+
+    // Batch delete the given files.
+    // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
+    // possibly stop at the first error if is simulating batch deletes.
+    virtual Status delete_files(const std::vector<std::string>& paths) {
+        for (auto&& path : paths) {
+            auto st = delete_file(path);
+            if (!st.ok() && !st.is_not_found()) {
+                return st;
+            }
+        }
+        return Status::OK();
+    }
 };
 
 // Creation-time options for WritableFile
@@ -277,6 +301,9 @@ struct WritableFileOptions {
     bool sync_on_close = true;
     // For remote filesystem, skip filling local filesystem cache on write requests
     bool skip_fill_local_cache = false;
+
+    bool direct_write = false;
+
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };

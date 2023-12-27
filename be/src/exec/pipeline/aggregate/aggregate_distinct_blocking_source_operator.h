@@ -25,7 +25,8 @@ public:
     AggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id,
                                             int32_t plan_node_id, int32_t driver_sequence,
                                             const char* name = "aggregate_distinct_blocking_source")
-            : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _aggregator(std::move(aggregator)) {
+            : SourceOperator(factory, id, name, plan_node_id, false, driver_sequence),
+              _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
 
@@ -34,11 +35,11 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    Status set_finished(RuntimeState* state) override;
+    [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 protected:
     // It is used to perform aggregation algorithms shared by

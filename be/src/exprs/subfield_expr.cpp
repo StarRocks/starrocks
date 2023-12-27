@@ -25,7 +25,11 @@ namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
-    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {}
+    explicit SubfieldExpr(const TExprNode& node) : Expr(node), _used_subfield_names(node.used_subfield_names) {
+        if (node.__isset.copy_flag) {
+            _copy_flag = node.copy_flag;
+        }
+    }
 
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
@@ -54,9 +58,6 @@ public:
         if (col->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(col.get());
             const uint8_t* nulls = nullable->null_column()->raw_data();
-            // for (size_t i = 0; i < num_rows; i++) {
-            //     null_flags[i] = nulls[i];
-            // }
             std::memcpy(&null_flags[0], &nulls[0], num_rows * sizeof(uint8_t));
         }
 
@@ -66,9 +67,6 @@ public:
 
         std::string fieldname = _used_subfield_names.back();
         ColumnPtr subfield_column = struct_column->field_column(fieldname);
-        if (subfield_column == nullptr) {
-            return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-        }
         if (subfield_column->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(subfield_column.get());
             const uint8_t* nulls = nullable->null_column()->raw_data();
@@ -83,13 +81,23 @@ public:
         DCHECK_EQ(subfield_column->size(), result_null->size());
 
         // We need clone a new subfield column
-        return NullableColumn::create(subfield_column->clone_shared(), result_null);
+        if (_copy_flag) {
+            return NullableColumn::create(subfield_column->clone_shared(), result_null);
+        } else {
+            return NullableColumn::create(subfield_column, result_null);
+        }
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
+    int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+        subfields->push_back(_used_subfield_names);
+        return 1;
+    }
+
 private:
     std::vector<std::string> _used_subfield_names;
+    bool _copy_flag = true;
 };
 
 Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {

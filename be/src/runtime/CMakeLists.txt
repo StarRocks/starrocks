@@ -17,6 +17,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -41,6 +45,7 @@ set(RUNTIME_FILES
     large_int_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
+    dummy_load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
@@ -65,6 +70,7 @@ set(RUNTIME_FILES
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
     mysql_result_writer.cpp
+    http_result_writer.cpp
     file_result_writer.cpp
     statistic_result_writer.cpp
     variable_result_writer.cpp
@@ -72,6 +78,7 @@ set(RUNTIME_FILES
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
+    tablets_channel.cpp
     time_types.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
@@ -85,6 +92,11 @@ set(RUNTIME_FILES
     profile_report_worker.cpp
     schema_table_sink.cpp
     command_executor.cpp
+    iceberg_table_sink.cpp
+    hive_table_sink.cpp
+    table_function_table_sink.cpp
+    blackhole_table_sink.cpp
+    dictionary_cache_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

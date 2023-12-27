@@ -160,7 +160,7 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     return Status::OK();
 }
 
-Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<std::string>* paths) {
+Status parse_conf_datacache_paths(const std::string& config_path, std::vector<std::string>* paths) {
     if (config_path.empty()) {
         return Status::OK();
     }
@@ -180,11 +180,11 @@ Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<
             LOG(WARNING) << "invalid block cache path. path=" << item;
             continue;
         }
-        paths->emplace_back(std::move(local_path.string()));
+        paths->emplace_back(local_path.string());
     }
     if ((path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
-        LOG(WARNING) << "fail to parse block_cache_disk_path config. value=[" << config_path << "]";
-        return Status::InvalidArgument("fail to parse block_cache_disk_path");
+        LOG(WARNING) << "fail to parse datacache_disk_path config. value=[" << config_path << "]";
+        return Status::InvalidArgument("fail to parse datacache_disk_path");
     }
     return Status::OK();
 }

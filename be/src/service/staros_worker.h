@@ -35,7 +35,7 @@ class CacheKey;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
-Status to_status(absl::Status absl_status);
+Status to_status(const absl::Status& absl_status);
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
@@ -59,12 +59,17 @@ public:
 
     absl::Status update_worker_info(const WorkerInfo& info) override;
 
+    // get shard info directly from local cache, if the shard is assigned to this worker
     absl::StatusOr<ShardInfo> get_shard_info(ShardId id) const override;
 
     std::vector<ShardInfo> shards() const override;
 
     // `conf`: a k-v map, provides additional information about the filesystem configuration
     absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
+
+    // retrieve shard info from the worker. Unlike `get_shard_info`, if the shard info is not there in local cache,
+    // the worker will try to fetch it back from starmgr.
+    absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
 private:
     struct ShardInfoDetails {
@@ -76,13 +81,26 @@ private:
 
     using CacheValue = std::weak_ptr<FileSystem>;
 
+    // This function can be made static perfectly. The only reason to make it `virtual`
+    // is, for unit test MOCK as it is the only interface to interact with g_starlet.
+    virtual absl::StatusOr<ShardInfo> _fetch_shard_info_from_remote(ShardId id);
+
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
+
+    static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
+
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
+
+    static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
+
+    static bool need_enable_cache(const ShardInfo& info);
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
                                                                                  const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
                                                                       const Configuration& conf);
+    absl::Status invalidate_fs(const ShardInfo& shard);
 
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
@@ -92,6 +110,7 @@ private:
 extern std::shared_ptr<StarOSWorker> g_worker;
 void init_staros_worker();
 void shutdown_staros_worker();
+void update_staros_starcache();
 
 } // namespace starrocks
 #endif // USE_STAROS

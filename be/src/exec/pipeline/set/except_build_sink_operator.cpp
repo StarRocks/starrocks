@@ -42,8 +42,8 @@ void ExceptBuildSinkOperator::close(RuntimeState* state) {
 Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    Expr::prepare(_dst_exprs, state);
-    Expr::open(_dst_exprs, state);
+    RETURN_IF_ERROR(Expr::prepare(_dst_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_dst_exprs, state));
 
     return Status::OK();
 }

@@ -606,12 +606,12 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        std::string source;
         if (src.is_null()) {
-            source = "null";
-        } else {
-            source = src.get_slice().to_string();
+            dst->set_null();
+            return Status::OK();
         }
+        std::string source = src.get_slice().to_string();
+
         CppType value;
         RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
         dst->set(value);
@@ -637,15 +637,14 @@ public:
                           MemPool* mem_pool) const override {
         for (size_t i = 0; i < src.size(); i++) {
             Datum src_datum = src.get(i);
-            Slice source;
             if (src_datum.is_null()) {
-                source = "null";
+                dst->append_nulls(1);
             } else {
-                source = src_datum.get_slice();
+                Slice source = src_datum.get_slice();
+                JsonValue json;
+                RETURN_IF_ERROR(JsonValue::parse(source, &json));
+                dst->append_datum(&json);
             }
-            JsonValue json;
-            RETURN_IF_ERROR(JsonValue::parse(source, &json));
-            dst->append_datum(&json);
         }
         return Status::OK();
     }
@@ -671,13 +670,12 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        std::string source;
         if (src.is_null()) {
-            source = "null";
-        } else {
-            auto value = src.template get<CppType>();
-            source = src_typeinfo->to_string(&value);
+            dst->set_null();
+            return Status::OK();
         }
+        auto value = src.template get<CppType>();
+        std::string source = src_typeinfo->to_string(&value);
         Slice slice;
         slice.size = source.size();
         if (mem_pool == nullptr) {
@@ -1732,52 +1730,6 @@ void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& sr
     for (size_t i = 0; i < num_datums; ++i) {
         _converters[i]->convert(&(*dst)[i], src[i]);
     }
-}
-
-Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
-    DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
-    DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
-    auto num_columns = in_schema.num_fields();
-    _converters.resize(num_columns, nullptr);
-    for (int i = 0; i < num_columns; ++i) {
-        auto& f1 = in_schema.field(i);
-        auto& f2 = out_schema.field(i);
-        DCHECK_EQ(f1->id(), f2->id());
-        _converters[i] = get_field_converter(f1->type()->type(), f2->type()->type());
-        if (_converters[i] == nullptr) {
-            return Status::NotSupported("Cannot get field converter");
-        }
-    }
-    _out_schema = std::make_shared<Schema>(out_schema);
-    return Status::OK();
-}
-
-std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
-    auto num_columns = _converters.size();
-    DCHECK_EQ(num_columns, from.num_columns());
-    for (int i = 0; i < num_columns; ++i) {
-        auto f = _out_schema->field(i);
-        auto c = _converters[i]->copy_convert(*from.get_column_by_id(f->id()));
-        dest->append_column(std::move(c), f);
-    }
-    // Make sure schema in chunk contains valid sort key idx
-    dest->schema()->init_sort_key_idxes();
-    return dest;
-}
-
-std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
-    auto num_columns = _converters.size();
-    DCHECK_EQ(num_columns, from->num_columns());
-    for (int i = 0; i < num_columns; ++i) {
-        auto f = _out_schema->field(i);
-        auto c = _converters[i]->move_convert(from->get_column_by_id(f->id()).get());
-        dest->append_column(std::move(c), f);
-    }
-    // Make sure schema in chunk contains valid sort key idx
-    dest->schema()->init_sort_key_idxes();
-    return dest;
 }
 
 } // namespace starrocks

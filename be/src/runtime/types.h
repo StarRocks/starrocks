@@ -110,10 +110,27 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_array_type(TypeDescriptor children) {
+    static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
         res.children.push_back(children);
+        return res;
+    }
+
+    static TypeDescriptor create_map_type(const TypeDescriptor& key, const TypeDescriptor& value) {
+        TypeDescriptor res;
+        res.type = TYPE_MAP;
+        res.children.push_back(key);
+        res.children.push_back(value);
+        return res;
+    }
+
+    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+                                             const std::vector<TypeDescriptor>& filed_types) {
+        TypeDescriptor res;
+        res.type = TYPE_STRUCT;
+        res.field_names = field_names;
+        res.children = filed_types;
         return res;
     }
 
@@ -300,6 +317,8 @@ struct TypeDescriptor {
 
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
+
+    size_t get_flat_size() const;
 
     static inline int get_decimal_byte_size(int precision) {
         DCHECK_GT(precision, 0);

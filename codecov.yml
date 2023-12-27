@@ -1,0 +1,30 @@
+comment: false
+codecov:
+  allow_coverage_offsets: true
+  max_report_age: off
+github_checks:
+  annotations: false
+coverage:
+  status:
+    project:
+      default: off
+      fe-total:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
+        flags:
+          - fe-total
+      be-total:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
+        flags:
+          - be-total
+    patch: false
+flags:
+  fe-total:
+    paths:
+      - fe/
+  be-total:
+    paths:
+      - be/

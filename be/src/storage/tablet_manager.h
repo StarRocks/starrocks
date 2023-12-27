@@ -60,7 +60,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
-class TabletBasicInfo;
+struct TabletBasicInfo;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -172,6 +172,7 @@ public:
 
     void register_clone_tablet(int64_t tablet_id);
     void unregister_clone_tablet(int64_t tablet_id);
+    bool check_clone_tablet(int64_t tablet_id);
 
     size_t shutdown_tablets() const {
         std::shared_lock l(_shutdown_tablets_lock);

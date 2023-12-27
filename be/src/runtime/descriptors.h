@@ -89,11 +89,14 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
+    SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
+
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
+    bool is_output_column() const { return _is_output_column; }
     bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
 
     int slot_size() const { return _slot_size; }
@@ -103,6 +106,10 @@ public:
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
+
+    int32_t col_unique_id() const { return _col_unique_id; }
+
+    SlotDescriptor(const TSlotDescriptor& tdesc);
 
 private:
     friend class DescriptorTbl;
@@ -116,6 +123,7 @@ private:
     const TupleId _parent;
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
+    const int32_t _col_unique_id;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -125,8 +133,11 @@ private:
     const int _slot_size;
 
     const bool _is_materialized;
+    const bool _is_output_column;
 
-    SlotDescriptor(const TSlotDescriptor& tdesc);
+    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
+    const bool _is_nullable;
+
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };
 
@@ -154,6 +165,7 @@ public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
+    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
@@ -181,6 +193,8 @@ public:
     virtual bool is_partition_col(const SlotDescriptor* slot) const;
     virtual int get_partition_col_index(const SlotDescriptor* slot) const;
     virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
+    virtual bool has_base_path() const { return false; }
+    virtual const std::string& get_base_path() const { return _table_location; }
 
     Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
@@ -188,6 +202,9 @@ public:
         }
         return Status::OK();
     }
+
+    StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
+                                                       ObjectPool* pool);
 
 protected:
     std::string _hdfs_base_path;
@@ -202,6 +219,16 @@ public:
     HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HdfsTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    std::string _serde_lib;
+    std::string _input_format;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
 };
 
 class IcebergTableDescriptor : public HiveTableDescriptor {
@@ -210,9 +237,17 @@ public:
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
+    bool is_unpartitioned_table() { return _partition_column_names.empty(); }
+    const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
+    const std::vector<std::string> full_column_names();
+    std::vector<int32_t> partition_index_in_schema();
+    bool has_base_path() const override { return true; }
+
+    Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
 
 private:
     TIcebergSchema _t_iceberg_schema;
+    std::vector<std::string> _partition_column_names;
 };
 
 class FileTableDescriptor : public HiveTableDescriptor {
@@ -220,6 +255,17 @@ public:
     FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~FileTableDescriptor() override = default;
     bool has_partition() const override { return false; }
+    const std::string& get_table_locations() const;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    std::string _serde_lib;
+    std::string _input_format;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
 };
 
 class DeltaLakeTableDescriptor : public HiveTableDescriptor {
@@ -234,8 +280,6 @@ public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
     bool has_partition() const override { return true; }
-    const bool& is_mor_table() const;
-    const std::string& get_base_path() const;
     const std::string& get_instant_time() const;
     const std::string& get_hive_column_names() const;
     const std::string& get_hive_column_types() const;
@@ -243,12 +287,22 @@ public:
     const std::string& get_serde_lib() const;
 
 private:
-    bool _is_mor_table;
     std::string _hudi_instant_time;
     std::string _hive_column_names;
     std::string _hive_column_types;
     std::string _input_format;
     std::string _serde_lib;
+};
+
+class PaimonTableDescriptor : public HiveTableDescriptor {
+public:
+    PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~PaimonTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    const std::string& get_paimon_native_table() const;
+
+private:
+    std::string _paimon_native_table;
 };
 
 // ===========================================

@@ -32,6 +32,7 @@
 #include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/timezone_utils.h"
@@ -66,6 +67,20 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
             ++iter_slot;
         }
     }
+}
+
+OrcChunkReader::OrcChunkReader()
+        : _read_chunk_size(4096),
+          _tzinfo(cctz::utc_time_zone()),
+          _tzoffset_in_seconds(0),
+          _drop_nanoseconds_in_datetime(false),
+          _broker_load_mode(true),
+          _strict_mode(true),
+          _broker_load_filter(nullptr),
+          _num_rows_filtered(0),
+          _error_message_counter(0),
+          _lazy_load_ctx(nullptr) {
+    _row_reader_options.useWriterTimezone();
 }
 
 Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
@@ -539,7 +554,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
+        RETURN_IF_ERROR(_column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements));
     }
 
     if (_broker_load_mode) {
@@ -887,7 +902,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
         }
         for (Expr* c : conjunct->children()) {
-            _add_conjunct(c, builder);
+            RETURN_IF_ERROR(_add_conjunct(c, builder));
         }
         builder->end();
         return Status::OK();
@@ -1242,6 +1257,23 @@ bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const 
         return true;
     }
     return false;
+}
+
+Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
+    auto const& root = _reader->getType();
+
+    auto cnt = root.getSubtypeCount();
+    for (uint64_t i = 0; i < cnt; i++) {
+        TypeDescriptor tp;
+        auto name = root.getFieldName(i);
+
+        auto subtype = root.getSubtype(i);
+
+        RETURN_IF_ERROR(get_orc_type(subtype, &tp));
+
+        schema->emplace_back(i, name, tp);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

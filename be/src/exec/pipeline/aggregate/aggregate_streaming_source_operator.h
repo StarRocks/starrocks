@@ -24,7 +24,7 @@ class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                      int32_t driver_sequence, AggregatorPtr aggregator)
-            : SourceOperator(factory, id, "aggregate_streaming_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "aggregate_streaming_source", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -33,14 +33,14 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
-    Status set_finished(RuntimeState* state) override;
+    [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    Status _output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state);
+    [[nodiscard]] Status _output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSinkOperator. It is

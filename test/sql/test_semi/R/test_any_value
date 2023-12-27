@@ -1,0 +1,158 @@
+-- name: test_any_value @system
+CREATE TABLE `sc3` (
+  `v1` bigint(20) NULL COMMENT "",
+  `a1` ARRAY<INT> NULL,
+  `a2` ARRAY<STRUCT<a INT, b INT>> NULL,
+  `m1` MAP<INT, INT> NULL,
+  `m2` MAP<INT, STRUCT<c INT, b ARRAY<INT>>> NULL,
+  `s1` STRUCT<s1 int, s2 ARRAY<STRUCT<a int, b int>>, s3 MAP<INT, INT>, s4 Struct<e INT, f INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NOT NULL COMMENT "",
+  `v3` string NULL COMMENT "",
+  `v4` string NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into sc3 values (1, [1,2,3],[row(1,11),row(2,21),row(3,31)], map{1:11, 2:21}, map{1:row(11, [111, 221, 331]), 2:row(22, [221, 221, 331])}, row(1, [row(1,1), row(2,1)], map{1:11, 2:21}, row(1,1)));
+-- result:
+-- !result
+insert into sc3 values (2, [2,2,3],[row(1,12),row(2,22),row(3,32)], map{1:12, 2:22}, map{1:row(12, [112, 222, 332]), 2:row(22, [222, 222, 332])}, row(1, [row(1,2), row(2,2)], map{1:12, 2:22}, row(1,2)));
+-- result:
+-- !result
+insert into sc3 values (3, [3,2,3],[row(1,13),row(2,23),row(3,33)], map{1:13, 2:23}, map{1:row(13, [113, 223, 333]), 2:row(22, [223, 223, 333])}, row(1, [row(1,3), row(2,3)], map{1:13, 2:23}, row(1,3)));
+-- result:
+-- !result
+insert into sc3 values (1, [4,2,3],[row(1,14),row(2,24),row(3,34)], map{1:14, 2:24}, map{1:row(14, [114, 224, 334]), 2:row(22, [224, 224, 334])}, row(1, [row(1,4), row(2,4)], map{1:14, 2:24}, row(1,4)));
+-- result:
+-- !result
+insert into sc3 values (2, [5,2,3],[row(1,15),row(2,25),row(3,35)], map{1:15, 2:25}, map{1:row(15, [115, 225, 335]), 2:row(22, [225, 225, 335])}, row(1, [row(1,5), row(2,5)], map{1:15, 2:25}, row(1,5)));
+-- result:
+-- !result
+insert into sc3 values (3, [6,2,3],[row(1,16),row(2,26),row(3,36)], map{1:16, 2:26}, map{1:row(16, [116, 226, 336]), 2:row(22, [226, 226, 336])}, row(1, [row(1,6), row(2,6)], map{1:16, 2:26}, row(1,6)));
+-- result:
+-- !result
+insert into sc3 values (1, [7,2,3],[row(1,17),row(2,27),row(3,37)], map{1:17, 2:27}, map{1:row(17, [117, 227, 337]), 2:row(22, [227, 227, 337])}, row(1, [row(1,7), row(2,7)], map{1:17, 2:27}, row(1,7)));
+-- result:
+-- !result
+insert into sc3 values (2, [8,2,3],[row(1,18),row(2,28),row(3,38)], map{1:18, 2:28}, map{1:row(18, [118, 228, 338]), 2:row(22, [228, 228, 338])}, row(1, [row(1,8), row(2,8)], map{1:18, 2:28}, row(1,8)));
+-- result:
+-- !result
+insert into sc3 values (3, [9,2,3],[row(1,19),row(2,29),row(3,39)], map{1:19, 2:29}, map{1:row(19, [119, 229, 339]), 2:row(22, [229, 229, 339])}, row(1, [row(1,9), row(2,9)], map{1:19, 2:29}, row(1,9)));
+-- result:
+-- !result
+insert into sc3 values (4, [9,2,3],NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+insert into sc3 values (4, [9,2,3],NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+insert into sc3 values (4, [9,2,3],NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+insert into sc3 values (4, [9,2,3],NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+insert into sc3 values (4, [9,2,3],NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+insert into t0 values (1, 1, '1', '1');
+-- result:
+-- !result
+insert into t0 values (2, 2, '2', '2');
+-- result:
+-- !result
+insert into t0 values (3, 3, '3', '3');
+-- result:
+-- !result
+insert into t0 values (1, 1, '1', '1');
+-- result:
+-- !result
+insert into t0 values (2, 2, '2', '2');
+-- result:
+-- !result
+insert into t0 values (3, 3, '3', '3');
+-- result:
+-- !result
+insert into t0 values (1, 1, '1', '1');
+-- result:
+-- !result
+insert into t0 values (2, 2, '2', '2');
+-- result:
+-- !result
+insert into t0 values (3, 3, '3', '3');
+-- result:
+-- !result
+insert into t0 values (11, 11, '1', '11');
+-- result:
+-- !result
+insert into t0 values (22, 22, '1', '22');
+-- result:
+-- !result
+insert into t0 values (33, 33, '1', '33');
+-- result:
+-- !result
+insert into t0 values (11, 11, NULL, '11');
+-- result:
+-- !result
+insert into t0 values (22, 22, NULL, '22');
+-- result:
+-- !result
+insert into t0 values (33, 33, NULL, '33');
+-- result:
+-- !result
+select any_value(v1), any_value(a1), any_value(a2), any_value(m1), any_value(m2), any_value(s1) from sc3;
+-- result:
+[REGEX]\d.*
+-- !result
+select any_value(a1), any_value(a2), any_value(m1), any_value(m2), any_value(s1) from sc3 where v1 = 2 group by v1;
+-- result:
+[REGEX].*\[(2|5|8),2,3\].*
+-- !result
+select any_value(a1), any_value(a2), any_value(m1), any_value(m2), any_value(s1) from sc3 where v1 = 4;
+-- result:
+[9,2,3]	None	None	None	None
+-- !result
+select any_value(v1), any_value(v2), any_value(v3), any_value(v4) from t0;
+-- result:
+[REGEX]\d.*
+-- !result
+select any_value(12), any_value(123), any_value('a') from t0;
+-- result:
+12	123	a
+-- !result
+select any_value([9,2,3]), any_value(map{1:row(19, [119, 229, 339]), 2:row(22, [229, 229, 339])}), any_value(row(1, [row(1,9), row(2,9)], map{1:19, 2:29}, row(1,9))) from sc3;
+-- result:
+[9,2,3]	{1:{"col1":19,"col2":[119,229,339]},2:{"col1":22,"col2":[229,229,339]}}	{"col1":1,"col2":[{"col1":1,"col2":9},{"col1":2,"col2":9}],"col3":{1:19,2:29},"col4":{"col1":1,"col2":9}}
+-- !result
+select any_value(distinct v1) from t0;
+-- result:
+[REGEX].*Getting syntax error at line.*
+-- !result
+select v1, v3, any_value(v2) over (partition by v3) from t0;
+-- result:
+[REGEX].*not supported with OVER clause.*
+-- !result

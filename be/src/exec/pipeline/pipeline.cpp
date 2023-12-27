@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline.h"
 
+#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -29,7 +30,7 @@ size_t Pipeline::degree_of_parallelism() const {
 void Pipeline::count_down_driver(RuntimeState* state) {
     bool all_drivers_finished = ++_num_finished_drivers == _drivers.size();
     if (all_drivers_finished) {
-        state->fragment_ctx()->count_down_pipeline(state);
+        state->fragment_ctx()->count_down_pipeline();
     }
 }
 
@@ -90,17 +91,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                if (workgroup != nullptr) {
-                    scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor_with_workgroup());
-                } else {
-                    scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor_without_workgroup());
-                }
+                scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
             } else {
-                if (workgroup != nullptr) {
-                    scan_operator->set_scan_executor(state->exec_env()->scan_executor_with_workgroup());
-                } else {
-                    scan_operator->set_scan_executor(state->exec_env()->scan_executor_without_workgroup());
-                }
+                scan_operator->set_scan_executor(state->exec_env()->scan_executor());
             }
         }
     }
@@ -121,6 +114,11 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->runtime_profile(), true, nullptr);
+        if (curr_op->is_combinatorial_operator()) {
+            curr_op->for_each_child_operator([&](Operator* child) {
+                driver->runtime_profile()->add_child(child->runtime_profile(), true, nullptr);
+            });
+        }
     }
 }
 

@@ -1,0 +1,91 @@
+-- name: test_pipe_basic
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,617. OK num: 1(upload 1 files).
+-- !result
+create table t1 
+properties('replication_num' = '1')
+as select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+-- result:
+-- !result
+desc t1;
+-- result:
+col_int	int	YES	true	None	
+col_map	map<varchar(1048576),int>	YES	false	None	
+col_struct	varchar(1048576)	YES	false	None	
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
+create pipe p1 properties('auto_ingest'='false') as 
+    insert into t1 
+    select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+-- result:
+-- !result
+alter pipe p1 suspend;
+-- result:
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	SUSPEND
+-- !result
+select pipe_name, file_name, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+function: wait_for_pipe_finish('db_${uuid0}', 'p1')
+-- result:
+None
+-- !result
+select count(*) from t1;
+-- result:
+6
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	FINISHED
+-- !result
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	col_not_null.parquet	1617	FINISHED
+-- !result
+drop pipe p1;
+-- result:
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
@@ -25,7 +27,8 @@ class ScanTaskQueue;
 
 class ScanExecutor {
 public:
-    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
+    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
+                          bool add_metrics = true);
     virtual ~ScanExecutor();
 
     void initialize(int32_t num_threads);

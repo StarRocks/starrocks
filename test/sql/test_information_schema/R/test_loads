@@ -1,0 +1,70 @@
+-- name: test_information_schema_loads
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY RANGE(event_day)(PARTITION p1 VALUES LESS THAN ("2020-01-31")) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2020-01-14', 2);
+-- result:
+-- !result
+select state,type,TRACKING_SQL from information_schema.loads where database_name='db_${uuid0}';
+-- result:
+FINISHED	INSERT	None
+-- !result
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY RANGE(event_day)(PARTITION p1 VALUES LESS THAN ("2020-01-31")) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2022-01-14', 2);
+-- result:
+[REGEX].*Insert has filtered data in strict mode.*
+-- !result
+select state,type from information_schema.loads where database_name='db_${uuid1}';
+-- result:
+CANCELLED	INSERT
+-- !result
+select TRACKING_SQL from information_schema.loads where database_name='db_${uuid1}';
+-- result:
+[REGEX]select tracking_log from information_schema.load_tracking_logs where job_id=.*
+-- !result
+[UC]id=select job_id from information_schema.loads where database_name='db_${uuid1}';
+-- result:
+65080
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id};
+-- result:
+Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
+
+-- !result
+[UC]label=select label from information_schema.loads where database_name='db_${uuid1}';
+-- result:
+insert_1dd7d7e1-c702-11ed-a15b-00163e0dcbfc
+-- !result
+select tracking_log from information_schema.load_tracking_logs where label='${label}';
+-- result:
+Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
+
+-- !result
+select * from information_schema.loads where database_name='db_${uuid1}';
+-- result:
+[REGEX].*Cancelled.*
+-- !result
+select * from information_schema.load_tracking_logs where database_name='db_${uuid1}';
+-- result:
+E: (1064, 'load_tracking_logs must specify label or job_id')
+-- !result
+select * from information_schema.load_tracking_logs where job_id=0;
+-- result:
+-- !result
+select * from information_schema.load_tracking_logs where label="not exist";
+-- result:
+-- !result

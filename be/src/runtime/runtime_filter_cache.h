@@ -24,7 +24,6 @@
 
 namespace starrocks {
 
-using JoinRuntimeFilterPtr = std::shared_ptr<const JoinRuntimeFilter>;
 class RfCacheValue;
 using RfCacheValueRawPtr = RfCacheValue*;
 using RfCacheValuePtr = std::shared_ptr<RfCacheValue>;

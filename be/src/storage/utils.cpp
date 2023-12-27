@@ -35,24 +35,17 @@
 #include "storage/utils.h"
 
 #include <bvar/bvar.h>
-#include <dirent.h>
 #include <fmt/format.h>
-#include <lz4/lz4.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
-#include <cstdarg>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -82,11 +75,11 @@ Status gen_timestamp_string(string* out_string) {
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {} ", std::strerror(errno)));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
-        return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+        return Status::InternalError(fmt::format("localtime_r: {}", std::strerror(errno)));
     }
 
     *out_string = time_suffix;
@@ -385,6 +378,16 @@ bool valid_bool(const std::string& value_str) {
     StringParser::ParseResult result;
     StringParser::string_to_bool(value_str.c_str(), value_str.length(), &result);
     return result == StringParser::PARSE_SUCCESS;
+}
+
+std::string parent_name(const std::string& fullpath) {
+    std::filesystem::path path(fullpath);
+    return path.parent_path().string();
+}
+
+std::string file_name(const std::string& fullpath) {
+    std::filesystem::path path(fullpath);
+    return path.filename().string();
 }
 
 } // namespace starrocks

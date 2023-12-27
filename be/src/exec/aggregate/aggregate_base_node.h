@@ -27,7 +27,7 @@ public:
     ~AggregateBaseNode() override;
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 protected:

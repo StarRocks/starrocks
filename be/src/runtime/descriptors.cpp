@@ -39,10 +39,14 @@
 #include <sstream>
 
 #include "common/object_pool.h"
+#include "common/status.h"
+#include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "util/compression/block_compression.h"
+#include "util/thrift_util.h"
 
 namespace starrocks {
 using boost::algorithm::join;
@@ -59,15 +63,31 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
     return os;
 }
 
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
+        : _id(id),
+          _type(std::move(type)),
+          _parent(0),
+          _null_indicator_offset(0, 0),
+          _col_name(std::move(name)),
+          _col_unique_id(-1),
+          _slot_idx(0),
+          _slot_size(_type.get_slot_size()),
+          _is_materialized(false),
+          _is_output_column(false),
+          _is_nullable(true) {}
+
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),
           _parent(tdesc.parent),
           _null_indicator_offset(tdesc.nullIndicatorByte, tdesc.nullIndicatorBit),
           _col_name(tdesc.colName),
+          _col_unique_id(tdesc.col_unique_id),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(tdesc.isMaterialized) {}
+          _is_materialized(tdesc.isMaterialized),
+          _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true),
+          _is_nullable(tdesc.__isset.isNullable ? tdesc.isNullable : true) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -75,9 +95,13 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _parent(pdesc.parent()),
           _null_indicator_offset(pdesc.null_indicator_byte(), pdesc.null_indicator_bit()),
           _col_name(pdesc.col_name()),
+          _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(pdesc.is_materialized()) {}
+          _is_materialized(pdesc.is_materialized()),
+          _is_output_column(true),
+          // keep same as is_nullable()
+          _is_nullable(_null_indicator_offset.bit_mask != 0) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
@@ -128,6 +152,10 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_t
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TIcebergTable& thrift_table,
+                                                 const THdfsPartition& thrift_partition)
+        : _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
@@ -144,12 +172,52 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hdfsTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
     }
+    _hive_column_names = tdesc.hdfsTable.hive_column_names;
+    _hive_column_types = tdesc.hdfsTable.hive_column_types;
+    _input_format = tdesc.hdfsTable.input_format;
+    _serde_lib = tdesc.hdfsTable.serde_lib;
+}
+
+const std::string& HdfsTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& HdfsTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+const std::string& HdfsTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+const std::string& HdfsTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
 }
 
 FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.fileTable.location;
     _columns = tdesc.fileTable.columns;
+    _hive_column_names = tdesc.fileTable.hive_column_names;
+    _hive_column_types = tdesc.fileTable.hive_column_types;
+    _input_format = tdesc.fileTable.input_format;
+    _serde_lib = tdesc.fileTable.serde_lib;
+}
+
+const std::string& FileTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& FileTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+const std::string& FileTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+const std::string& FileTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -157,6 +225,50 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
+    _partition_column_names = tdesc.icebergTable.partition_column_names;
+}
+
+std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
+    std::vector<int32_t> indexes;
+    indexes.reserve(_partition_column_names.size());
+
+    for (const auto& name : _partition_column_names) {
+        for (int i = 0; i < _columns.size(); ++i) {
+            if (_columns[i].column_name == name) {
+                indexes.emplace_back(i);
+                break;
+            }
+        }
+    }
+
+    return indexes;
+}
+
+const std::vector<std::string> IcebergTableDescriptor::full_column_names() {
+    std::vector<std::string> full_column_names;
+    for (const auto& column : _columns) {
+        full_column_names.emplace_back(column.column_name);
+    }
+
+    return full_column_names;
+}
+
+Status IcebergTableDescriptor::set_partition_desc_map(const starrocks::TIcebergTable& thrift_table,
+                                                      starrocks::ObjectPool* pool) {
+    if (thrift_table.__isset.compressed_partitions) {
+        ASSIGN_OR_RETURN(TPartitionMap * tPartitionMap,
+                         deserialize_partition_map(thrift_table.compressed_partitions, pool));
+        for (const auto& entry : tPartitionMap->partitions) {
+            auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_table, entry.second));
+            _partition_id_to_desc_map[entry.first] = partition;
+        }
+    } else {
+        for (const auto& entry : thrift_table.partitions) {
+            auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_table, entry.second));
+            _partition_id_to_desc_map[entry.first] = partition;
+        }
+    }
+    return Status::OK();
 }
 
 DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -179,20 +291,11 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hudiTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
     }
-    _is_mor_table = tdesc.hudiTable.is_mor_table;
     _hudi_instant_time = tdesc.hudiTable.instant_time;
     _hive_column_names = tdesc.hudiTable.hive_column_names;
     _hive_column_types = tdesc.hudiTable.hive_column_types;
     _input_format = tdesc.hudiTable.input_format;
     _serde_lib = tdesc.hudiTable.serde_lib;
-}
-
-const bool& HudiTableDescriptor::is_mor_table() const {
-    return _is_mor_table;
-}
-
-const std::string& HudiTableDescriptor::get_base_path() const {
-    return _table_location;
 }
 
 const std::string& HudiTableDescriptor::get_instant_time() const {
@@ -213,6 +316,15 @@ const std::string& HudiTableDescriptor::get_input_format() const {
 
 const std::string& HudiTableDescriptor::get_serde_lib() const {
     return _serde_lib;
+}
+
+PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _paimon_native_table = tdesc.paimonTable.paimon_native_table;
+}
+
+const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
+    return _paimon_native_table;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
@@ -238,6 +350,29 @@ int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) con
         ++idx;
     }
     return -1;
+}
+
+StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
+        const TCompressedPartitionMap& compressed_partition_map, ObjectPool* pool) {
+    const std::string& base64_partition_map = compressed_partition_map.compressed_serialized_partitions;
+    std::string compressed_buf;
+    compressed_buf.resize(base64_partition_map.size() + 3);
+    base64_decode2(base64_partition_map.data(), base64_partition_map.size(), compressed_buf.data());
+    compressed_buf.resize(compressed_partition_map.compressed_len);
+
+    std::string uncompressed_buf;
+    uncompressed_buf.resize(compressed_partition_map.original_len);
+    Slice uncompress_output(uncompressed_buf);
+    const BlockCompressionCodec* zlib_uncompress_codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(starrocks::CompressionTypePB::ZLIB, &zlib_uncompress_codec));
+    RETURN_IF_ERROR(zlib_uncompress_codec->decompress(compressed_buf, &uncompress_output));
+
+    TPartitionMap* tPartitionMap = pool->add(new TPartitionMap());
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<uint8_t*>(uncompress_output.data),
+                                           reinterpret_cast<uint32_t*>(&uncompress_output.size), TProtocolType::BINARY,
+                                           tPartitionMap));
+
+    return tPartitionMap;
 }
 
 // =============================================
@@ -512,7 +647,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         }
         case TTableType::ICEBERG_TABLE: {
-            desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            auto* iceberg_desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
+            RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool, chunk_size));
+            desc = iceberg_desc;
             break;
         }
         case TTableType::DELTALAKE_TABLE: {
@@ -525,6 +663,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool, chunk_size));
             desc = hudi_desc;
+            break;
+        }
+        case TTableType::PAIMON_TABLE: {
+            desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::JDBC_TABLE: {

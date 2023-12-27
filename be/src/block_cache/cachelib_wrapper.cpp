@@ -42,37 +42,36 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
         nvmConfig.navyConfig.blockCache().setDataChecksum(options.enable_checksum);
-        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_parcel_memory_mb);
+        nvmConfig.navyConfig.setMaxParcelMemoryMB(options.max_flying_memory_mb);
         nvmConfig.navyConfig.setMaxConcurrentInserts(options.max_concurrent_inserts);
         config.enableNvmCache(nvmConfig);
     }
 
     Cache::MMConfig mm_config;
-    mm_config.lruInsertionPointSpec = options.lru_insertion_point;
+    mm_config.lruInsertionPointSpec = 1;
     _cache = std::make_unique<Cache>(config);
     _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize, {}, mm_config);
     _meta_path = options.meta_path;
     return Status::OK();
 }
 
-Status CacheLibWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
-                                    bool overwrite) {
+Status CacheLibWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     //  Simulate the behavior of skipping if exists
-    if (!overwrite && _cache->find(key)) {
+    if (options && !options->overwrite && _cache->find(key)) {
         return Status::AlreadyExist("the cache item already exists");
     }
     // TODO: check size for chain item
-    auto handle = _cache->allocate(_default_pool, key, size);
+    auto handle = _cache->allocate(_default_pool, key, buffer.size());
     if (!handle) {
         return Status::InternalError("allocate cachelib item failed");
     }
-    // std::memcpy(handle->getMemory(), value, size);
-    strings::memcpy_inlined(handle->getMemory(), value, size);
+    buffer.copy_to(handle->getMemory());
     _cache->insertOrReplace(handle);
     return Status::OK();
 }
 
-StatusOr<size_t> CacheLibWrapper::read_cache(const std::string& key, char* value, size_t off, size_t size) {
+Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                                    ReadCacheOptions* options) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -80,28 +79,37 @@ StatusOr<size_t> CacheLibWrapper::read_cache(const std::string& key, char* value
     if (!handle) {
         return Status::NotFound("not found cachelib item");
     }
-    // to check if cached.
-    if (value == nullptr) {
-        return 0;
-    }
     DCHECK((off + size) <= handle->getSize());
     // std::memcpy(value, (char*)handle->getMemory() + off, size);
-    strings::memcpy_inlined(value, (char*)handle->getMemory() + off, size);
-
-    if (handle->hasChainedItem()) {
-    }
-    return size;
+    void* data = malloc(size);
+    strings::memcpy_inlined(data, (char*)handle->getMemory() + off, size);
+    buffer->append_user_data(data, size, nullptr);
+    return Status::OK();
 }
 
-Status CacheLibWrapper::remove_cache(const std::string& key) {
+Status CacheLibWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
-    const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
-    return navy_stats;
+const CacheMetrics CacheLibWrapper::cache_metrics() {
+    // not implemented
+    CacheMetrics metrics{};
+    return metrics;
 }
+
+Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
+                                     std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+    return Status::NotSupported("not supported write object in cachelib");
+}
+
+Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+    return Status::NotSupported("not supported read object in cachelib");
+}
+
+void CacheLibWrapper::record_read_remote(size_t size, int64_t lateny_us) {}
+
+void CacheLibWrapper::record_read_cache(size_t size, int64_t lateny_us) {}
 
 Status CacheLibWrapper::shutdown() {
     if (_cache) {

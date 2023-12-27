@@ -55,7 +55,7 @@ FileResultWriter::FileResultWriter(const ResultFileOptions* file_opts,
         : _file_opts(file_opts), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
 FileResultWriter::~FileResultWriter() {
-    _close_file_writer(true);
+    (void)_close_file_writer(true);
 }
 
 Status FileResultWriter::init(RuntimeState* state) {
@@ -104,10 +104,22 @@ Status FileResultWriter::_create_file_writer() {
                 PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter},
                 std::move(writable_file), _output_expr_ctxs);
         break;
-    case TFileFormatType::FORMAT_PARQUET:
-        _file_builder = std::make_unique<ParquetBuilder>(std::move(writable_file), _output_expr_ctxs,
-                                                         _file_opts->parquet_options, _file_opts->file_column_names);
+    case TFileFormatType::FORMAT_PARQUET: {
+        ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(_file_opts->parquet_options));
+        auto result =
+                parquet::ParquetBuildHelper::make_schema(_file_opts->file_column_names, _output_expr_ctxs,
+                                                         std::vector<parquet::FileColumnId>(_output_expr_ctxs.size()));
+        if (!result.ok()) {
+            return Status::NotSupported(result.status().message());
+        }
+        auto schema = result.ValueOrDie();
+        auto parquet_builder = std::make_unique<ParquetBuilder>(
+                std::move(writable_file), std::move(properties), std::move(schema), _output_expr_ctxs,
+                _file_opts->parquet_options.row_group_max_size, _file_opts->max_file_size_bytes);
+        RETURN_IF_ERROR(parquet_builder->init());
+        _file_builder = std::move(parquet_builder);
         break;
+    }
     default:
         return Status::InternalError(strings::Substitute("unsupported file format: $0", _file_opts->file_format));
     }

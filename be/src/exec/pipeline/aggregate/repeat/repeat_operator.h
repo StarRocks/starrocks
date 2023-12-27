@@ -30,7 +30,7 @@ public:
                    const std::vector<std::vector<SlotId>>& null_slot_ids, uint64_t repeat_times_required,
                    uint64_t repeat_times_last, const std::vector<std::vector<int64_t>>& grouping_list,
                    const TupleDescriptor* tuple_desc, const std::vector<ExprContext*>& conjunct_ctxs)
-            : Operator(factory, id, "repeat", plan_node_id, driver_sequence),
+            : Operator(factory, id, "repeat", plan_node_id, false, driver_sequence),
               _null_slot_ids(null_slot_ids),
               _repeat_times_required(repeat_times_required),
               _repeat_times_last(repeat_times_last),

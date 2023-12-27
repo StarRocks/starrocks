@@ -170,11 +170,11 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status FileScanNode::close(RuntimeState* state) {
+void FileScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     _scan_finished.store(true);
     _queue_writer_cond.notify_all();
@@ -188,7 +188,7 @@ Status FileScanNode::close(RuntimeState* state) {
     }
     _cur_mem_usage = 0;
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 // This function is called after plan node has been prepared.
@@ -220,6 +220,11 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
                                    ScannerCounter* counter) {
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
+    }
+    if (runtime_state()->enable_log_rejected_record() &&
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
+        return Status::InternalError("only support csv/json format to log rejected record");
     }
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
@@ -316,8 +321,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
             // todo: break if failed ?
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << "FileScanner[" << start_idx + i
-                             << "] process failed. status=" << status.get_error_msg();
+                LOG(WARNING) << "FileScanner[" << start_idx + i << "] process failed. status=" << status.message();
                 break;
             }
         }

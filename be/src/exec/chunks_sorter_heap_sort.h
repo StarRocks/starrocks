@@ -235,9 +235,9 @@ public:
               _limit(limit) {}
     ~ChunksSorterHeapSort() override = default;
 
-    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status do_done(RuntimeState* state) override;
-    Status get_next(ChunkPtr* chunk, bool* eos) override;
+    [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] Status do_done(RuntimeState* state) override;
+    [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
     int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
@@ -249,7 +249,7 @@ public:
 
     size_t get_output_rows() const override;
 
-    void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
+    void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
 private:
     size_t _number_of_rows_to_sort() const { return _offset + _limit; }

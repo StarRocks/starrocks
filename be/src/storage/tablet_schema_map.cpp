@@ -26,8 +26,7 @@ static void get_stats(std::ostream& os, void*) {
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
 
-bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
-                                             const std::shared_ptr<const TabletSchema>& schema_ptr) {
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr) {
     if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
         schema_pb.column_size() != schema_ptr->num_columns()) {
         return false;
@@ -44,6 +43,20 @@ bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
     return true;
 }
 
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaCSPtr& in_schema, const TabletSchemaCSPtr& ori_schema) {
+    if (in_schema->keys_type() != ori_schema->keys_type() || in_schema->num_columns() != ori_schema->num_columns() ||
+        in_schema->id() != ori_schema->id() || in_schema->schema_version() != ori_schema->schema_version()) {
+        return false;
+    }
+
+    for (auto i = 0; i < in_schema->num_columns(); i++) {
+        if (in_schema->column(i).unique_id() != ori_schema->column(i).unique_id()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
     SchemaId id = schema_pb.id();
     DCHECK_NE(TabletSchema::invalid_id(), id);
@@ -54,7 +67,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     // We use shared schema to save mem usage, but the premise is that we need to ensure that no two different
     // TabletSchemaPBs have the same id. But we can't guarantee it after schema change so far, so we should
     // check the consistent of tablet schema.
-    // If check failed, we will create a new tablet_schema as return value, but we must hold the original schema
+    // If check failed, we will create a new unsafe_tablet_schema_ref as return value, but we must hold the original schema
     // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
     // a dead lock(#issue 5646)
     TabletSchemaPtr result = nullptr;
@@ -84,6 +97,40 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
         }
     }
 
+    return std::make_pair(result, insert);
+}
+
+std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr& tablet_schema) {
+    DCHECK(tablet_schema != nullptr);
+    SchemaId id = tablet_schema->id();
+    DCHECK_NE(id, TabletSchema::invalid_id());
+    MapShard* shard = get_shard(id);
+    bool insert = false;
+    TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr;
+    {
+        std::unique_lock l(shard->mtx);
+        auto it = shard->map.find(id);
+        if (it == shard->map.end()) {
+            result = tablet_schema;
+            shard->map.emplace(id, result);
+            insert = true;
+        } else {
+            ptr = it->second.lock();
+            if (UNLIKELY(!ptr)) {
+                result = tablet_schema;
+                it->second = std::weak_ptr<const TabletSchema>(result);
+                insert = true;
+            } else {
+                if (check_schema_unique_id(tablet_schema, ptr)) {
+                    result = ptr;
+                } else {
+                    result = tablet_schema;
+                }
+                insert = false;
+            }
+        }
+    }
     return std::make_pair(result, insert);
 }
 

@@ -42,7 +42,7 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     _sort_context->ref();
     _sort_context->incr_sinker();
 
-    _chunks_sorter->setup_runtime(_unique_metrics.get(), this->mem_tracker());
+    _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
 
     return Status::OK();
 }

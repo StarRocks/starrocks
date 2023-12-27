@@ -34,6 +34,7 @@ namespace starrocks {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
+    const std::string* catalog{nullptr};
     const std::string* db{nullptr};
     const std::string* table{nullptr};
     const std::string* wild{nullptr};
@@ -67,6 +68,7 @@ struct SchemaScannerParam {
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
+    std::vector<TFrontend> frontends;
 
     SchemaScannerParam() = default;
 };
@@ -91,6 +93,8 @@ public:
     virtual Status get_next(ChunkPtr* chunk, bool* eos);
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
+
+    TAuthInfo build_auth_info();
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 

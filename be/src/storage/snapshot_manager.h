@@ -114,7 +114,7 @@ private:
 
     std::string _get_header_full_path(const TabletSharedPtr& ref_tablet, const std::string& schema_hash_path) const;
 
-    Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchema& tablet_schema,
+    Status _rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path, TabletSchemaCSPtr& tablet_schema,
                              const RowsetId& next_id, RowsetMetaPB* new_rs_meta_pb);
 
     static SnapshotManager* _s_instance;

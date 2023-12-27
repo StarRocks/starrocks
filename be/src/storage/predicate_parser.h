@@ -15,8 +15,10 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "common/statusor.h"
+#include "tablet_schema.h"
 
 namespace starrocks {
 
@@ -30,7 +32,7 @@ class ColumnPredicate;
 
 class PredicateParser {
 public:
-    explicit PredicateParser(const TabletSchema& schema) : _schema(schema) {}
+    explicit PredicateParser(TabletSchemaCSPtr schema) : _schema(std::move(schema)) {}
 
     // check if an expression can be pushed down to the storage level
     bool can_pushdown(const ColumnPredicate* predicate) const;
@@ -47,7 +49,7 @@ public:
     uint32_t column_id(const SlotDescriptor& slot_desc);
 
 private:
-    const TabletSchema& _schema;
+    const TabletSchemaCSPtr _schema;
 };
 
 } // namespace starrocks

@@ -1,0 +1,67 @@
+select
+l_orderkey,
+l_partkey,
+l_suppkey,
+l_linenumber,
+l_quantity,
+l_extendedprice,
+l_discount,
+l_tax,
+l_returnflag,
+l_linestatus,
+l_shipdate,
+l_commitdate,
+l_receiptdate,
+l_shipinstruct,
+l_shipmode,
+l_comment,
+ps_availqty,
+ps_supplycost,
+ps_comment,
+p_name,
+p_mfgr,
+p_brand,
+p_type,
+p_size,
+p_container,
+p_retailprice,
+p_comment,
+s_name,
+s_address,
+s_nationkey,
+s_phone,
+s_acctbal,
+s_comment,
+snation.n_name as sn_name,
+snation.n_comment as sn_comment,
+sregion.r_name as sr_name,
+sregion.r_comment as sr_comment,
+o_custkey,
+o_orderstatus,
+o_totalprice,
+o_orderdate,
+o_orderpriority,
+o_clerk,
+o_shippriority,
+o_comment,
+c_name,
+c_address,
+c_nationkey,
+c_phone,
+c_acctbal,
+c_mktsegment,
+c_comment,
+cnation.n_name as cn_name,
+cnation.n_comment as cn_comment,
+cregion.r_name as cr_name,
+cregion.r_comment as cr_comment
+from
+  lineitem inner join orders on lineitem.l_orderkey = orders.o_orderkey
+  inner join partsupp on lineitem.l_partkey = partsupp.ps_partkey and lineitem.l_suppkey = partsupp.ps_suppkey
+  inner join part on lineitem.l_partkey =  part.p_partkey
+  inner join supplier on lineitem.l_suppkey = supplier.s_suppkey
+  inner join customer on orders.o_custkey = customer.c_custkey
+  inner join nation snation on supplier.s_nationkey = snation.n_nationkey
+  inner join region sregion on snation.n_regionkey = sregion.r_regionkey
+  inner join nation cnation on customer.c_nationkey = cnation.n_nationkey
+  inner join region cregion on cnation.n_regionkey = cregion.r_regionkey

@@ -589,19 +589,31 @@ TEST(TestColumnReader, testSubstructsWithNulls) {
 
     const unsigned char buffer1[] = {0x16, 0x0f};
     EXPECT_CALL(streams, getStreamProxy(1, proto::Stream_Kind_PRESENT, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer1, ARRAY_SIZE(buffer1))));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer1, ARRAY_SIZE(buffer1))));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer1, ARRAY_SIZE(buffer1));
+            });
 
     const unsigned char buffer2[] = {0x0a, 0x55};
     EXPECT_CALL(streams, getStreamProxy(2, proto::Stream_Kind_PRESENT, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer2, ARRAY_SIZE(buffer2))));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer2, ARRAY_SIZE(buffer2))));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer2, ARRAY_SIZE(buffer2));
+            });
 
     const unsigned char buffer3[] = {0x04, 0xf0};
     EXPECT_CALL(streams, getStreamProxy(3, proto::Stream_Kind_PRESENT, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer3, ARRAY_SIZE(buffer3))));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer3, ARRAY_SIZE(buffer3))));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer3, ARRAY_SIZE(buffer3));
+            });
 
     const unsigned char buffer4[] = {0x17, 0x01, 0x00};
     EXPECT_CALL(streams, getStreamProxy(3, proto::Stream_Kind_DATA, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer4, ARRAY_SIZE(buffer4))));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer4, ARRAY_SIZE(buffer4))));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer4, ARRAY_SIZE(buffer4));
+            });
 
     // create the row type
     std::unique_ptr<Type> innerType = createStructType();
@@ -1325,13 +1337,22 @@ TEST(TestColumnReader, testListPropagateNulls) {
     // set getStream
     const unsigned char buffer[] = {0xff, 0x00};
     EXPECT_CALL(streams, getStreamProxy(1, proto::Stream_Kind_PRESENT, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
+            });
 
     EXPECT_CALL(streams, getStreamProxy(2, proto::Stream_Kind_LENGTH, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, 0)));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, 0)));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer, 0);
+            });
 
     EXPECT_CALL(streams, getStreamProxy(3, proto::Stream_Kind_DATA, true))
-            .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, 0)));
+            // .WillRepeatedly(testing::Return(new SeekableArrayInputStream(buffer, 0)));
+            .WillRepeatedly([&](uint64_t columnId, proto::Stream_Kind kind, bool) {
+                return new SeekableArrayInputStream(buffer, 0);
+            });
 
     // create the row type
     std::unique_ptr<ColumnReader> reader = buildReader(*rowType, streams);
