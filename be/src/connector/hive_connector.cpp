@@ -554,6 +554,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
 
 HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) {
     const auto& scan_range = _scan_range;
+    static const char* serde_property_prefix = "SerDe.";
 
     std::string required_fields;
     for (auto const& slot : _materialize_slots) {
@@ -578,6 +579,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     std::string hive_column_types;
     std::string serde;
     std::string input_format;
+    std::map<std::string, std::string> serde_properties;
 
     if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
         const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
@@ -599,6 +601,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
         hive_column_types = hdfs_table->get_hive_column_types();
         serde = hdfs_table->get_serde_lib();
         input_format = hdfs_table->get_input_format();
+        serde_properties = hdfs_table->get_serde_properties();
     }
 
     std::map<std::string, std::string> jni_scanner_params;
@@ -613,6 +616,10 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     jni_scanner_params["serde"] = serde;
     jni_scanner_params["input_format"] = input_format;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+
+    for (const auto& pair : serde_properties) {
+        jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
+    }
 
     std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
 

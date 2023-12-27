@@ -388,6 +388,9 @@ struct THdfsTable {
 
     // hive table serde_lib
     9: optional string serde_lib
+
+    // hive table serde properties
+    10: optional map<string, string> serde_properties
 }
 
 struct TFileTable {

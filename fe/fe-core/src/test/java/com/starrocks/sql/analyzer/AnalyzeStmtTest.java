@@ -149,7 +149,7 @@ public class AnalyzeStmtTest {
                 return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
                         "hive", "tpch", "", 0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
-                        null, null);
+                        Maps.newHashMap(), null, null);
             }
         };
         String sql = "analyze table tpch.customer";
