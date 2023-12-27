@@ -171,7 +171,7 @@ public class QueryRuntimeProfile {
         return profileAlreadyReported;
     }
 
-    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+    public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
     }
 
@@ -265,6 +265,7 @@ public class QueryRuntimeProfile {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
+        Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
         if (topProfileSupplier != null && execPlan != null && connectContext != null &&
                 connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
@@ -276,8 +277,17 @@ public class QueryRuntimeProfile {
             ExecPlan plan = execPlan;
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            saveRunningProfile(profilingPlan, profile);
         }
+    }
+
+    public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
+        // topProfileSupplier may be null when the query is finished.
+        // And here to make sure that runtime profile won't overwrite the final profile
+        if (topProfileSupplier == null) {
+            return;
+        }
+        ProfileManager.getInstance().pushProfile(profilingPlan, profile);
     }
 
     public void finalizeProfile() {

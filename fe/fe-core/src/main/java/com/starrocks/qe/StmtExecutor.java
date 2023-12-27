@@ -633,8 +633,13 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-                        if (!needRetry && context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan);
+                        if (needRetry) {
+                            // If the runtime profile is enabled, then we need to clean up the profile record related
+                            // to this failed execution.
+                            String queryId = DebugUtil.printId(context.getExecutionId());
+                            ProfileManager.getInstance().removeProfile(queryId);
+                        } else if (context.isProfileEnabled()) {
+                            isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                 handleExplainStmt(ExplainAnalyzer.analyze(
@@ -881,10 +886,14 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private boolean tryProcessProfileAsync(ExecPlan plan) {
+    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
         if (coord == null || coord.getQueryProfile() == null) {
             return false;
         }
+
+        // Disable runtime profile processing after the query is finished.
+        coord.setTopProfileSupplier(null);
+
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
@@ -909,6 +918,9 @@ public class StmtExecutor {
             long totalTimeMs = now - startTime;
             summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+            if (retryIndex > 0) {
+                summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
+            }
 
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -1803,7 +1815,7 @@ public class StmtExecutor {
         } finally {
             boolean isAsync = false;
             if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan);
+                isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
