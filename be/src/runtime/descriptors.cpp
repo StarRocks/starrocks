@@ -176,6 +176,7 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hive_column_types = tdesc.hdfsTable.hive_column_types;
     _input_format = tdesc.hdfsTable.input_format;
     _serde_lib = tdesc.hdfsTable.serde_lib;
+    _serde_properties = tdesc.hdfsTable.serde_properties;
 }
 
 const std::string& HdfsTableDescriptor::get_hive_column_names() const {
@@ -192,6 +193,10 @@ const std::string& HdfsTableDescriptor::get_input_format() const {
 
 const std::string& HdfsTableDescriptor::get_serde_lib() const {
     return _serde_lib;
+}
+
+const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
+    return _serde_properties;
 }
 
 FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)

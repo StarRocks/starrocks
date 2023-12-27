@@ -223,12 +223,14 @@ public:
     const std::string& get_hive_column_types() const;
     const std::string& get_input_format() const;
     const std::string& get_serde_lib() const;
+    const std::map<std::string, std::string> get_serde_properties() const;
 
 private:
     std::string _serde_lib;
     std::string _input_format;
     std::string _hive_column_names;
     std::string _hive_column_types;
+    std::map<std::string, std::string> _serde_properties;
 };
 
 class IcebergTableDescriptor : public HiveTableDescriptor {

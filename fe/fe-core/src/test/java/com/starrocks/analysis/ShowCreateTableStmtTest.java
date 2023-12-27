@@ -130,7 +130,7 @@ public class ShowCreateTableStmtTest {
 
         HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
-                props, HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
+                props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
         GlobalStateMgr.getDdlStmt(table, result, null, null, false, true);
         Assert.assertEquals(result.size(), 1);
