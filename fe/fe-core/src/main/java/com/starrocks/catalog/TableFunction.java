@@ -88,6 +88,35 @@ public class TableFunction extends Function {
                     Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
             functionSet.addBuiltin(func);
         }
+<<<<<<< HEAD
+=======
+
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName("unnest_bitmap"),
+                Lists.newArrayList("unnest_bitmap"), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        functionSet.addBuiltin(funcUnnestBitmap);
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            // set default arguments' const expressions in order
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
+            try {
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // for both named arguments and positional arguments
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type), defaultArgs);
+            functionSet.addBuiltin(func);
+        }
+
+        TableFunction listRowsets = new TableFunction(new FunctionName("list_rowsets"),
+                Lists.newArrayList("id", "segments", "rows", "size", "overlapped", "delete_predicate"),
+                Lists.newArrayList(/*tablet_id*/Type.BIGINT, /*tablet_version*/Type.BIGINT),
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BOOLEAN, Type.STRING));
+        functionSet.addBuiltin(listRowsets);
+>>>>>>> 702adaa142 ([Feature] Add table function unnest_bitmap (#37729))
     }
 
     public List<Type> getTableFnReturnTypes() {

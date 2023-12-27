@@ -31,7 +31,11 @@ public:
 
     void set_offset(int offset) { this->_offset = offset; }
 
+<<<<<<< HEAD
     int get_offset() { return _offset; }
+=======
+    virtual void set_offset(int64_t offset) { this->_offset = offset; }
+>>>>>>> 702adaa142 ([Feature] Add table function unnest_bitmap (#37729))
 
     starrocks::Columns& get_columns() { return _columns; }
 
