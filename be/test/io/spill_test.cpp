@@ -552,6 +552,23 @@ TEST_F(SpillTest, partition_process) {
     }
 }
 
+TEST_F(SpillTest, aligned_buffer) {
+    spill::AlignedBuffer buffer;
+    ASSERT_EQ(buffer.data(), nullptr);
+    auto is_aligned = [](void* ptr, std::size_t alignment) {
+        return reinterpret_cast<uintptr_t>(ptr) % alignment == 0;
+    };
+    buffer.resize(1);
+    buffer.data()[0] = '@';
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(8192);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(1);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+}
+
 /*
 TEST_F(SpillTest, file_group_test) {
     auto chunk = std::make_unique<Chunk>();
