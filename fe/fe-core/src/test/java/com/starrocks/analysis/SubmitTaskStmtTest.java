@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -26,6 +27,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -148,14 +150,19 @@ public class SubmitTaskStmtTest {
     public void testSubmitWithWarehouse() throws Exception {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        // not exists
-        Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+        // not supported
+        Exception e = Assert.assertThrows(AnalysisException.class, () ->
                 starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
                         "insert into tbl1 select * from tbl1")
         );
-        Assert.assertEquals("warehouse not exists: w1", e.getMessage());
+        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter warehouse.", e.getMessage());
 
         // mock the warehouse
+        new MockUp<TaskAnalyzer>() {
+            @Mock
+            public void analyzeTaskProperties(Map<String, String> properties) {
+            }
+        };
         new MockUp<WarehouseManager>() {
             @Mock
             Warehouse getWarehouse(String name) {

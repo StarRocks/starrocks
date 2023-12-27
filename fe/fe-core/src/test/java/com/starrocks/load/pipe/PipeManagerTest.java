@@ -40,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -162,10 +163,14 @@ public class PipeManagerTest {
         String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
                 "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
-        Assert.assertEquals("Getting analyzing error. Detail message: " +
-                "Invalid parameter Warehouse not exists: w1.", e.getMessage());
+        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter w1.", e.getMessage());
 
         // mock the warehouse
+        new MockUp<PipeAnalyzer>() {
+            @Mock
+            public void analyzeWarehouseProperty(String warehouseName) {
+            }
+        };
         new MockUp<WarehouseManager>() {
             @Mock
             public boolean warehouseExists(String warehouseName) {
