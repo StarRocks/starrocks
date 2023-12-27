@@ -164,6 +164,12 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
 
+        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
+        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
+        runCtx.setThreadLocalInfo();
+        LOG.info("start to execute task run, task_id:{}, query_id:{}, thread_local_query_id:{}",
+                taskId, runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId());
+
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
 
@@ -188,6 +194,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
+        LOG.info("finished to execute task run, task_id:{}, query_id:{}, query_state:{}",
+                taskId, runCtx.getQueryId(), queryState);
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;

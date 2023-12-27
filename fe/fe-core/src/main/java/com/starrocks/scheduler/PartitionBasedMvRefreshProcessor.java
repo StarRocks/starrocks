@@ -98,7 +98,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -108,6 +108,7 @@ import java.util.stream.Collectors;
 public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
+    private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
     public static final String MV_ID = "mvId";
 
@@ -140,8 +141,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         prepare(context);
+
+        ConnectContext connectContext = context.getCtx();
         try {
             doMvRefresh(context);
+            connectContext.getState().setOk();
+        } catch (Throwable e) {
+            connectContext.getState().setError(e.getMessage());
+            throw e;
         } finally {
             postProcess();
         }
@@ -181,7 +188,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 checked = true;
                 partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (partitionsToRefresh.isEmpty()) {
-                    LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
+                    LOG.info("no partitions to refresh for materialized view {}, query_id:{}",
+                            materializedView.getName(), mvContext.getCtx().getQueryId());
                     return;
                 }
                 // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
@@ -226,7 +234,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
-        ctx.setThreadLocalInfo();
 
         // 3. AST
         InsertStmt insertStmt = generateInsertAst(mvToRefreshedPartitions, materializedView, ctx);
@@ -240,6 +247,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             insertStmt =
                     analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
             execPlan = StatementPlanner.plan(insertStmt, ctx);
+            if (mvContext.getCtx().getSessionVariable().isEnableOptimizerTraceLog()) {
+                StringBuffer sb = new StringBuffer();
+                sb.append(String.format("[TRACE QUERY] MV: %s\n", materializedView.getName()));
+                sb.append(String.format("MV PartitionsToRefresh: %s \n", Joiner.on(",").join(mvToRefreshedPartitions)));
+                sb.append(String.format("Base PartitionsToScan:%s\n", refTablePartitionNames));
+                sb.append("Insert Plan:\n");
+                sb.append(execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE));
+                LOG.info(sb.toString());
+            }
+            LOG.info("[MV FINAL PLAN] Materialized view {} partitions to refresh:{}, ref base partitions:{}, query_id:{}",
+                    materializedView.getName(), Joiner.on(",").join(mvToRefreshedPartitions, ctx.getQueryId()),
+                    refTablePartitionNames);
         } catch (Throwable e) {
             LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
             throw e;
@@ -790,7 +809,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
         ctx.getPlannerProfile().reset();
-        ctx.setThreadLocalInfo();
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
@@ -1020,11 +1038,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
-        ctx.setStmtId(new AtomicInteger().incrementAndGet());
+        ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        LOG.info("start to refresh materialized view {}, query_id:{}", materializedView.getName(),
+                ctx.getQueryId());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } finally {
+            LOG.info("finished to refresh materialized view {}, query_id:{}", materializedView.getName(),
+                    ctx.getQueryId());
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
