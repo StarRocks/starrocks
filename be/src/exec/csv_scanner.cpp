@@ -549,9 +549,8 @@ Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
     CSVReader::Fields fields;
     _curr_reader->split_record(record, &fields);
     for (size_t i = 0; i < fields.size(); i++) {
-        std::ostringstream os;
-        os << "$" << i;
-        schema->emplace_back(SlotDescriptor(i, os.str(), get_type_desc(fields[i])));
+        // column name: $1, $2, $3...
+        schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
     }
     return Status::OK();
 }

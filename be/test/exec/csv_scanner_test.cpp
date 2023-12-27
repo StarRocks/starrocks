@@ -27,6 +27,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -1027,6 +1028,28 @@ TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     rfile.close();
 
     (void)fs::remove(log_file_path);
+}
+
+TEST_P(CSVScannerTest, test_get_schema) {
+    std::vector<std::pair<std::string, LogicalType>> expected_schema = {
+            {"$1", TYPE_BIGINT}, {"$2", TYPE_VARCHAR}, {"$3", TYPE_DOUBLE}, {"$4", TYPE_BOOLEAN}};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file22");
+    range.__set_num_of_columns_from_file(0);
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner({}, ranges, "\n", ",");
+    ASSERT_OK(scanner->open());
+    std::vector<SlotDescriptor> schema;
+    ASSERT_OK(scanner->get_schema(&schema));
+    ASSERT_EQ(expected_schema.size(), schema.size());
+
+    for (size_t i = 0; i < schema.size(); i++) {
+        EXPECT_EQ(expected_schema[i].first, schema[i].col_name());
+        EXPECT_EQ(expected_schema[i].second, schema[i].type().type);
+    }
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
