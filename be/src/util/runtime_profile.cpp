@@ -39,18 +39,12 @@
 #include <iostream>
 #include <memory>
 #include <queue>
-#include <unordered_set>
 #include <utility>
 
-#include "common/config.h"
 #include "common/object_pool.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
-#include "util/debug_util.h"
-#include "util/monotime.h"
 #include "util/pretty_printer.h"
-#include "util/thread.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -71,7 +65,6 @@ const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
           _pool(new ObjectPool()),
-          _own_pool(false),
           _name(std::move(name)),
           _metadata(-1),
           _is_averaged_profile(is_averaged_profile),
