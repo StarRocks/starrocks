@@ -283,9 +283,9 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                              const Status& status, bool done, bool attach_profile) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
-    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+    ObjectPool obj_pool;
     if (attach_profile) {
-        profile = _build_merged_instance_profile(query_ctx, fragment_ctx, obj_pool.get());
+        profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
         auto* query_peak_memory = profile->add_counter(
@@ -331,8 +331,6 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         } else {
             LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
         }
-        // Force lambda capture obj_pool to take over the ownership of the object pool.
-        obj_pool->clear();
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
