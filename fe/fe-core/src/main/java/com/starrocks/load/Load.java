@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1202,6 +1203,42 @@ public class Load {
         dos.writeInt(deleteJobSize);
 
         return checksum;
+    }
+    public static class CSVOptions {
+        public String columnSeparator = "\t";
+        public String rowDelimiter = "\n";
+    }
+
+    public static TFileFormatType getFormatType(String fileFormat, String path) {
+        if (fileFormat != null) {
+            if (fileFormat.toLowerCase().equals("parquet")) {
+                return TFileFormatType.FORMAT_PARQUET;
+            } else if (fileFormat.toLowerCase().equals("orc")) {
+                return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
+            }
+            // Attention: The compression type of csv format is from the suffix of filename.
+        }
+
+        String lowerCasePath = path.toLowerCase();
+        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
+            return TFileFormatType.FORMAT_PARQUET;
+        } else if (lowerCasePath.endsWith(".orc")) {
+            return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".gz")) {
+            return TFileFormatType.FORMAT_CSV_GZ;
+        } else if (lowerCasePath.endsWith(".bz2")) {
+            return TFileFormatType.FORMAT_CSV_BZ2;
+        } else if (lowerCasePath.endsWith(".lz4")) {
+            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
+        } else if (lowerCasePath.endsWith(".deflate")) {
+            return TFileFormatType.FORMAT_CSV_DEFLATE;
+        } else if (lowerCasePath.endsWith(".zst")) {
+            return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else {
+            return TFileFormatType.FORMAT_CSV_PLAIN;
+        }
     }
 
 }

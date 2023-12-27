@@ -219,7 +219,7 @@ public class FileScanNode extends LoadScanNode {
             // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
-            TFileFormatType format = formatType(context.fileGroup.getFileFormat(), "");
+            TFileFormatType format = Load.getFormatType(context.fileGroup.getFileFormat(), "");
             initParams(context);
             paramCreateContexts.add(context);
         }
@@ -536,37 +536,6 @@ public class FileScanNode extends LoadScanNode {
         Collections.shuffle(nodes, random);
     }
 
-    private TFileFormatType formatType(String fileFormat, String path) {
-        if (fileFormat != null) {
-            if (fileFormat.toLowerCase().equals("parquet")) {
-                return TFileFormatType.FORMAT_PARQUET;
-            } else if (fileFormat.toLowerCase().equals("orc")) {
-                return TFileFormatType.FORMAT_ORC;
-            } else if (fileFormat.toLowerCase().equals("json")) {
-                return TFileFormatType.FORMAT_JSON;
-            }
-            // Attention: The compression type of csv format is from the suffix of filename.
-        }
-
-        String lowerCasePath = path.toLowerCase();
-        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
-            return TFileFormatType.FORMAT_PARQUET;
-        } else if (lowerCasePath.endsWith(".orc")) {
-            return TFileFormatType.FORMAT_ORC;
-        } else if (lowerCasePath.endsWith(".gz")) {
-            return TFileFormatType.FORMAT_CSV_GZ;
-        } else if (lowerCasePath.endsWith(".bz2")) {
-            return TFileFormatType.FORMAT_CSV_BZ2;
-        } else if (lowerCasePath.endsWith(".lz4")) {
-            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
-        } else if (lowerCasePath.endsWith(".deflate")) {
-            return TFileFormatType.FORMAT_CSV_DEFLATE;
-        } else if (lowerCasePath.endsWith(".zst")) {
-            return TFileFormatType.FORMAT_CSV_ZSTD;
-        } else {
-            return TFileFormatType.FORMAT_CSV_PLAIN;
-        }
-    }
 
     // If fileFormat is not null, we use fileFormat instead of check file's suffix
     private void processFileGroup(
@@ -585,7 +554,7 @@ public class FileScanNode extends LoadScanNode {
         long curFileOffset = 0;
         for (int i = 0; i < fileStatuses.size(); ) {
             TBrokerFileStatus fileStatus = fileStatuses.get(i);
-            TFileFormatType formatType = formatType(context.fileGroup.getFileFormat(), fileStatus.path);
+            TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();

@@ -23,7 +23,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.load.FormatOptions;
+import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.rpc.BackendServiceClient;
@@ -92,6 +92,7 @@ public class TableFunctionTable extends Table {
 
     private String path;
     private String format;
+    TFileFormatType tFormat;
     private String compressionType;
 
     private int autoDetectSampleFiles;
@@ -102,7 +103,7 @@ public class TableFunctionTable extends Table {
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
 
-    private FormatOptions.CSVOptions csvOptions = new FormatOptions.CSVOptions();
+    private Load.CSVOptions csvOptions = new Load.CSVOptions();
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -298,25 +299,10 @@ public class TableFunctionTable extends Table {
         brokerScanRange.setParams(params);
         brokerScanRange.setBroker_addresses(Lists.newArrayList());
 
-        TFileFormatType fileFormat;
-        switch (format.toLowerCase()) {
-            case "parquet":
-                fileFormat = TFileFormatType.FORMAT_PARQUET;
-                break;
-            case "orc":
-                fileFormat = TFileFormatType.FORMAT_ORC;
-                break;
-            case "csv":
-                fileFormat = TFileFormatType.FORMAT_CSV_PLAIN;
-                break;
-            default:
-                throw new TException("unsupported format: " + format);
-        }
-
         for (int i = 0; i < filelist.size(); ++i) {
             TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
             rangeDesc.setFile_type(TFileType.FILE_BROKER);
-            rangeDesc.setFormat_type(fileFormat);
+            rangeDesc.setFormat_type(Load.getFormatType(format, filelist.get(i).path));
             rangeDesc.setPath(filelist.get(i).path);
             rangeDesc.setSplittable(filelist.get(i).isSplitable);
             rangeDesc.setStart_offset(0);
@@ -438,7 +424,7 @@ public class TableFunctionTable extends Table {
         return writeSingleFile;
     }
 
-    public FormatOptions.CSVOptions getCsvOptions() {
+    public Load.CSVOptions getCsvOptions() {
         return csvOptions;
     }
 }
