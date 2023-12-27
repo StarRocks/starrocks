@@ -92,39 +92,6 @@ LatestSourcePosition: {"0":"6"}
 1 row in set (0.01 sec)
 ```
 
-<<<<<<< HEAD
-2. 展示名称为 test1 的当前正在运行的例行导入作业。
-
-    ```sql
-    SHOW ROUTINE LOAD FOR test1;
-    ```
-
-3. 显示 example_db 下，所有的例行导入作业（包括已停止或取消的作业）。结果为一行或多行。
-
-    ```sql
-    use example_db;
-    SHOW ALL ROUTINE LOAD;
-    ```
-
-4. 显示 example_db 下，所有正在运行的例行导入作业。
-
-    ```sql
-    use example_db;
-    SHOW ROUTINE LOAD;
-    ```
-
-5. 显示 example_db 下，名称为 test1 的当前正在运行的例行导入作业。
-
-    ```sql
-    SHOW ROUTINE LOAD FOR example_db.test1;
-    ```
-
-6. 显示 example_db 下，名称为 test1 的所有例行导入作业（包括已停止或取消的作业）。结果为一行或多行。
-
-    ```sql
-    SHOW ALL ROUTINE LOAD FOR example_db.test1;
-    ```
-=======
 如果导入作业因异常而处于 `PAUSED` 或者 `CANCELLED` 状态，您可以根据返回结果中的 `ReasonOfStateChanged`、`ErrorLogUrls` 、`TrackingSQL` 和 `OtherMsg` 排查具体原因。
 
 ```SQL
