@@ -298,6 +298,8 @@ public:
 
     int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
+    int32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
+
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }

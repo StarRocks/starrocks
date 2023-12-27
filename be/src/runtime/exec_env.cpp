@@ -665,6 +665,15 @@ int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     return std::max<int32_t>(1, _max_executor_threads / 2);
 }
 
+int32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
+    if (pipeline_sink_dop > 0) {
+        return pipeline_sink_dop;
+    }
+
+    // Default sink dop is the number of hardware threads.
+    return std::max<int32_t>(1, _max_executor_threads);
+}
+
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
 }
