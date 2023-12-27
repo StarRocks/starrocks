@@ -670,8 +670,9 @@ int32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
         return pipeline_sink_dop;
     }
 
-    // Default sink dop is the number of hardware threads.
-    return std::max<int32_t>(1, _max_executor_threads);
+    // Default sink dop is the number of hardware threads with a cap of 64.
+    auto dop = std::max<int32_t>(1, _max_executor_threads);
+    return std::min<int32_t>(dop, 64);
 }
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
