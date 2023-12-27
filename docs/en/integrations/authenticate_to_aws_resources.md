@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: AWS
+description: "This topic describes how to authenticate with AWS"
 ---
 
 # Authenticate to AWS resources
