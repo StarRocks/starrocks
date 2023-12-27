@@ -934,6 +934,9 @@ CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
+CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
+CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
+CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
