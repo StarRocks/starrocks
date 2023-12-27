@@ -293,14 +293,6 @@ public class AnalyzeInsertTest {
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                        "\t\"format\"=\"parquet\" ) \n" +
-                        "select \"abc\" as k1",
-                "compression is a mandatory property. " +
-                "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4).");
-
-        analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
