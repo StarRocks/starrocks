@@ -62,15 +62,6 @@ public:
         NgramHash cur_hash;
         size_t i;
         const char* ptr = haystack.get_data();
-        std::memset(map_memo, 0, map_size * sizeof(NgramHash));
-
-        // only for test
-        std::unique_ptr<NgramHash[]> checkMap(new NgramHash[map_size]);
-        NgramHash* checkMapPtr;
-        if constexpr (need_recovery_map) {
-            checkMapPtr = checkMap.get();
-            std::memcpy(checkMapPtr, map, map_size * sizeof(NgramHash));
-        }
 
         for (i = 0; i + N <= haystack_length; i++) {
             cur_hash = getAsciiHash(ptr + i);
@@ -85,14 +76,9 @@ public:
         }
 
         if constexpr (need_recovery_map) {
-            bool isTest = true;
             for (int j = 0; j < i; j++) {
                 if (map_memo[j]) {
                     map[map_memo[j]]++;
-                }
-            }
-            if (std::memcmp(map, checkMapPtr, map_size) != 0) {
-                while (isTest) {
                 }
             }
         }
@@ -134,8 +120,6 @@ public:
                     calculateDistanceWithHaystack<true>(map.get(), cur_haystack_str, memo.get(), needle_gram_count);
             float row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
 
-            LOG(INFO) << "needle_not_overlap_with_haystack: " << needle_not_overlap_with_haystack
-                      << "\nneedle_gram_count:" << needle_gram_count;
             res->get_data()[i] = row_result;
         }
 
@@ -168,8 +152,6 @@ public:
         size_t needle_not_overlap_with_haystack =
                 calculateDistanceWithHaystack<false>(hash.get(), cur_haystack, nullptr, needle_gram_count);
         float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
-        LOG(INFO) << "needle_not_overlap_with_haystack: " << needle_not_overlap_with_haystack
-                  << "\nneedle_gram_count:" << needle_gram_count;
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_ptr->size());
     }
