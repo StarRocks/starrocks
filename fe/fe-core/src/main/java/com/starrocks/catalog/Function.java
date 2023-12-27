@@ -278,7 +278,7 @@ public class Function implements Writable {
 
     public void setArgNames(List<String> names) {
         if (names != null) {
-            argNames = names.toArray(String[]::new);
+            argNames = names.toArray(new String[0]);
             Preconditions.checkState(argNames.length == argTypes.length);
         }
     }
