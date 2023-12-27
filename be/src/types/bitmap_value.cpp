@@ -863,8 +863,9 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        raw::make_room(array, _bitmap->cardinality());
-        _bitmap->toUint64Array((uint64_t*)(*array).data());
+        size_t cur_size = array->size();
+        array->resize(cur_size + _bitmap->cardinality());
+        _bitmap->toUint64Array((uint64_t*)(*array).data() + cur_size);
         break;
     }
     case SET:

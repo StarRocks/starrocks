@@ -709,6 +709,21 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     for (size_t i = 0; i < 64; i++) {
         ASSERT_EQ(array_4[i], i);
     }
+
+    // append multi times
+    std::vector<int64_t> array_5;
+    _large_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 64);
+
+    auto new_bitmap = gen_bitmap(100, 200);
+    new_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 164);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(array_5[i], i);
+    }
+    for (size_t i = 64; i < 164; i++) {
+        ASSERT_EQ(array_5[i], i + 36);
+    }
 }
 
 TEST_F(BitmapValueTest, bitmap_compress) {
