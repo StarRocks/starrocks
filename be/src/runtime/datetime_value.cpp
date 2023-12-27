@@ -137,7 +137,8 @@ bool JodaFormat::prepare(std::string_view format) {
             ++repeat_count;
         }
 
-        switch (*ptr) {
+        char ch = *ptr;
+        switch (ch) {
         case joda::JodaFormatChar::ERA:
         case joda::JodaFormatChar::CENURY:
             // NOT SUPPORTED
@@ -310,16 +311,16 @@ bool JodaFormat::prepare(std::string_view format) {
         }
         case joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY:
         case joda::JodaFormatChar::CLOCKHOUR_OF_DAY:
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 23)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 24)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 11)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 12)) {
                     return false;
                 }
                 _hour = int_value;
@@ -330,16 +331,16 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         case joda::JodaFormatChar::HOUR_OF_HALFDAY:
         case joda::JodaFormatChar::HOUR_OF_DAY: {
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 24)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 23)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 12)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 11)) {
                     return false;
                 }
 
@@ -403,7 +404,6 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         }
         default: {
-            char ch = *ptr;
             _token_parsers.emplace_back([&, ch]() {
                 if (ch != *val) {
                     return false;
