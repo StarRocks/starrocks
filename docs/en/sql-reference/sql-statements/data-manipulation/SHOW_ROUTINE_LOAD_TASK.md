@@ -4,17 +4,14 @@ displayed_sidebar: "English"
 
 # SHOW ROUTINE LOAD TASK
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
-
 ## Description
 
 Shows the execution information of load tasks within a Routine Load job.
 
 :::note
 
-- <RoutineLoadPrivNote />
+For the relationship between a Routine Load job and the load tasks in it, see [Load data using Routine Load](../../../loading/RoutineLoad.md#basic-concepts)
 
-- For the relationship between a Routine Load job and the load tasks in it, see [Load data using Routine Load](../../../loading/RoutineLoad.md#basic-concepts)
 :::
 
 ## Syntax
