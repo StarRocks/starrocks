@@ -265,34 +265,14 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
-            if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                String dbName = stmt.getDbName();
-                String tableName = stmt.getTableName();
-                String existedCatalogName = stmt.getExistedCatalogName();
-                String existedDbName = stmt.getExistedDbName();
-                String existedTableName = stmt.getExistedTableName();
-
-                if (getDb(catalogName, dbName) == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-                }
-                if (!catalogName.equals(existedCatalogName)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, String.format(
-                            "Failed to create table %s.%s.%s. msg: Like table across catalogs is not supported",
-                            catalogName, dbName, tableName));
-                }
-                if (tableExists(catalogName, dbName, tableName)) {
-                    if (stmt.isSetIfNotExists()) {
-                        LOG.info("create table[{}] which already exists", tableName);
-                        return;
-                    } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
-                    }
-                }
-
-                if (!tableExists(existedCatalogName, existedDbName, existedTableName)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE,
-                            String.format("Failed to create table %s.%s. msg: Like table %s.%s doesn't exist",
-                                    dbName, tableName, existedDbName, existedTableName));
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (tableExists(catalogName, dbName, tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
             }
             connectorMetadata.get().createTableLike(stmt);
