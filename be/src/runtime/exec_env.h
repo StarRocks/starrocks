@@ -296,9 +296,9 @@ public:
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
-    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
+    uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
-    int32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
+    uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 

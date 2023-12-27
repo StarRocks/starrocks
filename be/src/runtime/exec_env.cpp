@@ -656,23 +656,23 @@ void ExecEnv::wait_for_finish() {
     _wait_for_fragments_finish();
 }
 
-int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+uint32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     if (pipeline_dop > 0) {
         return pipeline_dop;
     }
 
     // Default dop is a half of the number of hardware threads.
-    return std::max<int32_t>(1, _max_executor_threads / 2);
+    return std::max<uint32_t>(1, _max_executor_threads / 2);
 }
 
-int32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
+uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
     if (pipeline_sink_dop > 0) {
         return pipeline_sink_dop;
     }
 
     // Default sink dop is the number of hardware threads with a cap of 64.
-    auto dop = std::max<int32_t>(1, _max_executor_threads);
-    return std::min<int32_t>(dop, 64);
+    auto dop = std::max<uint32_t>(1, _max_executor_threads);
+    return std::min<uint32_t>(dop, 64);
 }
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
