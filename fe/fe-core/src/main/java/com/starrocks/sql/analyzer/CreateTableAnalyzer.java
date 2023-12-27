@@ -46,6 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -168,23 +169,22 @@ public class CreateTableAnalyzer {
         KeysDesc keysDesc = statement.getKeysDesc();
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
-            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
-                NodePosition keysPos = NodePosition.ZERO;
-                if (keysDesc != null) {
-                    keysPos = keysDesc.getPos();
+            List<String> columnNames = 
+                    statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+            for (String column : statement.getSortKeys()) {
+                int idx = columnNames.indexOf(column);
+                if (idx == -1) {
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
-                throw new SemanticException("only primary key support sort key", keysPos);
-            } else {
-                List<String> columnNames =
-                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
-
-                for (String column : statement.getSortKeys()) {
-                    int idx = columnNames.indexOf(column);
-                    if (idx == -1) {
-                        throw new SemanticException("Unknown column '%s' does not exist", column);
-                    }
-                    sortKeyIdxes.add(idx);
+                sortKeyIdxes.add(idx);
+            }
+        } else {
+            int cid = 0;
+            for (Column col : statement.getColumns()) {
+                if (col.isKey()) {
+                    sortKeyIdxes.add(cid);
                 }
+                cid++;
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
@@ -455,6 +455,14 @@ public class CreateTableAnalyzer {
 
                 if (column.isGeneratedColumn()) {
                     Expr expr = column.generatedColumnExpr();
+
+                    List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
+                    expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
+                    if (dictionaryGetExprs.size() != 0) {
+                        for (DictionaryGetExpr dictionaryGetExpr : dictionaryGetExprs) {
+                            dictionaryGetExpr.setSkipStateCheck(true);
+                        }
+                    }
 
                     ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(columns.stream().map(col -> new Field(

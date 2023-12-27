@@ -161,7 +161,7 @@ Status LakeSnapshotLoader::upload(const ::starrocks::lake::UploadSnapshotsReques
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
-           << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -257,7 +257,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
-           << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }

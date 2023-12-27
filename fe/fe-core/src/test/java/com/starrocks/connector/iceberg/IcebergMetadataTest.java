@@ -14,16 +14,20 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
@@ -31,14 +35,25 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -188,6 +203,33 @@ public class IcebergMetadataTest extends TableTestBase {
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
+    }
+
+    @Test
+    public void testIcebergHiveCatalogTableExists(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.tableExists("db", "tbl");
+                result = true;
+                minTimes = 0;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        Assert.assertTrue(metadata.tableExists("db", "tbl"));
+    }
+
+    @Test
+    public void testIcebergCatalogTableExists(@Mocked IcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable("db", "tbl");
+                result = null;
+                minTimes = 0;
+            }
+        };
+        MockIcebergCatalog mockIcebergCatalog = new MockIcebergCatalog();
+        Assert.assertTrue(mockIcebergCatalog.tableExists("db", "tbl"));
     }
 
     @Test
@@ -1002,6 +1044,48 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetPartitions1() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitions.size());
+    }
+
+    @Test
+    public void testGetPartitions2() {
+        mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableG, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, Lists.newArrayList());
+        Assert.assertEquals(1, partitions.size());
+    }
+
+    @Test
     public void testRefreshTableException(@Mocked CachingIcebergCatalog icebergCatalog) {
         new Expectations() {
             {
@@ -1015,5 +1099,56 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        TableName tableName = new TableName("db", "tbl");
+        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
+        AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
+
+        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
+        List<ColumnDef> cols = new ArrayList<>();
+        cols.add(c2);
+        cols.add(c3);
+        AddColumnsClause addColumnsClause = new AddColumnsClause(cols, null, new HashMap<>());
+
+        List<AlterClause> clauses = Lists.newArrayList();
+        clauses.add(addColumnClause);
+        clauses.add(addColumnsClause);
+        AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
+        metadata.alterTable(stmt);
+        clauses.clear();
+
+        // must be default null
+        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
+        clauses.add(addC4);
+        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(stmtC4));
+        clauses.clear();
+
+        // drop/rename/modify column
+        DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
+        ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
+        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
+        Map<String, String> properties = new HashMap<>();
+        ModifyColumnClause modifyColumnClause =
+                new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);
+        clauses.add(dropColumnClause);
+        clauses.add(columnRenameClause);
+        clauses.add(modifyColumnClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // unsupported alter operation
+        clauses.clear();
+        TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
+        clauses.add(tableRenameClause);
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }

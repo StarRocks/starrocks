@@ -26,6 +26,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -72,20 +73,19 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
         connectContext.getSessionVariable().setEnableShortCircuit(false);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -135,9 +135,15 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private Exception exception;
         private String properties;
         private String traceLog;
+        private boolean isLogical;
 
         public MVRewriteChecker(String query) {
+            this(query, false);
+        }
+
+        public MVRewriteChecker(String query, boolean isLogical) {
             this.query = query;
+            this.isLogical = isLogical;
         }
 
         public MVRewriteChecker(String mv, String query) {
@@ -172,7 +178,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
                 Pair<ExecPlan, String> planAndTrace =
                         UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
-                this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                if (isLogical) {
+                    this.rewritePlan = planAndTrace.first.getExplainString(StatementBase.ExplainLevel.LOGICAL);
+                } else {
+                    this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                }
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
+                }
                 this.traceLog = planAndTrace.second;
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
@@ -286,6 +299,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
     protected MVRewriteChecker sql(String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(query);
+        return fixture.rewrite();
+    }
+
+    protected MVRewriteChecker sql(String query, boolean isLogical) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query, isLogical);
         return fixture.rewrite();
     }
 

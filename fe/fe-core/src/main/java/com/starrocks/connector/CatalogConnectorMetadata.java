@@ -112,6 +112,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.tableExists(dbName, tblName);
+    }
+
+    @Override
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         return normal.getMaterializedViewIndex(dbName, tblName);
     }
@@ -276,5 +282,10 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
+    }
+
+    @Override
+    public List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
+        return normal.getChangedPartitionInfo(table, mvSnapShotID);
     }
 }

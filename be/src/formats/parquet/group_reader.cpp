@@ -522,8 +522,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
@@ -565,8 +564,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }

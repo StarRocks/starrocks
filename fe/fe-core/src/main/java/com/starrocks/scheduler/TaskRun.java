@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -47,6 +48,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    public static final String IS_TEST = "__IS_TEST__";
 
     private long taskId;
 
@@ -68,8 +70,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ExecuteOption executeOption;
 
+    private final String uuid;
+
     TaskRun() {
         future = new CompletableFuture<>();
+        uuid = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -175,6 +180,12 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
 
+        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
+        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
+        runCtx.setThreadLocalInfo();
+        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}",
+                runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId);
+
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
 
@@ -200,6 +211,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
+        LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
+                runCtx.getQueryId(), taskId, queryState);
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;
@@ -291,6 +304,9 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (status.getDefinition() == null) {
+            return false;
+        }
         TaskRun taskRun = (TaskRun) o;
         return status.getDefinition().equals(taskRun.getStatus().getDefinition());
     }
@@ -304,10 +320,11 @@ public class TaskRun implements Comparable<TaskRun> {
     public String toString() {
         return "TaskRun{" +
                 "taskId=" + taskId +
-                ", properties=" + properties +
-                ", task=" + task +
-                ", status=" + status +
                 ", type=" + type +
+                ", uuid=" + uuid +
+                ", task_state=" + status.getState() +
+                ", properties=" + properties +
+                ", extra_message =" + status.getExtraMessage() +
                 '}';
     }
 }

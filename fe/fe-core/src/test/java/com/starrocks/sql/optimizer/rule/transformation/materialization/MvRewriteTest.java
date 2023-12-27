@@ -27,20 +27,25 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteTest extends MvRewriteTestBase {
 
     @BeforeClass
@@ -93,10 +98,31 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k1);");
 
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl_for_view (\n" +
+                " k1 date NOT NULL,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(k1)\n" +
+                " (\n" +
+                "   PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "   PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "   PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "   PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "   PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "   PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+
         cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
                 "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
                 "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
                 "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+
+        cluster.runSql("test", "insert into test_partition_tbl_for_view values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2),\n" +
+                "(\"2020-03-11\",1,1),(\"2020-04-11\",1,2),(\"2020-05-11\",2,1),(\"2020-05-11\",2,2);");
     }
 
     @Test
@@ -894,114 +920,110 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPkFk() throws SQLException {
-        cluster.runSql("test", "CREATE TABLE test.parent_table1(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n," +
-                "\"unique_constraints\" = \"k1,k2\"\n" +
-                ");");
+        starRocksAssert.withTables(List.of(
+                        new MTable("parent_table1", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'unique_constraints' = 'k1,k2'"
+                        ),
+                        new MTable("parent_table2", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'unique_constraints' = 'k1,k2'"
+                        ),
+                        new MTable(
+                                "base_table1", "k1",
+                                List.of(
+                                        "k1 INT",
+                                        "k2 VARCHAR(20)",
+                                        "k3 INT",
+                                        "k4 VARCHAR(20)",
+                                        "k5 INT",
+                                        "k6 VARCHAR(20)",
+                                        "k7 INT",
+                                        "k8 VARCHAR(20)",
+                                        "k9 INT",
+                                        "k10 VARCHAR(20)"
+                                )
+                        ).withProperties(
+                                "'foreign_key_constraints' = '(k3,k4) REFERENCES parent_table1(k1, k2)'"
+                        )
+                ),
+                () -> {
+                    OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
+                    Assert.assertNotNull(olapTable.getUniqueConstraints());
+                    Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
+                    UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
+                    Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
+                    Assert.assertEquals("k1", uniqueConstraint.getUniqueColumns().get(0));
+                    Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
 
-        cluster.runSql("test", "CREATE TABLE test.parent_table2(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n," +
-                "\"unique_constraints\" = \"k1,k2\"\n" +
-                ");");
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
+                    Assert.assertNotNull(olapTable.getUniqueConstraints());
+                    Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
+                    UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
+                    Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
+                    Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumns().get(0));
+                    Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumns().get(1));
 
-        OlapTable olapTable = (OlapTable) getTable("test", "parent_table1");
-        Assert.assertNotNull(olapTable.getUniqueConstraints());
-        Assert.assertEquals(1, olapTable.getUniqueConstraints().size());
-        UniqueConstraint uniqueConstraint = olapTable.getUniqueConstraints().get(0);
-        Assert.assertEquals(2, uniqueConstraint.getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint.getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.getUniqueColumns().get(1));
+                    UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
+                    Assert.assertEquals(1, uniqueConstraint3.getUniqueColumns().size());
+                    Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumns().get(0));
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2; k3; k4\")");
-        Assert.assertNotNull(olapTable.getUniqueConstraints());
-        Assert.assertEquals(3, olapTable.getUniqueConstraints().size());
-        UniqueConstraint uniqueConstraint2 = olapTable.getUniqueConstraints().get(0);
-        Assert.assertEquals(2, uniqueConstraint2.getUniqueColumns().size());
-        Assert.assertEquals("k1", uniqueConstraint2.getUniqueColumns().get(0));
-        Assert.assertEquals("k2", uniqueConstraint2.getUniqueColumns().get(1));
+                    UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
+                    Assert.assertEquals(1, uniqueConstraint4.getUniqueColumns().size());
+                    Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
 
-        UniqueConstraint uniqueConstraint3 = olapTable.getUniqueConstraints().get(1);
-        Assert.assertEquals(1, uniqueConstraint3.getUniqueColumns().size());
-        Assert.assertEquals("k3", uniqueConstraint3.getUniqueColumns().get(0));
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
+                    Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
 
-        UniqueConstraint uniqueConstraint4 = olapTable.getUniqueConstraints().get(2);
-        Assert.assertEquals(1, uniqueConstraint4.getUniqueColumns().size());
-        Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
+                    cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
-        Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
+                    ;
+                    OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
+                    Assert.assertNotNull(baseTable.getForeignKeyConstraints());
+                    List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
+                    Assert.assertEquals(1, foreignKeyConstraints.size());
+                    BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
+                    Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
+                    Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
+                    Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
 
-        cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
+                    cluster.runSql("test", "alter table base_table1 set(" +
+                            "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
+                            "(k5,k6) REFERENCES parent_table2(k1, k2)\")");
 
-        cluster.runSql("test", "CREATE TABLE test.base_table1(\n" +
-                "k1 INT,\n" +
-                "k2 VARCHAR(20),\n" +
-                "k3 INT,\n" +
-                "k4 VARCHAR(20),\n" +
-                "k5 INT,\n" +
-                "k6 VARCHAR(20),\n" +
-                "k7 INT,\n" +
-                "k8 VARCHAR(20),\n" +
-                "k9 INT,\n" +
-                "k10 VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(k1)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k1, k2)\"\n" +
-                ");");
-        OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
-        Assert.assertNotNull(baseTable.getForeignKeyConstraints());
-        List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
-        Assert.assertEquals(1, foreignKeyConstraints.size());
-        BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
-        Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
-        Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
-        Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
+                    List<ForeignKeyConstraint> foreignKeyConstraints2 = baseTable.getForeignKeyConstraints();
+                    Assert.assertEquals(2, foreignKeyConstraints2.size());
+                    BaseTableInfo parentTableInfo2 = foreignKeyConstraints2.get(1).getParentTableInfo();
+                    OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
+                    Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
+                    Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
+                    Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
 
-        cluster.runSql("test", "alter table base_table1 set(" +
-                "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
-                "(k5,k6) REFERENCES parent_table2(k1, k2)\")");
-
-        List<ForeignKeyConstraint> foreignKeyConstraints2 = baseTable.getForeignKeyConstraints();
-        Assert.assertEquals(2, foreignKeyConstraints2.size());
-        BaseTableInfo parentTableInfo2 = foreignKeyConstraints2.get(1).getParentTableInfo();
-        OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
-        Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
-        Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
-        Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
-        Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
-        Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
-        Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
-
-        cluster.runSql("test", "show create table base_table1");
-        cluster.runSql("test", "alter table base_table1 set(" +
-                "\"foreign_key_constraints\"=\"\")");
-        List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
-        Assert.assertNull(foreignKeyConstraints3);
+                    cluster.runSql("test", "show create table base_table1");
+                    cluster.runSql("test", "alter table base_table1 set(" +
+                            "\"foreign_key_constraints\"=\"\")");
+                    List<ForeignKeyConstraint> foreignKeyConstraints3 = baseTable.getForeignKeyConstraints();
+                    Assert.assertNull(foreignKeyConstraints3);
+                }
+        );
     }
 
     @Test
@@ -1697,14 +1719,17 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "agg_join_mv_1");
-            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
-            Assert.assertNotNull(planContext);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
-            Assert.assertNotNull(planContext);
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
-            Assert.assertNotNull(planContext);
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
             starRocksAssert.dropMaterializedView("agg_join_mv_1");
         }
 
@@ -1716,8 +1741,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
             starRocksAssert.withMaterializedView(mvSql);
 
             MaterializedView mv = getMv("test", "mv_with_window");
-            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
-            Assert.assertNotNull(planContext);
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
             Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
             starRocksAssert.dropMaterializedView("mv_with_window");
         }
@@ -1735,8 +1761,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 starRocksAssert.withMaterializedView(mvSql);
 
                 MaterializedView mv = getMv("test", mvName);
-                MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
-                Assert.assertNotNull(planContext);
+                List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                Assert.assertNotNull(planContexts);
+                Assert.assertNotNull(planContexts.size() == 1);
             }
             for (int i = 0; i < testSize; i++) {
                 String mvName = "plan_cache_mv_" + i;
@@ -1919,5 +1946,30 @@ public class MvRewriteTest extends MvRewriteTestBase {
             Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
             Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
         }
+    }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
+                SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
     }
 }

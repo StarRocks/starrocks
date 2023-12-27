@@ -531,10 +531,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Table getTable(String tableName) {
-        if (nameToTable.containsKey(tableName)) {
-            return nameToTable.get(tableName);
-        }
-        return null;
+        return nameToTable.get(tableName);
     }
 
     public Optional<Table> mayGetTable(String tableName) {
@@ -568,6 +565,10 @@ public class Database extends MetaObject implements Writable {
      */
     public Table getTable(long tableId) {
         return idToTable.get(tableId);
+    }
+
+    public Optional<Table> mayGetTable(long tableId) {
+        return Optional.ofNullable(getTable(tableId));
     }
 
     public static Database read(DataInput in) throws IOException {

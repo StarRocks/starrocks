@@ -61,6 +61,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -168,7 +169,9 @@ public class StatementPlanner {
         LogicalPlan logicalPlan;
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+            // get a logicalPlan without inlining views
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+            logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
         OptExpression optimizedPlan;
@@ -213,14 +216,16 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.currentTimeMillis();
+            long planStartTime = System.nanoTime();
             if (!isSchemaValid) {
                 colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+                // get a logicalPlan without inlining views
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+                logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
             OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
@@ -251,13 +256,12 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.currentTimeMillis();
+                long buildFragmentStartTime = System.nanoTime();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t ->
-                        t.lastSchemaUpdateTime.get() > planStartTime);
+                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());

@@ -19,6 +19,7 @@
 #include "gutil/strings/join.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_recover.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -47,7 +48,8 @@ public:
 
     ~PrimaryKeyTxnLogApplier() override {
         // must release primary index before `handle_failure`, otherwise `handle_failure` will fail
-        _tablet.update_mgr()->release_primary_index(_index_entry);
+        _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+        _index_entry = nullptr;
         // handle failure first, then release lock
         _builder.handle_failure();
         if (_inited) {
@@ -74,10 +76,11 @@ public:
     Status apply(const TxnLogPB& log) override {
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
-            RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
+            RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
         if (log.has_op_compaction()) {
-            RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), log.txn_id()));
+            RETURN_IF_ERROR(
+                    check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -99,6 +102,38 @@ public:
     std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
 
 private:
+    bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
+    bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
+
+    Status check_and_recover(const std::function<Status()>& publish_func) {
+        auto ret = publish_func();
+        if (config::enable_primary_key_recover && need_recover(ret)) {
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
+                LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
+                // release and remove index entry's reference
+                _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+                _index_entry = nullptr;
+                // rebuild delvec and pk index
+                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
+                RETURN_IF_ERROR(recover.pre_cleanup());
+                RETURN_IF_ERROR(recover.recover());
+                LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
+                          << " base_ver: " << _base_version;
+            }
+            if (need_re_publish(ret)) {
+                _builder.set_recover_flag(RecoverFlag::OK);
+                // duplicate primary key happen when prepare index, so we need to re-publish it.
+                return publish_func();
+            } else {
+                _builder.set_recover_flag(RecoverFlag::OK);
+                // No need to re-publish, make sure txn log already apply
+                return Status::OK();
+            }
+        }
+        return ret;
+    }
+
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
@@ -107,7 +142,7 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(_metadata, &_builder,
                                                                                        _base_version, _new_version));
         }
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
@@ -126,7 +161,7 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(_metadata, &_builder,
                                                                                        _base_version, _new_version));
         }
         if (op_compaction.input_rowsets().empty()) {
@@ -215,6 +250,9 @@ public:
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
+        }
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
         }
         return Status::OK();
     }
@@ -338,6 +376,29 @@ private:
             _metadata->set_next_rowset_id(new_rowset->id() + std::max(1, new_rowset->segments_size()));
         }
         DCHECK(!op_schema_change.has_delvec_meta());
+        return Status::OK();
+    }
+
+    Status apply_replication_log(const TxnLogPB_OpReplication& op_replication) {
+        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+            LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
+                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
+            return Status::Corruption("Invalid txn meta state: " +
+                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
+        }
+        if (op_replication.txn_meta().snapshot_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
+                         << ", new version: " << _new_version;
+            return Status::Corruption("mismatched snapshot version and new version");
+        }
+
+        if (!op_replication.txn_meta().incremental_snapshot()) {
+            _metadata->clear_rowsets();
+        }
+        for (const auto& op_write : op_replication.op_writes()) {
+            RETURN_IF_ERROR(apply_write_log(op_write));
+        }
         return Status::OK();
     }
 

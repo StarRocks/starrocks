@@ -259,7 +259,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public String getCatalogName() {
-        return "default";
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
     public String getName() {
@@ -562,6 +562,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public Partition getPartition(String partitionName) {
+        return null;
+    }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
 

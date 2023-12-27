@@ -12,6 +12,12 @@ displayed_sidebar: "Chinese"
 
 设置后的配置项，在 FE 重启之后会恢复成 **fe.conf** 文件中的配置或者默认值。如果需要让配置长期生效，建议设置完之后同时修改 **fe.conf** 文件，防止重启后修改失效。
 
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```sql

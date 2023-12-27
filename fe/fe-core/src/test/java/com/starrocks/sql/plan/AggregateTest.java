@@ -2561,4 +2561,29 @@ public class AggregateTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1");
     }
+
+    @Test
+    public void testLegacyGroupConcat() throws Exception {
+        String sql = "select /*+ set_var(sql_mode = GROUP_CONCAT_LEGACY) */ group_concat(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), ', ')");
+
+        sql = "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+
+        sql = "select /*+ set_var(sql_mode = '68719476768') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        // overwrite the GROUP_CONCAT_LEGACY
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
+    }
 }

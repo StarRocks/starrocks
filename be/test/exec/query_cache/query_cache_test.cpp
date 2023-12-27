@@ -259,12 +259,10 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
-            auto st = i->prepare(state);
-            st.permit_unchecked_error();
+            (void)i->prepare(state);
         }
 
-        auto st = tasks[k].downstream->prepare(state);
-        st.permit_unchecked_error();
+        (void)tasks[k].downstream->prepare(state);
     }
     return tasks;
 }

@@ -96,6 +96,7 @@ namespace lake {
 class LocationProvider;
 class TabletManager;
 class UpdateManager;
+class ReplicationTxnManager;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -142,6 +143,7 @@ public:
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
+    MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -207,6 +209,8 @@ private:
 
     std::shared_ptr<MemTracker> _consistency_mem_tracker;
 
+    std::shared_ptr<MemTracker> _replication_mem_tracker;
+
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
 
@@ -261,6 +265,7 @@ public:
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
+    ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
@@ -303,6 +308,8 @@ public:
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
+    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
@@ -336,6 +343,7 @@ private:
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
+    std::unique_ptr<ThreadPool> _dictionary_cache_pool;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
@@ -369,6 +377,7 @@ private:
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;
     lake::UpdateManager* _lake_update_manager = nullptr;
+    lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

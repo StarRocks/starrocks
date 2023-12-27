@@ -52,6 +52,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -62,6 +63,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -85,12 +87,14 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * meta structure for materialized view
@@ -535,6 +539,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.baseTableInfos = baseTableInfos;
     }
 
+    public List<TableType> getBaseTableTypes() {
+        if (baseTableInfos == null) {
+            return Lists.newArrayList();
+        }
+        List<TableType> baseTableTypes = Lists.newArrayList();
+        baseTableInfos.forEach(tableInfo -> baseTableTypes.add(tableInfo.getTable().getType()));
+        return baseTableTypes;
+    }
+
     public void setPartitionRefTableExprs(List<Expr> partitionRefTableExprs) {
         this.partitionRefTableExprs = partitionRefTableExprs;
     }
@@ -780,6 +793,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         mv.active = this.active;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        mv.viewDefineSql = this.viewDefineSql;
         if (this.baseTableIds != null) {
             mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
         }
@@ -788,6 +802,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (this.partitionRefTableExprs != null) {
             mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
+        }
+        if (!queryOutputIndices.isEmpty()) {
+            mv.setQueryOutputIndices(Lists.newArrayList(queryOutputIndices));
         }
     }
 
@@ -1022,7 +1039,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
-        for (Column column : getBaseSchema()) {
+        List<Integer> outputIndices =
+                CollectionUtils.isNotEmpty(queryOutputIndices) ? queryOutputIndices :
+                        IntStream.range(0, getBaseSchema().size()).boxed().collect(Collectors.toList());
+        for (int index : outputIndices) {
+            Column column = getBaseSchema().get(index);
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
@@ -1439,14 +1460,99 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(entry.getKey()).get(x))
             );
         }
+
         if (partitionExpr instanceof FunctionCallExpr) {
-            // because the relation of partitions between materialized view and base partition table is n : m,
-            // should calculate the candidate partitions recursively.
-            SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                    baseToMvNameRef, mvToBaseNameRef);
+            List<TableWithPartitions> baseTableWithPartitions = baseChangedPartitionNames.keySet().stream()
+                    .map(x -> new TableWithPartitions(x, baseChangedPartitionNames.get(x)))
+                    .collect(Collectors.toList());
+            if (isCalcPotentialRefreshPartition(baseTableWithPartitions,
+                    basePartitionNameToRangeMap, needRefreshMvPartitionNames, mvPartitionNameToRangeMap)) {
+                // because the relation of partitions between materialized view and base partition table is n : m,
+                // should calculate the candidate partitions recursively.
+                SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                        baseToMvNameRef, mvToBaseNameRef, Sets.newHashSet());
+            }
         }
         toRefreshPartitions.addAll(needRefreshMvPartitionNames);
         return true;
+    }
+
+    /**
+     * According base table and materialized view's partition range, we can define those mappings from base to mv:
+     * <p>
+     * One-to-One
+     *  src:     |----|    |----|
+     *  dst:     |----|    |----|
+     * eg: base table is partitioned by one day, and mv is partition by one day
+     * </p>
+     * <p>
+     * Many-to-One
+     *  src:     |----|    |----|     |----|    |----|
+     *  dst:     |--------------|     |--------------|
+     * eg: base table is partitioned by one day, and mv is partition by date_trunc('month', dt)
+     * <p>
+     * One/Many-to-Many
+     *  src:     |----| |----| |----| |----| |----| |----|
+     *  dst:     |--------------| |--------------| |--------------|
+     * eg: base table is partitioned by three days, and mv is partition by date_trunc('month', dt)
+     *  </p>
+     *
+     *  For one-to-one or many-to-one we can trigger to refresh by materialized view's partition, but for many-to-many
+     *  we need also consider affected materialized view partitions also.
+     *
+     *  eg:
+     *  ref table's partitions:
+     *   p0:   [2023-07-27, 2023-07-30)
+     *   p1:   [2023-07-30, 2023-08-02)
+     *   p2:   [2023-08-02, 2023-08-05)
+     *  materialized view's partition:
+     *   p0:   [2023-07-01, 2023-08-01)
+     *   p1:   [2023-08-01, 2023-09-01)
+     *   p2:   [2023-09-01, 2023-10-01)
+     *
+     *  So ref table's p1 has been changed, materialized view to refresh partition: p0, p1. And when we refresh p0,p1
+     *  we also need to consider other ref table partitions(p0); otherwise, the mv's final result will lose data.
+     */
+    public boolean isCalcPotentialRefreshPartition(List<TableWithPartitions> baseChangedPartitionNames,
+                                                   Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap,
+                                                   Set<String> mvPartitions,
+                                                   Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap) {
+        List<PartitionRange> mvSortedPartitionRanges =
+                TableWithPartitions.getSortedPartitionRanges(mvPartitionNameToRangeMap, mvPartitions);
+        for (TableWithPartitions baseTableWithPartition : baseChangedPartitionNames) {
+            Map<String, Range<PartitionKey>> baseRangePartitionMap =
+                    refBaseTableRangePartitionMap.get(baseTableWithPartition.getTable());
+            List<PartitionRange> baseSortedPartitionRanges =
+                    baseTableWithPartition.getSortedPartitionRanges(baseRangePartitionMap);
+            for (PartitionRange basePartitionRange : baseSortedPartitionRanges) {
+                if (isManyToManyPartitionRangeMapping(basePartitionRange, mvSortedPartitionRanges)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether srcRange is intersected with many dest ranges.
+     */
+    private boolean isManyToManyPartitionRangeMapping(PartitionRange srcRange,
+                                                      List<PartitionRange> dstRanges) {
+        int mid = Collections.binarySearch(dstRanges, srcRange);
+        if (mid < 0) {
+            return false;
+        }
+
+        int lower = mid - 1;
+        if (lower >= 0 && dstRanges.get(lower).isIntersected(srcRange)) {
+            return true;
+        }
+
+        int higher = mid + 1;
+        if (higher < dstRanges.size() && dstRanges.get(higher).isIntersected(srcRange)) {
+            return true;
+        }
+        return false;
     }
 
     /**

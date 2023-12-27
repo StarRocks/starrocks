@@ -45,9 +45,11 @@ message PublishVersionResponse {
 
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
-    repeated int64 txn_ids = 2;    
+    repeated int64 txn_ids = 2;
     // Whether need to clean up the txn logs
     optional bool skip_cleanup = 3;
+    // Should have the save size with txn_ids or 0
+    repeated TxnTypePB txn_types = 4;
 }
 
 message AbortTxnResponse {
@@ -62,6 +64,15 @@ message DeleteTabletRequest {
 message DeleteTabletResponse {
     repeated int64 failed_tablets = 1;
     optional StatusPB status = 2;
+}
+
+message DeleteTxnLogRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;
+}
+
+message DeleteTxnLogResponse {
+    optional StatusPB status = 1;
 }
 
 message CompactRequest {
@@ -246,6 +257,7 @@ service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
     rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
+    rpc delete_txn_log(DeleteTxnLogRequest) returns (DeleteTxnLogResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);

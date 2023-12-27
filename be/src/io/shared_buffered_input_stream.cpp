@@ -131,7 +131,7 @@ Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IO
             sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
-            if (r.active) {
+            if (r.is_active) {
                 small_active_ranges.emplace_back(r);
             } else {
                 small_lazy_flag[index] = true;
@@ -217,9 +217,6 @@ void SharedBufferedInputStream::release() {
 }
 
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
-    if (_align_size != 0) {
-        offset = (offset + _align_size - 1) / _align_size * _align_size;
-    }
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
 }

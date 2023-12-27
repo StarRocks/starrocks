@@ -482,6 +482,11 @@ public class OperationType {
     public static final short OP_UPDATE_FRONTEND_V2 = 13030;
     public static final short OP_ADD_BROKER_V2 = 13031;
     public static final short OP_DROP_BROKER_V2 = 13032;
+    public static final short OP_DECOMMISSION_DISK = 13033;
+    public static final short OP_CANCEL_DECOMMISSION_DISK = 13034;
+    public static final short OP_DISABLE_DISK = 13035;
+    public static final short OP_CANCEL_DISABLE_DISK = 13036;
+    public static final short OP_BATCH_DELETE_REPLICA_BATCH = 13037;
 
     public static final short OP_TIMESTAMP_V2 = 13040;
     public static final short OP_LEADER_INFO_CHANGE_V2 = 13041;
@@ -508,6 +513,14 @@ public class OperationType {
 
     // alter catalog
     public static final short OP_ALTER_CATALOG = 13300;
+
+    // Dictionary
+    public static final short OP_CREATE_DICTIONARY = 13400;
+    public static final short OP_DROP_DICTIONARY = 13401;
+    public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
+
+    // Replication job
+    public static final short OP_REPLICATION_JOB = 13500;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

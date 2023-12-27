@@ -76,6 +76,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -226,6 +227,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
+    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -374,6 +376,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_load_rpc_pool));
     REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
+                            .set_min_threads(1)
+                            .set_max_threads(8)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_dictionary_cache_pool));
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -469,7 +478,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
     if (!status.ok()) {
-        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        LOG(ERROR) << "load path mgr init failed." << status.message();
         exit(-1);
     }
 
@@ -479,6 +488,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
@@ -494,6 +504,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -568,6 +579,10 @@ void ExecEnv::stop() {
         _routine_load_task_executor->stop();
     }
 
+    if (_dictionary_cache_pool) {
+        _dictionary_cache_pool->shutdown();
+    }
+
 #ifndef BE_TEST
     close_s3_clients();
 #endif
@@ -620,6 +635,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
+    SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 }

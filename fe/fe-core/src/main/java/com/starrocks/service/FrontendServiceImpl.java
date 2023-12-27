@@ -68,6 +68,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -177,6 +178,8 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -274,6 +277,8 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
@@ -342,7 +347,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -361,8 +366,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        fullName);
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -643,6 +647,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
         return SysObjectDependencies.listObjectDependencies(params);
+    }
+
+    @Override
+    public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
+        return SysFeLocks.listLocks(params, true);
     }
 
     // list MaterializedView table match pattern
@@ -2742,5 +2751,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw semanticException;
         }
         return response;
+    }
+
+    @Override
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
+        return leaderImpl.startTableReplication(request);
     }
 }

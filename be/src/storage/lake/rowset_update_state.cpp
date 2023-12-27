@@ -47,6 +47,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
         return _status;
     }
     std::call_once(_load_once_flag, [&] {
+        TRACE_COUNTER_SCOPE_LATENCY_US("update_state_load_latency_us");
         _base_version = base_version;
         _builder = builder;
         _tablet_id = metadata.id();
@@ -69,12 +70,11 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
 
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(*tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+    Rowset rowset(tablet->tablet_mgr(), tablet->id(), &op_write.rowset(), -1 /*unused*/, tablet_schema);
 
-    RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, rowset_ptr.get()));
+    RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, &rowset));
 
-    if (!op_write.has_txn_meta() || rowset_ptr->num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
+    if (!op_write.has_txn_meta() || rowset.num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
     if (!op_write.txn_meta().partial_update_column_ids().empty()) {
@@ -524,10 +524,13 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
 Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                             int64_t base_version, Tablet* tablet, const MetaFileBuilder* builder) {
     _builder = builder;
-    // check if base version is match and pk index has not been updated yet, and we can skip resolve conflict
-    if (base_version == _base_version && !_builder->has_update_index()) {
+    // There are two cases that we must resolve conflict here:
+    // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
+    // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
+    if (base_version == _base_version && base_version + 1 == metadata.version()) {
         return Status::OK();
     }
+    TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     _base_version = base_version;
     // skip resolve conflict when not partial update happen.
     if (!op_write.has_txn_meta() || op_write.rowset().segments_size() == 0 ||

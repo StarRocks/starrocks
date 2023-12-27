@@ -139,8 +139,8 @@ public class MaterializationContext {
         return baseTables != null && baseTables.size() > 1;
     }
 
-    public Set<ColumnRefOperator> getOriginQueryColumns() {
-        return originQueryColumns;
+    public boolean isSingleTable() {
+        return baseTables != null && baseTables.size() == 1;
     }
 
     public List<Table> getIntersectingTables() {

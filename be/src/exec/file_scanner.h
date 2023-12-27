@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -60,6 +61,9 @@ public:
     virtual void close();
 
     virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
+
+    static Status sample_schema(RuntimeState* state, const TBrokerScanRange& scan_range,
+                                std::vector<SlotDescriptor>* schema);
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,

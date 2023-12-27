@@ -78,7 +78,7 @@ public:
         return _rep_level_decoder.decode_batch(n, levels);
     }
 
-    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];

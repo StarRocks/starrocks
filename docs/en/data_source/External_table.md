@@ -571,7 +571,7 @@ A Hive resource corresponds to a Hive cluster. You must configure the Hive clust
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -761,7 +761,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -930,7 +930,7 @@ Execute the following statement to create a Hudi resource named `hudi0`:
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 

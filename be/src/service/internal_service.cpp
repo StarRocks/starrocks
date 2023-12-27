@@ -50,8 +50,7 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -76,6 +75,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
@@ -231,7 +231,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
-            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -305,7 +305,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
 
     auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
-        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -515,7 +515,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
-            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -776,6 +776,64 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PProcessDictionaryCacheRequest* request,
+                                                           PProcessDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    PProcessDictionaryCacheRequestType request_type = request->type();
+    switch (request_type) {
+    case PProcessDictionaryCacheRequestType::BEGIN: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::REFRESH: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::COMMIT: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::CLEAR: {
+        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::STATISTIC: {
+        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    default: {
+        std::stringstream ss;
+        ss << "invalid request type for process_dictionary_cache";
+        LOG(WARNING) << ss.str();
+        Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
+        break;
+    }
+    }
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -803,39 +861,9 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
     }
 
     RuntimeState state(_exec_env);
-    RuntimeProfile profile{"dummy_profile", false};
-    ScannerCounter counter{};
-    std::unique_ptr<FileScanner> p_scanner;
-
-    auto tp = scan_range.ranges[0].format_type;
-    {
-        switch (tp) {
-        case TFileFormatType::FORMAT_PARQUET:
-            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        case TFileFormatType::FORMAT_ORC:
-            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        default:
-            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
-            LOG(WARNING) << err_msg;
-            st = Status::InvalidArgument(err_msg);
-            return;
-        }
-    }
-
-    st = p_scanner->open();
-    if (!st.ok()) {
-        LOG(WARNING) << "open file scanner failed: " << st;
-        return;
-    }
-
-    DeferOp defer2([&p_scanner] { p_scanner->close(); });
 
     std::vector<SlotDescriptor> schema;
-    st = p_scanner->get_schema(&schema);
+    st = FileScanner::sample_schema(&state, scan_range, &schema);
     if (!st.ok()) {
         LOG(WARNING) << "get schema failed: " << st;
         return;
@@ -856,7 +884,7 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
-        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;

@@ -216,7 +216,7 @@ int64_t DeltaWriterImpl::last_write_ts() const {
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
-        ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+        ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -344,7 +344,11 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     _last_write_ts = butil::gettimeofday_s();
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto full = res.value();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();

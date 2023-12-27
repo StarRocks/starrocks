@@ -80,4 +80,6 @@ service PBackendService {
     rpc execute_command(starrocks.ExecuteCommandRequestPB) returns (starrocks.ExecuteCommandResultPB);
     rpc update_fail_point_status(starrocks.PUpdateFailPointStatusRequest) returns (starrocks.PUpdateFailPointStatusResponse);
     rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
+
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

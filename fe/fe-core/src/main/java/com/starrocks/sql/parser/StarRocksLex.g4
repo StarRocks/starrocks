@@ -64,6 +64,7 @@ BROKER: 'BROKER';
 BUCKETS: 'BUCKETS';
 BUILTIN: 'BUILTIN';
 BY: 'BY';
+CACHE: 'CACHE';
 CANCEL: 'CANCEL';
 CASE: 'CASE';
 CAST: 'CAST';
@@ -124,6 +125,8 @@ DEFAULT: 'DEFAULT';
 DELETE: 'DELETE';
 DENSE_RANK: 'DENSE_RANK';
 DEFERRED: 'DEFERRED';
+DICTIONARY: 'DICTIONARY';
+DICTIONARY_GET: 'DICTIONARY_GET';
 NTILE: 'NTILE';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
@@ -464,6 +467,7 @@ YEAR: 'YEAR';
 LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
+DISK: 'DISK';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -560,7 +564,11 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    : '/*'([ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    ;
+
+OPTIMIZER_HINT
+    : '/*+' .*? '*/' -> channel(2)
     ;
 
 SEMICOLON: ';';

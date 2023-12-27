@@ -27,6 +27,8 @@ import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -77,7 +79,7 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class)
     Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 
-    @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 60000)
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "execute_command", onceTalkTimeout = 600000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 
     @ProtobufRPC(serviceName = "PInternalService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
@@ -87,8 +89,11 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
 
-    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_short_circuit",
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "exec_short_circuit",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request);
+
+    @ProtobufRPC(serviceName = "PInternalService", methodName = "process_dictionary_cache", onceTalkTimeout = 600000)
+    Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request);
 }
 

@@ -40,6 +40,7 @@ import org.junit.Test;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class AlterMaterializedViewTest {
@@ -199,6 +200,56 @@ public class AlterMaterializedViewTest {
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
         Assert.assertTrue(mv.isActive());
         Assert.assertNull(mv.getInactiveReason());
+    }
+
+    @Test
+    public void testAlterMVOnViewComment() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tb_order` (\n" +
+                "                                 `order_id` bigint(20) NULL COMMENT \"order_id\",\n" +
+                "                                 `order_amt` double NULL COMMENT \"order_amt\",\n" +
+                "                                 `order_date` date NULL COMMENT \"order_date\",\n" +
+                "                                 `description` varchar(255) NULL COMMENT \"description\",\n" +
+                "                                 `buyer_id` bigint(20) NULL COMMENT \"buyer_id\",\n" +
+                "                                 `seller_id` bigint(20) NULL COMMENT \"seller_id\",\n" +
+                "                                 `product_id` bigint(20) NULL COMMENT \"product_id\",\n" +
+                "                                 `express_id` bigint(20) NULL COMMENT \"express_id\",\n" +
+                "                                 `region_id` bigint(20) NULL COMMENT \"region_id\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`)\n" +
+                "DISTRIBUTED BY HASH(`order_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ")");
+        starRocksAssert.withView("create or replace view pb_view as " +
+                "select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "                                       from `tb_order`");
+        starRocksAssert.withMaterializedView("create Materialized View mv_pb_view\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "as select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "   from pb_view");
+
+        // replace with exactly same
+        starRocksAssert.withView("create or replace view pb_view as " +
+                "select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "                                       from `tb_order`");
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_pb_view ACTIVE;");
+
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_pb_view");
+        Map<String, String> columnMap =
+                mv.getColumns().stream().collect(Collectors.toMap(Column::getName, Column::getComment));
+        Assert.assertEquals(Map.of("order_id", "",
+                "order_amt", "",
+                "order_date", "",
+                "description", "",
+                "buyer_id", "",
+                "seller_id", "",
+                "product_id", "",
+                "express_id", "",
+                "region_id", ""), columnMap);
     }
 
     @Test

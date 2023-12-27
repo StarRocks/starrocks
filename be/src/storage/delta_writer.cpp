@@ -222,15 +222,18 @@ Status DeltaWriter::_init() {
             }
             writer_context.referenced_column_ids.push_back(index);
         }
-        int64_t average_row_size = _tablet->updates()->get_average_row_size();
-        if (average_row_size != 0) {
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
-        } else {
-            // If tablet is a new created tablet and has no historical data, average_row_size is 0
-            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
-            // we will consider it as 16 bytes.
-            average_row_size = _tablet_schema->estimate_row_size(16);
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        if (_opt.partial_update_mode == PartialUpdateMode::ROW_MODE) {
+            // no need to control memtable row when using column mode, because we don't need to fill missing column
+            int64_t average_row_size = _tablet->updates()->get_average_row_size();
+            if (average_row_size != 0) {
+                _memtable_buffer_row = config::write_buffer_size / average_row_size;
+            } else {
+                // If tablet is a new created tablet and has no historical data, average_row_size is 0
+                // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+                // we will consider it as 16 bytes.
+                average_row_size = _tablet_schema->estimate_row_size(16);
+                _memtable_buffer_row = config::write_buffer_size / average_row_size;
+            }
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
@@ -376,7 +379,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                 fmt::format("can't partial update for column with row. tablet_id: {}", _opt.tablet_id));
     }
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, from, size);
+    ASSIGN_OR_RETURN(auto full, _mem_table->insert(chunk, indexes, from, size));
     _last_write_ts = butil::gettimeofday_s();
     _write_buffer_size = _mem_table->write_buffer_size();
     if (_mem_tracker->limit_exceeded()) {

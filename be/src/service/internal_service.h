@@ -166,6 +166,10 @@ public:
     void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
                             PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
 
+    void process_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PProcessDictionaryCacheRequest* request,
+                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
