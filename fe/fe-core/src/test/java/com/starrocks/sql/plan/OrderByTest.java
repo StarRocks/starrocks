@@ -616,6 +616,25 @@ class OrderByTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
     }
 
+    @Test
+    public void testTopNRuntimeFilterWithFilter() throws Exception {
+        String sql = "select * from t0 where v1 > 1 order by v1 limit 10";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: v1)");
+
+        String sql1 = "select * from t0 where v1 is not null order by v1 limit 10";
+        String plan1 = getVerboseExplain(sql1);
+
+        assertContains(plan1, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: v1)");
+
+        String sql2 = "select * from t0 where v1 is null order by v1 limit 10";
+        String plan2 = getVerboseExplain(sql2);
+        assertNotContains(plan2, " runtime filters");
+    }
+
     @ParameterizedTest
     @MethodSource("failToStrictSql")
     void testFailToStrictOrderByExpression(String sql) {
