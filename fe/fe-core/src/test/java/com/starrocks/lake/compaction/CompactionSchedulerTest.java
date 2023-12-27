@@ -61,8 +61,6 @@ public class CompactionSchedulerTest {
 
         // default value
         Config.lake_compaction_default_timeout_second = 86400;
-        // default value, and greater than `lake_compaction_default_timeout_second`
-        Config.max_lake_compaction_timeout_second = 259200;
         // value smaller than `lake_compaction_default_timeout_second`
         // expect not affect lake compaction's  transaction operation
         Config.max_stream_load_timeout_second = 64800;
@@ -84,9 +82,6 @@ public class CompactionSchedulerTest {
         Config.lake_compaction_default_timeout_second = 86400;
         // default value
         Config.max_stream_load_timeout_second = 259200;
-        // value smaller than `lake_compaction_default_timeout_second`
-        // expect to affect lake compaction's transaction operation
-        Config.max_lake_compaction_timeout_second = 64800;
 
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =

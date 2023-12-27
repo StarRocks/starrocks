@@ -315,8 +315,7 @@ public class GlobalTransactionMgr implements Writable {
                         Config.min_load_timeout_second);
                 break;
             case LAKE_COMPACTION:
-                checkValidTimeoutSecond(timeoutSecond, Config.max_lake_compaction_timeout_second,
-                        Config.min_load_timeout_second);
+                // skip transaction timeout range check for lake compaction
                 break;
             default:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);

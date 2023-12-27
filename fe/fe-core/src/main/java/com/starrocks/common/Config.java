@@ -2376,12 +2376,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_default_timeout_second = 86400; // 1 day
 
-    /**
-     * Max timeout for lake compaction transaction.
-     * This value should always be greater than `lake_compaction_default_timeout_second`
-     */
-    @ConfField(mutable = true)
-    public static int max_lake_compaction_timeout_second = 259200; // 3days
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
