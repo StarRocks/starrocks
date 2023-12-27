@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -37,9 +36,9 @@ public class OuterJoinReorderTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("joinAssocRuleSqls")
-    void joinAssociativityRuleSql(Pair<String, String> pair) throws Exception {
-        String plan = getFragmentPlan(pair.first);
-        assertContains(plan, pair.second);
+    void joinAssociativityRuleSql(String sql, String expectedPlan) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
     }
 
 
@@ -140,7 +139,10 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |  other predicates: 8: v8 <=> 2: v2\n" +
                 "  |  \n" +
                 "  |----13:EXCHANGE");
-        List<Pair<String, String>> zips = zipSqlAndPlan(sqlList, planList);
-        return zips.stream().map(e -> Arguments.of(e));
+        sqlList.add("select * from (select t0.*, concat(abs(abs(v7)), ifnull(v8, 1), null) from colocate_t0 t0 left join" +
+                " t2 on v2 = v7) t left join colocate_t1 on v1 = v4");
+        planList.add("xxx");
+        List<Arguments> zips = zipSqlAndPlan(sqlList, planList);
+        return zips.stream();
     }
 }
