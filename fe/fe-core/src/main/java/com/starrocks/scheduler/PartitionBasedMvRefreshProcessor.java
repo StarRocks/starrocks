@@ -1628,9 +1628,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                 } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
                     if (snapshotTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
+                        return false;
                     } else {
                         PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
                         // TODO: Support list partition later.
