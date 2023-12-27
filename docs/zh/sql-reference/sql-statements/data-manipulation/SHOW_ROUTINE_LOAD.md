@@ -4,13 +4,9 @@ displayed_sidebar: "Chinese"
 
 # SHOW ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
-
 ## 功能
 
 查看 Routine Load 导入作业的执行情况。
-
-<RoutineLoadPrivNote />
 
 ## 语法
 
