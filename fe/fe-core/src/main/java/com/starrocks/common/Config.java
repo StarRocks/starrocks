@@ -2367,6 +2367,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
+    public static int lake_publish_delete_txnlog_max_threads = 16;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
