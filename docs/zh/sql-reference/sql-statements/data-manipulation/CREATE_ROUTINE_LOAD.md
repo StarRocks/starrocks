@@ -12,12 +12,7 @@ Routine Load 支持持续消费 Apache Kafka® 的消息并导入至 StarRocks �
 
 > **说明**
 >
-<<<<<<< HEAD
 > Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入](../../../loading/RoutineLoad.md)。
-=======
-> - Routine Load 的应用场景、基本原理和基本操作，请参见 [使用 Routine Load 导入数据](../../../loading/RoutineLoad.md)。
-> - Routine Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
->>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
 
 ## 语法
 
