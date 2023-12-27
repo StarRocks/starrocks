@@ -113,6 +113,7 @@ public:
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
     [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status create_from_memory(std::string_view data);
     [[nodiscard]] Status save(const std::string& file_path);
     [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);

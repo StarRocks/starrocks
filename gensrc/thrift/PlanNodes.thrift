@@ -265,6 +265,7 @@ struct TBrokerScanRangeParams {
     // confluent schema registry url for pb import
     28: optional string confluent_schema_registry_url
     29: optional i64 json_file_size_limit;
+    30: optional i64 schema_sample_file_count
 }
 
 // Broker scan range
@@ -353,6 +354,10 @@ struct THdfsScanRange {
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
+
+    19: optional bool use_odps_jni_reader
+
+    20: optional map<string, string> odps_split_info
 }
 
 struct TBinlogScanRange {

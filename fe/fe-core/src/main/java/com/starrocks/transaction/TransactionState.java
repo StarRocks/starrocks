@@ -60,6 +60,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
+import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -104,7 +105,8 @@ public class TransactionState implements Writable {
         DELETE(6),                     // synchronization delete job use this type
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
-        MV_REFRESH(9);                  // Refresh MV
+        MV_REFRESH(9),                  // Refresh MV
+        REPLICATION(10);                // Replication
 
         private final int flag;
 
@@ -136,6 +138,8 @@ public class TransactionState implements Writable {
                     return FRONTEND_STREAMING;
                 case 9:
                     return MV_REFRESH;
+                case 10:
+                    return REPLICATION;
                 default:
                     return null;
             }
@@ -783,6 +787,10 @@ public class TransactionState implements Writable {
         return sourceType;
     }
 
+    public TTxnType getTxnType() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
+    }
+
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
         return publishVersionTasks;
     }
@@ -992,7 +1000,8 @@ public class TransactionState implements Writable {
                     txnSpan,
                     createTime,
                     this,
-                    Config.enable_sync_publish);
+                    Config.enable_sync_publish,
+                    this.getTxnType());
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

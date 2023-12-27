@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_label: AWS
+description: "本文介绍如何认证 AWS 资源"
 ---
 
 # 配置 AWS 认证信息

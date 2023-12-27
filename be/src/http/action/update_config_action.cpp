@@ -117,7 +117,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             if (mgr != nullptr) {
-                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+                const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
+                (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
             }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
@@ -226,6 +227,25 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_cache_evict_interval", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_interval";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
+                                                                      value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
             }
         });
 #endif // USE_STAROS

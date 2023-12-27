@@ -149,6 +149,11 @@ CONF_Int32(sleep_five_seconds, "5");
 CONF_Int32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
+// The count of thread to replication
+CONF_Int32(replication_threads, "64");
+CONF_Int32(replication_thread_pool_queue_size, "2048");
+CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
@@ -787,6 +792,10 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
 
+// text reader
+// Spilt text file's scan range into io ranges of 16mb size
+CONF_Int64(text_io_range_size, "16777216");
+
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 CONF_Int32(orc_row_index_cache_max_size, "1048576");
@@ -904,6 +913,9 @@ CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
+CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
+CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1042,8 +1054,10 @@ CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
-// control the background compaction threads
-CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// Number of max major compaction threads
+CONF_mInt32(pindex_major_compaction_num_threads, "0");
+// Limit of major compaction per disk.
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc/evict interval
