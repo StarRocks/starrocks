@@ -333,7 +333,10 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     }
     std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
     if (need_lock) {
-        guard = index.fetch_guard();
+        guard = index.try_fetch_guard();
+        if (guard == nullptr) {
+            return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
+        }
     }
     op(index);
 
@@ -725,7 +728,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
         auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false, true);
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
-            if (!st.is_uninitialized()) {
+            if (!st.is_uninitialized() && !st.is_cancelled()) {
                 LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1",
                                                   tablet->id(), st.to_string());
             } else {

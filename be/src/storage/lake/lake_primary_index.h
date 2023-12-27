@@ -51,6 +51,13 @@ public:
         return std::make_unique<std::lock_guard<std::mutex>>(_mutex);
     }
 
+    std::unique_ptr<std::lock_guard<std::mutex>> try_fetch_guard() {
+        if (_mutex.try_lock()) {
+            return std::make_unique<std::lock_guard<std::mutex>>(_mutex, std::adopt_lock);
+        }
+        return nullptr;
+    }
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
