@@ -177,5 +177,6 @@ public class SubmitTaskStmtTest {
                 task.getProperties().containsKey(SessionVariable.WAREHOUSE));
         Assert.assertTrue(task.getProperties().toString(),
                 task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID));
+        Assert.assertEquals("('warehouse_id'='123')", task.getPropertiesString());
     }
 }

@@ -182,6 +182,7 @@ public class PipeManagerTest {
         Pipe pipe = getPipe("p_warehouse");
         Assert.assertTrue(pipe.getTaskProperties().toString(),
                 pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assert.assertEquals("('warehouse'='w1')", pipe.getPropertiesString());
 
         // alter pipe
         alterPipe("alter pipe p_warehouse set('warehouse' = 'w2') ");
