@@ -4,8 +4,6 @@ displayed_sidebar: "English"
 
 # ALTER ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivNote.md'
-
 ## Description
 
 Alters a Routine Load job that is in the `PAUSED` state. You can execute PAUSE ROUTINE LOAD to pause a Routine Load job.
@@ -14,8 +12,6 @@ After successfully altering a Routine Load job, you can:
 
 - Check the modifications made to the Routine Load job by using [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md).
 - Resume the Routine Load job by using [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md).
-
-<RoutineLoadPrivNote />
 
 ## Syntax
 
