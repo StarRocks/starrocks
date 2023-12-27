@@ -1,0 +1,36 @@
+-- name: test_bitmap_to_array
+
+-- create table
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- bitmap(empty)
+truncate table t1;
+insert into t1 select 1, bitmap_empty();
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(single)
+truncate table t1;
+insert into t1 select 1, to_bitmap(1);
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(set)
+truncate table t1;
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 10));
+select bitmap_to_array(c2) from t1;
+
+-- bitmap(bitmap)
+truncate table t1;
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(1, 40));
+select bitmap_to_array(c2) from t1;
+
+-- multi row
+truncate table t1;
+insert into t1 select 1, bitmap_agg(generate_series) from table(generate_series(0, 4093));
+insert into t1 select 2, bitmap_agg(generate_series) from table(generate_series(4094, 8000));
+select sum(generate_series) from table(generate_series(0, 8000));
