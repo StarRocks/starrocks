@@ -235,7 +235,6 @@ If you need to create partitions in advance, you can use other partition creatio
 
 - Dynamic partitioning
 
-<<<<<<< HEAD
   StarRocks supports [dynamic partitioning](./dynamic_partitioning.md), which can automatically manage the time to live (TTL) of partitions, such as partitioning new input data in tables and deleting expired partitions. This feature significantly reduces maintenance costs.
 
 - Manually create partitions
@@ -427,6 +426,3 @@ The following statement displays all partitions in table `site_access`.
 ```SQL
 SHOW PARTITIONS FROM site_access;
 ```
-=======
-For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
->>>>>>> 2953992c4a ([Doc] update routine load sql stmt (#37810))
