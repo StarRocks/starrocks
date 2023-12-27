@@ -173,4 +173,10 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
+    }
 }

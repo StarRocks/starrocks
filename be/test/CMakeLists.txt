@@ -57,6 +57,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
         ./exec/csv_scanner_test.cpp
+        ./exec/file_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
@@ -180,6 +181,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp

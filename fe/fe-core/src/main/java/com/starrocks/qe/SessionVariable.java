@@ -361,6 +361,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if the gc of any service is caused, you can set the value to 100 for testing.
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
+    public static final String ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE = "enable_connector_sink_global_shuffle";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -461,6 +462,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
+
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
@@ -480,6 +483,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_materialized_view_rewrite_greedy_mode";
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
+
+    public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -866,6 +871,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
     private int pipelineSinkDop = 0;
+
+    // Add a global shuffle between the connector sink fragment and its child fragment.
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enableConnectorSinkGlobalShuffle = true;
 
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
@@ -1325,6 +1334,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
 
+    /**
+     * Whether enable materialized-view rewrite for INSERT statement
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT)
+    private boolean enableMaterializedViewRewriteForInsert = false;
+
     @VarAttr(name = ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE)
     private boolean enableSyncMaterializedViewRewrite = true;
 
@@ -1360,6 +1375,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether to use materialized view plan context cache to reduce mv rewrite time cost
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
+
+    @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
+    private boolean enableViewBasedMvRewrite = false;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -2301,6 +2319,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return pipelineSinkDop;
     }
 
+    public boolean isEnableConnectorSinkGlobalShuffle() {
+        return enableConnectorSinkGlobalShuffle;
+    }
+
     public void setPipelineSinkDop(int pipelineSinkDop) {
         this.pipelineSinkDop = pipelineSinkDop;
     }
@@ -2604,6 +2626,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
     }
 
+    public boolean isEnableMaterializedViewRewriteForInsert() {
+        return enableMaterializedViewRewriteForInsert;
+    }
+
+    public void setEnableMaterializedViewRewriteForInsert(boolean value) {
+        this.enableMaterializedViewRewriteForInsert = value;
+    }
+
     public boolean isEnableMaterializedViewUnionRewrite() {
         return enableMaterializedViewUnionRewrite;
     }
@@ -2671,6 +2701,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewPlanCache() {
         return this.enableMaterializedViewPlanCache;
+    }
+
+    public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
+        this.enableViewBasedMvRewrite = enableViewBasedMvRewrite;
+    }
+
+    public boolean isEnableViewBasedMvRewrite() {
+        return this.enableViewBasedMvRewrite;
     }
 
     public String getQueryExcludingMVNames() {
@@ -3192,7 +3230,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() throws CloneNotSupportedException {
-        return super.clone();
+    public Object clone() {
+        try {
+            return super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
