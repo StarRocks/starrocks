@@ -157,6 +157,7 @@ public class MockedBase {
 
         InputSplit split0 = new IndexedInputSplit("session", 0);
         InputSplit split1 = new IndexedInputSplit("session", 1);
+
         when(inputSplitAssigner.getAllSplits()).thenReturn(new InputSplit[] {split0, split1});
         when(inputSplitAssigner.getSplit(0)).thenReturn(split0);
         when(inputSplitAssigner.getSplit(1)).thenReturn(split1);
@@ -179,6 +180,7 @@ public class MockedBase {
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
         when(connectorMgr.getConnector(anyString())).thenReturn(
                 new CatalogConnector(odpsConnector, new InformationSchemaConnector("catalog")));
+        when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
 
         RemoteFileInfo fileInfo = new RemoteFileInfo();
         fileInfo.setFiles(ImmutableList.of(RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));

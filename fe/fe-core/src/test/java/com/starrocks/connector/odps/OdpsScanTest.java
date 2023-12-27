@@ -95,8 +95,8 @@ public class OdpsScanTest extends MockedBase {
     }
 
     @Test
-    public void testPlanFragmentBuilder(@Mocked com.starrocks.qe.ConnectContext connectContext, @Mocked
-    ColumnRefFactory columnRefFactory) {
+    public void testPlanFragmentBuilder(@Mocked com.starrocks.qe.ConnectContext connectContext,
+                                        @Mocked ColumnRefFactory columnRefFactory) {
         when(odpsSplitsInfo.getSplits()).thenReturn(ImmutableList.of(new RowRangeInputSplit("sessionId", 0, 2)));
         when(odpsSplitsInfo.getSplitPolicy()).thenReturn(OdpsSplitsInfo.SplitPolicy.ROW_OFFSET);
         OptExpression phys = new OptExpression(physicalOdpsScanOperator);
