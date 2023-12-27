@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -127,6 +128,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 
 /**
  * Core logic of materialized view refresh task run
@@ -351,8 +354,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         if (lastException != null) {
-            throw new DmlException("Refresh materialized view %s failed after retrying %s times", lastException,
-                    this.materializedView.getName(), maxRefreshMaterializedViewRetryNum);
+            String errorMsg = lastException.getMessage();
+            if (lastException instanceof NullPointerException) {
+                errorMsg = ExceptionUtils.getStackTrace(lastException);
+            }
+            // field ERROR_MESSAGE in information_schema.task_runs length is 65535
+            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ? errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
+            throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
+                    lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
     }
 
