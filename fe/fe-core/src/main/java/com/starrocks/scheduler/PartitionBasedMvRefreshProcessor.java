@@ -893,7 +893,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private boolean unSupportRefreshByPartition(Table table) {
         return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable();
+                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable()
+                && !table.isPaimonTable();
     }
 
     /**
@@ -1713,8 +1714,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos =
                 Maps.newHashMap();
         for (Map.Entry<Table, Set<String>> entry : baseTableAndPartitionNames.entrySet()) {
-            if (entry.getKey().isHiveTable() || entry.getKey().isJDBCTable() || entry.getKey().isIcebergTable()) {
-                Table  table = entry.getKey();
+            if (entry.getKey().isHiveTable() || entry.getKey().isJDBCTable() || entry.getKey().isIcebergTable()
+                    || entry.getKey().isPaimonTable()) {
+                Table table = entry.getKey();
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
                                 baseTableInfo -> baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())).
                         findAny();
