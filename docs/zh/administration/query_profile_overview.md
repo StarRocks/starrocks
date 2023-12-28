@@ -46,6 +46,8 @@ Runtime Query Profile 与普通 Query Profile 格式和内容均相同。您可�
 
 ## 获取 Query Profile
 
+### 通过 Web 页面获取
+
 以下步骤获取 Query Profile：
 
 1. 在浏览器中访问 `http://<fe_ip>:<fe_http_port>`。
@@ -57,6 +59,29 @@ Runtime Query Profile 与普通 Query Profile 格式和内容均相同。您可�
 页面将跳转至相应 Query Profile。
 
 ![img](../assets/profile-2.png)
+
+### 通过 get_query_profile 函数获取
+
+以下示例展示了如何获取 Query Profile：
+
+```
+-- Enable the profiling feature.
+set enable_profile = true;
+
+-- Run a simple query.
+select 1;
+
+-- Get the query_id of the query.
+select last_query_id();
++--------------------------------------+
+| last_query_id()                      |
++--------------------------------------+
+| bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
++--------------------------------------+
+
+-- Obtain the query profile.
+select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G;
+```
 
 ## 分析 Query Profile
 
