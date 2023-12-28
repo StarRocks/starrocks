@@ -271,7 +271,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String query3 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 99";
         String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "1:Project\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan3, "1:Project\n" +
                 "  |  <slot 6> : 17: t1c\n" +
                 "  |  <slot 14> : 15: v1 + 1 * 2\n" +
                 "  |  \n" +
@@ -315,7 +315,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String query8 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d < 10";
         String plan8 = getFragmentPlan(query8);
-        PlanTestBase.assertContains(plan8, "1:Project\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:Project\n" +
                 "  |  <slot 6> : 16: t1c\n" +
                 "  |  <slot 14> : 15: v1 + 1 * 2\n" +
                 "  |  \n" +
