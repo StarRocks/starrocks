@@ -778,7 +778,7 @@ public class Config extends ConfigBase {
     public static int publish_version_interval_ms = 10;
 
     @ConfField(mutable = true)
-    public static boolean lake_enable_batch_publish_version  = false;
+    public static boolean lake_enable_batch_publish_version = false;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
@@ -2598,7 +2598,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = false;
-  
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2646,6 +2646,30 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String access_control = "native";
+
+    /**
+     *  Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     *  Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
+
+    /**
+     * Whether to use the unix group as the ranger authentication group
+     */
+    @ConfField(mutable = true)
+    public static boolean ranger_user_ugi = false;
 
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
