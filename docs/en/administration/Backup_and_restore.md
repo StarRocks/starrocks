@@ -14,6 +14,10 @@ StarRocks supports the following remote storage systems:
 - AWS S3
 - Google GCS
 
+> **NOTE**
+>
+> Shared-data StarRocks clusters do not support data BACKUP and RESTORE.
+
 ## Back up data
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
