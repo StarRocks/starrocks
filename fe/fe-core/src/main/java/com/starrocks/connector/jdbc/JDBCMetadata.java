@@ -24,7 +24,9 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
@@ -50,6 +52,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
+    private boolean supportPartitionScan;
+
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
     private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
@@ -72,15 +76,28 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
-        checkAndSetSupportPartitionInformation();
-        createMetaAsyncCacheInstances(properties);
+
+        if (checkSupportPartitionScan()) {
+            checkAndSetSupportPartitionInformation();
+        } else {
+            schemaResolver.setSupportPartitionInformation(false);
+        }
+        createMetaAsyncCacheInstances();
     }
 
-    private void createMetaAsyncCacheInstances(Map<String, String> properties) {
-        partitionNamesCache = new JDBCMetaCache<>(properties, false);
-        tableIdCache = new JDBCMetaCache<>(properties, true);
-        tableInstanceCache = new JDBCMetaCache<>(properties, false);
-        partitionInfoCache = new JDBCMetaCache<>(properties, false);
+    private boolean checkSupportPartitionScan() {
+        if (properties.get(JDBCResource.JDBC_SUPPORT_PARTITION_SCAN) != null) {
+            return supportPartitionScan =
+                    Boolean.parseBoolean(properties.get(JDBCResource.JDBC_SUPPORT_PARTITION_SCAN));
+        }
+        return supportPartitionScan = Config.jdbc_meta_default_support_partition_scan;
+    }
+
+    private void createMetaAsyncCacheInstances() {
+        partitionNamesCache = new JDBCMetaCache<>(this.properties, false);
+        tableIdCache = new JDBCMetaCache<>(this.properties, true);
+        tableInstanceCache = new JDBCMetaCache<>(this.properties, false);
+        partitionInfoCache = new JDBCMetaCache<>(this.properties, false);
     }
 
     public void checkAndSetSupportPartitionInformation() {
@@ -167,6 +184,10 @@ public class JDBCMetadata implements ConnectorMetadata {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {
+                        // When partition scan support is closed, a list of length 0 is returned by default
+                        if (!this.supportPartitionScan) {
+                            return Lists.newArrayList();
+                        }
                         return schemaResolver.listPartitionNames(connection, databaseName, tableName);
                     } catch (SQLException e) {
                         throw new StarRocksConnectorException("list partition names for JDBC catalog fail!",
@@ -177,6 +198,10 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
+            // When partition scan support is closed, a list of length 0 is returned by default
+            if (!this.supportPartitionScan) {
+                return Lists.newArrayList();
+            }
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
                     .stream().map(String::toLowerCase).collect(Collectors.toSet());
             if (!partitionColumnNames.isEmpty()) {
@@ -194,6 +219,11 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        // When partition scan support is closed, the single partition is returned by default
+        if (!this.supportPartitionScan) {
+            return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+        }
+
         JDBCTable jdbcTable = (JDBCTable) table;
         List<Partition> partitions = partitionInfoCache.get(
                 new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName()),
@@ -243,7 +273,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         partitionInfoCache.invalidate(jdbcTableName);
     }
 
-    public void refreshCache(Map<String, String> properties) {
-        createMetaAsyncCacheInstances(properties);
+    public void refreshCache() {
+        createMetaAsyncCacheInstances();
     }
 }

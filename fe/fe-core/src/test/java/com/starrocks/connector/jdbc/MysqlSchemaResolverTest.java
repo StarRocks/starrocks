@@ -169,8 +169,7 @@ public class MysqlSchemaResolverTest {
             List<String> partitionNamesWithCache = jdbcMetadata.listPartitionNames("test", "tbl1");
             Assert.assertFalse(partitionNamesWithCache.isEmpty());
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
+            jdbcMetadata.refreshCache();
             List<String> partitionNamesWithOutCache = jdbcMetadata.listPartitionNames("test", "tbl1");
             Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
         } catch (Exception e) {
@@ -257,8 +256,7 @@ public class MysqlSchemaResolverTest {
             int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(sizeWithCache > 0);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
+            jdbcMetadata.refreshCache();
             int sizeWithOutCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertEquals(0, sizeWithOutCache);
         } catch (Exception e) {

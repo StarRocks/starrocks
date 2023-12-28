@@ -104,6 +104,10 @@ public abstract class JDBCSchemaResolver {
 
     }
 
+    public void setSupportPartitionInformation(boolean supportPartitionInformation) {
+        this.supportPartitionInformation = supportPartitionInformation;
+    }
+
     public boolean isSupportPartitionInformation() {
         return supportPartitionInformation;
     }

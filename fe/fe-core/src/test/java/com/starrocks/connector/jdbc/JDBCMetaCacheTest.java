@@ -174,8 +174,7 @@ public class JDBCMetaCacheTest {
             Table table2 = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table2 instanceof JDBCTable);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
+            jdbcMetadata.refreshCache();
             Table table3 = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertFalse(table3 instanceof JDBCTable);
         } catch (Exception e) {

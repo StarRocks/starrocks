@@ -55,6 +55,13 @@ public class JDBCResource extends Resource {
     public static final String CHECK_SUM = "checksum";
     public static final String DRIVER_CLASS = "driver_class";
 
+    public static final String JDBC_META_CACHE_ENABLE = "jdbc_meta_cache_enable";
+    public static final String JDBC_META_CACHE_EXPIRESEC = "jdbc_meta_cache_expire_sec";
+
+    public static final String JDBC_SUPPORT_PARTITION_SCAN = "jdbc_support_partition_scan";
+
+
+
     // @TODO is this necessary?
     // private static final String JDBC_TYPE = "jdbc_type";
 

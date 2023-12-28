@@ -2781,4 +2781,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = true)
+    public static boolean jdbc_meta_default_support_partition_scan = true;
 }
