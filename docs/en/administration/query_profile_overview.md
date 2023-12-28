@@ -16,7 +16,7 @@ SET enable_profile = true;
 
 ### Enable Query Profile for Slow Queries
 
-We generally do not recommend enabling Query Profile in a production environment on a global, long-term basis. This is because the data collection and processing of Query Profile may impose additional burdens on the system. However, if you need to capture and analyze slow queries, you can enable Query Profile only for slow queries. This can be achieved by setting the variable `big_query_profile_second_threshold` to an integer greater than `0`. For example, if this variable is set to `30`, it means that only queries with an execution time exceeding 30 seconds will trigger Query Profile. This ensures system performance while effectively monitoring slow queries.
+It is not recommended to enable Query Profile in a production environment on a global, long-term basis. This is because the data collection and processing of Query Profile may impose additional burdens on the system. However, if you need to capture and analyze slow queries, you can enable Query Profile only for slow queries. This can be achieved by setting the variable `big_query_profile_second_threshold` to an integer greater than `0`. For example, if this variable is set to `30`, it means that only queries with an execution time exceeding 30 seconds will trigger Query Profile. This ensures system performance while effectively monitoring slow queries.
 
 ```SQL
 SET global big_query_profile_second_threshold = 30;
@@ -24,7 +24,7 @@ SET global big_query_profile_second_threshold = 30;
 
 ### Enable Runtime Query Profile
 
-Some queries may take a long time to execute, ranging from seconds to hours. Often, it is challenging to determine whether a query is still in progress or the system has crashed before the query completes. To address this issue, we introduced the Runtime Query Profile feature in v3.1 and later. This feature allows you to collect and report Query Profile data at fixed time intervals during query execution. This gives you the insight into the query's execution progress and potential bottlenecks in real-time, without waiting for the query to finish. In this way, you can monitor and optimize the query process more effectively.
+Some queries may take a long time to execute, ranging from seconds to hours. Often, it is challenging to determine whether a query is still in progress or the system has crashed before the query completes. To address this issue, StarRocks introduced the Runtime Query Profile feature in v3.1 and later. This feature allows you to collect and report Query Profile data at fixed time intervals during query execution. This gives you the insight into the query's execution progress and potential bottlenecks in real-time, without waiting for the query to finish. In this way, you can monitor and optimize the query process more effectively.
 
 When Query Profile is enabled, this feature is automatically activated, with a default reporting interval of 10 seconds. You can adjust the interval by modifying the variable `runtime_profile_report_interval`:
 
@@ -36,11 +36,13 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 
 ### Configure Query Profile Behavior
 
-| Configuration Type | Configuration Item | Valid Values | Description |
+| Configuration Type | Configuration Item | Valid Values | Default Values | Description |
 | -- | -- | -- | -- |
-| Session Variable | enable_profile | true/false | Whether to enable Query Profile. `true` means to enable this feature. |
-| Session Variable | pipeline_profile_level | 1/2 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, we generally do not recommend changing this value. |
-| FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
+| Session Variable | enable_profile | true/false | false | Whether to enable Query Profile. `true` means to enable this feature. |
+| Session Variable | pipeline_profile_level | 1/2 | 1 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. |
+| Session Variable | runtime_profile_report_interval | Positive integer | 10 | The report interval of Runtime Query Profile. Unit: second. |
+| Session Variable | big_query_profile_second_threshold | Integer | 0 | If the execution time of a big query excceds this value, Query Profile is automatically enbaled for this query. Setting this item to `0` indicates this feature is disabled. Unit: second. |
+| FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
 
 ## Obtain Query Profile
 
