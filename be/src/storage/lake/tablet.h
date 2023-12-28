@@ -74,7 +74,11 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
@@ -97,6 +101,8 @@ public:
     [[nodiscard]] std::string metadata_root_location() const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
+
+    [[nodiscard]] std::string txn_slog_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string txn_vlog_location(int64_t version) const;
 

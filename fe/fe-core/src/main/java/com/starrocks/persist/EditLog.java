@@ -103,6 +103,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
@@ -1282,6 +1283,11 @@ public class EditLog {
                     globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
                     break;
                 }
+                case OperationType.OP_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
@@ -1314,7 +1320,6 @@ public class EditLog {
                     UpdateFailoverGroupLog updateFailoverGroupLog = (UpdateFailoverGroupLog) journal.getData();
                     globalStateMgr.getFailoverGroupMgr()
                             .replayUpdateFailoverGroup(updateFailoverGroupLog.getFailoverGroup());
-                    break;
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
@@ -2416,6 +2421,11 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
     }
 
     // warehouse

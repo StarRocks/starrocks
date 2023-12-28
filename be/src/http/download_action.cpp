@@ -76,6 +76,8 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
         status = check_token(req);
         if (!status.ok()) {
             HttpChannel::send_reply(req, status.message());
+            LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                         << " error:" << status;
             return;
         }
     }
@@ -83,12 +85,14 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
     status = check_path_is_allowed(file_param);
     if (!status.ok()) {
         HttpChannel::send_reply(req, status.message());
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param << " error:" << status;
         return;
     }
     auto is_dir = fs::is_directory(file_param);
     if (!is_dir.ok()) {
         HttpChannel::send_reply(req, is_dir.status().message());
-        return;
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                     << " error:" << is_dir.status();
     }
     if (*is_dir) {
         do_dir_response(file_param, req);

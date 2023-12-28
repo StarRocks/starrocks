@@ -133,6 +133,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -1203,6 +1204,10 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
             case OperationTypeEPack.OP_CREATE_WAREHOUSE:
             case OperationTypeEPack.OP_ALTER_WAREHOUSE:
                 data = Warehouse.read(in);
@@ -1224,7 +1229,6 @@ public class JournalEntity implements Writable {
                 data = UpdateFailoverGroupLog.read(in);
                 isRead = true;
                 break;
-
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

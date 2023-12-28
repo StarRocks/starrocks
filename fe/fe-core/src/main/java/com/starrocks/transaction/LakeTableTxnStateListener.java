@@ -28,6 +28,8 @@ import com.starrocks.common.Config;
 import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -192,6 +194,17 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        // The new versions in a replication transaction depend on the versions in ReplicationTxnCommitAttachment
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -211,10 +224,15 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
+        List<TxnTypePB> txnTypes = Collections.singletonList(
+                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        ? TxnTypePB.TXN_REPLICATION
+                        : TxnTypePB.TXN_NORMAL);
         List<ComputeNode> nodes = getAllAliveNodes();
         for (ComputeNode node : nodes) { // Send abortTxn() request to all nodes
             AbortTxnRequest request = new AbortTxnRequest();
             request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
             request.skipCleanup = true;
             request.tabletIds = null; // unused when skipCleanup is true
 
@@ -224,6 +242,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnWithCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
+        List<TxnTypePB> txnTypes = Collections.singletonList(
+                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        ? TxnTypePB.TXN_REPLICATION
+                        : TxnTypePB.TXN_NORMAL);
         Map<Long, List<Long>> tabletGroup = new HashMap<>();
         for (TabletCommitInfo info : txnState.getTabletCommitInfos()) {
             tabletGroup.computeIfAbsent(info.getBackendId(), k -> Lists.newArrayList()).add(info.getTabletId());
@@ -235,6 +257,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             }
             AbortTxnRequest request = new AbortTxnRequest();
             request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
             request.tabletIds = entry.getValue();
             request.skipCleanup = false;
 

@@ -130,12 +130,18 @@ message TxnLogPB {
         repeated MetadataUpdateInfoPB metadata_update_infos = 1;
     }
 
+    message OpReplication {
+        optional ReplicationTxnMetaPB txn_meta = 1;
+        repeated OpWrite op_writes = 2;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
     optional OpCompaction op_compaction = 4;
     optional OpSchemaChange op_schema_change = 5;
     optional OpAlterMetadata op_alter_metadata = 6;
+    optional OpReplication op_replication = 7;
 }
 
 message TabletMetadataLockPB {}

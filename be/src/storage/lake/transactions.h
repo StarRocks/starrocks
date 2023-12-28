@@ -75,7 +75,10 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
 // - txn_ids A `std::span` of `int64_t` containing the transaction IDs to be aborted.
+// - txn_types A `std::span` of `int32_t(TxnTypePB)` containing the transaction types to be aborted.
+//             Using int32_t instead of TxnTypePB due to protobuf uses int32_t to store enum
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
+               std::span<const int32_t> txn_types);
 
 } // namespace starrocks::lake

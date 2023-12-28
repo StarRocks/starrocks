@@ -246,6 +246,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
@@ -570,6 +571,8 @@ public class GlobalStateMgr {
     private PipeScheduler pipeScheduler;
     private MVActiveChecker mvActiveChecker;
 
+    private ReplicationMgr replicationMgr;
+
     private FailoverGroupMgr failoverGroupMgr;
     private static GlobalStateMgr FAILOVER_GROUP_STATE = null;
     private static long failoverGroupThreadId = -1;
@@ -839,6 +842,7 @@ public class GlobalStateMgr {
             }
         });
 
+        this.replicationMgr = new ReplicationMgr();
         this.failoverGroupMgr = new FailoverGroupMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
@@ -1120,6 +1124,10 @@ public class GlobalStateMgr {
 
     public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
         return connectorTableMetadataProcessor;
+    }
+
+    public ReplicationMgr getReplicationMgr() {
+        return replicationMgr;
     }
 
     public FailoverGroupMgr getFailoverGroupMgr() {
@@ -1503,6 +1511,8 @@ public class GlobalStateMgr {
             safeModeChecker.start();
         }
 
+        replicationMgr.start();
+
         failoverGroupThreadId = failoverGroupMgr.getId();
         failoverGroupMgr.start();
         LOG.info("failover group thread id is {}", failoverGroupThreadId);
@@ -1613,6 +1623,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                 .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
                 .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
@@ -1841,6 +1852,7 @@ public class GlobalStateMgr {
                 globalFunctionMgr.save(dos);
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
+                replicationMgr.save(dos);
                 securityPolicyManager.save(dos);
                 warehouseMgr.save(dos);
                 failoverGroupMgr.save(dos);
