@@ -37,6 +37,8 @@ public class LockChecker extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LockChecker.class);
 
+    private static int waiterNumber = 0;
+
     public LockChecker() {
         super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
     }
@@ -101,6 +103,7 @@ public class LockChecker extends FrontendDaemon {
                     }
                 }
                 ownerInfo.add("lockWaiters", waiterIds);
+                waiterNumber = waiterIds.size();
                 dbLocks.add(ownerInfo);
             }
         }
@@ -122,5 +125,9 @@ public class LockChecker extends FrontendDaemon {
                 }
             }
         }
+    }
+
+    public static int getWaiterNumber() {
+        return waiterNumber;
     }
 }

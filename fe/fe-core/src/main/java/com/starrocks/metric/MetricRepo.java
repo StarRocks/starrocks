@@ -158,6 +158,8 @@ public final class MetricRepo {
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
+    public static GaugeMetricImpl<Integer> GAUGE_DB_LOCK_WAITER;
+
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
@@ -358,6 +360,11 @@ public final class MetricRepo {
         GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));
         GAUGE_SAFE_MODE.setValue(0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SAFE_MODE);
+
+        GAUGE_DB_LOCK_WAITER = new GaugeMetricImpl<>("db_lock_waiter", MetricUnit.NOUNIT, "db lock waiter");
+        GAUGE_DB_LOCK_WAITER.addLabel(new MetricLabel("type", "db_lock_waiter"));
+        GAUGE_DB_LOCK_WAITER.setValue(0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_DB_LOCK_WAITER);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
