@@ -267,7 +267,7 @@ public class StarRocksAssert {
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
-                    throw new Exception(e.getMessage(), e);
+                    throw new DdlException(e.getMessage());
                 }
                 retryTime++;
                 Thread.sleep(1000);
