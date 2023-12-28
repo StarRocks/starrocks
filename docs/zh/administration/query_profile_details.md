@@ -10,7 +10,7 @@ Query Profile 的结构与执行引擎的设计密切相关，由以下五部分
 
 - Fragment：执行树。一个查询由一个或多个 Fragment 组成。
 - FragmentInstance：每个 Fragment 可以有多个实例，每个实例称为 FragmentInstance，分别由不同的计算节点来执行。
-- Pipeline：一个 FragmentInstance 会被拆分成多个 Pipeline。Pipeline 是一个执行链，由一组收尾相接的 Operator 构成。
+- Pipeline：一个 FragmentInstance 会被拆分成多个 Pipeline。Pipeline 是一个执行链，由一组首尾相接的 Operator 构成。
 - PipelineDriver：一个 Pipeline 可以有多个实例，每个实例称为 PipelineDriver，以充分利用多个计算核心。
 - Operator：算子。一个 PipelineDriver 由多个 Operator 组成。
 
@@ -126,7 +126,7 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 ##### QuerySpillBytes
 
-描述：Spill字节数量
+描述：Spill 到本地磁盘的字节数量
 
 ##### ResultDeliverTime
 
@@ -179,11 +179,11 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 ##### DegreeOfParallelism
 
-描述：并行度。
+描述：Pipeline 执行的并行度。
 
 ##### TotalDegreeOfParallelism
 
-描述：并行度之和。由于同一个 Pipeline 会在多个机器执行，这里就把所有的并行度累加起来。
+描述：并行度之和。由于同一个 Pipeline 会在多个机器执行，这里指的是把所有并行度累加起来的值。
 
 ##### DriverPrepareTime
 
@@ -195,7 +195,7 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 ##### ActiveTime
 
-描述：Pipeline 的执行时间，包括各个算子的执行时间，以及整个框架的 Overhead，包括调用has_output，need_input 这些方法时间。
+描述：Pipeline 的执行时间，包括各个算子的执行时间，以及整个框架的 Overhead，包括调用 has_output，need_input 这些方法的时间。
 
 ##### PendingTime
 
@@ -459,7 +459,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### ReadPKIndex
 
-- 描述：读取 PK 索引的时间。
+- 描述：读取 PrimaryKey 索引的时间。
 - 级别：二级指标
 
 ##### SegmentInit
@@ -626,7 +626,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 #### Connector Scan Operator
 
-##### ##### DataSourceType
+##### DataSourceType
 
 - 描述：数据源类型，可以是 HiveDataSource，ESDataSource 等等。
 - 级别：一级指标
@@ -714,7 +714,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### InputStream
 
-- 描述：
+- 描述：仅用于分类，无具体含义。
 - 级别：二级指标
 - 下属指标：AppIOBytesRead、AppIOCounter、AppIOTime、FSIOBytesRead、FSIOCounter、FSIOTime
 
@@ -750,7 +750,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### ORC
 
-- 描述：
+- 描述：仅用于分类，无具体含义。
 - 级别：二级指标
 - 下属指标：IcebergV2FormatTimer、StripeNumber、StripeSizes
 
@@ -796,7 +796,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### SharedBuffered
 
-- 描述：
+- 描述：仅用于分类，无具体含义。
 - 级别：二级指标
 - 下属指标：DirectIOBytes、DirectIOCount、DirectIOTime、SharedIOBytes、SharedIOCount、SharedIOTime
 
@@ -807,8 +807,9 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### DirectIOCount
 
-- 描述：直接 IO 的次数。|
+- 描述：直接 IO 的次数。
 - 级别：三级指标
+
 ##### DirectIOTime
 
 - 描述：直接 IO 的耗时。
@@ -1036,7 +1037,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### PassThroughRowCount
 
-描述：Streaming 模式下，由于聚合度不高，导致退化成 Streaming 模式后，处理的数据量。
+描述：Auto 模式下，由于聚合度不高，导致退化成 Streaming 模式后，处理数据的行数。
 
 ##### ResultAggAppendTime
 
@@ -1345,7 +1346,7 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 ##### Type
 
-描述：Local Exchange 类型，包括：`Passthrough`、Partition` 以及 `Broadcast`。
+描述：Local Exchange 类型，包括：`Passthrough`、`Partition` 以及 `Broadcast`。
 
 ##### ShuffleNum
 

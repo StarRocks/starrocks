@@ -26,7 +26,7 @@ EXPLAIN ANALYZE <statement>
 
 ## 使用说明
 
-请注意，当您模拟并分析 INSERT INTO 语句的 Query Profile 时，实际上不会导入任何数据。默认情况下，导入事务会被中止，以确保在分析过程中不会对数据进行意外更改。
+请注意，当您模拟并分析 INSERT INTO 语句的 Query Profile 时，实际上不会导入任何数据。默认情况下，导入事务会被强制回滚，以确保在分析过程中不会对数据进行意外更改。
 
 ## 示例
 
@@ -34,7 +34,7 @@ EXPLAIN ANALYZE <statement>
 
 ![img](../../../assets/Profile/text_based_explain_analyze_select.jpeg)
 
-示例二：模拟分析 INSERT INTO 语句。完成后，导入事务会被中止，数据不会被实际导入。
+示例二：模拟分析 INSERT INTO 语句。执行结束后，导入事务会被强制回滚，数据不会被实际导入。
 
 ![img](../../../assets/Profile/text_based_explain_analyze_insert.jpeg)
 

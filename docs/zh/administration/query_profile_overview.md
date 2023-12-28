@@ -24,7 +24,7 @@ SET global big_query_profile_second_threshold = 30;
 
 ### 启用 Runtime Query Profile
 
-某些查询可能需要耗费较长时间执行，从数十秒到数小时不等。在查询完成之前，经常无法判断查询是否还在进行或是系统已经死机。为解决这个问题，我们在 v3.1 及以上版本中引入了 Runtime Query Profile 功能。此功能允许我们在查询执行过程中，按固定时间间隔收集并上报 Query Profile 数据。这使我们能够实时了解查询的执行进度和潜在的瓶颈点，而不必等到查询完全结束。通过这种方式，我们可以更有效地监控和优化查询过程。
+某些查询可能需要耗费较长时间执行，从数十秒到数小时不等。在查询完成之前，经常无法判断查询是否还在进行或是系统已经死机。为解决这个问题，StarRocks 在 v3.1 及以上版本中引入了 Runtime Query Profile 功能。此功能允许 StarRocks 在查询执行过程中，按固定时间间隔收集并上报 Query Profile 数据。这使您能够实时了解查询的执行进度和潜在的瓶颈点，而不必等到查询完全结束。通过这种方式，您可以更有效地监控和优化查询过程。
 
 当 Query Profile 启用时，该功能会自动启用，默认的上报时间间隔为 10 秒。您可以通过修改变量 `runtime_profile_report_interval` 来调整对应的时间间隔：
 
@@ -36,11 +36,13 @@ Runtime Query Profile 与普通 Query Profile 格式和内容均相同。您可�
 
 ### 配置 Query Profile 行为
 
-| 配置方式 | 配置项 | 可选值 | 含义 |
-| -- | -- | -- | -- |
-| Session 变量 | enable_profile | true/false | 是否启用 Query Profile 功能。`true` 表示启用。 |
-| Session 变量 | pipeline_profile_level | 1/2 | 设置 Query Profile 的级别。`1` 表示会对 Profile 进行合并展示；`2` 表示保留原始的 Profile，如果选用这一级别，那么所有可视化的分析工具将不再起作用，因此通常不建议修改该参数。 |
-| FE 动态配置项 | enable_statistics_collect_profile | true/false | 是否启用统计信息采集相关查询的 Query Profile。`true` 表示启用。 |
+| 配置方式 | 配置项 | 可选值 | 默认值 | 含义 |
+| -- | -- | -- | -- | -- |
+| Session 变量 | enable_profile | true/false | false |是否启用 Query Profile 功能。`true` 表示启用。 |
+| Session 变量 | pipeline_profile_level | 1/2 | 1 | 设置 Query Profile 的级别。`1` 表示会对 Profile 进行合并展示；`2` 表示保留原始的 Profile，如果选用这一级别，那么所有可视化的分析工具将不再起作用，因此通常不建议修改该参数。 |
+| Session 变量 | runtime_profile_report_interval | 正整数 | 10 | 设置 Runtime Query Profile 上报的时间间隔，单位秒。 |
+| Session 变量 | big_query_profile_second_threshold | 整数 | 0 | 设置长查询自动开启 Query Profile 的阈值，`0` 或者负数表示关闭该功能。正整数表示启用，单位秒。 |
+| FE 动态配置项 | enable_statistics_collect_profile | true/false | false | 是否启用统计信息采集相关查询的 Query Profile。`true` 表示启用。 |
 
 ## 获取 Query Profile
 
