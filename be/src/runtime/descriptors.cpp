@@ -332,6 +332,22 @@ const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
     return _paimon_native_table;
 }
 
+OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    _database_name = tdesc.dbName;
+    _table_name = tdesc.tableName;
+}
+
+const std::string& OdpsTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+const std::string& OdpsTableDescriptor::get_table_name() const {
+    return _table_name;
+}
+
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
 bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
@@ -676,6 +692,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::JDBC_TABLE: {
             desc = pool->add(new JDBCTableDescriptor(tdesc));
+            break;
+        }
+        case TTableType::ODPS_TABLE: {
+            desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
         default:
