@@ -127,6 +127,8 @@ void PipelineDriverPoller::run_internal() {
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
+                } else if (driver->query_ctx()->exceed_max_concurrency()) {
+                    ++driver_it;
                 } else {
                     auto status_or_is_not_blocked = driver->is_not_blocked();
                     if (!status_or_is_not_blocked.ok()) {

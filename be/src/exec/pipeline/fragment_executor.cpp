@@ -149,6 +149,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     if (query_options.__isset.runtime_profile_report_interval) {
         _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
     }
+    if (query_options.__isset.driver_max_concurrency && query_options.driver_max_concurrency > 0) {
+        _query_ctx->set_max_concurrency(query_options.driver_max_concurrency);
+    }
 
     bool enable_query_trace = false;
     if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {

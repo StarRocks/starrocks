@@ -142,6 +142,12 @@ void GlobalDriverExecutor::_worker_thread() {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 continue;
             }
+            auto concurrency_token = driver->query_ctx()->acquire_exec_concurrency();
+            if (!concurrency_token) {
+                // reach max concurrency add to poller
+                _blocked_driver_poller->add_blocked_driver(driver);
+                continue;
+            }
 
             StatusOr<DriverState> maybe_state;
             int64_t start_time = driver->get_active_time();

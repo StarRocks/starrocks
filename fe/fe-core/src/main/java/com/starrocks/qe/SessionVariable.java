@@ -600,6 +600,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
+    // pipeline driver max concurrency. 0 means unlimited
+    public static final String DRIVER_MAX_CONCURRENCY = "driver_max_concurrency";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1226,6 +1229,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = DRIVER_MAX_CONCURRENCY)
+    private int driverMaxConcurrency = 0;
 
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
@@ -3104,6 +3110,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setDriver_max_concurrency(driverMaxConcurrency);
         return tResult;
     }
 
