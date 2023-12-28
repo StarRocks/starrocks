@@ -354,10 +354,7 @@ struct THdfsScanRange {
 
     19: optional bool use_odps_jni_reader
 
-    20: optional map<string, string> odps_split_info
-
-    // delete columns slots like iceberg equality delete column slots
-    21: optional list<Types.TSlotId> delete_column_slot_ids;
+    20: optional map<string, string> odps_split_infos
 }
 
 struct TBinlogScanRange {
