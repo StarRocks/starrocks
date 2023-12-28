@@ -34,6 +34,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -104,8 +105,14 @@ public class AggregationAnalyzer {
         }
 
         @Override
+        public Boolean visitFieldReference(FieldReference node, Void context) {
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function");
+        }
+
+        @Override
         public Boolean visitExpression(Expr node, Void context) {
-            throw new SemanticException("%s is not support in GROUP BY clause", node.toSql());
+            throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function");
         }
 
         private boolean isGroupingKey(Expr node) {
