@@ -150,10 +150,6 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 描述：参与该 Fragment 执行的所有 BE 的地址信息
 
-##### InstanceIds
-
-描述：该 Fragment 的所有 FragmentInstance ID
-
 ##### FragmentInstancePrepareTime
 
 描述：Fragment Prepare 阶段的耗时
