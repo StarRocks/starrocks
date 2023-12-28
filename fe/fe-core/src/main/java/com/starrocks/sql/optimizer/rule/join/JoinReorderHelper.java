@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -100,7 +101,7 @@ public class JoinReorderHelper {
     }
 
 
-    public static boolean isLeftAsscom(OptExpression bottomJoinExpr, OptExpression topJoinExpr) {
+    public static boolean isLeftAsscom(OptExpression bottomJoinExpr, OptExpression topJoinExpr, boolean isInnerMode) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinExpr.getOp();
         ScalarOperator topJoinOnCondition = topJoin.getOnPredicate();
 
@@ -108,6 +109,21 @@ public class JoinReorderHelper {
         if (!splitCols.get(2).isEmpty()) {
             return false;
         }
+
+        Projection botJoinProjection = bottomJoinExpr.getOp().getProjection();
+        if (!isInnerMode && botJoinProjection != null && !splitCols.get(1).isEmpty()) {
+            ColumnRefSet rightCols = splitCols.get(1);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : botJoinProjection.getColumnRefMap().entrySet()) {
+                if (rightCols.contains(entry.getKey())) {
+                    // don't reorder join like select ifnull(t1.v1,0) from t0 left join t1 on t0.v2 = t1.v2
+                    // left join t3 on t0.v3 = t3.v3
+                    if (Utils.isNotAlwaysNullResultWithNullScalarOperator(entry.getValue())) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         if (topJoinOnCondition == null) {
             return false;
         }
