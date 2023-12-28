@@ -32,6 +32,10 @@ public class JDBCTable extends Table {
     private String jdbcTable;
     private Map<String, String> properties;
     private String dbName;
+<<<<<<< HEAD
+=======
+    private List<Column> partitionColumns;
+>>>>>>> f12d92df93 ([BugFix] fix bad jdbc driver name (#37975))
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -95,6 +99,29 @@ public class JDBCTable extends Table {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // TODO, identify the remote table that created after deleted
+    @Override
+    public String getUUID() {
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            return String.join(".", catalogName, dbName, name);
+        } else {
+            return Long.toString(id);
+        }
+    }
+
+    private static String buildCatalogDriveName(String uri) {
+        // jdbc:postgresql://172.26.194.237:5432/db_pg_select
+        // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
+        // requirement: it should be used as local path.
+        // and there is no ':' in it to avoid be parsed into non-local filesystem.
+        return uri.replace("//", "")
+                .replace("/", "_")
+                .replace(":", "_");
+    }
+
+>>>>>>> f12d92df93 ([BugFix] fix bad jdbc driver name (#37975))
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TJDBCTable tJDBCTable = new TJDBCTable();
@@ -112,7 +139,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
             String uri = properties.get(JDBCResource.URI);
-            String driverName = uri.replace("//", "").replace("/", "_");
+            String driverName = buildCatalogDriveName(uri);
             tJDBCTable.setJdbc_driver_name(driverName);
             tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
