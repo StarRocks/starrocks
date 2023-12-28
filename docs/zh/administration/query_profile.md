@@ -22,11 +22,7 @@ set enable_profile = true;
 
 ## 获取 Query Profile
 
-> **说明**
->
-> 如果您使用 StarRocks 企业版，则可以使用 StarRocks Manager 获取并可视化 Query Profile。
-
-如果您不是 StarRocks 企业版用户，请按照以下步骤获取 Query Profile：
+请按照以下步骤获取 Query Profile：
 
 1. 在浏览器中访问 `http://<fe_ip>:<fe_http_port>`。
 2. 在显示的页面上，单击顶部导航中的 **queries**。
