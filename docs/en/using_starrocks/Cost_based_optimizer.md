@@ -2,6 +2,18 @@
 displayed_sidebar: "English"
 ---
 
+CREATE TABLE IF NOT EXISTS aggregate_tbl (
+    site_id LARGEINT NOT NULL COMMENT "id of site",
+    date DATE NOT NULL COMMENT "time of event",
+    city_code VARCHAR(20) COMMENT "city_code of user",
+    pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
+)
+AGGREGATE KEY(site_id, date, city_code)
+DISTRIBUTED BY HASH(site_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "3"
+);
+
 # Gather statistics for CBO
 
 This topic describes the basic concept of StarRocks CBO and how to collect statistics for the CBO. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics.
@@ -118,7 +130,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_small_table_size     | LONG    | 5368709120   | The threshold for determining whether a table is a small table for automatic full collection. A table whose size is greater than this value is considered a large table, whereas a table whose size is less than or equal to this value is considered a small table. Unit: Byte. Default value: 5368709120 (5 GB).                         |
 | statistic_auto_collect_small_table_interval | LONG    | 0         | The interval for automatically collecting full statistics of small tables. Unit: seconds.                              |
 | statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default value: 43200 (12 hours).                               |
-| statistic_auto_collect_sample_threshold  | DOUBLE	| 0.3   | The statistics health threshold for triggering automatic sampled collection. If the health value of statistics is lower than this threshold, automatic sampled collection is triggered. |
+| statistic_auto_collect_sample_threshold  | DOUBLE  | 0.3   | The statistics health threshold for triggering automatic sampled collection. If the health value of statistics is lower than this threshold, automatic sampled collection is triggered. |
 | statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |

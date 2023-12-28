@@ -14,13 +14,13 @@ displayed_sidebar: "Chinese"
 
 ## 语法
 
-- 将数据库和表的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
+- 将数据库和表的指定权限授予某用户或某角色。指定的用户或角色必须存在。
 
     ```SQL
-    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}
+    GRANT privilege_list ON db_name.tbl_name TO {user_identity | ROLE 'role_name'}
     ```
 
-- 将资源的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
+- 将资源的指定权限授予某用户或某角色。指定的用户或角色必须存在。
 
     ```SQL
     GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
@@ -42,7 +42,7 @@ displayed_sidebar: "Chinese"
 
 ### privilege_list
 
-授予某用户或某角色的指定权限。如果要一次性授予某用户或某角色多种权限，需要用逗号 (`,`) 将不同权限分隔开。支持权限如下：
+授予某用户或某角色的指定权限。如果要一次性授予某用户或某角色多种权限，需要用逗号 (`,`) 将不同权限分隔开，见示例三。支持权限如下：
 
 - `NODE_PRIV`：集群节点操作权限，如节点上下线。
 - `ADMIN_PRIV`：除 `NODE_PRIV` 以外的所有权限。
@@ -60,7 +60,7 @@ displayed_sidebar: "Chinese"
 - 库表权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`
 - 资源权限：`USAGE_PRIV`
 
-### db_name [.tbl_name]
+### db_name.tbl_name
 
 指定的数据库和表。支持以下格式：
 
@@ -117,13 +117,13 @@ GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
 ```
 
-示例五：将资源 spark_resource 的使用权限授予用户 `jack`。
+示例五：将资源 `spark_resource` 的使用权限授予用户 `jack`。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
-示例六：将资源 spark_resource 的使用权限授予角色 `my_role` 。
+示例六：将资源 `spark_resource` 的使用权限授予角色 `my_role` 。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';

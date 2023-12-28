@@ -75,7 +75,7 @@ StarRocks classifies the resource privileges into two levels.
 
 ## Privilege Description
 
-The `ADMIN\PRIV` and `GRANT_PRIV` privileges are special because they both have the privilege to grant privileges.
+The `ADMIN_PRIV` and `GRANT_PRIV` privileges are special because they both have the privilege to grant privileges.
 
 * CREATE USER
 
