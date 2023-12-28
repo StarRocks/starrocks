@@ -89,7 +89,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     auto res = std::make_shared<MapColumn>(std::move(key_col), std::move(value_col), std::move(offsets));
 
     if (all_const) {
-        return ConstColumn::create(res, num_rows);
+        res->assign(num_rows, 0);
     }
     return res;
 }
