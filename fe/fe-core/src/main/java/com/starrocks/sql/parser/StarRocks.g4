@@ -611,7 +611,7 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT setVarHint* TASK qualifiedName?
+    : SUBMIT setVarHint* TASK qualifiedName? properties?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
