@@ -1183,7 +1183,6 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalOdpsScan(OptExpression optExpression, ExecPlan context) {
-            LOG.info("[debug] start visit physical odps scan");
             PhysicalOdpsScanOperator node = (PhysicalOdpsScanOperator) optExpression.getOp();
 
             Table referenceTable = node.getTable();
@@ -1228,7 +1227,6 @@ public class PlanFragmentBuilder {
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
-            LOG.info("[debug] finish visit physical odps scan");
             return fragment;
         }
 
