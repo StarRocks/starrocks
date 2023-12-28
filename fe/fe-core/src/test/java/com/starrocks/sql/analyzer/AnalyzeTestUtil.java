@@ -153,6 +153,7 @@ public class AnalyzeTestUtil {
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
                 "  `v2` int NOT NULL,\n" +
+                "  `v4` int NOT NULL,\n" +
                 "  `v3` array<int> not null" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +

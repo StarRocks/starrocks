@@ -107,6 +107,34 @@ public class NativeAccessController implements AccessController {
     }
 
     @Override
+    public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                   Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
+        LOG.info("=== Need column policies: action {}, {} {}", privilegeType,
+                tableName.getNoClusterString(), columns);
+        // roll back to table level
+        checkTableAction(currentUser, roleIds, tableName, privilegeType);
+    }
+
+    @Override
+    public void checkViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                       Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
+        LOG.info("=== Need column policies: action {}, {} {}", privilegeType,
+                tableName.getNoClusterString(), columns);
+        // roll back to view level
+        checkViewAction(currentUser, roleIds, tableName, privilegeType);
+    }
+
+    @Override
+    public void checkMaterializedViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
+                                                   TableName tableName, Set<String> columns,
+                                                   PrivilegeType privilegeType) throws AccessDeniedException {
+        LOG.info("=== Need column policies: action {}, {} {}", privilegeType,
+                tableName.getNoClusterString(), columns);
+        // roll back to view level
+        checkMaterializedViewAction(currentUser, roleIds, tableName, privilegeType);
+    }
+
+    @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.VIEW,
