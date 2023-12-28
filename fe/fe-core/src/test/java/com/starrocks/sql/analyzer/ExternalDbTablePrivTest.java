@@ -21,11 +21,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -48,21 +50,22 @@ public class ExternalDbTablePrivTest {
     private static UserIdentity testUser;
 
     private void mockHiveMeta() {
-        new MockUp<GlobalStateMgr>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String name) {
-                return new Database(112233, name);
+            public Database getDb(String catalogName, String databaseName) {
+                return new Database(112233, databaseName);
             }
         };
 
-        new MockUp<Database>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Table getTable(String tableName) {
+            public Table getTable(String catalogName, String databaseName, String tableName) {
                 return new OlapTable(112244, tableName, new ArrayList<>(),
                         null, null, null);
             }
         };
     }
+
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -158,11 +161,56 @@ public class ExternalDbTablePrivTest {
         ctx.setDatabase(null);
     }
 
+    public void verifySelect(String grantSql, String revokeSql, String expectError) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // 1. before grant: access denied
+        ctxToTestUser();
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.SELECT));
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        ctxToTestUser();
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.SELECT));
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+
+        ctxToTestUser();
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.SELECT));
+    }
+
+    public void verifyDrop(String grantSql, String revokeSql, String expectError) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // 1. before grant: access denied
+        ctxToTestUser();
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.DROP));
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        ctxToTestUser();
+        Assert.assertTrue(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.DROP));
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+
+        ctxToTestUser();
+        Assert.assertFalse(PrivilegeActions.checkTableAction(ctx,
+                "hive0", "tpch", "region", PrivilegeType.DROP));
+    }
+
     @Test
     public void testPrivOnTable() throws Exception {
         // Test select on table
-        verifyGrantRevoke(
-                "select * from hive0.tpch.region",
+        verifySelect(
                 "grant select on table tpch.region to test",
                 "revoke select on table tpch.region from test",
                 "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
@@ -174,8 +222,7 @@ public class ExternalDbTablePrivTest {
                 "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
 
         // Test drop on table
-        verifyGrantRevoke(
-                "drop table hive0.tpch.region",
+        verifyDrop(
                 "grant drop on tpch.region to test",
                 "revoke drop on tpch.region from test",
                 "DROP command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
@@ -215,7 +262,7 @@ public class ExternalDbTablePrivTest {
 
         // Test show databases, check any action on table
         grantRevokeSqlAsRoot("grant drop on tpch.region to test");
-        StatementBase showTableStmt =  UtFrameUtils.parseStmtWithNewParser("show databases",
+        StatementBase showTableStmt = UtFrameUtils.parseStmtWithNewParser("show databases",
                 starRocksAssert.getCtx());
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTableStmt);
         ShowResultSet set = executor.execute();
@@ -230,7 +277,7 @@ public class ExternalDbTablePrivTest {
         grantRevokeSqlAsRoot("grant drop on tpch.region to test");
         grantRevokeSqlAsRoot("grant select on tpch.nation to test");
         grantRevokeSqlAsRoot("grant drop on database tpch to test");
-        StatementBase showGrantsStmt =  UtFrameUtils.parseStmtWithNewParser("show grants",
+        StatementBase showGrantsStmt = UtFrameUtils.parseStmtWithNewParser("show grants",
                 starRocksAssert.getCtx());
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showGrantsStmt);
         set = executor.execute();

@@ -162,6 +162,14 @@ public class MetadataMgr {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
+    public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
@@ -184,6 +192,10 @@ public class MetadataMgr {
             db.setCatalogName(catalogName);
         }
         return db;
+    }
+
+    public Database getDb(Long databaseId) {
+        return localMetastore.getDb(databaseId);
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {

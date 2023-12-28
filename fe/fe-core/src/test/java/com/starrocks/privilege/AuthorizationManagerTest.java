@@ -34,6 +34,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -42,7 +43,6 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -67,65 +67,27 @@ public class AuthorizationManagerTest {
     @Before
     public void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
-        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
-        // create db.tbl0 ~ tbl3
-        String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        starRocksAssert.withDatabase(DB_NAME);
-        starRocksAssert.withDatabase(DB_NAME + "1");
-        for (int i = 0; i < 4; ++i) {
-            starRocksAssert.withTable("create table db.tbl" + i + createTblStmtStr);
-        }
-        // create view
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                "create view db.view1 as select * from db.tbl1", ctx), ctx);
-        GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        globalStateMgr.getAuthorizationMgr().initBuiltinRolesAndUsers();
-        starRocksAssert.getCtx().setRemoteIP("localhost");
-        String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
-                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
-        starRocksAssert.withResource(createResourceStmt);
 
-        // create mv
-        starRocksAssert.withDatabase("db3");
-        createMvForTest(starRocksAssert, starRocksAssert.getCtx());
+        String createResourceSql = "create external resource 'hive0' PROPERTIES(" +
+                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseStmtWithNewParser(createResourceSql, ctx);
+        if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
+            GlobalStateMgr.getCurrentState().getResourceMgr().createResource(createResourceStmt);
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        RBACMockedMetadataMgr metadataMgr =
+                new RBACMockedMetadataMgr(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
+        metadataMgr.init();
+        globalStateMgr.setMetadataMgr(metadataMgr);
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
-        publicRoleId = globalStateMgr.getAuthorizationMgr().getRoleIdByNameNoLock("public");
 
         GlobalVariable.setActivateAllRolesOnLogin(true);
-    }
-
-    private static void createMvForTest(StarRocksAssert starRocksAssert,
-                                        ConnectContext connectContext) throws Exception {
-        starRocksAssert.withTable("CREATE TABLE db3.tbl1\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    v1 int sum\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values less than('2020-02-01'),\n" +
-                "    PARTITION p2 values less than('2020-03-01')\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');");
-        String sql = "create materialized view db3.mv1 " +
-                "partition by k1 " +
-                "distributed by hash(k2) " +
-                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ") " +
-                "as select k1, k2 from db3.tbl1;";
-        createMaterializedView(sql, connectContext);
+        publicRoleId = globalStateMgr.getAuthorizationMgr().getRoleIdByNameNoLock("public");
     }
 
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
@@ -614,7 +576,6 @@ public class AuthorizationManagerTest {
     public void testGrantAll() throws Exception {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         setCurrentUserAndRoles(ctx, testUser);
-        ;
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         Assert.assertFalse(PrivilegeActions.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
@@ -747,15 +708,14 @@ public class AuthorizationManagerTest {
         ShowExecutor executor = new ShowExecutor(ctx, showTableStmt);
         ShowResultSet resultSet = executor.execute();
         Set<String> allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "view1")), allTables);
+        Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "mv1", "view1")), allTables);
 
         // user with table priv can only see tbl1
         setCurrentUserAndRoles(ctx, userWithTablePriv);
         executor = new ShowExecutor(ctx, showTableStmt);
         resultSet = executor.execute();
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("tbl1", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
+        allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
+        Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
 
         // show databases
         ShowDbStmt showDbStmt = new ShowDbStmt(null);

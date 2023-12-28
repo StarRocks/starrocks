@@ -825,50 +825,42 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            db.readLock();
-            try {
-                for (Table tbl : db.getTables()) {
-                    if (matcher != null && !matcher.match(tbl.getName())) {
-                        continue;
-                    }
-                    // check tbl privs
-                    if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (tbl.isView()) {
-                            if (!PrivilegeActions.checkAnyActionOnView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (tbl.isMaterializedView()) {
-                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (!PrivilegeActions.checkAnyActionOnTable(
+        db.readLock();
+        try {
+            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+
+            for (String tableName : tableNames) {
+                Table tbl = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (matcher != null && !matcher.match(tbl.getName())) {
+                    continue;
+                }
+
+                // check tbl privs
+                if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (tbl.isView()) {
+                        if (!PrivilegeActions.checkAnyActionOnView(
                                 connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
-                    } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                    } else if (tbl.isMaterializedView()) {
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(
+                                connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
+                    } else if (!PrivilegeActions.checkAnyActionOnTable(
+                            connectContext, db.getFullName(), tbl.getName())) {
+                        continue;
                     }
-                    tableMap.put(tbl.getName(), tbl.getMysqlType());
+                } else {
+                    if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
+                            db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                        continue;
+                    }
                 }
-            } finally {
-                db.readUnlock();
+                tableMap.put(tbl.getName(), tbl.getMysqlType());
             }
-        } else {
-            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-            PatternMatcher finalMatcher = matcher;
-            final String finalCatalogName = catalogName;
-            tableNames = tableNames.stream()
-                    .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                    .filter(tblName -> PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            finalCatalogName, dbName, tblName))
-                    .collect(Collectors.toList());
-            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+        } finally {
+            db.readUnlock();
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
