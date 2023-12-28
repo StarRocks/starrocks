@@ -170,10 +170,14 @@ PARTITION BY RANGE(`k1`)
     PARTITION p1 VALUES LESS THAN ('2019-05-31'),
     PARTITION p2 VALUES LESS THAN ('2019-06-30')
 )
-DISTRIBUTED BY HASH(`k2`)
+DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
 PROPERTIES (
     "colocate_with" = "group1"
 );
+INSERT INTO tbl1
+VALUES
+    ("2015-09-12",1000,1),
+    ("2015-09-13",2000,2);
 ~~~
 
 Table 2:
@@ -185,55 +189,65 @@ CREATE TABLE `tbl2` (
     `v1` double SUM NOT NULL COMMENT ""
 ) ENGINE=OLAP
 AGGREGATE KEY(`k1`, `k2`)
-DISTRIBUTED BY HASH(`k2`)
+DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
 PROPERTIES (
     "colocate_with" = "group1"
 );
+INSERT INTO tbl2
+VALUES
+    ("2015-09-12 00:00:00",3000,3),
+    ("2015-09-12 00:00:00",4000,4);
 ~~~
 
 View query plan:
 
 ~~~Plain Text
-DESC SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
-
-+----------------------------------------------------+
-| Explain String                                     |
-+----------------------------------------------------+
-| PLAN FRAGMENT 0                                    |
-|  OUTPUT EXPRS:`tbl1`.`k1` |                        |
-|   PARTITION: RANDOM                                |
-|                                                    |
-|   RESULT SINK                                      |
-|                                                    |
-|   2:HASH JOIN                                      |
-|   |  join op: INNER JOIN                           |
-|   |  hash predicates:                              |
-|   |  colocate: true                                |
-|   |    `tbl1`.`k2` = `tbl2`.`k2`                   |
-|   |  tuple ids: 0 1                                |
-|   |                                                |
-|   |----1:OlapScanNode                              |
-|   |       TABLE: tbl2                              |
-|   |       PREAGGREGATION: OFF. Reason: null        |
-|   |       partitions=0/1                           |
-|   |       rollup: null                             |
-|   |       buckets=0/0                              |
-|   |       cardinality=-1                           |
-|   |       avgRowSize=0.0                           |
-|   |       numNodes=0                               |
-|   |       tuple ids: 1                             |
-|   |                                                |
-|   0:OlapScanNode                                   |
-|      TABLE: tbl1                                   |
-|      PREAGGREGATION: OFF. Reason: No AggregateInfo |
-|      partitions=0/2                                |
-|      rollup: null                                  |
-|      buckets=0/0                                   |
-|      cardinality=-1                                |
-|      avgRowSize=0.0                                |
-|      numNodes=0                                    |
-|      tuple ids: 0                                  |
-+----------------------------------------------------+
+EXPLAIN SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
++-------------------------------------------------------------------------+
+| Explain String                                                          |
++-------------------------------------------------------------------------+
+| PLAN FRAGMENT 0                                                         |
+|  OUTPUT EXPRS:1: k1 | 2: k2 | 3: v1 | 4: k1 | 5: k2 | 6: v1             |
+|   PARTITION: UNPARTITIONED                                              |
+|                                                                         |
+|   RESULT SINK                                                           |
+|                                                                         |
+|   3:EXCHANGE                                                            |
+|                                                                         |
+| PLAN FRAGMENT 1                                                         |
+|  OUTPUT EXPRS:                                                          |
+|   PARTITION: RANDOM                                                     |
+|                                                                         |
+|   STREAM DATA SINK                                                      |
+|     EXCHANGE ID: 03                                                     |
+|     UNPARTITIONED                                                       |
+|                                                                         |
+|   2:HASH JOIN                                                           |
+|   |  join op: INNER JOIN (COLOCATE)                                     |
+|   |  colocate: true                                                     |
+|   |  equal join conjunct: 5: k2 = 2: k2                                 |
+|   |                                                                     |
+|   |----1:OlapScanNode                                                   |
+|   |       TABLE: tbl1                                                   |
+|   |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join |
+|   |       partitions=1/2                                                |
+|   |       rollup: tbl1                                                  |
+|   |       tabletRatio=6/6                                               |
+|   |       tabletList=15344,15346,15348,15350,15352,15354                |
+|   |       cardinality=1                                                 |
+|   |       avgRowSize=3.0                                                |
+|   |                                                                     |
+|   0:OlapScanNode                                                        |
+|      TABLE: tbl2                                                        |
+|      PREAGGREGATION: OFF. Reason: None aggregate function               |
+|      partitions=1/1                                                     |
+|      rollup: tbl2                                                       |
+|      tabletRatio=6/6                                                    |
+|      tabletList=15373,15375,15377,15379,15381,15383                     |
+|      cardinality=1                                                      |
+|      avgRowSize=3.0                                                     |
++-------------------------------------------------------------------------+
+40 rows in set (0.03 sec)
 ~~~
 
 If a Colocate Join takes effect, the Hash Join node displays `colocate: true`.
