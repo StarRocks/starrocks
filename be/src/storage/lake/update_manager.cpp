@@ -64,10 +64,12 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                                           int64_t base_version, int64_t new_version) {
+                                                           int64_t base_version, int64_t new_version,
+                                                           std::unique_ptr<std::lock_guard<std::mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
+    guard = index.fetch_guard();
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
@@ -132,7 +134,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true, false));
     TRACE_COUNTER_INCREMENT("state_bytes", state.memory_usage());
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // 2. rewrite segment file if it is partial update
@@ -316,7 +318,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     return Status::OK();
 }
 
-Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
+Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
                                        const std::function<void(LakePrimaryIndex&)>& op) {
     TRACE_COUNTER_SCOPE_LATENCY_US("handle_index_op_latency_us");
     auto index_entry = _index_cache.get(tablet->id());
@@ -330,6 +332,13 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
     if (!index.is_load(base_version)) {
         return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
+    std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    if (need_lock) {
+        guard = index.try_fetch_guard();
+        if (guard == nullptr) {
+            return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
+        }
+    }
     op(index);
 
     return Status::OK();
@@ -337,9 +346,9 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
 
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
                                               const std::vector<ColumnUniquePtr>& upserts,
-                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+                                              std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet, base_version, need_lock, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -352,9 +361,9 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 
 Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
                                               const std::vector<ColumnUniquePtr>& upserts,
-                                              std::vector<std::vector<uint64_t>>* rss_rowids) {
+                                              std::vector<std::vector<uint64_t>>* rss_rowids, bool need_lock) {
     Status st;
-    st.update(_handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
+    st.update(_handle_index_op(tablet, base_version, need_lock, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -717,10 +726,10 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
     if (metadata_ptr != nullptr) {
-        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false);
+        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false, true);
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
-            if (!st.is_uninitialized()) {
+            if (!st.is_uninitialized() && !st.is_cancelled()) {
                 LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1",
                                                   tablet->id(), st.to_string());
             } else {
