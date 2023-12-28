@@ -180,6 +180,92 @@ class ParserTest {
                 exprs[1] instanceof FunctionCallExpr);
     }
 
+<<<<<<< HEAD
+=======
+    @ParameterizedTest
+    @MethodSource("keyWordSqls")
+    void testNodeReservedWords_3(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("reservedWordSqls")
+    void testReservedWords(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("Not quoting reserved words. sql should fail.");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ParsingException);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("multipleStatements")
+    void testMultipleStatements(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("setQuantifierInAggFunc")
+    void testSetQuantifierInAggFunc(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("unexpectedTokenSqls")
+    void testUnexpectedTokenSqls(String sql, String expecting) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("sql should fail.");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            assertContains(e.getMessage(), expecting);
+        }
+    }
+
+    @Test
+    void testWrongVariableName() {
+        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+
+        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+
+        res = VariableMgr.findSimilarVarNames("pipeline");
+        assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
+
+        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
+    }
+
+>>>>>>> fa72214349 ([BugFix] fix wrong order by scope for distinct query (#37910))
     @Test
     void testModOperator() {
         String sql = "select 100 MOD 2";

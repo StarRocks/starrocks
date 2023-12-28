@@ -340,6 +340,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
+<<<<<<< HEAD
+=======
+    public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
+
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+    public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+
+>>>>>>> fa72214349 ([BugFix] fix wrong order by scope for distinct query (#37910))
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1071,6 +1083,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -1996,6 +2011,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
+<<<<<<< HEAD
+=======
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
+    }
+
+>>>>>>> fa72214349 ([BugFix] fix wrong order by scope for distinct query (#37910))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
