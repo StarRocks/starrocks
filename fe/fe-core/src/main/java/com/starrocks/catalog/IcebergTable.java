@@ -30,10 +30,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Util;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -152,7 +152,7 @@ public class IcebergTable extends Table {
         if (partitionColumns == null) {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
                     filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
-            partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(PartitionUtil
+            partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(IcebergPartitionUtils
                     .getPartitionSourceName(this.getNativeTable().schema(), partitionField))).collect(Collectors.toList());
         }
         return partitionColumns;
