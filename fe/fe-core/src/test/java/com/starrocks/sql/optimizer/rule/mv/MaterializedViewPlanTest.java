@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
