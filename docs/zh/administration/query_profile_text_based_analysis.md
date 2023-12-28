@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 首先，您需要通过 SHOW PROFILELIST 语句来获取查询的概要信息，该命令会列出所有正常结束、异常结束，以及仍在运行（运行 10 秒以上且仍未结束）的查询。通过这个语句，您可以获取到对应的 Query ID，方便进行后续的 Query Profile 分析。语法如下：
 
-```
+```SQL
 SHOW PROFILELIST [LIMIT <num>];
 ```
 
