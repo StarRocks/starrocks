@@ -288,9 +288,14 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     return Status::OK();
 }
 
-int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_dop();
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
+}
+
+uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = request.pipeline_sink_dop();
+    return exec_env->calc_pipeline_sink_dop(degree_of_parallelism);
 }
 
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
@@ -949,7 +954,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto* source_operator =
                 down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
 
-        size_t desired_iceberg_sink_dop = request.pipeline_sink_dop();
+        size_t desired_iceberg_sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
         size_t source_operator_dop = source_operator->degree_of_parallelism();
         OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
                 context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
@@ -978,7 +983,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto* source_operator =
                 down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
 
-        size_t desired_hive_sink_dop = request.pipeline_sink_dop();
+        size_t desired_hive_sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
         size_t source_operator_dop = source_operator->degree_of_parallelism();
         OpFactoryPtr hive_table_sink_op = std::make_shared<HiveTableSinkOperatorFactory>(
                 context->next_operator_id(), fragment_ctx, thrift_sink.hive_table_sink,
@@ -1032,7 +1037,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        size_t sink_dop = request.pipeline_sink_dop();
+        size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
 
         if (target_table.write_single_file) {
             sink_dop = 1;
