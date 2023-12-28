@@ -50,11 +50,7 @@ public class JDBCTable extends Table {
 
     private Map<String, String> properties;
     private String dbName;
-<<<<<<< HEAD
     private String catalogName;
-=======
-    private List<Column> partitionColumns;
->>>>>>> f12d92df93 ([BugFix] fix bad jdbc driver name (#37975))
 
     public JDBCTable() {
         super(TableType.JDBC);
