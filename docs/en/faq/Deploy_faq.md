@@ -47,9 +47,9 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 
 ## Can FE and BE configuration items be modified and then take effect without restarting the cluster?
 
-Yes. Perform the following steps to complete the modifications for an FE and a BE configuration item:
+Yes. Perform the following steps to modify the configurations of [FE and BE parameters](../administration/FE_configuration.md):
 
-- FE: You can complete the modification for an FE in one of the following ways:
+- FE
   - SQL
 
   ```plaintext
@@ -76,7 +76,7 @@ Yes. Perform the following steps to complete the modifications for an FE and a B
   http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
   ```
 
-- BE: You can complete the modification for a BE in the following way:
+- BE
 
 ```plaintext
 curl -XPOST -u username:password \
