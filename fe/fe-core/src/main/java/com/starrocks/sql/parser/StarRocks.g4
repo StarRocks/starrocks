@@ -598,7 +598,7 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT TASK qualifiedName?
+    : SUBMIT TASK qualifiedName? properties?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 

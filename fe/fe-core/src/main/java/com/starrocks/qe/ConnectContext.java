@@ -661,6 +661,10 @@ public class ConnectContext {
         this.currentWarehouse = currentWarehouse;
     }
 
+    public void setCurrentWarehouseId(long id) {
+        // not implemented in this codebase
+    }
+
     public void setParentConnectContext(ConnectContext parent) {
         this.parent = parent;
     }
