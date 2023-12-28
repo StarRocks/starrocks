@@ -113,6 +113,7 @@ import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -279,7 +280,9 @@ public class StarRocksAssert {
                     }
                 }
                 retryTime++;
-                Thread.sleep(1000);
+                System.out.println("ut create table failed with " + retryTime + " time retry, msg: " +
+                        e.getMessage() + ", " + Arrays.toString(e.getStackTrace()));
+                Thread.sleep(500);
             }
         }
     }
@@ -287,6 +290,12 @@ public class StarRocksAssert {
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         utCreateTableWithRetry(createTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert withTableNoRetry(String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }
 

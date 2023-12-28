@@ -83,7 +83,8 @@ public class CreateTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        // StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     private static void alterTableWithNewParser(String sql) throws Exception {
