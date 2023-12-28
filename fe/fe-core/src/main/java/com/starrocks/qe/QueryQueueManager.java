@@ -184,6 +184,11 @@ public class QueryQueueManager {
     }
 
     public boolean enableCheckQueue(Coordinator coord) {
+        ConnectContext context = coord.getConnectContext();
+        if (context != null && context.getSessionVariable() != null && !context.getSessionVariable().isEnableQueryQueue()) {
+            return false;
+        }
+
         if (coord.isLoadType()) {
             return GlobalVariable.isEnableQueryQueueLoad();
         }

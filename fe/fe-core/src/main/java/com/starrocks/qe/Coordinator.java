@@ -3774,4 +3774,8 @@ public class Coordinator {
                 connectContext.getSessionVariable().isEnablePipelineEngine() &&
                 fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
 }
