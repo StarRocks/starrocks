@@ -162,19 +162,18 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
                                 const std::string& expr_name) {
     // print_module(*module);
     std::lock_guard<std::mutex> lock(_mutex);
+    auto* func = lookup_function(expr_name);
+    // The function has already been compiled.
+    if (func != nullptr) {
+        ++_resource_ref_count_map[expr_name];
+        return func;
+    }
 
     // Create a resource tracker for the module, which will be used to remove the module from the JIT engine.
     auto resource_tracker = _jit->getMainJITDylib().createResourceTracker();
     auto error =
             _jit->addIRModule(resource_tracker, llvm::orc::ThreadSafeModule(std::move(module), std::move(context)));
     if (UNLIKELY(error)) {
-        auto* func = lookup_function(expr_name);
-        // The function has already been compiled.
-        if (func != nullptr) {
-            LOG(WARNING) << "JIT: Failed to add IR module to JIT, module already exist";
-            return nullptr;
-        }
-
         std::string error_message;
         llvm::handleAllErrors(std::move(error), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         LOG(ERROR) << "JIT: Failed to add IR module to JIT: " << error_message;
@@ -182,13 +181,16 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
     }
 
     _resource_tracker_map[expr_name] = std::move(resource_tracker);
+    _resource_ref_count_map[expr_name] = 1;
     // Lookup the function in the JIT engine, this will trigger the compilation.
     return lookup_function(expr_name);
 }
 
 Status JITEngine::remove_module(const std::string& expr_name) {
     std::lock_guard<std::mutex> lock(_mutex);
-
+    if (--_resource_ref_count_map[expr_name] > 0) {
+        return Status::OK();
+    }
     auto it = _resource_tracker_map.find(expr_name);
     if (it == _resource_tracker_map.end()) {
         return Status::OK();
@@ -202,7 +204,6 @@ Status JITEngine::remove_module(const std::string& expr_name) {
         LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
         return Status::JitCompileError("Failed to remove IR module from JIT");
     }
-
     return Status::OK();
 }
 

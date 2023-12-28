@@ -50,6 +50,10 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }
+    if (prepared_times.fetch_add(1) > 0) {
+        LOG(ERROR) << "prepared more times";
+        return Status::RuntimeError("Prepared more times");
+    }
 
     // TODO(Yueyang): remove this time cost.
     auto start = MonotonicNanos();
@@ -88,7 +92,10 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     args.reserve(_children.size() + 1);
     for (Expr* child : _children) {
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
-        args.emplace_back(column);
+        if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
+            return ColumnHelper::align_return_type(column, type(), column->size(), true);
+        }
+        args.emplace_back(ColumnHelper::unpack_and_duplicate_const_column(column->size(), column));
     }
 
 #ifdef DEBUG
@@ -101,13 +108,6 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     }
 #endif
 
-    for (const auto& column : args) {
-        // TODO(Yueyang): remove this when support ifnull expr.
-        if (column->only_null()) {
-            return ColumnHelper::create_const_null_column(column->size());
-        }
-    }
-
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), is_constant(), ptr->num_rows(), false);
     args.emplace_back(result_column);
 
@@ -116,7 +116,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     if (result_column->is_constant() && ptr != nullptr) {
         result_column->resize(ptr->num_rows());
     }
-    RETURN_IF_ERROR(result_column->unfold_const_children(_type));
+    // RETURN_IF_ERROR(result_column->unfold_const_children(_type));
     return result_column;
 }
 

@@ -126,6 +126,7 @@ private:
     // TODO(Yueyang): Check whether we need to use a better data structure to store the resource tracker.
     // because in OLAP scenarios, this might not be the performance bottleneck.
     std::unordered_map<std::string, llvm::orc::ResourceTrackerSP> _resource_tracker_map;
+    std::unordered_map<std::string, std::atomic_int> _resource_ref_count_map;
 };
 
 } // namespace starrocks

@@ -62,6 +62,8 @@ private:
 
     bool _is_prepared = false;
 
+    std::atomic_int prepared_times = 0;
+
     JITScalarFunction _jit_function = nullptr;
 };
 
