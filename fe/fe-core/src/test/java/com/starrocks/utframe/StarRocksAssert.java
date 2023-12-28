@@ -74,6 +74,7 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -267,7 +268,15 @@ public class StarRocksAssert {
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
-                    throw new DdlException(e.getMessage());
+                    if (e.getCause() instanceof DdlException) {
+                        throw new DdlException(e.getMessage());
+                    } else if (e.getCause() instanceof SemanticException) {
+                        throw new SemanticException(e.getMessage());
+                    } else if (e.getCause() instanceof AnalysisException) {
+                        throw new AnalysisException(e.getMessage());
+                    } else {
+                        throw e;
+                    }
                 }
                 retryTime++;
                 Thread.sleep(1000);
