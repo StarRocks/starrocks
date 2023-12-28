@@ -25,6 +25,7 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -39,7 +40,7 @@ using namespace starrocks;
 class LakeTabletWriterTest : public TestBase, testing::WithParamInterface<KeysType> {
 public:
     LakeTabletWriterTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -84,7 +85,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_tablet_writer";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -110,7 +111,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
@@ -193,7 +194,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     // generate 2 segments automatically
@@ -265,7 +266,7 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
 
     Chunk chunk0({c0, c1}, _schema);
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
     ASSERT_OK(fs::remove_all(kTestDirectory));
@@ -284,7 +285,7 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
 
     Chunk chunk0({c0, c1}, _schema);
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
@@ -332,7 +333,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     ASSERT_OK(writer->open());

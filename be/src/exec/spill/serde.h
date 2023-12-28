@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstring>
+
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -43,9 +45,15 @@ struct AlignedBuffer {
     void resize(size_t size) {
         const size_t BLOCKSIZE = 4096;
         if (_capacity < size) {
-            if (UNLIKELY(posix_memalign(&_data, BLOCKSIZE, size) != 0)) {
+            void* new_data = nullptr;
+            if (UNLIKELY(posix_memalign(&new_data, BLOCKSIZE, size) != 0)) {
                 throw ::std::bad_alloc();
             }
+            if (_data != nullptr) {
+                memcpy(new_data, _data, _size);
+                free(_data);
+            }
+            _data = new_data;
             _capacity = size;
         }
         _size = size;

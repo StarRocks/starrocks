@@ -27,7 +27,8 @@ generate_series(start, end [,step])
 - `step`: the value to increment or decrement, optional.  Supported data types are INT, BIGINT, and LARGEINT. If not specified, the default step is 1. `step` can be either negative or positive, but cannot be zero.
 
 The three parameters must have the same data type, for example, `generate_series(INT start, INT end [, INT step])`.
-It supports named arguments from v3.3, where all parameters are input with names, like `name=>expr`, for example, `generate_series(start=>3, end=>7, step=>2)`.
+
+It supports named arguments from v3.3, where all parameters are input with names, like `name=>expr`, for example, `generate_series(start=>3, end=>7, step=>2)`. Named arguments can disorder arguments and optionally set default arguments, but can't mix with positional arguments.
 
 ## Return value
 
@@ -151,8 +152,6 @@ MySQL > select * from TABLE(generate_series(start=>2, end=>5, step=>2));
 |               4 |
 +-----------------+
 ```
-
-The input row `(NULL, 10)` has a NULL value and zero rows are returned for this row.
 
 ## keywords
 

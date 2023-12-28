@@ -43,9 +43,9 @@ class MetaFileBuilder;
 */
 class PrimaryKeyRecover {
 public:
-    explicit PrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, TabletMetadata* metadata)
-            : _builder(builder), _tablet(tablet), _metadata(metadata) {}
-    ~PrimaryKeyRecover() {}
+    explicit PrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata);
+
+    ~PrimaryKeyRecover();
 
     // Follow the steps below:
     // 1. reset_state
@@ -62,7 +62,7 @@ private:
 private:
     MetaFileBuilder* _builder;
     Tablet* _tablet;
-    TabletMetadata* _metadata;
+    MutableTabletMetadataPtr _metadata;
     std::unique_ptr<Column> _pk_column;
     starrocks::Schema _pkey_schema;
 };

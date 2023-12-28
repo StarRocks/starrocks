@@ -157,10 +157,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         }
         List<String> partitionExprDesc = Lists.newArrayList();
         for (Expr partitionExpr : partitionExprs) {
-            if (partitionExpr instanceof CastExpr) {
-                if (isTimestampFunction(partitionExpr)) {
-                    partitionExprDesc.add(partitionExpr.getChild(0).toSql());
-                }
+            if (partitionExpr instanceof CastExpr && isTimestampFunction(partitionExpr)) {
+                partitionExprDesc.add(partitionExpr.getChild(0).toSql());
             } else {
                 partitionExprDesc.add(partitionExpr.toSql());
             }
