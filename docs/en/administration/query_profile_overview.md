@@ -36,7 +36,7 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 
 ### Configure Query Profile Behavior
 
-| Configuration Type | Configuration Item | Valid Values | Default Values | Description |
+| Configuration Type | Configuration Item | Valid Values | Default Value | Description |
 | -- | -- | -- | -- |
 | Session Variable | enable_profile | true/false | false | Whether to enable Query Profile. `true` means to enable this feature. |
 | Session Variable | pipeline_profile_level | 1/2 | 1 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. |
