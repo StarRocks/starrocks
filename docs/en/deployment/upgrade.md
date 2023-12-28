@@ -24,6 +24,7 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 | v2.5.x                | Yes                    |
 | v3.0.x                | No                     |
 | v3.1.x                | No                     |
+| v3.2.x                | No                     |
 
 ### Upgrade paths
 
