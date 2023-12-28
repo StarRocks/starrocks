@@ -73,7 +73,7 @@ displayed_sidebar: "Chinese"
 
 ```sql
 CREATE USER 'test'@'%' IDENTIFIED BY '123456';
-GRANT SELECT ON . TO 'test'@'%';
+GRANT SELECT_PRIV ON . TO 'test'@'%';
 ```
 
 ## 为 BE 节点增加磁盘空间后，数据存储无法均衡负载且报错 “Failed to get scan range, no queryable replica found in tablet: xxxxx”。我该如何解决？
