@@ -40,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -93,6 +94,11 @@ public class ColocateTableTest {
 
     private static void createTable(String sql) throws Exception {
         starRocksAssert.withTable(sql);
+    }
+
+    private static void createTableNoRetry(String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     @Test
@@ -228,7 +234,7 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same bucket num: 1");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
+        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -239,7 +245,6 @@ public class ColocateTableTest {
                 " \"replication_num\" = \"1\",\n" +
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
-
     }
 
     @Test
@@ -266,8 +271,8 @@ public class ColocateTableTest {
                 return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
-        
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
+
+        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -296,7 +301,7 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables distribution columns size must be the same : 2");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
+        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -326,7 +331,7 @@ public class ColocateTableTest {
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables distribution columns must have the same data type");
         expectedEx.expectMessage("current col: k2, should be: INT");
-        createTable("create table " + dbName + "." + tableName2 + " (\n" +
+        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +

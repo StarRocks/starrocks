@@ -267,7 +267,7 @@ public class StarRocksAssert {
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
-                    throw new Exception("ut create table failed after 3 times", e);
+                    throw new Exception(e.getMessage(), e);
                 }
                 retryTime++;
                 Thread.sleep(1000);
