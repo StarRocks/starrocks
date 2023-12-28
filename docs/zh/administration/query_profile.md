@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+unlisted: true
 ---
 
 # 查看分析 Query Profile
