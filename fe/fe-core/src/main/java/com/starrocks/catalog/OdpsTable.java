@@ -23,7 +23,6 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,8 +50,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
 
     public OdpsTable(String catalogName, com.aliyun.odps.Table odpsTable) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), odpsTable.getName(), TableType.ODPS,
-                odpsTable.getSchema().getColumns().stream().map(EntityConvertUtils::convertColumn).collect(
-                        Collectors.toList()));
+                EntityConvertUtils.getFullSchema(odpsTable));
         this.createTime = odpsTable.getCreatedTime().getTime();
         this.catalogName = catalogName;
         this.dbName = odpsTable.getProject();
@@ -60,9 +58,8 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         this.partitionColumns =
                 odpsTable.getSchema().getPartitionColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList());
-        this.dataColumns = fullSchema;
-        this.fullSchema = new ArrayList<>(dataColumns);
-        this.fullSchema.addAll(partitionColumns);
+        this.dataColumns = odpsTable.getSchema().getColumns().stream().map(EntityConvertUtils::convertColumn).collect(
+                Collectors.toList());
     }
 
     @Override

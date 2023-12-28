@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.odps;
 
+import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.CharTypeInfo;
 import com.aliyun.odps.type.DecimalTypeInfo;
@@ -28,6 +29,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -88,5 +90,13 @@ public class EntityConvertUtils {
 
     public static Column convertColumn(com.aliyun.odps.Column column) {
         return new Column(column.getName(), convertType(column.getTypeInfo()), true);
+    }
+
+    public static List<Column> getFullSchema(com.aliyun.odps.Table odpsTable) {
+        TableSchema tableSchema = odpsTable.getSchema();
+        List<com.aliyun.odps.Column> columns = new ArrayList<>(tableSchema.getColumns());
+        columns.addAll(tableSchema.getPartitionColumns());
+        return columns.stream().map(EntityConvertUtils::convertColumn).collect(
+                Collectors.toList());
     }
 }

@@ -136,8 +136,6 @@ public class EntityConvertUtilsTest {
     }
 
     @Test
-    // 测试用例编号：EntityConvertUtilsTests014
-    // 测试目的：测试convertType方法中的case BOOLEAN的情况
     public void testConvertTypeCaseBoolean() {
         TypeInfo typeInfo = TypeInfoFactory.BOOLEAN;
         Type result = EntityConvertUtils.convertType(typeInfo);
