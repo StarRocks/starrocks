@@ -450,7 +450,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
@@ -1272,7 +1280,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
