@@ -332,7 +332,7 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
     
 -- 自动采集所有数据库的统计信息，不收集`db_name.tbl_name`表。
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
-   "statistic_exclude_pattern" = "db_name\.tbl_name"
+   "statistic_exclude_pattern" = "db_name.tbl_name"
 );    
 ```
 

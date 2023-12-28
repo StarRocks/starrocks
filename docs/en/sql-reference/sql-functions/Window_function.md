@@ -300,7 +300,7 @@ NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 
 `num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
 
-Window clause is not allowed in NTILE() function
+Window clause is not allowed in NTILE() function.
 
 NTILE() function returns BIGINT type of data.
 
@@ -317,6 +317,8 @@ select id, x, y,
         ) as bucket_id
 from t1;
 ```
+
+Return data:
 
 ```plaintext
 +------+------+------+-----------+
@@ -340,8 +342,6 @@ As the above example shown, when `num_buckets` is `2`:
 * Rows of No.1 to No.6 were classified into the first partition; rows of No.1 to No.3 were stored in the first bucket, and rows of No.4 to No.6 were stored in the second one.
 * Rows of No.7 to No.9 were classified into the second partition; rows of No.7 and No.8 were stored in the first bucket, and row No.9 was stored in the second one.
 * Row No.10 was classified into the third partition and stored in the first bucket.
-
-<br/>
 
 ### FIRST_VALUE()
 
