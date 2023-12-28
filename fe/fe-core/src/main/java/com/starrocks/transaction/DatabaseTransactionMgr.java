@@ -1900,33 +1900,10 @@ public class DatabaseTransactionMgr {
         } finally {
             readUnlock();
         }
-        if (transactionState == null) {
-            return TTransactionStatus.UNKNOWN;
-        }
-        TransactionStatus status = transactionState.getTransactionStatus();
-
-        switch (status.value()) {
-            //UNKNOWN
-            case 0:
-                return TTransactionStatus.UNKNOWN;
-            //PREPARE
-            case 1:
-                return TTransactionStatus.PREPARE;
-            //COMMITTED
-            case 2:
-                return TTransactionStatus.COMMITTED;
-            //VISIBLE
-            case 3:
-                return TTransactionStatus.VISIBLE;
-            //ABORTED
-            case 4:
-                return TTransactionStatus.ABORTED;
-            //PREPARED
-            case 5:
-                return TTransactionStatus.PREPARED;
-            default:
-                return TTransactionStatus.UNKNOWN;
-        }
+        return Optional.ofNullable(transactionState)
+                .map(TransactionState::getTransactionStatus)
+                .map(TransactionStatus::toThrift)
+                .orElse(TTransactionStatus.UNKNOWN);
     }
 
     private void checkDatabaseDataQuota() throws AnalysisException {
