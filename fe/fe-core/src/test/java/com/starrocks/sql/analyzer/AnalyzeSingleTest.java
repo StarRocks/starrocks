@@ -751,11 +751,8 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testRemoveComments() {
-        analyzeFail("select /*+ SET */ v1 from t0",
-                "Unexpected input 'SET', the most similar input is {'SET_VAR'}");
-        analyzeFail("select /*+   abc*/ v1 from t0",
-                "Unexpected input 'abc', the most similar input is {'SET_VAR'}");
-
+        analyzeSuccess("select /*+ SET */ v1 from t0");
+        analyzeSuccess("select /*+   abc*/ v1 from t0");
         analyzeSuccess("select v1 /*+*/ from t0");
         analyzeSuccess("select v1 /*+\n*/ from t0");
         analyzeSuccess("select v1 /*+   \n\n*/ from t0");
