@@ -19,6 +19,10 @@ StarRocks 存算分离集群架构如下：
 
 ![Shared-data Architecture](../assets/share_data_arch.png)
 
+> **说明**
+>
+> StarRocks 存算分离集群不支持数据备份和恢复。
+
 ## 部署 StarRocks 存算分离集群
 
 StarRocks 存算分离集群的部署方式与存算一体集群的部署方式类似，但存算分离集群需要部署 CN 节点而非 BE 节点。本小节仅列出部署 StarRocks 存算分离集群时需要添加到 FE 和 CN 配置文件 **fe.conf** 和 **cn.conf** 中的额外配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](../deployment/deploy_manually.md)。
