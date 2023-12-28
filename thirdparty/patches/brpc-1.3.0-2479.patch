@@ -1,5 +1,19 @@
+From 5789252249834de742785503e33543ac687ad077 Mon Sep 17 00:00:00 2001
+From: stdpain <drfeng08@gmail.com>
+Date: Mon, 25 Dec 2023 16:10:25 +0800
+Subject: [PATCH] support gc for ListOfABAFreeId
+
+---
+ src/bthread/bthread.cpp          |   1 +
+ src/bthread/id.cpp               |   1 +
+ src/bthread/list_of_abafree_id.h | 161 ++++++++++++++++++++++++++-----
+ test/CMakeLists.txt              |   1 +
+ test/abalist_unittest.cc         |  46 +++++++++
+ 5 files changed, 187 insertions(+), 23 deletions(-)
+ create mode 100644 test/abalist_unittest.cc
+
 diff --git a/src/bthread/bthread.cpp b/src/bthread/bthread.cpp
-index 201a6745..b94d4138 100644
+index 201a674592..b94d41384c 100644
 --- a/src/bthread/bthread.cpp
 +++ b/src/bthread/bthread.cpp
 @@ -199,6 +199,7 @@ BUTIL_FORCE_INLINE bool can_run_thread_local(const bthread_attr_t* __restrict at
@@ -11,7 +25,7 @@ index 201a6745..b94d4138 100644
      static bool exists(bthread_t id) { return bthread::TaskGroup::exists(id); }
  };
 diff --git a/src/bthread/id.cpp b/src/bthread/id.cpp
-index 41c49a3f..ba77580a 100644
+index 41c49a3f7c..ba77580a04 100644
 --- a/src/bthread/id.cpp
 +++ b/src/bthread/id.cpp
 @@ -291,6 +291,7 @@ void id_pool_status(std::ostream &os) {
@@ -23,7 +37,7 @@ index 41c49a3f..ba77580a 100644
      static bool exists(bthread_id_t id)
      { return bthread::id_exists_with_true_negatives(id); }
 diff --git a/src/bthread/list_of_abafree_id.h b/src/bthread/list_of_abafree_id.h
-index ac2b2234..3eca0fa7 100644
+index ac2b223423..c197fe9281 100644
 --- a/src/bthread/list_of_abafree_id.h
 +++ b/src/bthread/list_of_abafree_id.h
 @@ -15,27 +15,29 @@
@@ -87,7 +101,7 @@ index ac2b2234..3eca0fa7 100644
      // Put #entries of each level into `counts'
      // Returns #levels.
      size_t get_sizes(size_t* counts, size_t n);
-@@ -82,26 +85,38 @@ private:
+@@ -82,26 +85,38 @@ class ListOfABAFreeId {
          IdBlock* next;
      };
      void forward_index();
@@ -178,7 +192,7 @@ index ac2b2234..3eca0fa7 100644
      IdBlock* new_block = new (std::nothrow) IdBlock;
      if (NULL == new_block) {
          return ENOMEM;
-@@ -188,6 +212,92 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+@@ -188,6 +212,88 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
      return 0;
  }
  
@@ -187,10 +201,6 @@ index ac2b2234..3eca0fa7 100644
 +    IdBlock* new_block = new (std::nothrow) IdBlock;
 +    if (NULL == new_block) {
 +        return ENOMEM;
-+    }
-+    // reset head block
-+    for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
-+        new_block->ids[i] = IdTraits::ID_INIT;
 +    }
 +    new_block->next = NULL;
 +
@@ -271,7 +281,7 @@ index ac2b2234..3eca0fa7 100644
  template <typename Id, typename IdTraits>
  template <typename Fn>
  void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
-@@ -200,6 +310,15 @@ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
+@@ -200,6 +306,15 @@ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
      }
  }
  
@@ -287,7 +297,7 @@ index ac2b2234..3eca0fa7 100644
  template <typename Id, typename IdTraits>
  size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
      if (n == 0) {
-@@ -210,6 +329,6 @@ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
+@@ -210,6 +325,6 @@ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
      return 1;
  }
  
@@ -297,7 +307,7 @@ index ac2b2234..3eca0fa7 100644
 -#endif  // BTHREAD_LIST_OF_ABAFREE_ID_H
 +#endif // BTHREAD_LIST_OF_ABAFREE_ID_H
 diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
-index 42cb647b..051f52ef 100644
+index 42cb647b82..051f52efb5 100644
 --- a/test/CMakeLists.txt
 +++ b/test/CMakeLists.txt
 @@ -144,6 +144,7 @@ SET(TEST_BUTIL_SOURCES
@@ -310,7 +320,7 @@ index 42cb647b..051f52ef 100644
      ${PROJECT_SOURCE_DIR}/test/version_unittest.cc
 diff --git a/test/abalist_unittest.cc b/test/abalist_unittest.cc
 new file mode 100644
-index 00000000..8a42d3d2
+index 0000000000..8a42d3d248
 --- /dev/null
 +++ b/test/abalist_unittest.cc
 @@ -0,0 +1,46 @@
