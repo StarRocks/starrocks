@@ -34,6 +34,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,6 +47,13 @@ public class PaimonColumnConverterTest {
     @Test
     public void testConvertBinary() {
         BinaryType paimonType = new BinaryType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.VARBINARY);
+    }
+
+    @Test
+    public void testConvertVarBinary() {
+        VarBinaryType paimonType = new VarBinaryType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.VARBINARY);
     }
