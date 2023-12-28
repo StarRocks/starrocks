@@ -62,13 +62,17 @@ import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
+import com.starrocks.epack.sql.ast.CancelDisableDiskClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DisableDiskClause;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
@@ -1087,6 +1091,22 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDecommissionDiskClause(DecommissionDiskClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCancelDecommissionDiskClause(CancelDecommissionDiskClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDisableDiskClause(DisableDiskClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCancelDisableDiskClause(CancelDisableDiskClause clause, C context) {
         return visitNode(clause, context);
     }
 

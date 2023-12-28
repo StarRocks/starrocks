@@ -74,6 +74,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.alter.SystemHandlerEpack;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
@@ -160,7 +161,7 @@ public class AlterJobMgr {
     public AlterJobMgr() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
-        clusterHandler = new SystemHandler();
+        clusterHandler = new SystemHandlerEpack();
         compactionHandler = new CompactionHandler();
     }
 

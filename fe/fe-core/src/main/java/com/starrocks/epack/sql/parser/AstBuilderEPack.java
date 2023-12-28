@@ -21,6 +21,8 @@ import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
+import com.starrocks.epack.sql.ast.CancelDisableDiskClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -28,7 +30,9 @@ import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
+import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DisableDiskClause;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
@@ -992,4 +996,44 @@ public class AstBuilderEPack extends AstBuilder {
         return new DropComputeNodeClause(hostPorts, createPos(context), whName);
     }
 
+
+    @Override
+    public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {
+        List<String> strings = context
+                .string()
+                .stream()
+                .map(c -> ((StringLiteral) visit(c)).getStringValue())
+                .collect(toList());
+        return new DecommissionDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
+    }
+
+    @Override
+    public ParseNode visitCancelDecommissionDiskClause(StarRocksParser.CancelDecommissionDiskClauseContext context) {
+        List<String> strings = context
+                .string()
+                .stream()
+                .map(c -> ((StringLiteral) visit(c)).getStringValue())
+                .collect(toList());
+        return new CancelDecommissionDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
+    }
+
+    @Override
+    public ParseNode visitDisableDiskClause(StarRocksParser.DisableDiskClauseContext context) {
+        List<String> strings = context
+                .string()
+                .stream()
+                .map(c -> ((StringLiteral) visit(c)).getStringValue())
+                .collect(toList());
+        return new DisableDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
+    }
+
+    @Override
+    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
+        List<String> strings = context
+                .string()
+                .stream()
+                .map(c -> ((StringLiteral) visit(c)).getStringValue())
+                .collect(toList());
+        return new CancelDisableDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
+    }
 }
