@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -127,6 +128,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 
 /**
  * Core logic of materialized view refresh task run
@@ -351,8 +354,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         if (lastException != null) {
-            throw new DmlException("Refresh materialized view %s failed after retrying %s times", lastException,
-                    this.materializedView.getName(), maxRefreshMaterializedViewRetryNum);
+            String errorMsg = lastException.getMessage();
+            if (lastException instanceof NullPointerException) {
+                errorMsg = ExceptionUtils.getStackTrace(lastException);
+            }
+            // field ERROR_MESSAGE in information_schema.task_runs length is 65535
+            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ? errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
+            throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
+                    lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
     }
 
@@ -383,7 +392,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             StatementPlanner.lock(locker, dbs);
 
-            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView);
+            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView, ctx);
             // Must set execution id before StatementPlanner.plan
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             execPlan = StatementPlanner.plan(insertStmt, ctx);
@@ -1002,7 +1011,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private boolean unSupportRefreshByPartition(Table table) {
         return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable();
+                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable()
+                && !table.isPaimonTable();
     }
 
     /**
@@ -1127,10 +1137,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvRangePartitionNames;
                 } else {
-                    // If the user specifies the start and end ranges, and the non-partitioned table still changes,
-                    // it should be refreshed according to the user-specified range, not all partitions.
-                    return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
-                            mvRangePartitionNames, true);
+                    if (isAutoRefresh) {
+                        // If this refresh comes from PERIODIC/EVENT_TRIGGER, it should not respect the config to do the
+                        // refresh rather than only checking the ref table's update.
+                        // eg:
+                        //  MV: SELECT t2.k1 as k1, t2.k2 as k2, t1.k1 as k3, t1.k2 as k4 FROM t1 join t2 on t1.k1=t2.k1;
+                        //  RefTable    : t1, Partition: p0,p1,p2
+                        //  NonRefTable : t2, Partition: p0,p1,p2
+                        // when t2 is updated, it will trigger refresh of ref-table's all partitions.
+                        // if `partition_refresh_number` is 1, then:
+                        // - The 1th TaskRun: start=null,end=null,  ref-table refresh partition: p0
+                        // - The 2th TaskRun: start=p1,end=p2,      ref-table refresh partition: p1
+                        // - The 3th TaskRun: start=p2,end=p2,      ref-table refresh partition: p2
+                        // if use method below, it will break in the 2th TaskRun because ref-table has not updated in the
+                        // specific start and end ranges.
+                        return mvRangePartitionNames;
+                    } else {
+                        // If the user specifies the start and end ranges, and the non-partitioned table still changes,
+                        // it should be refreshed according to the user-specified range, not all partitions.
+                        return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
+                                mvRangePartitionNames, true);
+                    }
                 }
             }
 
@@ -1320,8 +1347,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public InsertStmt analyzeInsertStmt(InsertStmt insertStmt,
                                         Map<String, Set<String>> refTableRefreshPartitions,
-                                        MaterializedView materializedView) throws AnalysisException {
-        Analyzer.analyze(insertStmt, ConnectContext.get());
+                                        MaterializedView materializedView,
+                                        ConnectContext ctx) throws AnalysisException {
+        Analyzer.analyze(insertStmt, ctx);
 
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
@@ -1929,7 +1957,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             return partitionInfos;
-        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable()) {
+        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable() ||
+                baseTable.isPaimonTable()) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
                     baseTableInfo);
         } else {

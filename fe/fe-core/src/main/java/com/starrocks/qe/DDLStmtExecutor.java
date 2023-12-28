@@ -336,7 +336,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().alterTable(stmt);
             });
             return null;
         }

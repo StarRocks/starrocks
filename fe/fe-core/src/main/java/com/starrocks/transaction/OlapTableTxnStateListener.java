@@ -28,6 +28,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -278,6 +279,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -331,8 +342,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         AgentBatchTask batchTask = null;
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
-                ClearTransactionTask task =
-                        new ClearTransactionTask(beId, txnState.getTransactionId(), Lists.newArrayList());
+                ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(),
+                        Lists.newArrayList(), txnState.getTxnType());
                 CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.

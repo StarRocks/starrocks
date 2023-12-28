@@ -549,7 +549,8 @@ public class SyncPartitionUtils {
                                                              Map<String, Map<Table, Set<String>>> mvToBaseNameRef,
                                                              Set<String> mvPotentialRefreshPartitionNames) {
         int curNameCount = needRefreshMvPartitionNames.size();
-        for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
+        Set<String> copiedNeedRefreshMvPartitionNames = Sets.newHashSet(needRefreshMvPartitionNames);
+        for (String needRefreshMvPartitionName : copiedNeedRefreshMvPartitionNames) {
             // baseTable with its partitions by mv's partition
             Map<Table, Set<String>> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
             Set<String> mvNeedRefreshPartitions = Sets.newHashSet();

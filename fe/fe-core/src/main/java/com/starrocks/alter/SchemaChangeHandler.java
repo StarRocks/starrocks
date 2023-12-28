@@ -1624,7 +1624,9 @@ public class SchemaChangeHandler extends AlterHandler {
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             long startTime = ConnectContext.get().getStartTime();
-            //for schema change add/drop value column optimize, direct modify table meta.
+            // for schema change add/drop value column optimize, direct modify table meta.
+            // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
+            // try to copy first before modifying, avoiding in-place changes.
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, txnId, startTime,
                                         addColumnsName, false);
             return null;
@@ -2497,7 +2499,8 @@ public class SchemaChangeHandler extends AlterHandler {
             Boolean hasMv = !olapTable.getRelatedMaterializedViews().isEmpty();
             for (long idx : indexIds) {
                 List<Column> indexSchema = indexSchemaMap.get(idx);
-                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx);
+                // modify the copied indexMeta and put the update result in the indexIdToMeta
+                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx).shallowCopy();
                 List<Column> originSchema = currentIndexMeta.getSchema();
                 
                 if (hasMv && indexSchema.size() < originSchema.size()) {
@@ -2505,7 +2508,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Column> differences = originSchema.stream().filter(element ->
                                    !indexSchema.contains(element)).collect(Collectors.toList());
                     // can just drop one column one time, so just one element in differences
-                    Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                    int dropIdx = originSchema.indexOf(differences.get(0));
                     modifiedColumns.add(originSchema.get(dropIdx).getName());
                 }
 
@@ -2547,6 +2550,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
+                // update the indexIdToMeta
+                olapTable.getIndexIdToMeta().put(idx, currentIndexMeta);
                 schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
                                                currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
                                                indexSchema);
