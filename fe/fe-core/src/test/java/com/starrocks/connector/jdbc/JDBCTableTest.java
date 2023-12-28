@@ -12,14 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.thrift.TJDBCTable;
+import com.starrocks.thrift.TTableDescriptor;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-
 
 public class JDBCTableTest {
 
@@ -51,4 +58,31 @@ public class JDBCTableTest {
         }
     }
 
+    @Test
+    public void testJDBCDriverName() {
+        try {
+            Map<String, String> properties = ImmutableMap.of(
+                    "driver_class", "org.postgresql.Driver",
+                    "checksum", "bef0b2e1c6edcd8647c24bed31e1a4ac",
+                    "driver_url",
+                    "http://x.com/postgresql-42.3.3.jar",
+                    "type", "jdbc",
+                    "user", "postgres",
+                    "password", "postgres",
+                    "jdbc_uri", "jdbc:postgresql://172.26.194.237:5432/db_pg_select"
+            );
+            List<Column> schema = new ArrayList<>();
+            schema.add(new Column("id", Type.INT));
+            JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
+            TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
+            TJDBCTable table = tableDescriptor.getJdbcTable();
+            Assert.assertEquals(table.getJdbc_driver_name(), "jdbc_postgresql_172.26.194.237_5432_db_pg_select");
+            Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
+            Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
+            Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
 }
