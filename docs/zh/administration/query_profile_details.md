@@ -14,7 +14,7 @@ Query Profile 的结构与执行引擎的设计密切相关，由以下五部分
 - PipelineDriver：一个 Pipeline 可以有多个实例，每个实例称为 PipelineDriver，以充分利用多个计算核心。
 - Operator：算子。一个 PipelineDriver 由多个 Operator 组成。
 
-![img](../assets/Profile/profile-3.png)
+![img](../assets/Profile/profile-hierarchy.png)
 
 ### Query Profile 的合并策略
 
