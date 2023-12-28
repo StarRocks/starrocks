@@ -52,7 +52,7 @@ public:
         // execute
         ASSERT_OK(func->init({}, &func_state));
         func_state->set_params(input_columns);
-        ASSERT_OK(func->open(rt_state, func_state));
+        ASSERT_OK(func->open(rt_state.get(), func_state));
         auto [result_columns, offset_column] = func->process(rt_state.get(), func_state, &eos);
 
         // check
