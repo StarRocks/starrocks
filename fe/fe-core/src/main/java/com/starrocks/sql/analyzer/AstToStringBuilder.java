@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -92,6 +93,139 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+<<<<<<< HEAD
+=======
+
+        // when you want to get the full string of a functionCallExpr set it true
+        // when you just want to a function name as its alias set it false
+        protected boolean addFunctionDbName;
+
+        public AST2StringBuilderVisitor() {
+            this(true);
+        }
+
+        public AST2StringBuilderVisitor(boolean addFunctionDbName) {
+            this.addFunctionDbName = addFunctionDbName;
+        }
+
+        // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+        @Override
+        public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (statement instanceof CreateUserStmt) {
+                sb.append("CREATE");
+            } else {
+                sb.append("ALTER");
+            }
+
+            sb.append(" USER ").append(statement.getUserIdentity());
+            if (!Strings.isNullOrEmpty(statement.getOriginalPassword())) {
+                if (statement.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(statement.getOriginalPassword()).append("'");
+                }
+            }
+
+            if (!Strings.isNullOrEmpty(statement.getAuthPluginName())) {
+                sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
+                if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
+                    if (statement.isPasswordPlain()) {
+                        sb.append(" BY '");
+                    } else {
+                        sb.append(" AS '");
+                    }
+                    sb.append(statement.getAuthStringUnResolved()).append("'");
+                }
+            }
+
+            if (!statement.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        statement.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
+            List<String> privList = new ArrayList<>();
+            for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                privList.add(privilegeType.name().replace("_", " "));
+            }
+
+            sb.append(Joiner.on(", ").join(privList));
+            sb.append(" ON ");
+
+            if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
+                sb.append(stmt.getObjectType().name());
+            } else {
+                if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                    sb.append(stmt.getObjectList().get(0).toString());
+                } else {
+                    sb.append(stmt.getObjectType().name()).append(" ");
+
+                    List<String> objectString = new ArrayList<>();
+                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                        objectString.add(tablePEntryObject.toString());
+                    }
+                    sb.append(Joiner.on(", ").join(objectString));
+                }
+            }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append("USER ").append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '").append(stmt.getRole()).append("'");
+            }
+
+            if (stmt instanceof GrantPrivilegeStmt && ((GrantPrivilegeStmt) stmt).isWithGrantOption()) {
+                sb.append(" WITH GRANT OPTION");
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("GRANT ");
+            } else {
+                sqlBuilder.append("REVOKE ");
+            }
+
+            sqlBuilder.append(Joiner.on(", ")
+                    .join(statement.getGranteeRole().stream().map(r -> "'" + r + "'").collect(toList())));
+            sqlBuilder.append(" ");
+            if (statement instanceof GrantRoleStmt) {
+                sqlBuilder.append("TO ");
+            } else {
+                sqlBuilder.append("FROM ");
+            }
+            if (statement.getRole() != null) {
+                sqlBuilder.append(" ROLE ").append(statement.getRole());
+            } else {
+                sqlBuilder.append(statement.getUserIdentity());
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        // --------------------------------------------Set Statement -------------------------------------------------------
+
+>>>>>>> 536bce203e ([BugFix] fix view with window function ignore null (#37925))
         @Override
         public String visitSetStatement(SetStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
@@ -692,6 +826,38 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
+<<<<<<< HEAD
+=======
+            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                int end = 1;
+                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                    end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
+                }
+                for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
+                    if (i != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(visit(node.getChild(i)));
+                }
+                List<OrderByElement> sortClause = fnParams.getOrderByElements();
+                if (sortClause != null) {
+                    sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
+                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
+                    sb.append(" SEPARATOR ");
+                    sb.append(visit(node.getChild(end)));
+                }
+                sb.append(")");
+            } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
+                List<String> p = node.getChildren().stream().map(child -> {
+                    String str = visit(child);
+                    if (child instanceof SlotRef && node.getIgnoreNulls()) {
+                        str += " ignore nulls";
+                    }
+                    return str;
+                }).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
+>>>>>>> 536bce203e ([BugFix] fix view with window function ignore null (#37925))
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
