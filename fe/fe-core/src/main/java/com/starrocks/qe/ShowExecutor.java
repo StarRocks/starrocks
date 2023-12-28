@@ -758,46 +758,51 @@ public class ShowExecutor {
 
     // Show databases statement
     private void handleShowDb() {
-        ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
-        List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames;
-        String catalogName;
-        if (showDbStmt.getCatalogName() == null) {
-            catalogName = connectContext.getCurrentCatalog();
-        } else {
-            catalogName = showDbStmt.getCatalogName();
-        }
-        dbNames = metadataMgr.listDbNames(catalogName);
-
-        PatternMatcher matcher = null;
-        if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
-        }
-        Set<String> dbNameSet = Sets.newTreeSet();
-        for (String dbName : dbNames) {
-            // Filter dbname
-            if (matcher != null && !matcher.match(dbName)) {
-                continue;
-            }
-
-            if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
-                    continue;
-                }
+        GlobalStateMgr.getCurrentState().tryLock(true);
+        try {
+            ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
+            List<List<String>> rows = Lists.newArrayList();
+            List<String> dbNames;
+            String catalogName;
+            if (showDbStmt.getCatalogName() == null) {
+                catalogName = connectContext.getCurrentCatalog();
             } else {
-                if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
+                catalogName = showDbStmt.getCatalogName();
+            }
+            dbNames = metadataMgr.listDbNames(catalogName);
+
+            PatternMatcher matcher = null;
+            if (showDbStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                        CaseSensibility.DATABASE.getCaseSensibility());
+            }
+            Set<String> dbNameSet = Sets.newTreeSet();
+            for (String dbName : dbNames) {
+                // Filter dbname
+                if (matcher != null && !matcher.match(dbName)) {
                     continue;
                 }
+
+                if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
+                        continue;
+                    }
+                } else {
+                    if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
+                        continue;
+                    }
+                }
+                dbNameSet.add(dbName);
             }
-            dbNameSet.add(dbName);
-        }
 
-        for (String dbName : dbNameSet) {
-            rows.add(Lists.newArrayList(dbName));
-        }
+            for (String dbName : dbNameSet) {
+                rows.add(Lists.newArrayList(dbName));
+            }
 
-        resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
+            resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
+        } finally {
+            GlobalStateMgr.getCurrentState().unlock();
+        }
     }
 
     // Show table statement.
