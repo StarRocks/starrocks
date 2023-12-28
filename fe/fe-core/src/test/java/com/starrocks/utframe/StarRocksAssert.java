@@ -255,9 +255,29 @@ public class StarRocksAssert {
         return this;
     }
 
+    // retry 3 times when create table in ut to avoid
+    // table creation timeout caused by heavy load of testing machine
+    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt) throws Exception {
+        int retryTime = 0;
+        final int MAX_RETRY_TIME = 3;
+
+        while (retryTime < MAX_RETRY_TIME) {
+            try {
+                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                break;
+            } catch (Exception e) {
+                if (retryTime == MAX_RETRY_TIME - 1) {
+                    throw new Exception("ut create table failed after 3 times", e);
+                }
+                retryTime++;
+                Thread.sleep(1000);
+            }
+        }
+    }
+
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        utCreateTableWithRetry(createTableStmt);
         return this;
     }
 
@@ -275,7 +295,7 @@ public class StarRocksAssert {
                 System.out.println(sql);
                 CreateTableStmt createTableStmt =
                         (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                utCreateTableWithRetry(createTableStmt);
                 names.add(mTable.getTableName());
             }
             if (action != null) {
@@ -312,7 +332,7 @@ public class StarRocksAssert {
                 String sql = mTable.getCreateTableSql();
                 CreateTableStmt createTableStmt =
                         (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                utCreateTableWithRetry(createTableStmt);
 
                 if (cluster != null) {
                     String dbName = createTableStmt.getDbName();

@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -76,7 +77,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 "'binlog_enable' = 'false', 'binlog_ttl_second' = '100', 'binlog_max_size' = '100');";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.
                 parseStmtWithNewParser(createTableStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         connectContext.getSessionVariable().setMVPlanner(true);
         String sql = "select * from binlog_test [_BINLOG_]";
