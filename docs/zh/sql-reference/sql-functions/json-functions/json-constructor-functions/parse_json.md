@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# PARSE_JSON
+# parse_json
 
 ## 功能
 

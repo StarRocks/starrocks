@@ -236,6 +236,9 @@ public class DeleteMgr implements Writable {
                 // TODO: support list partition prune
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                if (partitionIds.isEmpty()) {
+                    return null;
+                }
                 for (Long partitionId : partitionIds) {
                     Partition partition = olapTable.getPartition(partitionId);
                     partitionNames.add(partition.getName());
@@ -835,12 +838,7 @@ public class DeleteMgr implements Writable {
     }
 
     public long getDeleteInfoCount() {
-        lock.readLock().lock();
-        try {
-            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {

@@ -51,8 +51,12 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HiveScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(HiveScanner.class);
+
+    private static final String SERDE_PROPERTY_PREFIX = "SerDe.";
+
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
+    private Map<String, String> serdeProperties = new HashMap<>();
     private final String[] requiredFields;
     private int[] requiredColumnIds;
     private ColumnType[] requiredTypes;
@@ -77,6 +81,11 @@ public class HiveScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
 
+    // The key buffer used to store the key part(meta data) of the file.
+    private Writable key;
+    // The value buffer used to store the value data.
+    private Writable value;
+
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
@@ -93,6 +102,9 @@ public class HiveScanner extends ConnectorScanner {
         this.classLoader = this.getClass().getClassLoader();
         this.fsOptionsProps = params.get("fs_options_props");
         for (Map.Entry<String, String> kv : params.entrySet()) {
+            if (kv.getKey().startsWith(SERDE_PROPERTY_PREFIX)) {
+                this.serdeProperties.put(kv.getKey().substring(SERDE_PROPERTY_PREFIX.length()), kv.getValue());
+            }
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
     }
@@ -159,6 +171,7 @@ public class HiveScanner extends ConnectorScanner {
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
+        properties.putAll(serdeProperties);
 
         ScannerHelper.parseFSOptionsProps(fsOptionsProps, kv -> {
             properties.put(kv[0], kv[1]);
@@ -184,6 +197,8 @@ public class HiveScanner extends ConnectorScanner {
             structFields[i] = field;
             fieldInspectors[i] = field.getFieldObjectInspector();
         }
+        key = (Writable) reader.createKey();
+        value = (Writable) reader.createValue();
     }
 
     @Override
@@ -216,8 +231,6 @@ public class HiveScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Writable key = (Writable) reader.createKey();
-            Writable value = (Writable) reader.createValue();
             int numRows = 0;
             for (; numRows < getTableSize(); numRows++) {
                 if (!reader.next(key, value)) {
@@ -289,6 +302,9 @@ public class HiveScanner extends ConnectorScanner {
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);
+        sb.append("\n");
+        sb.append("serdeProperties: ");
+        sb.append(serdeProperties.toString());
         sb.append("\n");
         sb.append("inputFormat: ");
         sb.append(inputFormat);

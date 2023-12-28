@@ -258,6 +258,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         }
     }
     RETURN_IF_ERROR(open_random_access_file());
+    RETURN_IF_ERROR(_setup_io_ranges());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
@@ -332,8 +333,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             RETURN_IF_ERROR(_create_or_reinit_reader());
             continue;
         } else if (!status.ok()) {
-            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(),
-                                                status.get_error_msg());
+            LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(), status.message());
             return status;
         }
 
@@ -454,6 +454,19 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
             CSVReader::Record dummy;
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
+    }
+    return Status::OK();
+}
+
+Status HdfsTextScanner::_setup_io_ranges() const {
+    if (_shared_buffered_input_stream != nullptr) {
+        std::vector<io::SharedBufferedInputStream::IORange> ranges{};
+        for (int64_t offset = 0; offset < _scanner_params.file_size;) {
+            const int64_t remain_length = std::min(config::text_io_range_size, _scanner_params.file_size - offset);
+            ranges.emplace_back(offset, remain_length);
+            offset += remain_length;
+        }
+        RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
     return Status::OK();
 }

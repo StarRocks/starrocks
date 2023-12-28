@@ -83,6 +83,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         COLOCATE_MISMATCH, // replicas do not all locate in right colocate backends set.
         COLOCATE_REDUNDANT, // replicas match the colocate backends set, but redundant.
         NEED_FURTHER_REPAIR, // one of replicas need a definite repair.
+        DISK_MIGRATION, // The disk where the replica is located is decommissioned.
     }
 
     // Most read only accesses to replicas should acquire db lock, to prevent
@@ -188,6 +189,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
         return num;
+    }
+
+    @Override
+    public List<Replica> getAllReplicas() {
+        return replicas;
     }
 
     /**
@@ -586,7 +592,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
         int alive = 0;
         int aliveAndVersionComplete = 0;
-        int stable = 0;
+        int backendStable = 0;
+        int diskStable = 0;
 
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
@@ -617,7 +624,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 // this replica is alive, version complete, but backend is not available
                 continue;
             }
-            stable++;
+            backendStable++;
+
+            if (backend.isDiskDecommissioned(replica.getPathHash())) {
+                // disk in decommission state
+                continue;
+            }
+            diskStable++;
         }
 
         // 1. alive replicas are not enough
@@ -628,7 +641,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         if (needRecoverWithEmptyTablet(systemInfoService)) {
             LOG.info("need to forcefully recover with empty tablet for {}, replica info:{}",
                     id, getReplicaInfos());
-            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         }
 
@@ -644,7 +657,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             // For example: 3 replica, 3 be, one set bad, we need to forcefully delete one first
-            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         } else {
             List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
@@ -654,26 +667,26 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // of load task won't be blocked either.
             if (availableBEs.size() > alive) {
                 if (alive < (replicationNum / 2) + 1) {
-                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
+                    return Pair.create(TabletStatus.REPLICA_MISSING, Priority.HIGH);
                 } else if (alive < replicationNum) {
-                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.NORMAL);
+                    return Pair.create(TabletStatus.REPLICA_MISSING, Priority.NORMAL);
                 }
             }
         }
 
         // 2. version complete replicas are not enough
         if (aliveAndVersionComplete < (replicationNum / 2) + 1) {
-            return Pair.create(TabletStatus.VERSION_INCOMPLETE, TabletSchedCtx.Priority.HIGH);
+            return Pair.create(TabletStatus.VERSION_INCOMPLETE, Priority.HIGH);
         } else if (aliveAndVersionComplete < replicationNum) {
-            return Pair.create(TabletStatus.VERSION_INCOMPLETE, TabletSchedCtx.Priority.NORMAL);
+            return Pair.create(TabletStatus.VERSION_INCOMPLETE, Priority.NORMAL);
         } else if (aliveAndVersionComplete > replicationNum) {
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
-            return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+            return createRedundantSchedCtx(TabletStatus.REDUNDANT, Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         }
 
         // 3. replica is under relocating
-        if (stable < replicationNum) {
+        if (backendStable < replicationNum) {
             List<Long> replicaBeIds = replicas.stream()
                     .map(Replica::getBackendId).collect(Collectors.toList());
             List<Long> availableBeIds = aliveBeIdsInCluster.stream()
@@ -683,25 +696,30 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     && availableBeIds.size() >= replicationNum
                     && replicationNum > 1) { // Doesn't have any BE that can be chosen to create a new replica
                 return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT,
-                        stable < (replicationNum / 2) + 1 ? TabletSchedCtx.Priority.NORMAL :
-                                TabletSchedCtx.Priority.LOW, needFurtherRepairReplica);
+                        backendStable < (replicationNum / 2) + 1 ? Priority.NORMAL :
+                                Priority.LOW, needFurtherRepairReplica);
             }
-            if (stable < (replicationNum / 2) + 1) {
-                return Pair.create(TabletStatus.REPLICA_RELOCATING, TabletSchedCtx.Priority.NORMAL);
+            if (backendStable < (replicationNum / 2) + 1) {
+                return Pair.create(TabletStatus.REPLICA_RELOCATING, Priority.NORMAL);
             } else {
                 return Pair.create(TabletStatus.REPLICA_RELOCATING, Priority.LOW);
             }
         }
 
-        // 4. replica redundant
+        // 4. disk decommission
+        if (diskStable < replicationNum) {
+            return Pair.create(TabletStatus.DISK_MIGRATION, Priority.NORMAL);
+        }
+
+        // 5. replica redundant
         if (replicas.size() > replicationNum) {
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
-            return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+            return createRedundantSchedCtx(TabletStatus.REDUNDANT, Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         }
 
-        // 5. healthy
-        return Pair.create(TabletStatus.HEALTHY, TabletSchedCtx.Priority.NORMAL);
+        // 6. healthy
+        return Pair.create(TabletStatus.HEALTHY, Priority.NORMAL);
     }
 
     public TabletStatus getColocateHealthStatus(long visibleVersion,
@@ -752,6 +770,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
+        int diskStableCnt = 0;
         // 2. check version completeness
         for (Replica replica : replicas) {
             // do not check the replica that is not in the colocate backend set,
@@ -771,9 +790,19 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 // this replica is alive but version incomplete
                 return TabletStatus.VERSION_INCOMPLETE;
             }
+
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend != null && !backend.isDiskDecommissioned(replica.getPathHash())) {
+                diskStableCnt++;
+            }
         }
 
-        // 3. check redundant
+        // 3. check disk decommission
+        if (diskStableCnt < replicationNum) {
+            return TabletStatus.DISK_MIGRATION;
+        }
+
+        // 4. check redundant
         if (replicas.size() > replicationNum) {
             return TabletStatus.COLOCATE_REDUNDANT;
         }

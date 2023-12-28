@@ -1,0 +1,170 @@
+-- name: test_partition_by_expr_unixtime
+CREATE TABLE partition_unixtime (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+-- !result
+insert into partition_unixtime values(unix_timestamp('2021-01-05'),'1',1.1,1);
+-- result:
+-- !result
+select * from partition_unixtime;
+-- result:
+1609776000	1	1	1
+-- !result
+select * from partition_unixtime PARTITION(p20210105);
+-- result:
+1609776000	1	1	1
+-- !result
+drop table partition_unixtime;
+-- result:
+-- !result
+CREATE TABLE partition_unixtime (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+-- !result
+insert into partition_unixtime values(unix_timestamp('2021-01-05'),'1',1.1,1);
+-- result:
+-- !result
+select * from partition_unixtime;
+-- result:
+1609776000	1	1	1
+-- !result
+select * from partition_unixtime PARTITION(p20210105);
+-- result:
+1609776000	1	1	1
+-- !result
+drop table partition_unixtime;
+-- result:
+-- !result
+CREATE TABLE partition_unixtime (
+        create_time date,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 44. Detail message: Unsupported partition expression from_unixtime for column create_time type DATE.')
+-- !result
+CREATE TABLE partition_unixtime (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 44. Detail message: Unsupported partition expression from_unixtime for column create_time type VARCHAR(100).')
+-- !result
+-- name: test_partition_by_expr_unixtime_ms
+CREATE TABLE partition_unixtime_ms (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
+-- result:
+-- !result
+select * from partition_unixtime_ms;
+-- result:
+1609776000000	1	1	1
+-- !result
+select * from partition_unixtime_ms PARTITION(p20210105);
+-- result:
+1609776000000	1	1	1
+-- !result
+show create table partition_unixtime_ms;
+-- result:
+partition_unixtime_ms	CREATE TABLE `partition_unixtime_ms` (
+  `create_time` bigint(20) NULL COMMENT "",
+  `sku_id` varchar(100) NULL COMMENT "",
+  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `id` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`create_time`, `sku_id`)
+PARTITION BY RANGE(from_unixtime_ms(create_time))
+(PARTITION p20210101 VALUES [("2021-01-01 00:00:00"), ("2021-01-02 00:00:00")),
+PARTITION p20210102 VALUES [("2021-01-02 00:00:00"), ("2021-01-03 00:00:00")),
+PARTITION p20210103 VALUES [("2021-01-03 00:00:00"), ("2021-01-04 00:00:00")),
+PARTITION p20210104 VALUES [("2021-01-04 00:00:00"), ("2021-01-05 00:00:00")),
+PARTITION p20210105 VALUES [("2021-01-05 00:00:00"), ("2021-01-06 00:00:00")),
+PARTITION p20210106 VALUES [("2021-01-06 00:00:00"), ("2021-01-07 00:00:00")),
+PARTITION p20210107 VALUES [("2021-01-07 00:00:00"), ("2021-01-08 00:00:00")),
+PARTITION p20210108 VALUES [("2021-01-08 00:00:00"), ("2021-01-09 00:00:00")),
+PARTITION p20210109 VALUES [("2021-01-09 00:00:00"), ("2021-01-10 00:00:00")))
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+drop table partition_unixtime_ms;
+-- result:
+-- !result
+CREATE TABLE partition_unixtime_ms (
+        create_time int,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 47. Detail message: Unsupported partition expression from_unixtime_ms for column create_time type INT.')
+-- !result
+CREATE TABLE partition_unixtime_ms (
+        create_time date,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 47. Detail message: Unsupported partition expression from_unixtime_ms for column create_time type DATE.')
+-- !result
+CREATE TABLE partition_unixtime_ms (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 47. Detail message: Unsupported partition expression from_unixtime_ms for column create_time type VARCHAR(100).')
+-- !result

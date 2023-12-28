@@ -147,7 +147,7 @@ public class MaterializedViewHandlerTest {
                 result = OlapTable.OlapTableState.NORMAL;
                 olapTable.getIndexIdByName(baseIndexName);
                 result = baseIndexId;
-                olapTable.getPartitions();
+                olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
                 partition.getIndex(baseIndexId);
                 result = materializedIndex;
@@ -335,7 +335,7 @@ public class MaterializedViewHandlerTest {
                 result = 1L;
                 olapTable.getSchemaHashByIndexId(1L);
                 result = 1;
-                olapTable.getPartitions();
+                olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
                 partition.getIndex(1L);
                 result = materializedIndex;

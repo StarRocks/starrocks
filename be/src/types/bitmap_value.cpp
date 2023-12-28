@@ -38,6 +38,7 @@
 #include "types/bitmap_value_detail.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -834,7 +835,7 @@ std::string BitmapValue::to_string() const {
     }
     case SET:
         int pos = 0;
-        int64_t values[_set->size()];
+        uint64_t values[_set->size()];
         for (auto value : *_set) {
             values[pos++] = value;
         }
@@ -862,9 +863,9 @@ void BitmapValue::to_array(std::vector<int64_t>* array) const {
         array->emplace_back(_sv);
         break;
     case BITMAP: {
-        for (unsigned long ptr_value : *_bitmap) {
-            array->emplace_back(ptr_value);
-        }
+        size_t cur_size = array->size();
+        array->resize(cur_size + _bitmap->cardinality());
+        _bitmap->toUint64Array((uint64_t*)(*array).data() + cur_size);
         break;
     }
     case SET:
@@ -1152,6 +1153,38 @@ void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
         _copy_on_write();
         _bitmap->addMany(n_args, vals);
     }
+}
+
+uint64_t BitmapValueIter::next_batch(uint64_t* values, uint64_t count) {
+    uint64_t remain_rows = _remain_rows();
+    uint64_t read_count = std::min(count, remain_rows);
+    if (read_count <= 0) {
+        return 0;
+    }
+
+    switch (_bitmap->type()) {
+    case BitmapValue::EMPTY:
+        break;
+    case BitmapValue::SINGLE:
+        values[0] = _bitmap->_sv;
+        break;
+    case BitmapValue::SET: {
+        std::vector tmp_array(_bitmap->_set->begin(), _bitmap->_set->end());
+        std::sort(tmp_array.begin(), tmp_array.end());
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = tmp_array[_offset + i];
+        }
+        break;
+    }
+    case BitmapValue::BITMAP: {
+        for (uint64_t i = 0; i < read_count; i++) {
+            values[i] = *((*_bitmap_iter)++);
+        }
+        break;
+    }
+    }
+    _offset += read_count;
+    return read_count;
 }
 
 } // namespace starrocks

@@ -254,7 +254,8 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             for (Pair<String, View> entry : dumpInfo.getViewMap().values()) {
                 String viewName = DesensitizedSQLBuilder.desensitizeDbName(entry.first, dict) + "."
                         + DesensitizedSQLBuilder.desensitizeTblName(entry.second.getName(), dict);
-                String viewDef = DesensitizedSQLBuilder.desensitizeViewDef(entry.second, collector.getDesensitizedDict());
+                String viewDef = DesensitizedSQLBuilder.desensitizeViewDef(entry.second,
+                        collector.getDesensitizedDict(), ConnectContext.get());
                 viewMetaData.addProperty(viewName, viewDef);
             }
             dumpJson.add("view_meta", viewMetaData);

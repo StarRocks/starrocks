@@ -10,6 +10,12 @@ This statement is used to set configuration items for the cluster (Currently, on
 
 The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
 
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```sql

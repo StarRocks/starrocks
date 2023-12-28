@@ -68,6 +68,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -177,6 +178,8 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -274,6 +277,8 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
@@ -309,11 +314,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
+import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -321,6 +328,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -342,7 +350,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (params.isSetCatalog_name()) {
             catalogName = params.getCatalog_name();
         }
@@ -361,8 +369,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        fullName);
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -504,10 +511,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             List<TableName> allTables = view.getTableRefs();
                             for (TableName tableName : allTables) {
-                                if (tableName.getCatalog() != null &&
-                                        !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(tableName.getCatalog())) {
-                                    continue;
-                                }
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
@@ -578,6 +581,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TListPipesInfo row = new TListPipesInfo();
             row.setPipe_id(pipe.getPipeId().getId());
             row.setPipe_name(pipe.getName());
+            row.setProperties(pipe.getPropertiesString());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
             row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
@@ -647,6 +651,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
         return SysObjectDependencies.listObjectDependencies(params);
+    }
+
+    @Override
+    public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
+        return SysFeLocks.listLocks(params, true);
     }
 
     // list MaterializedView table match pattern
@@ -766,6 +775,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
+            info.setProperties(task.getPropertiesString());
             tasksResult.add(info);
         }
 
@@ -1305,6 +1315,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
+        // check txn
+        long limit = Config.stream_load_max_txn_num_per_be;
+        if (limit >= 0) {
+            long txnNumBe = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
+            LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
+            if (txnNumBe >= limit) {
+                throw new UserException("streamload txn num per be exceeds limit, be: "
+                        + clientIp + ", txn_num: " + txnNumBe + ", limit: " + limit);
+            }
+        }
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
             throw new UserException("empty label in begin request");
@@ -2196,6 +2216,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TCreatePartitionResult result;
         try {
+            if (partitionRequestNum.incrementAndGet() >= Config.thrift_server_max_worker_threads / 4) {
+                result = new TCreatePartitionResult();
+                TStatus errorStatus = new TStatus(SERVICE_UNAVAILABLE);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("Too many create partition requests, please try again later txn_id=%d",
+                        request.getTxn_id())));
+                result.setStatus(errorStatus);
+                return result;
+            }
+
             result = createPartitionProcess(request);
         } catch (Throwable t) {
             LOG.warn(t);
@@ -2204,6 +2234,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
                     request.getTxn_id(), t.getMessage())));
             result.setStatus(errorStatus);
+        } finally {
+            partitionRequestNum.decrementAndGet();
         }
 
         return result;
@@ -2736,5 +2768,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw semanticException;
         }
         return response;
+    }
+
+    @Override
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
+        return leaderImpl.startTableReplication(request);
     }
 }

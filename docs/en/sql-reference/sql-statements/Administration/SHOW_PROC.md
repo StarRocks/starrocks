@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows certain indicators of the StarRocks cluster.
 
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```SQL

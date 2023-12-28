@@ -15,7 +15,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-DROP TASK '<task_name>'
+DROP TASK <task_name>
 ```
 
 ## 参数说明
@@ -48,6 +48,6 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
 +----------+-----------+
 1 row in set (1.19 sec)
 
-MySQL > DROP TASK 'ctas';
+MySQL > DROP TASK ctas;
 Query OK, 0 rows affected (0.35 sec)
 ```

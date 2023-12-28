@@ -109,6 +109,9 @@ public class GlobalTransactionMgrTest {
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
+    private TransactionState.TxnCoordinator transactionSourceBe =
+            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "localbe");
+
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -376,11 +379,17 @@ public class GlobalTransactionMgrTest {
         Map<Long, TransactionState> idToTransactionState = Maps.newHashMap();
         idToTransactionState.put(1L, transactionState);
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 10);
+
         Map<Integer, Long> oldKafkaProgressMap = Maps.newHashMap();
         oldKafkaProgressMap.put(1, 0L);
-        KafkaProgress oldkafkaProgress = new KafkaProgress();
-        Deencapsulation.setField(oldkafkaProgress, "partitionIdToOffset", oldKafkaProgressMap);
+        KafkaProgress oldkafkaProgress = new KafkaProgress(oldKafkaProgressMap);
         Deencapsulation.setField(routineLoadJob, "progress", oldkafkaProgress);
+
+        Map<Integer, Long> kafkaTimestampProgressMap = Maps.newHashMap();
+        kafkaTimestampProgressMap.put(1, 1701411701409L);
+        KafkaProgress oldKafkaTimestampProgress = new KafkaProgress(kafkaTimestampProgressMap);
+        Deencapsulation.setField(routineLoadJob, "timestampProgress", oldKafkaTimestampProgress);
+
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
 
         TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
@@ -389,11 +398,20 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setFilteredRows(1);
         rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
         rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+
         TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+
         Map<Integer, Long> kafkaProgress = Maps.newHashMap();
         kafkaProgress.put(1, 100L); // start from 0, so rows number is 101, and consumed offset is 100
         tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
+        Map<Integer, Long> kafkaTimestampProgress = Maps.newHashMap();
+        kafkaTimestampProgress.put(1, 1701411701509L); // start from 0, so rows number is 101, and consumed offset is 100
+        tKafkaRLTaskProgress.setPartitionCmtOffsetTimestamp(kafkaTimestampProgress);
+
+        rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
@@ -451,11 +469,17 @@ public class GlobalTransactionMgrTest {
         Map<Long, TransactionState> idToTransactionState = Maps.newHashMap();
         idToTransactionState.put(1L, transactionState);
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 10);
+
         Map<Integer, Long> oldKafkaProgressMap = Maps.newHashMap();
         oldKafkaProgressMap.put(1, 0L);
-        KafkaProgress oldkafkaProgress = new KafkaProgress();
-        Deencapsulation.setField(oldkafkaProgress, "partitionIdToOffset", oldKafkaProgressMap);
+        KafkaProgress oldkafkaProgress = new KafkaProgress(oldKafkaProgressMap);
         Deencapsulation.setField(routineLoadJob, "progress", oldkafkaProgress);
+
+        Map<Integer, Long> oldKafkaTimestampProgressMap = Maps.newHashMap();
+        oldKafkaTimestampProgressMap.put(1, 1701411701409L);
+        KafkaProgress oldKafkaTimestampProgress = new KafkaProgress(oldKafkaTimestampProgressMap);
+        Deencapsulation.setField(routineLoadJob, "timestampProgress", oldKafkaTimestampProgress);
+
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
 
         TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
@@ -464,11 +488,20 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setFilteredRows(11);
         rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
         rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+
         TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+
         Map<Integer, Long> kafkaProgress = Maps.newHashMap();
-        kafkaProgress.put(1, 110L); // start from 0, so rows number is 111, consumed offset is 110
+        kafkaProgress.put(1, 110L); // start from 0, so rows number is 101, and consumed offset is 100
         tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
+        Map<Integer, Long> kafkaTimestampProgress = Maps.newHashMap();
+        kafkaTimestampProgress.put(1, 1701411701609L); // start from 0, so rows number is 101, and consumed offset is 100
+        tKafkaRLTaskProgress.setPartitionCmtOffsetTimestamp(kafkaTimestampProgress);
+
+        rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
@@ -866,5 +899,17 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
+            BeginTransactionException, DuplicatedRequestException {
+        masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSourceBe,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
+        assertEquals(1, res);
     }
 }

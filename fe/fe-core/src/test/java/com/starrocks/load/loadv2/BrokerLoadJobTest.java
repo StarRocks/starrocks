@@ -490,6 +490,7 @@ public class BrokerLoadJobTest {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Map<String, String> properties = Maps.newHashMap();
         properties.put(LoadStmt.PARTIAL_UPDATE_MODE, "column");
+        properties.put(LoadStmt.MERGE_CONDITION, "v1");
         brokerLoadJob.setJobProperties(properties);
         brokerLoadJob.onTaskFinished(attachment1);
     }

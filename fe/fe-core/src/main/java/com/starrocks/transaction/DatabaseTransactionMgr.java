@@ -61,6 +61,7 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
@@ -738,40 +739,51 @@ public class DatabaseTransactionMgr {
                         Config.lake_batch_publish_min_version_num,
                         Config.lake_batch_publish_max_version_num, txnId);
                 List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
+                        .filter(Objects::nonNull)
                         .collect(Collectors.toList());
+                if (states.isEmpty()) {
+                    continue;
+                }
+                if (states.size() == 1) { // fast path: no batch
+                    result.add(new TransactionStateBatch(states));
+                    continue;
+                }
+
+                // Only single table transactions will be batched together.
+                Preconditions.checkState(states.get(0).getTableIdList().size() == 1);
+
+                long tableId = states.get(0).getTableIdList().get(0);
+
                 // check whether version is consequent
                 // for schema change will occupy a version
                 Map<Long, PartitionCommitInfo> versions = new HashMap<>();
-                long tableId = -1;
-                if (states.size() != 0) {
-                    tableId = states.get(0).getTableIdList().get(0);
-                    versions.putAll(states.get(0).getTableCommitInfo(tableId).getIdToPartitionCommitInfo());
-                }
 
-                boolean consecutive = true;
-                for (int i = 1; i < states.size() && consecutive; i++) {
+                outerLoop:
+                for (int i = 0; i < states.size(); i++) {
                     TransactionState state = states.get(i);
-                    for (Map.Entry<Long, PartitionCommitInfo> item :
-                            state.getTableCommitInfo(tableId).getIdToPartitionCommitInfo().entrySet()) {
-                        if (versions.containsKey(item.getKey())) {
+                    TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+                    // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
+                    if (tableInfo == null) {
+                        states = states.subList(0, Math.max(i, 1));
+                        break;
+                    }
+                    Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                    for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                        PartitionCommitInfo currTxnInfo = item.getValue();
+                        PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
+                        if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
+                            assert i > 0;
                             // version is not consecutive
                             // may schema change occupy a version
-                            if (versions.get(item.getKey()).getVersion() + 1 != item.getValue().getVersion()) {
-                                states = states.subList(0, i);
-                                consecutive = false;
-                                break;
-                            }
+                            states = states.subList(0, i);
+                            break outerLoop;
                         }
-
-                        versions.put(item.getKey(), item.getValue());
+                        versions.put(item.getKey(), currTxnInfo);
                     }
-
                 }
 
-                if (states.size() != 0) {
-                    TransactionStateBatch batch = new TransactionStateBatch(states);
-                    result.add(batch);
-                }
+                TransactionStateBatch batch = new TransactionStateBatch(states);
+                result.add(batch);
             }
         } finally {
             readUnlock();
@@ -809,7 +821,9 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
 
@@ -928,7 +942,9 @@ public class DatabaseTransactionMgr {
                                 transactionState);
                         continue;
                     }
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         // prevent excessive logging
                         if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                             LOG.debug("transactionId {} partition commitInfo version {} is not equal with " +
@@ -961,7 +977,7 @@ public class DatabaseTransactionMgr {
                                         && replica.getLastFailedVersion() < 0) {
                                     // if replica not commit yet, skip it. This may happen when it's just create by clone.
                                     if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(),
-                                            replica.getBackendId())) {
+                                            replica.getBackendId(), replica.getState())) {
                                         continue;
                                     }
                                     // this means the replica is a healthy replica,
@@ -1278,6 +1294,15 @@ public class DatabaseTransactionMgr {
         abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
+    private void processNotFoundTxn(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (txnCommitAttachment == null) {
+            return;
+        }
+        if (txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            GlobalStateMgr.getCurrentState().getRoutineLoadMgr().setRoutineLoadJobOtherMsg(reason, txnCommitAttachment);
+        }
+    }
+
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
                                  TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
             throws UserException {
@@ -1294,6 +1319,9 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         if (transactionState == null) {
+            // If the transaction state does not exist, this task might have been aborted by
+            // the txntimeoutchecker thread. We need to perform some additional work.
+            processNotFoundTxn(transactionId, reason, txnCommitAttachment);
             throw new TransactionNotFoundException(transactionId);
         }
 
@@ -1469,6 +1497,18 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return txnInfos;
+    }
+
+    public Long getTransactionNumByCoordinateBe(String coordinateHost) {
+        readLock();
+        try {
+            return idToRunningTransactionState.values().stream()
+                    .filter(t -> (t.getCoordinator().sourceType == TransactionState.TxnSourceType.BE
+                            && t.getCoordinator().ip.equals(coordinateHost)))
+                    .mapToLong(item -> 1).sum();
+        } finally {
+            readUnlock();
+        }
     }
 
     // get show info of a specified txnId

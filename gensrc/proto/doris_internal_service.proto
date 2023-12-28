@@ -57,6 +57,7 @@ service PBackendService {
     rpc get_info(starrocks.PProxyRequest) returns (starrocks.PProxyResult);
     rpc get_pulsar_info(starrocks.PPulsarProxyRequest) returns (starrocks.PPulsarProxyResult);
     rpc get_file_schema(starrocks.PGetFileSchemaRequest) returns (starrocks.PGetFileSchemaResult);
+    rpc exec_short_circuit(starrocks.PExecShortCircuitRequest) returns (starrocks.PExecShortCircuitResult);
 
     // Transmit vectorized data between backends
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);
@@ -79,4 +80,6 @@ service PBackendService {
     rpc execute_command(starrocks.ExecuteCommandRequestPB) returns (starrocks.ExecuteCommandResultPB);
     rpc update_fail_point_status(starrocks.PUpdateFailPointStatusRequest) returns (starrocks.PUpdateFailPointStatusResponse);
     rpc list_fail_point(starrocks.PListFailPointRequest) returns (starrocks.PListFailPointResponse);
+
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

@@ -92,9 +92,10 @@ Status CacheLibWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
-    const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
-    return navy_stats;
+const CacheMetrics CacheLibWrapper::cache_metrics() {
+    // not implemented
+    CacheMetrics metrics{};
+    return metrics;
 }
 
 Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,

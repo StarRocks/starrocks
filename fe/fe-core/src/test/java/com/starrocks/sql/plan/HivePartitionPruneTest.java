@@ -26,8 +26,13 @@ import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
-    public void setUp() throws DdlException {
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+    public void setUp() {
+        super.setUp();
+        try {
+            GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -167,5 +172,11 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
+    }
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
     }
 }

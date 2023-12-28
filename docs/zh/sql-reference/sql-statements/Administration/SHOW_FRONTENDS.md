@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 该语句用于查看 FE 节点。FE 节点添加方式及高可用部署请参考 [集群部署](../../../administration/Deployment.md#部署-fe-高可用集群) 章节。
 
+> **注意**
+>
+> 该操作需要 SYSTEM 级 OPERATE 权限或 cluster_admin 角色。
+
 ## 语法
 
 ```sql

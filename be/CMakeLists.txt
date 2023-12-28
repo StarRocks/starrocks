@@ -82,7 +82,7 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
-option(WITH_STARCACHE "Build binary with starcache library" OFF)
+option(WITH_STARCACHE "Build binary with starcache library" ON)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
@@ -698,12 +698,6 @@ endif()
 if (ENABLE_FAULT_INJECTION)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
     message(STATUS "enable fault injection")
-endif()
-
-option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
-if (ASSERT_STATUS_CHECKED)
-    message(STATUS "Build with assert status checked")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
 endif()
 
 # For CMAKE_BUILD_TYPE=Debug

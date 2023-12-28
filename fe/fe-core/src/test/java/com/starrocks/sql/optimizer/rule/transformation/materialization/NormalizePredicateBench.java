@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -64,7 +65,7 @@ import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOpera
 @Measurement(time = 1, timeUnit = TimeUnit.SECONDS)
 public class NormalizePredicateBench {
 
-    @Param({"10", "20", "40", "80", "160"})
+    @Param({"10", "20", "40", "80", "160", "2000"})
     private int predicateSize;
 
     private ScalarOperator randomPredicate;
@@ -157,6 +158,12 @@ public class NormalizePredicateBench {
         ScalarOperator res = MvUtils.canonizePredicateForRewrite(randomPredicate);
     }
 
+    @Benchmark
+    public void bench_NormalizePredicate_Random_Non_MV() {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res = scalarRewriter.rewrite(randomPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+    }
+
     /**
      * (a = 1 and b = 2 and c = 3)
      * OR (a = 2 and b = 3 and c = 4)
@@ -166,5 +173,11 @@ public class NormalizePredicateBench {
     @Benchmark
     public void bench_NormalizePredicate_Disjunctive() {
         ScalarOperator res = MvUtils.canonizePredicateForRewrite(disjunctive);
+    }
+
+    @Benchmark
+    public void bench_NormalizePredicate_Disjunctive_Non_MV() {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator res = scalarRewriter.rewrite(disjunctive, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
     }
 }

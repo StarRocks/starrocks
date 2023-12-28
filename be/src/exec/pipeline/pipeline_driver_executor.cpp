@@ -53,8 +53,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -64,8 +63,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        auto st = _thread_pool->submit_func([this]() { this->_worker_thread(); });
-        st.permit_unchecked_error();
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -169,7 +167,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
                              << ", status=" << status;
-                driver->runtime_profile()->add_info_string("ErrorMsg", status.get_error_msg());
+                driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
@@ -285,8 +283,9 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                              const Status& status, bool done, bool attach_profile) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+    ObjectPool obj_pool;
     if (attach_profile) {
-        profile = _build_merged_instance_profile(query_ctx, fragment_ctx);
+        profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
         auto* query_peak_memory = profile->add_counter(
@@ -415,7 +414,8 @@ void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmuta
 }
 
 RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
-                                                                     FragmentContext* fragment_ctx) {
+                                                                     FragmentContext* fragment_ctx,
+                                                                     ObjectPool* obj_pool) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
     if (!query_ctx->enable_profile()) {
         return instance_profile;
@@ -447,8 +447,7 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
             continue;
         }
 
-        auto* merged_driver_profile =
-                RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), driver_profiles);
+        auto* merged_driver_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool, driver_profiles);
 
         // use the name of pipeline' profile as pipeline driver's
         merged_driver_profile->set_name(pipeline_profile->name());
@@ -461,7 +460,7 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
         merged_driver_profiles.push_back(merged_driver_profile);
     }
 
-    new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
+    new_instance_profile = obj_pool->add(new RuntimeProfile(instance_profile->name()));
     new_instance_profile->copy_all_info_strings_from(instance_profile);
     new_instance_profile->copy_all_counters_from(instance_profile);
     for (auto* merged_driver_profile : merged_driver_profiles) {

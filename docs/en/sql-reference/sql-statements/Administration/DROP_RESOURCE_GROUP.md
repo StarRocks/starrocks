@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Drops the specified resource group.
 
+:::tip
+
+This operation requires the DROP privilege on the target resource group. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```SQL

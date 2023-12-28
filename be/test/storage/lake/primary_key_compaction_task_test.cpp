@@ -22,7 +22,6 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
@@ -33,7 +32,6 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
@@ -145,8 +143,8 @@ protected:
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -164,8 +162,8 @@ protected:
     }
 
     void get_key_list(int64_t version, std::vector<int>& key_list) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto chunk = ChunkHelper::new_chunk(*_schema, 128);
@@ -243,8 +241,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
         EXPECT_TRUE(fs::path_exist(_lp->delvec_location(tablet_id, delvec_file.name())));
     }
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
@@ -300,8 +296,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
@@ -367,8 +361,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 2, read(version));
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
@@ -491,7 +483,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     config::max_update_compaction_num_singleton_deltas = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -567,7 +558,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     }
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 6, read(version));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     config::max_update_compaction_num_singleton_deltas = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -619,24 +609,23 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto tablet_meta, tablet.get_metadata(version));
+    ASSIGN_OR_ABORT(auto tablet_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
 
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_meta));
     config::max_update_compaction_num_singleton_deltas = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
-    EXPECT_EQ(3, compaction_score(tablet_meta));
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
 
     config::max_update_compaction_num_singleton_deltas = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
     EXPECT_EQ(2, input_rowsets2.size());
-    EXPECT_EQ(2, compaction_score(tablet_meta));
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
 
     config::max_update_compaction_num_singleton_deltas = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
-    EXPECT_EQ(1, compaction_score(tablet_meta));
+    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), tablet_meta));
     config::max_update_compaction_num_singleton_deltas = 1000;
 }
 
@@ -675,8 +664,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
@@ -685,15 +672,15 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     EXPECT_EQ(100, progress.value());
     // check compaction state
-    ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
-    RowsetPtr output_rowset = std::make_shared<Rowset>(
-            tablet, std::make_shared<RowsetMetadata>(txn_log->op_compaction().output_rowset()));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    Rowset output_rowset(_tablet_mgr.get(), _tablet_metadata->id(), &txn_log->op_compaction().output_rowset(), -1,
+                         _tablet_schema);
     {
         auto compaction_state = std::make_unique<CompactionState>();
         EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker() != nullptr);
         auto prev = _update_mgr->compaction_state_mem_tracker()->consumption();
-        for (size_t i = 0; i < output_rowset->num_segments(); i++) {
-            ASSERT_OK(compaction_state->load_segments(output_rowset.get(), _update_mgr.get(), _tablet_schema, i));
+        for (size_t i = 0; i < output_rowset.num_segments(); i++) {
+            ASSERT_OK(compaction_state->load_segments(&output_rowset, _update_mgr.get(), _tablet_schema, i));
             auto& pk_col = compaction_state->pk_cols[i];
             EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage() + prev);
             compaction_state->release_segments(i);
@@ -762,8 +749,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
         auto delvec_file = itr->second;
         EXPECT_TRUE(fs::path_exist(_lp->delvec_location(tablet_id, delvec_file.name())));
     }
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));

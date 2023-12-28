@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <any>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
@@ -33,9 +35,33 @@ struct ScanTaskGroup {
     int sub_queue_level = 0;
 };
 
+#define TO_NEXT_STAGE(yield_point) yield_point++;
+
+struct YieldContext {
+    YieldContext() = default;
+    YieldContext(size_t total_yield_point_cnt) : total_yield_point_cnt(total_yield_point_cnt) {}
+
+    ~YieldContext() = default;
+
+    DISALLOW_COPY(YieldContext);
+    YieldContext(YieldContext&&) = default;
+    YieldContext& operator=(YieldContext&&) = default;
+
+    bool is_finished() const { return yield_point >= total_yield_point_cnt; }
+    void set_finished() {
+        yield_point = total_yield_point_cnt = 0;
+        task_context_data.reset();
+    }
+
+    std::any task_context_data;
+    size_t yield_point{};
+    size_t total_yield_point_cnt{};
+    const workgroup::WorkGroup* wg = nullptr;
+};
+
 struct ScanTask {
 public:
-    using WorkFunction = std::function<void()>;
+    using WorkFunction = std::function<void(YieldContext&)>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
@@ -54,8 +80,13 @@ public:
         return *this;
     }
 
+    void run() { work_function(work_context); }
+
+    bool is_finished() const { return work_context.is_finished(); }
+
 public:
     WorkGroup* workgroup;
+    YieldContext work_context;
     WorkFunction work_function;
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
@@ -78,6 +109,7 @@ public:
 
     virtual StatusOr<ScanTask> take() = 0;
     virtual bool try_offer(ScanTask task) = 0;
+    virtual void force_put(ScanTask task) = 0;
 
     virtual size_t size() const = 0;
     bool empty() const { return size() == 0; }
@@ -95,6 +127,7 @@ public:
 
     StatusOr<ScanTask> take() override;
     bool try_offer(ScanTask task) override;
+    void force_put(ScanTask task) override;
 
     size_t size() const override { return _num_tasks; }
 
@@ -141,6 +174,7 @@ public:
 
     StatusOr<ScanTask> take() override;
     bool try_offer(ScanTask task) override;
+    void force_put(ScanTask task) override;
 
     size_t size() const override { return _queue.get_size(); }
 
@@ -162,6 +196,7 @@ public:
 
     StatusOr<ScanTask> take() override;
     bool try_offer(ScanTask task) override;
+    void force_put(ScanTask task) override;
 
     size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
 

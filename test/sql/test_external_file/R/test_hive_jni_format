@@ -2,7 +2,7 @@
 [UC]shell: avro_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/avro_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/18b53aff8c6f422e87ef9e3b4a3219e5/avro_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/c6174f14d2f1413488cb1f3ddd5bf5bf/avro_format/
 -- !result
 shell: ossutil64 mkdir ${avro_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -58,8 +58,13 @@ select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_avro_format;
 -- result:
-7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+7	57.30	["A","B","C"]
+-- !result
+select col_tinyint,col_timestamp from test_hive_avro_format  order by 1 limit 3;
+-- result:
+1	2023-10-29 10:00:00
+7	2022-01-01 10:00:00
 -- !result
 shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -70,7 +75,7 @@ shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/nul
 [UC]shell: rcbinary_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rcbinary_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/ed0414200602437987c7771c55e98b05/rcbinary_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/e27775bb1eed4c359beedae1df77b520/rcbinary_format/
 -- !result
 shell: ossutil64 mkdir ${rcbinary_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -118,16 +123,21 @@ PROPERTIES
 -- !result
 select * from test_hive_rcbinary_format where col_string = 'world';
 -- result:
-7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 02:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
+7	13	74	13000000000	6.15	4.376	57.30	world	Char      	Varchar	1	2022-01-01 10:00:00	2022-01-01	["A","B","C"]	{"key2":2,"key1":1}	{"name":"John","age":30}
 -- !result
 select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
 -- result:
-1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 02:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
+1	2	3	10000000000	1.23	3.14	100.50	you	are       	beautiful	0	2023-10-29 10:00:00	2023-10-29	["D","E","F"]	{"k2":5,"k1":3}	{"name":"chandler","age":54}
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
 -- result:
 7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+-- !result
+select col_tinyint,col_timestamp from test_hive_rcbinary_format  order by 1 limit 3;
+-- result:
+1	2023-10-29 10:00:00
+7	2022-01-01 10:00:00
 -- !result
 shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -138,7 +148,7 @@ shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: rctext_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rctext_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/ac2c404dfb8e4a17ace8e3aa6d2c0e47/rctext_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/45e80824e4314af89d1eed96ffd9baef/rctext_format/
 -- !result
 shell: ossutil64 mkdir ${rctext_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -194,8 +204,8 @@ select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 -- result:
-7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+7	57.30	["A","B","C"]
 -- !result
 shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -206,7 +216,7 @@ shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 [UC]shell: sequence_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/sequence_format/"
 -- result:
 0
-oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/7847f5f081e54501a414380f71600937/sequence_format/
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/a99c1567ef2b4050b8ee01cd5c453337/sequence_format/
 -- !result
 shell: ossutil64 mkdir ${sequence_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -262,10 +272,49 @@ select * from test_hive_sequence_format where abs(col_float - 1.23) < 0.01 ;
 -- !result
 select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
 -- result:
-7	57.30	["A","B","C"]
 1	100.50	["D","E","F"]
+7	57.30	["A","B","C"]
 -- !result
 shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: testHiveStructCharAndVarchar
+[UC]shell: struct_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/strcut/"
+-- result:
+0
+oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/a308f9e19fd64f8fbaae5e878fbec846/strcut/
+-- !result
+shell: ossutil64 mkdir ${struct_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/jni_scanner/test_hive_format/struct.seq ${struct_prefix[1]} | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 15,266. OK num: 1(upload 1 files).
+-- !result
+CREATE TABLE `hive_hdfs_sequencefile_struct_mix_deflate` (
+  `col_int` int,
+  `col_string` varchar(1048576),
+  `col_struct` struct<c_int int(11), c_float float, c_double double, c_char char(30), c_varchar varchar(200), c_date date, c_timestamp datetime, c_boolean boolean>
+)
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "${struct_prefix[1]}",
+    "format" = "sequence"
+);
+-- result:
+-- !result
+select col_int,col_struct from hive_hdfs_sequencefile_struct_mix_deflate order by 1 limit 1;
+-- result:
+-2144975700	{"c_int":1102434235,"c_float":-9972.251,"c_double":18.68127,"c_char":"(115)699-5565x12614           ","c_varchar":"Mozilla/5.0 (compatible; MSIE 5.0; Windows 95; Trident/4.1)","c_date":"2000-01-29","c_timestamp":"2000-11-10 11:01:59","c_boolean":1}
+-- !result
+shell: ossutil64 rm -rf ${struct_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
 

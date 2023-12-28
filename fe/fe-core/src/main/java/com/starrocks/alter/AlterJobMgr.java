@@ -690,7 +690,7 @@ public class AlterJobMgr {
         }
 
         if (isSynchronous) {
-            olapTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 
@@ -752,6 +752,7 @@ public class AlterJobMgr {
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
+        String comment = alterViewInfo.getComment();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Locker locker = new Locker();
@@ -766,11 +767,10 @@ public class AlterJobMgr {
                 throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-
+            view.setComment(comment);
             LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
-            view.lastSchemaUpdateTime.set(System.currentTimeMillis());
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {

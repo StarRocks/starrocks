@@ -53,6 +53,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
 
+    // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order, but the order is not fixed
     // When generate plan fragment, we need this info.
     // For select count(distinct id_bigint), sum(id_int) from test_basic;
     // In the distinct local (update serialize) agg stage:

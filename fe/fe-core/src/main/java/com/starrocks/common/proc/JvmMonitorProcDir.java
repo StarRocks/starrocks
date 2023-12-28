@@ -62,23 +62,23 @@ public class JvmMonitorProcDir implements ProcNodeInterface {
         result.addRow(genRow("classes total loaded", jvmStats.getClasses().getTotalLoadedClassCount()));
         result.addRow(genRow("classes unloaded", jvmStats.getClasses().getUnloadedClassCount()));
 
-        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted().getBytes()));
-        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed().getBytes()));
-        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted().getBytes()));
-        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed().getBytes()));
+        result.addRow(genRow("mem heap committed", jvmStats.getMem().getHeapCommitted()));
+        result.addRow(genRow("mem heap used", jvmStats.getMem().getHeapUsed()));
+        result.addRow(genRow("mem non heap committed", jvmStats.getMem().getNonHeapCommitted()));
+        result.addRow(genRow("mem non heap used", jvmStats.getMem().getNonHeapUsed()));
 
         for (MemoryPool memPool : jvmStats.getMem()) {
-            result.addRow(genRow("mem pool " + memPool.getName() + " committed", memPool.getCommitted().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " used", memPool.getUsed().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed().getBytes()));
-            result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax().getBytes()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " committed", memPool.getCommitted()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " used", memPool.getUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " max", memPool.getMax()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak used", memPool.getPeakUsed()));
+            result.addRow(genRow("mem pool " + memPool.getName() + " peak max", memPool.getPeakMax()));
         }
 
         for (BufferPool bp : jvmStats.getBufferPools()) {
             result.addRow(genRow("buffer pool " + bp.getName() + " count", bp.getCount()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed().getBytes()));
-            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity().getBytes()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " used", bp.getUsed()));
+            result.addRow(genRow("buffer pool " + bp.getName() + " capacity", bp.getTotalCapacity()));
         }
 
         for (GarbageCollector gc : jvmStats.getGc()) {

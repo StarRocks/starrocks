@@ -26,6 +26,7 @@
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
 #include "storage/row_source_mask.h"
@@ -44,21 +45,22 @@ using Field = starrocks::Field;
 using PredicateParser = starrocks::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema)
+        : ChunkIterator(std::move(schema)), _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(metadata)) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets)
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           std::vector<RowsetPtr> rowsets)
         : ChunkIterator(std::move(schema)),
-          _tablet(tablet),
-          _version(version),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
-                           RowSourceMaskBuffer* mask_buffer)
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
-          _tablet(tablet),
-          _version(version),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
@@ -72,14 +74,12 @@ TabletReader::~TabletReader() {
 }
 
 Status TabletReader::prepare() {
-    ASSIGN_OR_RETURN(_tablet_metadata, _tablet.get_metadata(_version));
-    CHECK_EQ(_version, _tablet_metadata->version());
     _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");
     }
     if (!_rowsets_inited) {
-        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(*_tablet_metadata)));
+        _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
@@ -145,7 +145,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.fill_data_cache = params.fill_data_cache;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
-        rs_opts.version = _version;
+        rs_opts.version = _tablet_metadata->version();
     }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);

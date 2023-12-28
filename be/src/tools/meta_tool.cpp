@@ -824,7 +824,7 @@ Status SegmentDump::calc_checksum() {
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
-        std::cout << "new segment iterator failed: " << seg_res.status().get_error_msg() << std::endl;
+        std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
         return seg_res.status();
     }
     auto seg_iter = std::move(seg_res.value());
@@ -1060,7 +1060,7 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
-            std::cout << "dump segment data failed: " << st.get_error_msg() << std::endl;
+            std::cout << "dump segment data failed: " << st.message() << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {

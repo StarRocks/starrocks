@@ -91,8 +91,6 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
-    // used for recording the last snapshot time when refresh mv based on mv.
-    private long refreshSnapshotTime = -1L;
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
@@ -247,14 +245,6 @@ public class IcebergTable extends Table {
             nativeTable = resourceMappingTable.getNativeTable();
         }
         return nativeTable;
-    }
-
-    public long getRefreshSnapshotTime() {
-        return refreshSnapshotTime;
-    }
-
-    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
-        this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
     @Override

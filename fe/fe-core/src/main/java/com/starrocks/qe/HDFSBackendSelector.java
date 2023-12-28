@@ -34,6 +34,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -85,7 +86,7 @@ public class HDFSBackendSelector implements BackendSelector {
     // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
-    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
+    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 128;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -115,6 +116,9 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof OdpsScanNode) {
+                OdpsScanNode node = (OdpsScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
             } else {
                 Preconditions.checkState(false);
             }
@@ -248,7 +252,8 @@ public class HDFSBackendSelector implements BackendSelector {
                     }
                     backends.addAll(servers);
                 }
-                ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
+                ComputeNode node =
+                        reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
                 if (node == null) {
                     remoteScanRangeLocations.add(scanRangeLocations);
                 } else {

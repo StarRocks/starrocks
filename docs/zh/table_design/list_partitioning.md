@@ -109,7 +109,7 @@ DISTRIBUTED BY HASH(`id`);
 ## 使用限制
 
 - 不支持[动态](./dynamic_partitioning.md)和[批量创建](./Data_distribution.md#range-分区) List 分区。
-- StarRocks [存算分离模式](../deployment/deploy_shared_data.md)从 3.1.1 版本开始支持该功能。
+- StarRocks [存算分离模式](../deployment/shared_data/s3.md)从 3.1.1 版本开始支持该功能。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` 分区直接被删除并且不能被恢复。
 - List 分区暂时不支持[备份与恢复](../administration/Backup_and_restore.md)。
 - [异步物化视图](../using_starrocks/Materialized_view.md)暂不支持基于使用 List 分区的基表创建。

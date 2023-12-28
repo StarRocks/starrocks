@@ -147,6 +147,7 @@ public class FrontendServiceImplTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
+        Config.stream_load_max_txn_num_per_be = 5;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -384,6 +385,28 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionExceedLimit() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        Config.thrift_server_max_worker_threads = 4;
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Config.thrift_server_max_worker_threads = 4096;
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.SERVICE_UNAVAILABLE);
     }
 
     @Test

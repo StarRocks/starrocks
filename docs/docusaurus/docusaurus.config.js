@@ -172,6 +172,7 @@ const config = {
         additionalLanguages: [
           'java',
           'haskell',
+          'python',
           'matlab',
           'bash',
           'diff',

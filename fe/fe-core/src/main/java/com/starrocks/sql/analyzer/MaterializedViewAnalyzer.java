@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -125,6 +126,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
+                    Table.TableType.ODPS,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW);
 
@@ -223,7 +225,7 @@ public class MaterializedViewAnalyzer {
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             final TableName tableNameObject = statement.getTableName();
-            MetaUtils.normalizationTableName(context, tableNameObject);
+            MetaUtils.normalizeMVName(context, tableNameObject);
             final String tableName = tableNameObject.getTbl();
             FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
@@ -243,6 +245,12 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
 
+            if (!InternalCatalog.isFromDefault(statement.getTableName())) {
+                throw new SemanticException("Materialized view can only be created in default_catalog. " +
+                        "You could either create it with default_catalog.<database>.<mv>, or switch to " +
+                        "default_catalog through `set catalog <default_catalog>` statement",
+                        statement.getTableName().getPos());
+            }
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
@@ -641,8 +649,6 @@ public class MaterializedViewAnalyzer {
                             functionCallExpr.getFnName().getFunction() +
                             " must related with column", functionCallExpr.getPos());
                 }
-                SlotRef slotRef = getSlotRef(functionCallExpr);
-                slotRef.setType(partitionColumn.getType());
                 // copy function and set it into partitionRefTableExpr
                 Expr partitionRefTableExpr = functionCallExpr.clone();
                 List<Expr> children = partitionRefTableExpr.getChildren();
@@ -674,6 +680,10 @@ public class MaterializedViewAnalyzer {
                                           ConnectContext connectContext,
                                           QueryStatement queryStatement) {
             Expr expr = SlotRefResolver.resolveExpr(partitionColumnExpr, queryStatement);
+            if (expr == null) {
+                throw new SemanticException("Cannot resolve materialized view's partition expression:%s",
+                        partitionColumnExpr.toSql());
+            }
             SlotRef slot;
             if (expr instanceof SlotRef) {
                 slot = (SlotRef) expr;
@@ -729,7 +739,7 @@ public class MaterializedViewAnalyzer {
                         slotRef.toSql());
             } else if (table.isNativeTableOrMaterializedView()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
-            } else if (table.isHiveTable() || table.isHudiTable()) {
+            } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
@@ -809,6 +819,7 @@ public class MaterializedViewAnalyzer {
             SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
             // should analyze the partition expr to get type info
             PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
+            // FIXME: Only consider query statement's output list for now, consider subquery or cte relation later.
             for (Expr columnExpr : columnExprMap.values()) {
                 if (columnExpr instanceof AnalyticExpr) {
                     AnalyticExpr analyticExpr = columnExpr.cast();
@@ -1020,7 +1031,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
             }
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            if (!mv.isActive() && AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason())) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
                         + " ACTIVE; ", mvName.getPos());

@@ -124,6 +124,7 @@ You can find a function based on the following categories:
 - [bitmap_andnot](./bitmap-functions/bitmap_andnot.md)
 - [bitmap_contains](./bitmap-functions/bitmap_contains.md)
 - [bitmap_count](./bitmap-functions/bitmap_count.md)
+- [bitmap_from_binary](./bitmap-functions/bitmap_from_binary.md)
 - [bitmap_from_string](./bitmap-functions/bitmap_from_string.md)
 - [bitmap_empty](./bitmap-functions/bitmap_empty.md)
 - [bitmap_has_any](./bitmap-functions/bitmap_has_any.md)
@@ -135,12 +136,14 @@ You can find a function based on the following categories:
 - [bitmap_remove](./bitmap-functions/bitmap_remove.md)
 - [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)
 - [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)
+- [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)
 - [bitmap_to_string](./bitmap-functions/bitmap_to_string.md)
 - [bitmap_union](./bitmap-functions/bitmap_union.md)
 - [bitmap_union_count](./bitmap-functions/bitmap_union_count.md)
 - [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)
 - [bitmap_xor](./bitmap-functions/bitmap_xor.md)
 - [intersect_count](./bitmap-functions/intersect_count.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [sub_bitmap](./bitmap-functions/sub_bitmap.md)
 - [to_bitmap](./bitmap-functions/to_bitmap.md)
 
@@ -291,6 +294,7 @@ You can find a function based on the following categories:
 - [character_length](./string-functions/character_length.md)
 - [concat](./string-functions/concat.md)
 - [concat_ws](./string-functions/concat_ws.md)
+- [crc32](./string-functions/crc32.md)
 - [ends_with](./string-functions/ends_with.md)
 - [find_in_set](./string-functions/find_in_set.md)
 - [group_concat](./string-functions/group_concat.md)
@@ -322,12 +326,15 @@ You can find a function based on the following categories:
 - [strright](./string-functions/strright.md)
 - [str_to_map](./string-functions/str_to_map.md)
 - [substr, substring](./string-functions/substring.md)
+- [substring_index](./string-functions/substring_index.md)
+- [translate](./string-functions/translate.md)
 - [trim](./string-functions/trim.md)
 - [ucase](./string-functions/ucase.md)
 - [unhex](./string-functions/unhex.md)
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
+- [url_extract_parameter](./string-functions/url_extract_parameter.md)
 
 ## Map functions
 
@@ -419,6 +426,7 @@ You can find a function based on the following categories:
 - [files](./table-functions/files.md)
 - [generate_series](./table-functions/generate_series.md)
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [unnest](./array-functions/unnest.md)
 
 ## Utility functions
@@ -427,6 +435,7 @@ You can find a function based on the following categories:
 - [current_role](./utility-functions/current_role.md)
 - [current_version](./utility-functions/current_version.md)
 - [database](./utility-functions/database.md)
+- [get_query_profile](./utility-functions/get_query_profile.md)
 - [host_name](./utility-functions/host_name.md)
 - [isnull](./utility-functions/isnull.md)
 - [isnotnull](./utility-functions/isnotnull.md)

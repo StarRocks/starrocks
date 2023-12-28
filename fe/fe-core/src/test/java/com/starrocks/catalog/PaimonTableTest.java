@@ -19,8 +19,6 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.thrift.TTableDescriptor;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.apache.paimon.options.CatalogOptions;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -31,9 +29,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class PaimonTableTest {
 
@@ -65,11 +61,8 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        Options options = new Options();
-        options.set(CatalogOptions.METASTORE, "filesystem");
-        options.set(CatalogOptions.WAREHOUSE, "file:///home/wgcn");
         PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
-                options, paimonNativeTable, 100L);
+                paimonNativeTable, 100L);
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
     }
@@ -90,27 +83,26 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        Options options = new Options();
-        options.set(CatalogOptions.METASTORE, "filesystem");
-        options.set(CatalogOptions.WAREHOUSE, "hdfs://host/warehouse");
         String dbName = "testDB";
         String tableName = "testTable";
         PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema,
-                options, paimonNativeTable, 100L);
+                paimonNativeTable, 100L);
 
         TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
         Assert.assertEquals(tTableDescriptor.getDbName(), dbName);
         Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
-        String optionString = tTableDescriptor.getPaimonTable().getPaimon_options();
-        String[] optionArray = optionString.split(",");
-        Map<String, String> optionMap = new HashMap<>();
-        for (String s : optionArray) {
-            String[] kv = s.split("=");
-            optionMap.put(kv[0], kv[1]);
-        }
-        for (String key : options.keySet()) {
-            Assert.assertEquals(optionMap.get(key), options.get(key));
-        }
     }
 
+    @Test
+    public void testEquals(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        String dbName = "testDB";
+        String tableName = "testTable";
+        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null,
+                paimonNativeTable, 100L);
+        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null,
+                paimonNativeTable, 100L);
+        Assert.assertEquals(table, table2);
+        Assert.assertEquals(table, table);
+        Assert.assertNotEquals(table, null);
+    }
 }

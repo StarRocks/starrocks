@@ -174,6 +174,12 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testTableExists() {
+        boolean exists = hiveMetadata.tableExists("db1", "tbl1");
+        Assert.assertTrue(exists);
+    }
+
+    @Test
     public void testGetHiveRemoteFiles() throws AnalysisException {
         FeConstants.runningUnitTest = true;
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";

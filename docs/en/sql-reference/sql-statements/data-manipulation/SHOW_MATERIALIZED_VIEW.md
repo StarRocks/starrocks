@@ -10,6 +10,12 @@ Shows all or one specific asynchronous materialized view.
 
 Since v3.0, the name of this statement is changed from SHOW MATERIALIZED VIEW to SHOW MATERIALIZED VIEWS.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL
