@@ -604,10 +604,14 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-<<<<<<< HEAD
-                        if (!needRetry) {
+                        if (needRetry) {
+                            // If the runtime profile is enabled, then we need to clean up the profile record related
+                            // to this failed execution.
+                            String queryId = DebugUtil.printId(context.getExecutionId());
+                            ProfileManager.getInstance().removeProfile(queryId);
+                        } else {
                             if (context.isProfileEnabled()) {
-                                isAsync = tryProcessProfileAsync(execPlan);
+                                isAsync = tryProcessProfileAsync(execPlan, i);
                                 if (parsedStmt.isExplain() &&
                                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
@@ -617,19 +621,6 @@ public class StmtExecutor {
 
                             if (!isStatisticsJob) {
                                 WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
-=======
-                        if (needRetry) {
-                            // If the runtime profile is enabled, then we need to clean up the profile record related
-                            // to this failed execution.
-                            String queryId = DebugUtil.printId(context.getExecutionId());
-                            ProfileManager.getInstance().removeProfile(queryId);
-                        } else if (context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan, i);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
->>>>>>> 4ab7bcd959 ([BugFix] Fix wrong profile of retry queries (#37977))
                             }
                         }
                         if (isAsync) {
