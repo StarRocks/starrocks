@@ -29,7 +29,7 @@ SHOW PROFILELIST [LIMIT n]
 | QueryId    | The ID of the query.                                         |
 | StartTime  | The start time of the query.                                 |
 | Time       | The latency of the query.                                    |
-| State      | The state of the query, including:`Error`: The query encounters an error.`Finished`: The query is finished.`Running`: The query is running. |
+| State      | The status of the query, including:`Error`: The query encounters an error.`Finished`: The query is finished.`Running`: The query is running. |
 | Statement  | The statement of the query.                                  |
 
 ## Examples
