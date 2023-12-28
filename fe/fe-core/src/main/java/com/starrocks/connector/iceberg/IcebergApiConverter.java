@@ -415,9 +415,16 @@ public class IcebergApiConverter {
                                          String dbName,
                                          String tableName,
                                          List<AlterClause> tableChanges) {
+        if (transaction == null || transaction.table() == null) {
+            throw new StarRocksConnectorException("Transaction or table cannot be null");
+        }
+
         for (AlterClause clause : tableChanges) {
             if (clause instanceof TableRenameClause) {
                 TableRenameClause tableRenameClause = (TableRenameClause) clause;
+                if (icebergCatalog == null) {
+                    throw new StarRocksConnectorException("iceberg catalog cannot be null");
+                }
                 icebergCatalog.renameTable(dbName, tableName, tableRenameClause.getNewTableName());
             } else if (clause instanceof ModifyTablePropertiesClause) {
                 ModifyTablePropertiesClause propertiesClause = (ModifyTablePropertiesClause) clause;
