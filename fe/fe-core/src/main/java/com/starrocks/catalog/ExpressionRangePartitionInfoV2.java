@@ -232,7 +232,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            return FunctionSet.STR_TO_DATE.equals(functionName);
+            return FunctionSet.STR2DATE.equals(functionName);
         }
         return false;
     }
