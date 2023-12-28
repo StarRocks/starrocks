@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Executes the specified SQL statement, and shows the corresponding query profile. For more information about query profile, see [Query Profile Overview](../../../administration/query_profile_overview.md).
+Executes the specified SQL statement, and shows the query profile of this statement. For more information about query profile, see [Query Profile Overview](../../../administration/query_profile_overview.md).
 
 This feature is supported from v3.1 onwards.
 
