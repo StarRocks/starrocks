@@ -1561,4 +1561,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
                 "     partitions=1/1");
     }
+
+    @Test
+    public void testNotAlwaysNullProjection() throws Exception {
+        String sql = "select * from (select c.*, ifnull(p_name, 0) from customer c left join part n on C_ADDRESS = P_NAME) " +
+                "t join nation on C_CUSTKEY = n_nationkey;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+
+    }
 }

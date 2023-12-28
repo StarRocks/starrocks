@@ -141,7 +141,16 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |----13:EXCHANGE");
         sqlList.add("select * from (select t0.*, concat(abs(abs(v7)), ifnull(v8, 1), null) from colocate_t0 t0 left join" +
                 " t2 on v2 = v7) t left join colocate_t1 on v1 = v4");
-        planList.add("xxx");
+        planList.add("4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 7> : concat(CAST(abs(abs(4: v7)) AS VARCHAR), CAST(ifnull(5: v8, 1) AS VARCHAR), NULL)\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 4: v7");
         List<Arguments> zips = zipSqlAndPlan(sqlList, planList);
         return zips.stream();
     }
