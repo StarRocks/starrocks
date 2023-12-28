@@ -30,7 +30,7 @@ You can control this merging behavior through a session variable `pipeline_profi
 - `2`: StarRocks does not merge the metrics. The original five-layer structure is retained.
 - Any other value will be treated as the default value `1`.
 
-Generally, we do not recommend setting this parameter to `2` because the Query Profile with the five-layer structure faces numerous limitations. For example, you cannot visualize it for analysis using any tools. Therefore, unless the merging process leads to the loss of crucial information, you do not need to adjust this parameter.
+Generally, we do not recommend setting this parameter to `2` because the Query Profile with the five-layer structure has many limitations. For example, you cannot perform visualized analysis on the profile using any tools. Therefore, unless the merging process leads to the loss of crucial information, you do not need to adjust this parameter.
 
 ### Metric Merging and MIN/MAX Values
 
@@ -126,7 +126,7 @@ Description: Maximum ScheduleTime metric across all Pipelines.
 
 ##### QuerySpillBytes
 
-Description: Number of spilled bytes.
+Description: Size of data spilled to local disks.
 
 ##### ResultDeliverTime
 
@@ -175,23 +175,23 @@ The relationship between core metrics is illustrated in the following diagram:
 
 ##### DegreeOfParallelism
 
-Description: Degree of parallelism.
+Description: Degree of pipeline execution parallelism.
 
 ##### TotalDegreeOfParallelism
 
-Description: Sum of degrees of parallelism. Since the same Pipeline may execute on multiple machines, this aggregates all parallelism.
+Description: Sum of degrees of parallelism. Since the same Pipeline may execute on multiple machines, this item aggregates all values.
 
 ##### DriverPrepareTime
 
-Description: Time to execute Prepare, excluding it from DriverTotalTime.
+Description: Time taken by the Prepare phase. This metric is not included in DriverTotalTime.
 
 ##### DriverTotalTime
 
-Description: Total execution time of the Pipeline. Excludes time spent in the prepare phase.
+Description: Total execution time of the Pipeline, excluding the time spent in the Prepare phase.
 
 ##### ActiveTime
 
-Description: Execution time of the Pipeline, including the execution time of each operator and the overall framework overhead, such as time spent on methods like has_output, need_input, etc.
+Description: Execution time of the Pipeline, including the execution time of each operator and the overall framework overhead, such as time spent in invoking methods like has_output, need_input, etc.
 
 ##### PendingTime
 
@@ -203,7 +203,7 @@ Description: Time the Pipeline is blocked due to an empty input queue.
 
 ##### FirstInputEmptyTime
 
-Description: Time the Pipeline is first blocked due to an empty input queue. Separating the first time is likely due to dependencies in the Pipeline.
+Description: Time the Pipeline is first blocked due to an empty input queue. The first blocking time is separately calculated because the first blocking is mainly caused by Pipeline dependencies.
 
 ##### FollowupInputEmptyTime
 
@@ -227,15 +227,15 @@ Description: Scheduling time of the Pipeline, from entering the ready queue to b
 
 ##### BlockByInputEmpty
 
-Description: Number of times blocked due to InputEmpty.
+Description: Number of times the pipeline is blocked due to InputEmpty.
 
 ##### BlockByOutputFull
 
-Description: Number of times blocked due to OutputFull.
+Description: Number of times the pipeline is blocked due to OutputFull.
 
 ##### BlockByPrecondition
 
-Description: Number of times blocked due to unmet preconditions.
+Description: Number of times the pipeline is blocked due to unmet preconditions.
 
 ### Operator General Metrics
 
@@ -313,7 +313,7 @@ The Scan Operator utilizes an additional thread pool for executing IO tasks. The
 
 #### OLAP Scan Operator
 
-To facilitate a better understanding of the various metrics within the Scan Operator, the following diagram clearly demonstrates the associations between these metrics and storage structures.
+To facilitate a better understanding of the various metrics within the Scan Operator, the following diagram demonstrates the associations between these metrics and storage structures.
 
 ![profile_scan_relationship](../assets/Profile/profile_scan_relationship.jpeg)
 
@@ -457,7 +457,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### ReadPKIndex
 
-- Description: Time spent reading PK index.
+- Description: Time spent reading Primary Key index.
 - Level: Secondary metric
 
 ##### SegmentInit
@@ -503,7 +503,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### ShortKeyRangeNumber
 
-- Description: Number of ShortKey range.
+- Description: Number of ShortKey ranges.
 - Level: Tertiary metric
 
 ##### RemainingRowsAfterShortKeyFilter
@@ -712,7 +712,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### InputStream
 
-- Description: Input stream.
+- Description: Used for classification purposes. It has no specific meaning.
 - Level: Secondary Metric
 - Sub-metrics: AppIOBytesRead, AppIOCounter, AppIOTime, FSIOBytesRead, FSIOCounter, FSIOTime
 
@@ -748,7 +748,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### ORC
 
-- Description: ORC details.
+- Description: Used for classification purposes. It has no specific meaning.
 - Level: Secondary Metric
 - Sub-metrics: IcebergV2FormatTimer, StripeNumber, StripeSizes
 
@@ -794,7 +794,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### SharedBuffered
 
-- Description: Shared buffer details.
+- Description: Used for classification purposes. It has no specific meaning.
 - Level: Secondary Metric
 - Sub-metrics: DirectIOBytes, DirectIOCount, DirectIOTime, SharedIOBytes, SharedIOCount, SharedIOTime
 
@@ -911,7 +911,7 @@ Description: Size of unsent data. This metric is non-zero when there is a short-
 
 ##### BytesPassThrough
 
-Description: Size of data not transmitted over the network when the destination node is the current node, i.e., the size of PassThrough data. Enabled by `enable_exchange_pass_through`.
+Description: If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`.
 
 ##### PassThroughBufferPeakMemoryUsage
 
@@ -1035,7 +1035,7 @@ Description: Number of input rows.
 
 ##### PassThroughRowCount
 
-Description: In streaming mode, the amount of data processed due to low aggregation leading to degradation to streaming mode.
+Description: In Auto mode, the number of data rows processed in streaming mode after low aggregation leads to degradation to streaming mode.
 
 ##### ResultAggAppendTime
 
@@ -1219,7 +1219,7 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 ##### StreamingBatchSize
 
-- Description: Merge operates in Streaming mode, size of data processed per operation.
+- Description: Size of data processed per Merge operation when Merge is performed in Streaming mode
 - Level: Primary Metric
 
 ##### LateMaterializationMaxBufferChunkNum
@@ -1247,17 +1247,6 @@ For ease of understanding various metrics, Merge can be represented as the follo
 
 - Description: Execution count of the Process stage.
 - Level: Secondary Metric
-- Sub-metrics: LateMaterializationGenerateOrdinalTime, SortedRunProviderTime
-
-##### LateMaterializationGenerateOrdinalTime
-
-- Description: Time taken for generating ordinal columns during late materialization.
-- Level: Tertiary Metric
-
-##### SortedRunProviderTime
-
-- Description: Time taken to retrieve data from the provider during the Process stage.
-- Level: Tertiary Metric
 
 ##### 4-SplitChunkStageCount
 
@@ -1282,54 +1271,54 @@ For ease of understanding various metrics, Merge can be represented as the follo
 ##### OverallStageTime
 
 - Description: Total execution time for each stage.
-- Level: Primary indicator
+- Level: Primary metric
 - Sub-metrics: 1-InitStageTime, 2-PrepareStageTime, 3-ProcessStageTime, 4-SplitChunkStageTime, 5-FetchChunkStageTime, 6-PendingStageTime, 7-FinishedStageTime
 
 ##### 1-InitStageTime
 
 - Description: Execution time for the Init stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 ##### 2-PrepareStageTime
 
 - Description: Execution time for the Prepare stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 ##### 3-ProcessStageTime
 
 - Description: Execution time for the Process stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 - Sub-metrics: LateMaterializationGenerateOrdinalTime, SortedRunProviderTime
 
 ##### LateMaterializationGenerateOrdinalTime
 
-- Description: Time taken for the delayed materialization to build the ID column.
-- Level: Tertiary indicator
+- Description: Time taken for generating ordinal columns during late materialization.
+- Level: Tertiary Metric
 
 ##### SortedRunProviderTime
 
-- Description: Time taken to fetch data from the Provider.
-- Level: Tertiary indicator
+- Description: Time taken to retrieve data from the provider during the Process stage.
+- Level: Tertiary Metric
 
 ##### 4-SplitChunkStageTime
 
 - Description: Time taken for the Split stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 ##### 5-FetchChunkStageTime
 
 - Description: Time taken for the Fetch stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 ##### 6-PendingStageTime
 
 - Description: Time taken for the Pending stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 ##### 7-FinishedStageTime
 
 - Description: Time taken for the Finished stage.
-- Level: Secondary indicator
+- Level: Secondary metric
 
 #### TableFunction Operator
 
