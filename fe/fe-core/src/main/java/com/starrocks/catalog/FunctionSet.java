@@ -622,6 +622,33 @@ public class FunctionSet {
             .add(FunctionSet.CORR)
             .build();
 
+<<<<<<< HEAD
+=======
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
+
+    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
+            .add(ARRAY_SUM)
+            .add(ARRAY_AVG)
+            .add(ARRAY_MIN)
+            .add(ARRAY_MAX)
+            .add(ARRAY_DISTINCT)
+            .add(ARRAY_SORT)
+            .add(REVERSE)
+            .add(ARRAY_INTERSECT)
+            .add(ARRAY_DIFFERENCE)
+            .add(ARRAYS_OVERLAP)
+            .add(ARRAY_AGG)
+            .add(ARRAY_CONCAT)
+            .add(ARRAY_SLICE)
+            .build();
+
+>>>>>>> 536bce203e ([BugFix] fix view with window function ignore null (#37925))
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
             .add(CONNECTION_ID)
             .add(CATALOG)
