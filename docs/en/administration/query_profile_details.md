@@ -14,7 +14,7 @@ The structure of a Query Profile is closely related to the design of StarRocks' 
 - **PipelineDriver**: A Pipeline can have multiple instances, each instance is called a PipelineDriver, to fully utilize multiple computing cores.
 - **Operator**: A PipelineDriver consists of multiple Operator instances.
 
-![profile-3](../assets/profile-3.png)
+![profile-3](../assets/Profile/profile-3.png)
 
 ### Query Profile Merging Strategy
 
