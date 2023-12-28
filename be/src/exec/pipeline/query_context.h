@@ -29,6 +29,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "util/atomic_token.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
@@ -46,25 +47,7 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 using ConcurrencyCounter = std::atomic<int64_t>;
-
-class ConcurrencyToken {
-public:
-    ConcurrencyToken() : _counter(nullptr) {}
-    ConcurrencyToken(ConcurrencyCounter* counter) : _counter(counter) {}
-    ConcurrencyToken(ConcurrencyToken&& other) noexcept : _counter(other._counter) { other._counter = nullptr; }
-    ~ConcurrencyToken() {
-        if (_counter) {
-            (*_counter)--;
-        }
-        _counter = nullptr;
-    }
-    void operator=(ConcurrencyToken&&) = delete;
-    DISALLOW_COPY(ConcurrencyToken);
-    operator bool() const { return _counter != nullptr; }
-
-private:
-    ConcurrencyCounter* _counter;
-};
+using ConcurrencyToken = AtomicToken<ConcurrencyCounter>;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -222,7 +205,7 @@ public:
     void set_max_concurrency(size_t max_concurrency) { _max_driver_concurrency = max_concurrency; }
 
     ConcurrencyToken acquire_exec_concurrency() {
-        if (_driver_concurrency.fetch_add(1) == _max_driver_concurrency - 1) {
+        if (_driver_concurrency.fetch_add(1) >= _max_driver_concurrency - 1) {
             _driver_concurrency--;
             return {};
         }
@@ -299,7 +282,7 @@ private:
     int64_t _static_query_mem_limit = 0;
 
     // TODO: support max SCAN concurrency
-    std::atomic<int64_t> _driver_concurrency = 0;
+    std::atomic<int64_t> _driver_concurrency = std::numeric_limits<size_t>::max();
     size_t _max_driver_concurrency = -1;
 };
 
