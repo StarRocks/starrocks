@@ -1137,6 +1137,11 @@ public class ShowExecutor {
             location = table.getTableLocation();
         }
 
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\");");
+        }
+
         if (!Strings.isNullOrEmpty(location)) {
             createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
         }

@@ -47,12 +47,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -64,6 +66,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
@@ -109,6 +112,7 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -1144,11 +1148,20 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(modifyColumnClause);
         metadata.alterTable(new AlterTableStmt(tableName, clauses));
 
-        // unsupported alter operation
+        // rename table
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        Assert.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify table properties/comment
+        clauses.clear();
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(FILE_FORMAT, "orc");
+        ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
+        AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
+        clauses.add(modifyTablePropertiesClause);
+        clauses.add(alterTableCommentClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
     }
 }

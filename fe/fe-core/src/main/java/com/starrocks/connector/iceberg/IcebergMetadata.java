@@ -127,12 +127,17 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
-import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+
+    public static final String LOCATION_PROPERTY = "location";
+    public static final String FILE_FORMAT = "file_format";
+    public static final String COMPRESSION_CODEC = "compression_codec";
+    public static final String COMMENT = "comment";
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
@@ -216,6 +221,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+        properties.put(COMMENT, stmt.getComment());
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
@@ -253,7 +259,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        commitAlterTable(table, schemaChanges, tableChanges);
+        commitAlterTable(dbName, tableName, table, schemaChanges, tableChanges);
 
         synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
@@ -267,15 +273,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private void commitAlterTable(org.apache.iceberg.Table table,
+    private void commitAlterTable(String dbName,
+                                  String tableName,
+                                  org.apache.iceberg.Table table,
                                   List<AlterClause> schemaChanges,
                                   List<AlterClause> tableChanges) {
         Transaction transaction = table.newTransaction();
 
-        // todo apply table changes like rename/set properties/modify comment
         if (!tableChanges.isEmpty()) {
-            throw new StarRocksConnectorException(
-                    "Unsupported alter operation for iceberg connector");
+            IcebergApiConverter.applyTableChanges(transaction, icebergCatalog, dbName, tableName, tableChanges);
         }
 
         if (!schemaChanges.isEmpty()) {
@@ -308,6 +314,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, table);
             return table;
 

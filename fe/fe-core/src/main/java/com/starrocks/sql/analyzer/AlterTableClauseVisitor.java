@@ -141,6 +141,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
         }
 
+        if (table.isExternalTableWithFileSystem()) {
+            return null;
+        }
+
         if (properties.size() != 1
                 && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
                 || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
