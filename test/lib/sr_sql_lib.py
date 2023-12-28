@@ -984,23 +984,21 @@ class StarrocksSQLApiLib(object):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
     def check_hit_materialized_view_plan(self, res, mv_name):
