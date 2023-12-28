@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
@@ -163,6 +164,13 @@ public class TaskRun implements Comparable<TaskRun> {
         return newProperties;
     }
 
+    private void handleWarehouseProperty() {
+        String warehouseId = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID);
+        if (warehouseId != null) {
+            runCtx.setCurrentWarehouseId(Long.parseLong(warehouseId));
+        }
+    }
+
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
@@ -192,6 +200,7 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
+            handleWarehouseProperty();
             for (String key : properties.keySet()) {
                 try {
                     runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
