@@ -21,6 +21,7 @@ jobs:
     name: RUN CHECKER
     env:
       PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ github.token }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
     steps:
