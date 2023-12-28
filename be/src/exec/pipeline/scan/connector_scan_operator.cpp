@@ -14,7 +14,6 @@
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
-#include "column/chunk.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -606,7 +605,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         }
         *mem_alloc_failed = true;
         // VLOG_OPERATOR << build_debug_string("alloc failed");
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        sched_yield();
     }
     if (*mem_alloc_failed) {
         _request_mem_tracker_bytes = 0;
