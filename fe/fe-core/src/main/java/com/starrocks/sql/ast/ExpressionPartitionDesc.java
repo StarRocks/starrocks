@@ -25,6 +25,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -104,6 +105,10 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                     partitionType = ((CastExpr) expr).getTargetTypeDef().getType();
                 } else if (expr instanceof FunctionCallExpr) {
                     slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+                    String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
+                    if (functionName.equals(FunctionSet.STR2DATE)) {
+                        partitionType = Type.DATE;
+                    }
                 } else {
                     throw new AnalysisException("Unsupported expr:" + expr.toSql());
                 }
