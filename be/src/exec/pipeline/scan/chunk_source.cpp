@@ -70,7 +70,10 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             if (chunk == nullptr) {
                 chunk = std::make_shared<Chunk>();
             }
-            if (!_status.ok()) {
+            if (_status.is_eagain()) {
+                _status = Status::OK();
+                continue;
+            } else if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     chunk->owner_info().set_owner_id(owner_id, true);
