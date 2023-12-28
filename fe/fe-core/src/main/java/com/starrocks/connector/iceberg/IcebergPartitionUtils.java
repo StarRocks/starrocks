@@ -23,9 +23,7 @@ import org.apache.iceberg.ChangelogScanTask;
 import org.apache.iceberg.DeletedDataFileScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.IncrementalChangelogScan;
-import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -38,7 +36,6 @@ import java.util.stream.Collectors;
 
 public class IcebergPartitionUtils {
     private static final Logger LOG = LogManager.getLogger(IcebergPartitionUtils.class);
-
     public static class IcebergPartition {
         private PartitionSpec spec;
         private StructLike data;
@@ -133,38 +130,5 @@ public class IcebergPartitionUtils {
             LOG.warn("get all iceberg partition failed", e);
         }
         return builder.build();
-    }
-
-    /**
-     * <p>
-     *     In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
-     *     name of a partition in the Iceberg table's Partition Spec. This name is used when trying to obtain the
-     *     names of Partition Spec partitions. e.g.
-     * </p>
-     * <p>
-     *     {
-     *   "source-id": 4,
-     *   "field-id": 1000,
-     *   "name": "ts_day",
-     *   "transform": "day"
-     *   }
-     * </p>
-     * <p>
-     *     column id is '4', column name is 'ts', but 'PartitionField#name' is 'ts_day', 'PartitionField#fieldId'
-     *     is '1000', 'PartitionField#name' default is 'columnName_transformName', and we can customize this name.
-     *     So even for an Identity Transform, this name doesn't necessarily have to match the schema column name,
-     *     because we can customize this name. But in general, nobody customize an Identity Transform Partition name.
-     * </p>
-     * <p>
-     *     To obtain the table columns for Iceberg tables, we use 'org.apache.iceberg.Schema#findColumnName'.
-     * </p>
-     *<br>
-     * refs:<br>
-     * - https://iceberg.apache.org/spec/#partition-evolution<br>
-     * - https://iceberg.apache.org/spec/#partition-specs<br>
-     * - https://iceberg.apache.org/spec/#partition-transforms
-     */
-    public static String getPartitionSourceName(Schema schema, PartitionField partition) {
-        return schema.findColumnName(partition.sourceId());
     }
 }

@@ -418,7 +418,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                         continue;
                     }
 
-                    srTypes.add(icebergTable.getColumn(IcebergPartitionUtils.getPartitionSourceName(spec.schema(),
+                    srTypes.add(icebergTable.getColumn(icebergTable.getPartitionSourceName(spec.schema(),
                             partitionField)).getType());
                 }
 
