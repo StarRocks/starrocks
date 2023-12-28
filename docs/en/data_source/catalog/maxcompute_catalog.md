@@ -10,7 +10,7 @@ A MaxCompute(ODPS) catalog is a kind of external catalog that enables you to que
 MaxCompute(ODPS) without ingestion.
 
 Also, you can directly transform and load data from MaxCompute(ODPS) by
-using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on
+using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on
 MaxCompute(ODPS) catalogs.
 
 To ensure successful SQL workloads on your MaxCompute(ODPS) cluster, your StarRocks cluster needs to
@@ -65,24 +65,24 @@ A set of parameters about how StarRocks accesses the metadata of your MaxCompute
 
 The following table describes the parameter you need to configure in `CatalogParams`.
 
-| Parameter            | Required	 | Description                                                                                                                                                                                                                                                                                                                   |
-|----------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| odps.endpoint        | Yes       | The target MaxCompute project name to access. If you have created a standard-mode workspace, please differentiate between the project names for production and development environments by specifying the project_name.                                                                                                       |
-| odps.project         | Yes       | The connection address of the MaxCompute service. Configure the Endpoint based on the region and network connection method chosen during the creation of the MaxCompute project.                                                                                                                                              |
-| odps.access.id       | Yes       | The AccessKey ID of your Alibaba Cloud account or RAM user.                                                                                                                                                                                                                                                                   |
-| odps.access.key      | Yes       | The AccessKey Secret corresponding to the AccessKey ID.                                                                                                                                                                                                                                                                       |
-| odps.tunnel.endpoint | No        | The public access link for the Tunnel service. If you haven't configured a Tunnel Endpoint, Tunnel will automatically route to the Tunnel Endpoint corresponding to the network where the MaxCompute service resides. If you have configured a Tunnel Endpoint, it will take precedence and automatic routing will not occur. |
-| odps.tunnel.quota    | No        | The quota name used by the Tunnel service. If not configured, the default quota will be used.                                                                                                                                                                                                                                 |
+| Parameter            | Required	 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|----------------------|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.endpoint        | Yes       | The connection address for the MaxCompute service. You need to configure the Endpoint according to the region selected when creating the MaxCompute project and the method of network connection. For the Endpoint values corresponding to each region and network, please refer to [Endpoint](https://help.aliyun.com/zh/maxcompute/user-guide/endpoints).                                                                                                 |
+| odps.project         | Yes       | The name of the target MaxCompute project you want to access. If you have created a standard mode workspace, please pay attention to distinguishing between the project names for the production environment and the development environment (_dev) when configuring this parameter. You can log in to the [MaxCompute Console](https://maxcompute.console.aliyun.com/), and obtain the MaxCompute project name on the Workspace > Project Management page. |
+| odps.access.id       | Yes       | The AccessKey ID of the Alibaba Cloud account or RAM user. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey ID.                                                                                                                                                                                                                                                                              |
+| odps.access.key      | Yes       | The AccessKey Secret corresponding to the AccessKey ID. You can enter the [AccessKey Management](https://ram.console.aliyun.com/manage/ak) page to obtain the AccessKey Secret.                                                                                                                                                                                                                                                                             |
+| odps.tunnel.endpoint | No        | The public network access link for the Tunnel service. If you have not configured the Tunnel Endpoint, Tunnel will automatically route to the Tunnel Endpoint corresponding to the network where the MaxCompute service is located. If you have configured the Tunnel Endpoint, it will be used as configured and not automatically routed.                                                                                                                 |
+| odps.tunnel.quota    | No        | The name of the resource group used for data transfer. StarRocks supports using [MaxCompute's dedicated resource groups](https://help.aliyun.com/zh/maxcompute/user-guide/purchase-and-use-exclusive-resource-groups-for-dts) to pull data. If not configured, the shared resource group will be used.                                                                                                                                                      |
 
 #### ScanParams
 
 Configuration parameters for StarRocks accessing files stored in the MaxCompute (ODPS) cluster. This
 parameter group is optional.
 
-| Parameter	           | Required	 | Description                                                                                                                                        |
-|----------------------|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| odps.split.policy	   | No	       | The shard policy used when scanning data.Possible values: size (shard by data size) and row_offset (shard by number of rows). Default value: size. |
-| odps.split.row.count | 	No       | 	The maximum number of rows per shard when odps.split.policy is set to row_offset. Default value: 4 * 1024 * 1024 = 4194304.                       |
+| Parameter	           | Required	 | Description                                                                                                                                                           |
+|----------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.split.policy	   | No	       | The shard policy used when scanning data. <br />Possible values: `size` (shard by data size) and `row_offset` (shard by number of rows). Default value: `size`.<br /> |
+| odps.split.row.count | 	No       | 	The maximum number of rows per shard when `odps.split.policy` is set to `row_offset`. <br />Default value: `4 * 1024 * 1024 = 4194304`.<br />                        |
 
 #### CachingMetaParams
 
@@ -90,17 +90,17 @@ A set of parameters specifying the caching strategy for metadata caching. StarRo
 metadata based on this strategy. This parameter group is optional.
 CachingMetaParams includes the following parameters.
 
-| Parameter                   | Required | Description                                                                                                                                                                                                          |
-|-----------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| odps.cache.table.enable     | No       | Specifies whether to cache table metadata in StarRocks. Possible values:true and false. Default value: true. Setting it to true enables caching, while setting it to false disables caching.                         |
-| odps.cache.table.expire     | No       | The time interval, in seconds, after which StarRocks automatically evicts cached metadata for tables or partitions. Default value: 86400 (24 hours).                                                                 |
-| odps.cache.table.size       | No       | The number of table metadata entries that StarRocks caches. Default value:1000.                                                                                                                                      |
-| odps.cache.partition.enable | No       | Specifies whether to cache metadata for all partitions of a table inStarRocks. Possible values: true and false. Default value: true. Setting it to true enables caching, while setting it to false disables caching. |
-| odps.cache.partition.expire | No       | The time interval, in seconds, after which StarRocks automatically evicts cached metadata for all partitions of a table. Default value: 86400 (24 hours).                                                            |
-| odps.cache.partition.size   | No       | The number of tables for which StarRocks caches metadata for all partitions. Default value: 1000.                                                                                                                    |
-| odps.cache.project.enable   | No       | Specifies whether to cache table information in the project in StarRocks. Possible values: true and false. Default value: true. Setting it to true enables caching, while setting it to false disables caching.      |
-| odps.cache.project.expire   | No       | The time interval, in seconds, after which StarRocks automatically evicts cached table information in the project. Default value: 86400 (24 hours).                                                                  |
-| odps.cache.project.size     | No       | The number of projects that StarRocks caches. Default value: 1000.                                                                                                                                                   |
+| Parameter                    | Required | Description                                                                                                                                                                                                          |
+|------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.cache.table.enable      | No       | Specifies whether to cache table metadata in StarRocks. Possible values:true and false. Default value: true. Setting it to true enables caching, while setting it to false disables caching.                         |
+| odps.cache.table.expire      | No       | The time interval, in seconds, after which StarRocks automatically evicts cached metadata for tables or partitions. Default value: 86400 (24 hours).                                                                 |
+| odps.cache.table.size        | No       | The number of table metadata entries that StarRocks caches. Default value:1000.                                                                                                                                      |
+| odps.cache.partition.enable  | No       | Specifies whether to cache metadata for all partitions of a table inStarRocks. Possible values: true and false. Default value: true. Setting it to true enables caching, while setting it to false disables caching. |
+| odps.cache.partition.expire  | No       | The time interval, in seconds, after which StarRocks automatically evicts cached metadata for all partitions of a table. Default value: 86400 (24 hours).                                                            |
+| odps.cache.partition.size    | No       | The number of tables for which StarRocks caches metadata for all partitions. Default value: 1000.                                                                                                                    |
+| odps.cache.table-name.enable | No       | Specifies whether to cache table information in the project in StarRocks. Possible values: true and false. Default value: false. Setting it to true enables caching, while setting it to false disables caching.     |
+| odps.cache.table-name.expire | No       | The time interval, in seconds, after which StarRocks automatically evicts cached table information in the project. Default value: 86400 (24 hours).                                                                  |
+| odps.cache.table-name.size   | No       | The number of projects that StarRocks caches. Default value: 1000.                                                                                                                                                   |
 
 ### Examples
 
@@ -109,12 +109,13 @@ use `odps_project` as the warehouse project.
 
 ```SQL
 
-CREATE EXTERNAL CATALOG odps_catalog PROPERTIES(
-"type"="odps",
-"odps.access.id"="<maxcompute_user_access_id>",
-"odps.access.key"="<maxcompute_user_access_key>",
-"odps.endpoint"="<maxcompute_server_endpoint>",
-"odps.project"="odps_project"
+CREATE EXTERNAL CATALOG odps_catalog 
+PROPERTIES (
+   "type"="odps",
+   "odps.access.id"="<maxcompute_user_access_id>",
+   "odps.access.key"="<maxcompute_user_access_key>",
+   "odps.endpoint"="<maxcompute_server_endpoint>",
+   "odps.project"="odps_project"
 );
 ```
 
@@ -144,7 +145,7 @@ drop an external catalog.
 The following example drops a MaxCompute(ODPS) catalog named `odps_catalog`:
 
 ```SQL
-DROP Catalog odps_catalog;
+DROP CATALOG odps_catalog;
 ```
 
 ## View the schema of a MaxCompute(ODPS) table
@@ -205,5 +206,34 @@ You can use one of the following syntaxes to view the schema of a MaxCompute(ODP
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
 
 ```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM MaxCompute(ODPS)_table;
+INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;
 ```
+
+## CBO Statistics Collection
+
+Since the MaxCompute (ODPS) Catalog cannot automatically collect CBO statistics for MaxCompute (
+ODPS) tables in the current version, in some cases, the optimizer may not be able to generate the
+most optimal query plan.
+
+Therefore, manually scanning the CBO statistics for MaxCompute (ODPS) tables and importing them into
+StarRocks can effectively optimize query times. Suppose there is a MaxCompute table named mc_table,
+you can create a manual collection task
+using [ANALYZE TABLE](../../sql-reference/sql-statements/data-definition/ANALYZE_TABLE.md) to
+collect CBO statistics.
+
+```SQL
+ANALYZE TABLE mc_table;
+```
+
+## Manually Updating Metadata Cache
+
+By default, StarRocks caches the metadata of MaxCompute (ODPS) to improve query performance.
+Therefore, after making structural changes to the table or other updates, you can also
+use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md)
+to manually update the metadata of the table, thus ensuring that StarRocks gets the
+new metadata information promptly:
+
+```SQL
+REFRESH EXTERNAL TABLE <table_name>
+```
+

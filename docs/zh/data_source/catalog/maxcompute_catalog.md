@@ -10,7 +10,7 @@ MaxCompute(ODPS) Catalog 是一种 External Catalog。通过 MaxCompute(ODPS) Ca
 Aliyun MaxCompute(ODPS) 里的数据。
 
 此外，您还可以基于 MaxCompute(ODPS) Catalog
-，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
 
 ## 使用说明
 
@@ -60,14 +60,14 @@ StarRocks 访问 MaxCompute(ODPS) 集群的相关参数配置。
 
 `CatalogParams` 包含如下参数。
 
-| 参数                   | 是否必须 | 说明                                                                                                                         |
-|----------------------|------|----------------------------------------------------------------------------------------------------------------------------|
-| odps.endpoint        | 是    | 访问的目标MaxCompute项目名称。如果您创建了标准模式的工作空间，在配置project_name时，请注意区分生产环境与开发环境（_dev）的项目名称。                                            |
-| odps.project         | 是    | MaxCompute服务的连接地址。您需要根据创建MaxCompute项目时选择的地域以及网络连接方式配置Endpoint。                                                             |
-| odps.access.id       | 是    | 阿里云账号或RAM用户的AccessKey ID。                                                                                                  |
-| odps.access.key      | 是    | AccessKey ID对应的AccessKey Secret。                                                                                           |
-| odps.tunnel.endpoint | 否    | Tunnel服务的外网访问链接。如果您未配置Tunnel Endpoint，Tunnel会自动路由到MaxCompute服务所在网络对应的Tunnel Endpoint。如果您配置了Tunnel Endpoint，则以配置为准，不进行自动路由。 |
-| odps.tunnel.quota    | 否    | Tunnel服务所使用的quota name，如未配置，则使用默认quota                                                                                     |
+| 参数                   | 是否必须 | 说明                                                                                                                                                                      |
+|----------------------|------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.endpoint        | 是    | MaxCompute服务的连接地址。您需要根据创建MaxCompute项目时选择的地域以及网络连接方式配置Endpoint。各地域及网络对应的Endpoint值，请参见[Endpoint](https://help.aliyun.com/zh/maxcompute/user-guide/endpoints)。             |
+| odps.project         | 是    | 访问的目标MaxCompute项目名称。如果您创建了标准模式的工作空间，在配置此参数时，请注意区分生产环境与开发环境（_dev）的项目名称。您可以登录[MaxCompute控制台](https://maxcompute.console.aliyun.com/)，在工作区> 项目管理页面获取MaxCompute项目名称。        |
+| odps.access.id       | 是    | 阿里云账号或RAM用户的AccessKey ID。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey ID。                                                                  |
+| odps.access.key      | 是    | AccessKey ID对应的AccessKey Secret。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey Secret。                                                       |
+| odps.tunnel.endpoint | 否    | Tunnel服务的外网访问链接。如果您未配置Tunnel Endpoint，Tunnel会自动路由到MaxCompute服务所在网络对应的Tunnel Endpoint。如果您配置了Tunnel Endpoint，则以配置为准，不进行自动路由。                                              |
+| odps.tunnel.quota    | 否    | 数据传输使用的资源组名称。StarRocks支持[使用Maxcompute独享资源组](https://help.aliyun.com/zh/maxcompute/user-guide/purchase-and-use-exclusive-resource-groups-for-dts)，对数据进行拉取。如未配置，则使用共享资源组。 |
 
 #### ScanParams
 
@@ -75,7 +75,7 @@ StarRocks 访问 MaxCompute(ODPS) 集群文件存储的相关参数配置。此�
 
 | 参数                   | 是否必须 | 说明                                                                                        |
 |----------------------|------|-------------------------------------------------------------------------------------------|
-| odps.split.policy    | 否    | 扫描数据时所使用的分片策略。<br />取值范围：`size`(根据数据大小分片） 和 `row_offset`（根据行数分片）。默认值：`size`。<br />        |
+| odps.split.policy    | 否    | 扫描数据时所使用的分片策略。<br />可选值为 `size`（按数据大小分片）或 `row_offset`（按行数分片）。默认值：`size`。<br />           |
 | odps.split.row.count | 否    | 当`odps.split.policy`为`row_offset`时，每个分片的最大行数。<br />默认值：`4 * 1024 * 1024 = 4194304`。<br /> |
 
 ##### CachingMetaParams
@@ -84,17 +84,17 @@ StarRocks 访问 MaxCompute(ODPS) 集群文件存储的相关参数配置。此�
 
 `CachingMetaParams` 包含如下参数。
 
-| 参数                          | 是否必须 | 说明                                                                                                |
-|-----------------------------|------|---------------------------------------------------------------------------------------------------|
-| odps.cache.table.enable     | 否    | 指定 StarRocks 是否缓存表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。     |
-| odps.cache.table.expire     | 否    | StarRocks 自动淘汰缓存的表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                          |
-| odps.cache.table.size       | 否    | StarRocks 缓存表元数据的数量。默认值：`1000`。                                                                   |
-| odps.cache.partition.enable | 否    | 指定 StarRocks 是否缓存表所有分区的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| odps.cache.partition.expire | 否    | StarRocks 自动淘汰缓存的表所有分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                         |
-| odps.cache.partition.size   | 否    | StarRocks 缓存表表所有分区的表数量。默认值：`1000`。                                                                |
-| odps.cache.project.enable   | 否    | 指定 StarRocks 是否缓存项目中表信息。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。    |
-| odps.cache.project.expire   | 否    | StarRocks 自动淘汰缓存的项目中表信息数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                          |
-| odps.cache.project.size     | 否    | StarRocks 缓存的项目数量。默认值：`1000`。                                                                     |
+| 参数                           | 是否必须 | 说明                                                                                                |
+|------------------------------|------|---------------------------------------------------------------------------------------------------|
+| odps.cache.table.enable      | 否    | 指定 StarRocks 是否缓存表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。     |
+| odps.cache.table.expire      | 否    | StarRocks 自动淘汰缓存的表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                          |
+| odps.cache.table.size        | 否    | StarRocks 缓存表元数据的数量。默认值：`1000`。                                                                   |
+| odps.cache.partition.enable  | 否    | 指定 StarRocks 是否缓存表所有分区的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| odps.cache.partition.expire  | 否    | StarRocks 自动淘汰缓存的表所有分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                         |
+| odps.cache.partition.size    | 否    | StarRocks 缓存表表所有分区的表数量。默认值：`1000`。                                                                |
+| odps.cache.table-name.enable | 否    | 指定 StarRocks 是否缓存项目中表信息。取值范围：`true` 和 `false`。默认值：`false`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。   |
+| odps.cache.table-name.expire | 否    | StarRocks 自动淘汰缓存的项目中表信息数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。                                          |
+| odps.cache.table-name.size   | 否    | StarRocks 缓存的项目数量。默认值：`1000`。                                                                     |
 
 ### 示例
 
@@ -103,12 +103,14 @@ StarRocks 访问 MaxCompute(ODPS) 集群文件存储的相关参数配置。此�
 
 ```SQL
 
-CREATE EXTERNAL CATALOG odps_catalog PROPERTIES(
-"type"="odps",
-"odps.access.id"="<maxcompute_user_access_id>",
-"odps.access.key"="<maxcompute_user_access_key>",
-"odps.endpoint"="<maxcompute_server_endpoint>",
-"odps.project"="odps_project"
+CREATE EXTERNAL CATALOG odps_catalog 
+PROPERTIES
+(
+    "type"="odps",
+    "odps.access.id"="<maxcompute_user_access_id>",
+    "odps.access.key"="<maxcompute_user_access_key>",
+    "odps.endpoint"="<maxcompute_server_endpoint>",
+    "odps.project"="odps_project"
 );
 
   ```
@@ -138,7 +140,7 @@ External Catalog。
 例如，通过如下命令删除 MaxCompute(ODPS) Catalog `odps_catalog`：
 
 ```SQL
-DROP Catalog odps_catalog;
+DROP CATALOG odps_catalog;
 ```
 
 ## 查看 MaxCompute(ODPS) 表结构
@@ -197,5 +199,29 @@ DROP Catalog odps_catalog;
 假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
 
 ```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM MaxCompute(ODPS)_table;
+INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;
+```
+
+## CBO 统计信息采集
+
+由于 MaxCompute(ODPS) Catalog 在当前版本还无法自动采集 MaxCompute(ODPS) 表的 CBO
+统计信息，导致某些情况下优化器无法做出最优的查询计划。
+因此手动扫描 MaxCompute(ODPS) 表的 CBO 统计信息，并导入到 StarRocks 中，可以有效优化查询时间。
+
+假设有一个 MaxCompute 表，表名为 `mc_table`,
+可以通过[ANALYZE TABLE](../../sql-reference/sql-statements/data-definition/ANALYZE_TABLE.md)
+创建手动采集任务，进行 CBO 统计信息采集。
+
+```SQL
+ANALYZE TABLE mc_table;
+```
+
+## 手动更新元数据缓存
+
+默认情况下，StarRocks 会缓存 Maxcompute(ODPS)
+的元数据，从而提高查询性能。因此，当对表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md)
+手动更新该表的元数据，从而确保 StarRocks 第一时间获取到新的元数据信息：
+
+```SQL
+REFRESH EXTERNAL TABLE <table_name>
 ```
