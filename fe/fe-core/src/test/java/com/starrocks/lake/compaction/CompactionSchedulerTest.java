@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.compaction;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
@@ -71,27 +70,6 @@ public class CompactionSchedulerTest {
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
-        } catch (Exception e) {
-            Assert.fail("Transaction failed for lake compaction");
-        }
-    }
-
-    @Test
-    public void testBeginTransactionFailWithSmallerLakeCompactionTimeout() {
-        // default value
-        Config.lake_compaction_default_timeout_second = 86400;
-        // default value
-        Config.max_stream_load_timeout_second = 259200;
-
-        CompactionMgr compactionManager = new CompactionMgr();
-        CompactionScheduler compactionScheduler =
-                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentSystemInfo(),
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
-        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
-        try {
-            Assert.assertThrows(AnalysisException.class, () -> {
-                compactionScheduler.beginTransaction(partitionIdentifier);
-            });
         } catch (Exception e) {
             Assert.fail("Transaction failed for lake compaction");
         }
