@@ -1,5 +1,5 @@
 # SQL-tester
-This is an introduction for the SQL-tester project.  
+This is an introduction for the SQL-tester project.  Test
 
 ## About
 SQL-tester is a SQL testing framework for StarRocks , designed to reduce the cost of test case construction. It uses SQL language to write test cases and has the ability to verify test results.
