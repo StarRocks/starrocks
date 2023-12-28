@@ -314,7 +314,7 @@ public class DynamicPartitionTableTest {
 
     @Test
     public void testNormalTimeZone() throws Exception {
-        starRocksAssert.withTableNoRetry("CREATE TABLE test.`dynamic_partition_time_zone` (\n" +
+        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_time_zone` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
                 "  `k3` smallint NULL COMMENT \"\",\n" +
@@ -346,7 +346,7 @@ public class DynamicPartitionTableTest {
     public void testInvalidTimeZone() throws Exception {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Unknown or incorrect time zone: 'invalid'");
-        starRocksAssert.withTableNoRetry("CREATE TABLE test.`dynamic_partition_invalid_time_zone` (\n" +
+        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_invalid_time_zone` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
                 "  `k3` smallint NULL COMMENT \"\",\n" +

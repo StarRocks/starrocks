@@ -257,15 +257,28 @@ public class StarRocksAssert {
         return this;
     }
 
+    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt) throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.setDatabase(createTableStmt.getDbName());
+        utCreateTableWithRetry(createTableStmt, connectContext);
+    }
+
     // retry 3 times when create table in ut to avoid
     // table creation timeout caused by heavy load of testing machine
-    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt) throws Exception {
+    public static void utCreateTableWithRetry(CreateTableStmt createTableStmt, ConnectContext ctx) throws Exception {
         int retryTime = 0;
         final int MAX_RETRY_TIME = 3;
 
         while (retryTime < MAX_RETRY_TIME) {
             try {
-                GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                CreateTableStmt createTableStmtCopied = createTableStmt;
+                if (retryTime > 0) {
+                    // copy `createTableStmt` after the first retry, because the state of `createTableStmt`
+                    // may change and throw different error after retry
+                    createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                            createTableStmt.getOrigStmt().originStmt, ctx);
+                }
+                GlobalStateMgr.getCurrentState().createTable(createTableStmtCopied);
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
@@ -289,13 +302,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        utCreateTableWithRetry(createTableStmt);
-        return this;
-    }
-
-    public StarRocksAssert withTableNoRetry(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        utCreateTableWithRetry(createTableStmt, ctx);
         return this;
     }
 
@@ -313,7 +320,7 @@ public class StarRocksAssert {
                 System.out.println(sql);
                 CreateTableStmt createTableStmt =
                         (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-                utCreateTableWithRetry(createTableStmt);
+                utCreateTableWithRetry(createTableStmt, ctx);
                 names.add(mTable.getTableName());
             }
             if (action != null) {
@@ -350,7 +357,7 @@ public class StarRocksAssert {
                 String sql = mTable.getCreateTableSql();
                 CreateTableStmt createTableStmt =
                         (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-                utCreateTableWithRetry(createTableStmt);
+                utCreateTableWithRetry(createTableStmt, ctx);
 
                 if (cluster != null) {
                     String dbName = createTableStmt.getDbName();

@@ -96,11 +96,6 @@ public class ColocateTableTest {
         starRocksAssert.withTable(sql);
     }
 
-    private static void createTableNoRetry(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-    }
-
     @Test
     public void testCreateOneTable() throws Exception {
         createTable("create table " + dbName + "." + tableName1 + " (\n" +
@@ -234,7 +229,7 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same bucket num: 1");
-        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
+        createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -272,7 +267,7 @@ public class ColocateTableTest {
             }
         };
 
-        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
+        createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -301,7 +296,7 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables distribution columns size must be the same : 2");
-        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
+        createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -331,7 +326,7 @@ public class ColocateTableTest {
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables distribution columns must have the same data type");
         expectedEx.expectMessage("current col: k2, should be: INT");
-        createTableNoRetry("create table " + dbName + "." + tableName2 + " (\n" +
+        createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
