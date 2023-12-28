@@ -131,9 +131,11 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
         analyzeFail("select distinct v1 from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                "Column 'v2' cannot be resolved");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                "Column 'v2' cannot be resolved");
+        analyzeFail("select * from t0 order by max(v2)",
+                "column must appear in the GROUP BY clause or be used in an aggregate function.");
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",

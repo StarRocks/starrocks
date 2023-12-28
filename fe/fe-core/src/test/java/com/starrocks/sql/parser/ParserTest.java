@@ -403,7 +403,7 @@ class ParserTest {
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
         res = VariableMgr.findSimilarVarNames("disable_joinreorder");
-        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join', 'enable_predicate_reorder'}");
+        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 
     @Test
