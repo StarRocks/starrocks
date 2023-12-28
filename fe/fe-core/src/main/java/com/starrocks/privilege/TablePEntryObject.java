@@ -261,7 +261,8 @@ public class TablePEntryObject implements PEntryObject {
             String dbName;
             Database database = null;
             if (CatalogMgr.isInternalCatalog(catalogId)) {
-                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(getDatabaseUUID()));
+                database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(Long.parseLong(getDatabaseUUID()));
                 if (database == null) {
                     throw new MetaNotFoundException("Cannot find database : " + databaseUUID);
                 }
@@ -275,7 +276,8 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 String tblName = null;
                 if (CatalogMgr.isInternalCatalog(catalogId)) {
-                    Table table = database.getTable(Long.parseLong(getTableUUID()));
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
                     if (table == null) {
                         throw new MetaNotFoundException("Cannot find table : " + tableUUID);
                     }

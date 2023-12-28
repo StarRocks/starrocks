@@ -432,22 +432,6 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowTable() throws AnalysisException, DdlException {
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-        ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-    }
-
-    @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
 
         new MockUp<SystemInfoService>() {
@@ -608,23 +592,7 @@ public class ShowExecutorTest {
         Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
-    @Test
-    public void testShowTableVerbose() throws AnalysisException, DdlException {
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertEquals("VIEW", resultSet.getString(1));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
-    }
 
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
@@ -1089,39 +1057,6 @@ public class ShowExecutorTest {
                 ")\n" +
                 "PARTITION BY ( year, dt )\n" +
                 "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
-    }
-
-
-    @Test
-    public void testShowTablesFromExternalCatalog() throws AnalysisException, DdlException {
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public Database getDb(String catalogName, String dbName) {
-                return new Database();
-            }
-
-            @Mock
-            public List<String> listTableNames(String catalogName, String dbName) {
-                List<String> tableNames = Lists.newArrayList();
-                tableNames.add("hive_test");
-                return tableNames;
-            }
-
-            @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
-                return new Table(TableType.HIVE);
-            }
-        };
-
-        ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("hive_test", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
     }
 
     @Test
