@@ -223,7 +223,6 @@ public class ProfileManager {
     }
 
     public void removeProfile(String queryId) {
-        ProfileElement element = new ProfileElement();
         writeLock.lock();
         try {
             loadProfileMap.remove(queryId);

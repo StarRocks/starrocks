@@ -887,12 +887,16 @@ public class StmtExecutor {
     }
 
     private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
-        if (coord == null || coord.getQueryProfile() == null) {
+        if (coord == null) {
             return false;
         }
 
         // Disable runtime profile processing after the query is finished.
         coord.setTopProfileSupplier(null);
+
+        if (coord.getQueryProfile() == null) {
+            return false;
+        }
 
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.

@@ -266,7 +266,8 @@ public class QueryRuntimeProfile {
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
         Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
-        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
+        ExecPlan plan = execPlan;
+        if (topProfileSupplier != null && plan != null && connectContext != null &&
                 connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
@@ -274,9 +275,8 @@ public class QueryRuntimeProfile {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlan;
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
         }
     }
