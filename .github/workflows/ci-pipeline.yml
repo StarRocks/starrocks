@@ -692,7 +692,7 @@ jobs:
     name: ADMIT TEST
     needs: [ deploy, SQL-Tester ]
     if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ci-admit
