@@ -55,6 +55,13 @@ public class TableTestBase {
     public static final Schema SCHEMA_F =
             new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "dt", Types.DateType.get()));
 
+    public static final Schema SCHEMA_H =
+            new Schema(required(1, "k1", Types.IntegerType.get()),
+                    required(2, "k2", Types.StringType.get()),
+                    required(3, "k3", Types.StringType.get()),
+                    required(4, "k4", Types.StringType.get()),
+                    required(5, "k5", Types.StringType.get()));
+
     protected static final int BUCKETS_NUMBER = 16;
 
     // Partition spec used to create tables
@@ -189,6 +196,7 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableE = null;
     public TestTables.TestTable mockedNativeTableF = null;
     public TestTables.TestTable mockedNativeTableG = null;
+    public TestTables.TestTable mockedNativeTableH = null;
 
     protected final int formatVersion = 1;
 
@@ -205,6 +213,7 @@ public class TableTestBase {
         this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
+        this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
     }
 
     @After

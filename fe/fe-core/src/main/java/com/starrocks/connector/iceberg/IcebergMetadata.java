@@ -661,7 +661,7 @@ public class IcebergMetadata implements ConnectorMetadata {
      * upper_bounds are persisted.
      * </p>
      */
-    private static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
+    public static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
         MetricsModes.MetricsMode defaultMode = MetricsModes.fromString(DEFAULT_WRITE_METRICS_MODE_DEFAULT);
         MetricsConfig metricsConf = MetricsConfig.forTable(table.getNativeTable());
         Map<String, MetricsModes.MetricsMode> filedToMetricsMode = Maps.newHashMap();
