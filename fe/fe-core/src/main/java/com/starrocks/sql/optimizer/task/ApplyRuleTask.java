@@ -17,7 +17,10 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -65,8 +68,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public void execute() {
-        if (groupExpression.hasRuleExplored(rule) ||
-                groupExpression.isUnused()) {
+        if (groupExpression.hasRuleExplored(rule) || groupExpression.isUnused()) {
             return;
         }
         // Apply rule and get all new OptExpressions
@@ -82,7 +84,22 @@ public class ApplyRuleTask extends OptimizerTask {
                 continue;
             }
             extractExpressions.add(extractExpr);
-            List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+
+            List<OptExpression> targetExpressions;
+            try {
+                targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            } catch (StarRocksPlannerException e) {
+                if (e.getType() == ErrorType.RULE_EXHAUSTED) {
+                    break;
+                } else {
+                    throw e;
+                }
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.log(ConnectContext.get(), "rule exhausted %s", rule);
+                break;
+            }
+
             newExpressions.addAll(targetExpressions);
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();

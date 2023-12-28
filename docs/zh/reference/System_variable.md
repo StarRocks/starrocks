@@ -481,7 +481,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。默认值为 `0`，表示没有限制。支持 `B`、`K`、`KB`、`M`、`MB`、`G`、`GB`、`T`、`TB`、`P`、`PB` 等单位。
+用于设置每个 BE 节点上查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 

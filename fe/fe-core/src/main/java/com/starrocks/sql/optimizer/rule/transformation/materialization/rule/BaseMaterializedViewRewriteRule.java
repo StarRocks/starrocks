@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -73,6 +74,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
+    }
+
+    @Override
+    public boolean exhausted(OptimizerContext context) {
+        if (context.ruleExhausted(type())) {
+            OptimizerTraceUtil.logMVRewrite(context, this, "rule exhausted");
+            return true;
+        }
+        return false;
     }
 
     @Override

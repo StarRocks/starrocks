@@ -2259,7 +2259,22 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMvWithImplicitColumnReorder() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_column_reorder refresh async as " +
+                "select c_1_3, c_1_4, c_1_0, c_1_1, c_1_2 from t1");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_column_reorder");
+        List<String> keys = mv.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        Assert.assertEquals(Lists.newArrayList("c_1_3"), keys);
+        Assert.assertEquals(Lists.newArrayList(), mv.getQueryOutputIndices());
+        String ddl = mv.getMaterializedViewDdlStmt(false);
+        Assert.assertTrue(ddl, ddl.contains("(`c_1_3`, `c_1_4`, `c_1_0`, `c_1_1`, `c_1_2`)"));
+        Assert.assertTrue(ddl, ddl.contains(" SELECT `test`.`t1`.`c_1_3`, `test`.`t1`.`c_1_4`, " +
+                "`test`.`t1`.`c_1_0`, `test`.`t1`.`c_1_1`, `test`.`t1`.`c_1_2`"));
+    }
+
+    @Test
     public void testCreateMvWithSortCols() throws Exception {
+        starRocksAssert.dropMaterializedView("mv1");
         {
             String sql = "create materialized view mv1\n" +
                     "distributed by hash(s2)\n" +
@@ -2272,6 +2287,13 @@ public class CreateMaterializedViewTest {
                     .collect(Collectors.toList());
             Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
             Assert.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
 
         {
@@ -2285,6 +2307,13 @@ public class CreateMaterializedViewTest {
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("s2"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
         {
             String sql = "create materialized view mv1\n" +
@@ -2297,6 +2326,13 @@ public class CreateMaterializedViewTest {
                     .filter(Column::isKey).map(Column::getName)
                     .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("k1"), keyColumns);
+
+            starRocksAssert.withMaterializedView(sql);
+            String ddl = starRocksAssert.getMv("test", "mv1")
+                    .getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(ddl, ddl.contains("(`k1`, `s2`)"));
+            Assert.assertTrue(ddl, ddl.contains("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`"));
+            starRocksAssert.dropMaterializedView("mv1");
         }
         {
             String sql = "create materialized view mv1\n" +
@@ -3446,6 +3482,8 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testRandomizeStart() throws Exception {
+        // NOTE: if the test case execute super slow, the delta would not be so stable
+        final long FIXED_DELTA = 5;
         String sql = "create materialized view mv_test_randomize \n" +
                 "distributed by hash(k1) buckets 10\n" +
                 "refresh async every(interval 1 minute) " +
@@ -3464,8 +3502,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         MaterializedView mv = getMv(testDb.getFullName(), "mv_test_randomize");
         long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertTrue("difference is " + (startTime - currentSecond),
-                currentSecond <= startTime && startTime < currentSecond + 60);
+        long delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= 60);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual disable it
@@ -3488,7 +3526,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertEquals(startTime, currentSecond);
+        delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < FIXED_DELTA);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual specify it
@@ -3511,8 +3550,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertTrue("difference is " + (startTime - currentSecond),
-                currentSecond <= startTime && startTime < currentSecond + 2);
+        delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < (2 + FIXED_DELTA));
         starRocksAssert.dropMaterializedView("mv_test_randomize");
     }
 
