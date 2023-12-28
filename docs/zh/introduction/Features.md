@@ -32,8 +32,11 @@ StarRocks 3.0 版本支持了全新的[存算分离模式](../deployment/deploy_
 
 StarRocks 存算分离模式与存算一体模式功能保持一致，写入及热数据查询性能也与存算一体基本持平。用户在存储分离模式下也可以实现数据更新、数据湖分析、物化视图加速等多种场景。
 
+<<<<<<< HEAD
 ![shared-data](../assets/share_data_arch.png)
 
+=======
+>>>>>>> e540a958f9 ([Doc] Update keywords and some ee description (backport #37902) (backport #37907) (#37911))
 ## CBO 优化器
 
 ![CBO](../assets/1.2-5.png)
