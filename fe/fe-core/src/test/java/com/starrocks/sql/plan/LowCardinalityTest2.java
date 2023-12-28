@@ -2058,12 +2058,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  <dict id 15> : <string id 3>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 0, probe_expr = (3)\n" +
+                "  |  - filter_id = 0, probe_expr = (3: S_ADDRESS)\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         assertContains(plan, "  2:EXCHANGE\n" +
                 "     distribution type: SHUFFLE\n" +
-                "     partition exprs: [3, VARCHAR, false]\n" +
+                "     partition exprs: [3: S_ADDRESS, VARCHAR(40), false]\n" +
                 "     cardinality: 1");
     }
 
