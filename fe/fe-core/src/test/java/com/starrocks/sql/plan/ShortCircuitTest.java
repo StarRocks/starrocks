@@ -37,6 +37,7 @@ public class ShortCircuitTest extends PlanTestBase {
     @Test
     public void testShortcircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setPreferComputeNode(true);
 
         // support short circuit
         String sql = "select * from tprimary1 where pk1=20";
