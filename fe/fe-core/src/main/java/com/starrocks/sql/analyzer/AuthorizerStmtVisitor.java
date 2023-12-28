@@ -206,9 +206,11 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
@@ -223,8 +225,9 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
+        Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
         Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        checkSelectTableAction(context, allTablesRelations);
+        checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
         return null;
     }
 
@@ -235,12 +238,15 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.INSERT);
+                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(), new HashSet<>(statement.getTargetColumnNames()),
+                        PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE_COLUMN.name(),
+                        String.join(".", statement.getTableName().getNoClusterString(),
+                                String.join(",", statement.getTargetColumnNames())));
             }
         }
 
@@ -258,25 +264,31 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
         }
+        Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+        tableColumns.remove(statement.getTableName());
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
         return null;
     }
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+        Set<String> assignmentColumn = statement.getAssignments().stream()
+                .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
         try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.UPDATE);
+            Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getTableName(), assignmentColumn, PrivilegeType.UPDATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                    PrivilegeType.UPDATE.name(), ObjectType.TABLE_COLUMN.name(),
+                    String.join(".", statement.getTableName().getNoClusterString(),
+                            String.join(",", assignmentColumn)));
         }
+        Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
         return null;
     }
 
@@ -329,6 +341,70 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                                 tableName.getCatalog(),
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                    }
+                }
+            }
+        }
+    }
+
+    void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
+                                   Map<TableName, Relation> allTouchedTables) {
+        for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
+            TableName tableName = tableColumns.getKey();
+            Set<String> columns = tableColumns.getValue();
+            Relation relation = allTouchedTables.get(tableName);
+            Table table;
+            if (relation instanceof TableRelation) {
+                table = ((TableRelation) relation).getTable();
+            } else {
+                table = ((ViewRelation) relation).getView();
+            }
+            if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                try {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+                }
+            } else {
+                if (table instanceof View) {
+                    try {
+                        Authorizer.checkViewColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                tableName, columns, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.VIEW_COLUMN.name(),
+                                String.join(".", tableName.getNoClusterString(),
+                                        String.join(",", columns)));
+                    }
+                } else if (table.isMaterializedView()) {
+                    try {
+                        Authorizer.checkMaterializedViewColumnsAction(context.getCurrentUserIdentity(),
+                                context.getCurrentRoleIds(), tableName, columns, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW_COLUMN.name(),
+                                String.join(".", tableName.getNoClusterString(),
+                                        String.join(",", columns)));
+                    }
+                } else {
+                    try {
+                        Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                tableName, columns, PrivilegeType.SELECT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                tableName.getCatalog(),
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.SELECT.name(), ObjectType.TABLE_COLUMN.name(),
+                                String.join(".", tableName.getNoClusterString(),
+                                        String.join(",", columns)));
                     }
                 }
             }
