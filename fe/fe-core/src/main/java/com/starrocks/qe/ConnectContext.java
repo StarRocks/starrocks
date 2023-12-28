@@ -316,6 +316,19 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    /**
+     * Set this connect to thread-local if not exists
+     *
+     * @return set or not
+     */
+    public boolean setThreadLocalInfoIfNotExists() {
+        if (threadLocalInfo.get() == null) {
+            threadLocalInfo.set(this);
+            return true;
+        }
+        return false;
+    }
+
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }

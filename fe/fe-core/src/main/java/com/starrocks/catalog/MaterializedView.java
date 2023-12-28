@@ -934,6 +934,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                                     Sets.newHashSet(mvId)).build()
                     );
                 }
+            } else {
+                res = false;
+                setInactiveAndReason("base-table dropped: " + baseTableInfo.getTableName());
             }
         }
         analyzePartitionInfo();
