@@ -1567,7 +1567,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select * from (select c.*, ifnull(p_name, 0) from customer c left join part n on C_ADDRESS = P_NAME) " +
                 "t join nation on C_CUSTKEY = n_nationkey;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "|  <slot 20> : ifnull(11: P_NAME, '0')\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: C_ADDRESS = 11: P_NAME");
 
     }
 }
