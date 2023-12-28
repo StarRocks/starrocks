@@ -15,6 +15,7 @@
 package com.starrocks.privilege;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -39,7 +40,7 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
             tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         } else {
-            Database database = mgr.getDb(tokens.get(0));
+            Database database = mgr.getMetadataMgr().getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, tokens.get(0));
             if (database == null) {
                 throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
             }
@@ -48,7 +49,8 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
-                Table table = database.getTable(tokens.get(1));
+                Table table = mgr.getMetadataMgr().getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        database.getFullName(), tokens.get(1));
                 if (table == null || !table.isMaterializedView()) {
                     throw new PrivObjNotFoundException(
                             "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
