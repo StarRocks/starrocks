@@ -97,6 +97,7 @@ public:
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
+        _guard.reset(nullptr);
         return _builder.finalize(_max_txn_id);
     }
 
@@ -143,8 +144,9 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
-                                                                                       _base_version, _new_version));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder, _base_version,
+                                                                         _new_version, _guard));
         }
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
@@ -162,8 +164,9 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
-                                                                                       _base_version, _new_version));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder, _base_version,
+                                                                         _new_version, _guard));
         }
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
@@ -235,6 +238,7 @@ private:
     MetaFileBuilder _builder;
     bool _inited;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
+    std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
