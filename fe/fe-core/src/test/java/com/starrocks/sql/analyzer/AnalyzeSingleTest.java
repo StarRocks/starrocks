@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -577,6 +578,10 @@ public class AnalyzeSingleTest {
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+
+        SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
+                "create table temp as select count(*) as cnt from t0");
+        Assert.assertEquals("1", stmt.getProperties().get("broadcast_row_limit"));
     }
 
     @Test
