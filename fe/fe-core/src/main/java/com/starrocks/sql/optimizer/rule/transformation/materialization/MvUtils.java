@@ -15,7 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -37,6 +39,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -55,10 +58,13 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -69,6 +75,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -78,6 +85,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -92,6 +101,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -105,7 +115,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
@@ -371,11 +383,13 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
-                                                                               String sql,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig) {
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
+            MaterializedView mv,
+            String sql,
+            ColumnRefFactory columnRefFactory,
+            ConnectContext connectContext,
+            OptimizerConfig optimizerConfig,
+            boolean inlineView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -389,8 +403,9 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        TransformerContext transformerContext =
+                new TransformerContext(columnRefFactory, connectContext, inlineView);
+        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -714,6 +729,12 @@ public class MvUtils {
     }
 
     public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
+        return collectScanColumn(optExpression, Predicates.alwaysTrue());
+    }
+
+    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
+                                                            Predicate<LogicalScanOperator> predicate) {
+
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
         OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
             @Override
@@ -727,7 +748,9 @@ public class MvUtils {
             @Override
             public Void visitLogicalTableScan(OptExpression optExpression, Void context) {
                 LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
-                columnRefOperators.addAll(scan.getColRefToColumnMetaMap().keySet());
+                if (predicate.test(scan)) {
+                    columnRefOperators.addAll(scan.getColRefToColumnMetaMap().keySet());
+                }
                 return null;
             }
         };
@@ -1039,6 +1062,9 @@ public class MvUtils {
         if (scanOperators.isEmpty()) {
             return false;
         }
+        if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
+            return true;
+        }
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
@@ -1218,14 +1244,23 @@ public class MvUtils {
 
         Column partitionColumn = partitionTableAndColumns.second;
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
-
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            return convertPartitionKeysToPredicate(columnRef, latestBaseTableRanges);
+            final Optional<ColumnRefOperator> columnRefOption;
+            if (scanOperator instanceof LogicalViewScanOperator) {
+                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
+                columnRefOption = Optional.ofNullable(viewScanOperator.getExpressionMapping(partitionExpr));
+            } else {
+                columnRefOption = Optional.ofNullable(scanOperator.getColumnReference(partitionColumn));
+            }
+            if (!columnRefOption.isPresent()) {
+                continue;
+            }
+            return convertPartitionKeysToPredicate(columnRefOption.get(), latestBaseTableRanges);
         }
         return null;
     }
@@ -1234,6 +1269,9 @@ public class MvUtils {
         Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
             return false;
+        }
+        if (scanOperator instanceof LogicalViewScanOperator) {
+            return true;
         }
         if (!scanTable.isNativeTableOrMaterializedView() && !scanTable.getTableIdentifier().equals(
                 refBaseTable.getTableIdentifier())) {
@@ -1454,5 +1492,142 @@ public class MvUtils {
         paritionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
         return slotRefs.get(0);
+    }
+
+    /**
+     * Inactive related mvs after modified columns have been done. Only inactive mvs after
+     * modified columns have done because the modified process may be failed and in this situation
+     * should not inactive mvs then.
+     */
+    public static void inactiveRelatedMaterializedViews(Database db,
+                                                        OlapTable olapTable,
+                                                        Set<String> modifiedColumns) {
+        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
+            return;
+        }
+        // inactive related asynchronous mvs
+        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            if (mv == null) {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                continue;
+
+            }
+            // TODO: support more types for base table's schema change.
+            try {
+                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
+                for (MvPlanContext mvPlanContext : mvPlanContexts) {
+                    if (mvPlanContext != null) {
+                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+                        List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                            if (scan == null) {
+                                return false;
+                            }
+                            Table table = scan.getTable();
+                            return table.getId() == olapTable.getId();
+                        });
+                        Set<String> usedColNames = usedColRefs.stream()
+                                .map(x -> x.getName())
+                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+                        for (String modifiedColumn : modifiedColumns) {
+                            if (usedColNames.contains(modifiedColumn)) {
+                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                        modifiedColumn, olapTable.getName());
+                                mv.setInactiveAndReason(
+                                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                            }
+                        }
+                    }
+                }
+            } catch (SemanticException e) {
+                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
+                        olapTable.getName());
+                mv.setInactiveAndReason(
+                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+            } catch (Exception e) {
+                LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
+                // basic check: may lose some situations
+                for (Column mvColumn : mv.getColumns()) {
+                    if (modifiedColumns.contains(mvColumn.getName())) {
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                        "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                mvColumn.getName(), olapTable.getName());
+                        mv.setInactiveAndReason(
+                                "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
+    }
+
+    public static OptExpression replaceLogicalViewScanOperator(
+            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+        if (viewScans == null) {
+            return queryExpression;
+        }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private static void doReplaceLogicalViewScanOperator(
+            OptExpression parent,
+            int index,
+            OptExpression queryExpression,
+            List<LogicalViewScanOperator> viewScans) {
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            LogicalViewScanOperator viewScanOperator = op.cast();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
+            parent.setChild(index, viewPlan);
+            return;
+        }
+        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
+        }
+    }
+
+    public static void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
+    public static OptExpression cloneExpression(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        for (OptExpression input : logicalTree.getInputs()) {
+            OptExpression clone = cloneExpression(input);
+            inputs.add(clone);
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
+        builder.withOperator(logicalTree.getOp());
+        Operator newOp = builder.build();
+        return OptExpression.create(newOp, inputs);
     }
 }

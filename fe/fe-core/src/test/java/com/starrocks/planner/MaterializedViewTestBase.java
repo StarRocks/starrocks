@@ -73,21 +73,19 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
 
-        connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
         connectContext.getSessionVariable().setEnableShortCircuit(false);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -184,6 +182,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     this.rewritePlan = planAndTrace.first.getExplainString(StatementBase.ExplainLevel.LOGICAL);
                 } else {
                     this.rewritePlan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+                }
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
                 }
                 this.traceLog = planAndTrace.second;
             } catch (Exception e) {

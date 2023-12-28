@@ -36,6 +36,7 @@ enum class TaskWorkerType {
     REPORT_DISK_STATE,
     REPORT_OLAP_TABLE,
     REPORT_WORKGROUP,
+    REPORT_DATACACHE_METRICS,
     UPLOAD,
     DOWNLOAD,
     MAKE_SNAPSHOT,
@@ -109,5 +110,7 @@ using ReleaseSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReleaseSnap
 using MoveDirAgentTaskRequest = AgentTaskRequestWithReqBody<TMoveDirReq>;
 using UpdateTabletMetaInfoAgentTaskRequest = AgentTaskRequestWithReqBody<TUpdateTabletMetaInfoReq>;
 using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAutoIncrementMapReq>;
+using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapshotRequest>;
+using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
 
 } // namespace starrocks

@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: Google Cloud Storage (GCS)
+description: "This topic describes how to authenticate with GCS"
 ---
 
 # Authenticate to Google Cloud Storage
@@ -44,7 +46,7 @@ CREATE EXTERNAL CATALOG hive_catalog_gcs
 PROPERTIES
 (
     "type" = "hive", 
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     StorageCredentialParams
 );
 ```

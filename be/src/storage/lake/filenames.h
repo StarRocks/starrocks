@@ -47,6 +47,10 @@ inline bool is_txn_log(std::string_view file_name) {
     return HasSuffixString(file_name, ".log");
 }
 
+inline bool is_txn_slog(std::string_view file_name) {
+    return HasSuffixString(file_name, ".slog");
+}
+
 inline bool is_txn_vlog(std::string_view file_name) {
     return HasSuffixString(file_name, ".vlog");
 }
@@ -69,6 +73,10 @@ inline std::string gen_delvec_filename(int64_t txn_id) {
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("{:016X}_{:016X}.log", tablet_id, txn_id);
+}
+
+inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
+    return fmt::format("{:016X}_{:016X}.slog", tablet_id, txn_id);
 }
 
 inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
@@ -120,6 +128,16 @@ inline std::pair<int64_t, int64_t> parse_tablet_metadata_filename(std::string_vi
 inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     CHECK_EQ(kTxnLogFilenameLength, file_name.size()) << file_name;
+    StringParser::ParseResult res;
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 17, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return {tablet_id, txn_id};
+}
+
+inline std::pair<int64_t, int64_t> parse_txn_slog_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
     StringParser::ParseResult res;
     auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;

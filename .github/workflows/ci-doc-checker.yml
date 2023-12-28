@@ -107,6 +107,7 @@ jobs:
 
       - name: Docusaurus build
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           DISABLE_VERSIONING: true
         working-directory: ./docs/docusaurus
         run: |
@@ -114,8 +115,11 @@ jobs:
           rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
           mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
           mv ../en ./docs
+          rm -rf ./docs/release_notes ./docs/ecosystem_release
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
           yarn install --frozen-lockfile
+          yarn clear
           yarn build
 
   behavior-unchange:

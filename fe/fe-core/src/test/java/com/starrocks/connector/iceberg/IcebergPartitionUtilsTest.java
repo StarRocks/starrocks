@@ -41,7 +41,7 @@ public class IcebergPartitionUtilsTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
     }
 
     @Test
@@ -78,8 +78,8 @@ public class IcebergPartitionUtilsTest {
                 (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
 
-        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("iceberg0",
-                "partitioned_db", "t1");
+        IcebergTable icebergTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr().
+                getTable("iceberg0", "partitioned_db", "t1");
         mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
         mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-03");
         Set<IcebergPartitionUtils.IcebergPartition> partitions = IcebergPartitionUtils.

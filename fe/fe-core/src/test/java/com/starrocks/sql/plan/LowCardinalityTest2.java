@@ -2039,4 +2039,32 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setNewPlanerAggStage(0);
         }
     }
+
+    @Test
+    public void testDateDiff() throws Exception {
+        String sql = "select date_diff(S_COMMENT, '2017-02-28', S_ADDRESS), S_COMMENT, S_ADDRESS " +
+                "from supplier order by S_COMMENT, S_ADDRESS";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "date_diff(DictExpr(11: S_COMMENT,[<place-holder>]), " +
+                "'2017-02-28 00:00:00', " +
+                "DictExpr(10: S_ADDRESS,[CAST(<place-holder> AS DATETIME)]))");
+    }
+
+    @Test
+    public void testJoinShuffle() throws Exception {
+        String sql = "select S_ADDRESS, S_COMMENT from supplier join[shuffle] " +
+                " low_card_t2 on S_ADDRESS = c_new where S_ADDRESS in ('a', 'b')";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Decode\n" +
+                "  |  <dict id 15> : <string id 3>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (3)\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        assertContains(plan, "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [3, VARCHAR, false]\n" +
+                "     cardinality: 1");
+    }
 }

@@ -156,6 +156,17 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testTableExists(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeCatalog.tableExists((Identifier) any);
+                result = true;
+            }
+        };
+        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     public void testListPartitionNames(@Mocked AbstractFileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder) throws Catalog.TableNotExistException {
 

@@ -25,16 +25,13 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
-#include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -46,7 +43,7 @@ namespace starrocks::lake {
 class LakePrimaryKeyPublishTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     LakePrimaryKeyPublishTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -129,8 +126,8 @@ public:
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-        ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
         auto ret = ChunkHelper::new_chunk(*_schema, 128);
@@ -155,7 +152,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
@@ -203,7 +200,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(_tablet_metadata->id(), txn_id));
 
     // read at version 2
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    ASSIGN_OR_ABORT(auto metadata_v2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), 2));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata_v2, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -308,8 +306,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         new_metadata->set_version(version + 1);
         std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, new_metadata);
         // update primary table state, such as primary index
-        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(
-                                                  *new_metadata, &tablet, builder.get(), version, version + 1));
+        std::unique_ptr<std::lock_guard<std::mutex>> lock = nullptr;
+        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(new_metadata, builder.get(),
+                                                                                     version, version + 1, lock));
         ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), txn_log->txn_id(), *new_metadata,
                                                                   &tablet, index_entry, builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry

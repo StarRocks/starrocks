@@ -62,7 +62,8 @@ public:
 
     TabletSchemaPtr get_schema() const;
 
-    StatusOr<RowsetList> get_rowsets() const;
+    // Prerequisite: valid() == true
+    RowsetList get_rowsets() const;
 
     // `segment_max_rows` is used in vertical writer
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
@@ -71,6 +72,8 @@ public:
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
+
+    bool has_delete_predicates() const;
 
 private:
     TabletManager* _tablet_mgr;

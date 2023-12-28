@@ -166,27 +166,9 @@ public:
     void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
                             PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
 
-    void refresh_dictionary_cache(google::protobuf::RpcController* controller,
-                                  const PRefreshDictionaryCacheRequest* request,
-                                  PRefreshDictionaryCacheResult* response, google::protobuf::Closure* done) override;
-
-    void refresh_dictionary_cache_begin(google::protobuf::RpcController* controller,
-                                        const PRefreshDictionaryCacheBeginRequest* request,
-                                        PRefreshDictionaryCacheBeginResult* response,
-                                        google::protobuf::Closure* done) override;
-
-    void refresh_dictionary_cache_commit(google::protobuf::RpcController* controller,
-                                         const PRefreshDictionaryCacheCommitRequest* request,
-                                         PRefreshDictionaryCacheCommitResult* response,
-                                         google::protobuf::Closure* done) override;
-
-    void clear_dictionary_cache(google::protobuf::RpcController* controller,
-                                const PClearDictionaryCacheRequest* request, PClearDictionaryCacheResult* response,
-                                google::protobuf::Closure* done) override;
-
-    void get_dictionary_statistic(google::protobuf::RpcController* controller,
-                                  const PGetDictionaryStatisticRequest* request,
-                                  PGetDictionaryStatisticResult* response, google::protobuf::Closure* done) override;
+    void process_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PProcessDictionaryCacheRequest* request,
+                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,

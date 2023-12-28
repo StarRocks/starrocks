@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 
 #include <chrono>
+#include <string_view>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -208,12 +209,39 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+        if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+            // how many in-flight rpcs and what exchange receivers are.
+            if (_total_in_flight_rpc > 0) {
+                std::stringstream ss;
+                auto remain_rpc_num = 0;
+                for (auto& remain_rpc : _num_in_flight_rpcs) {
+                    std::lock_guard<Mutex> l(*_mutexes[remain_rpc.first]);
+                    if (remain_rpc.second > 0) {
+                        ss << (remain_rpc_num > 0 ? ", " : "") << print_id(_instance_id2finst_id[remain_rpc.first]);
+                        remain_rpc_num++;
+                    }
+                }
+                LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id()) << " SinkBuffer remains "
+                             << remain_rpc_num << " rpcs, dest are " << ss.str();
+            }
+            // how many alive drivers left and what they are.
+            if (_num_remaining_eos > 0) {
+                std::stringstream ss;
+                for (auto& remain_eos : _num_sinkers) {
+                    ss << print_id(_instance_id2finst_id[remain_eos.first]) << "(" << remain_eos.second << "),";
+                }
+                LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id())
+                             << " remains EOS : " << ss.str();
+            }
+        }
     }
-    if (state != nullptr) {
+    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+        // check how many cancel operations are issued, and show the state of that time.
         LOG(INFO) << fmt::format(
-                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
-                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
-                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
+                "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
+                "_num_sending_rpc {}, chunk is full {}",
+                print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
+                _num_remaining_eos, _num_sending_rpc, is_full());
     }
 }
 
@@ -342,7 +370,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -352,8 +380,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             --_total_in_flight_rpc;
 
             const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
-            std::string err_msg = fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}]",
-                                              print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port);
+            std::string err_msg =
+                    fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
+                                print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;

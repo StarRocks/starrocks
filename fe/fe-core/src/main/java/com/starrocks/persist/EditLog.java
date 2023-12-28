@@ -84,6 +84,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
@@ -482,6 +483,11 @@ public class EditLog {
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
                     globalStateMgr.replayDeleteReplica(info);
+                    break;
+                }
+                case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.replayBatchDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
@@ -1169,6 +1175,31 @@ public class EditLog {
                     globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1511,6 +1542,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DELETE_REPLICA, info);
         }
+    }
+
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA_BATCH, info);
     }
 
     public void logTimestamp(Timestamp stamp) {
@@ -2192,6 +2227,11 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 
+    public void logReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
     public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
         logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
     }
@@ -2206,5 +2246,21 @@ public class EditLog {
 
     public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
         logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 }

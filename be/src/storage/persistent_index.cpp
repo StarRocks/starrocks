@@ -790,8 +790,15 @@ public:
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
-                std::string msg = strings::Substitute("FixedMutableIndex<$0> insert found duplicate key $1", KeySize,
-                                                      hexdump((const char*)key.data, KeySize));
+                auto old = reinterpret_cast<uint64_t*>(&(it->second));
+                auto old_rssid = (uint32_t)((*old) >> 32);
+                auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
+                auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                std::string msg = strings::Substitute(
+                        "FixedMutableIndex<$0> insert found duplicate key $1, new(rssid=$2 rowid=$3), old(rssid=$4 "
+                        "rowid=$5)",
+                        KeySize, hexdump((const char*)key.data, KeySize), (uint32_t)((*new_value) >> 32),
+                        (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
                 LOG(WARNING) << msg;
                 return Status::AlreadyExist(msg);
             }
@@ -1087,11 +1094,19 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (auto [_, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
             } else {
-                std::string msg = strings::Substitute("SliceMutableIndex key_size=$0 insert found duplicate key $1",
-                                                      skey.size, hexdump((const char*)skey.data, skey.size));
+                auto& old_compose_key = *it;
+                auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                auto old_rssid = (uint32_t)(old_value >> 32);
+                auto old_rowid = (uint32_t)(old_value & ROWID_MASK);
+                auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                std::string msg = strings::Substitute(
+                        "SliceMutableIndex key_size=$0 insert found duplicate key $1, "
+                        "new(rssid=$2 rowid=$3), old(rssid=$4 rowid=$5)",
+                        skey.size, hexdump((const char*)skey.data, skey.size), (uint32_t)((*new_value) >> 32),
+                        (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
                 LOG(WARNING) << msg;
                 return Status::AlreadyExist(msg);
             }
@@ -4842,8 +4857,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     return new_l2_version;
 }
 
-static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions, const EditVersion& output_l2_version,
-                               PersistentIndexMetaPB& index_meta) {
+void PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                         const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta) {
     // delete input l2 versions, and add output l2 version
     std::vector<EditVersion> new_l2_versions;
     std::vector<bool> new_l2_version_merged;

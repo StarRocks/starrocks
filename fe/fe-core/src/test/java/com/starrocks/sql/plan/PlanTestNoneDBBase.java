@@ -108,6 +108,32 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    private static String ignoreColRefs(String s) {
+        // ignore colRef id
+        // eg:
+        //  |  predicates: 2: k2 LIKE 'a%'
+        // to
+        //  |  predicates: $: k2 LIKE 'a%'
+        String str = s.replaceAll("\\d+: ", "\\$ ");
+        // ignore predicate order
+        // |  predicates: 2: k2 LIKE 'a%' or 1: k1 > 1
+        // TODO: only reorder predicates rather than the whole line.
+        return Arrays.stream(StringUtils.split(str, " ,;")).sorted().collect(Collectors.joining(" "));
+    }
+
+    public static void assertContainsIgnoreColRefs(String text, String... pattern) {
+        String normT = Stream.of(text.split("\n"))
+                .map(str -> ignoreColRefs(str))
+                .collect(Collectors.joining("\n"));
+        for (String s : pattern) {
+            // If pattern contains multi lines, only check line by line.
+            for (String line : s.split("\n")) {
+                String normS = ignoreColRefs(line).trim();
+                Assert.assertTrue(text, normT.contains(normS));
+            }
+        }
+    }
+
     public static void assertContainsCTEReuse(String sql) throws Exception {
         connectContext.getSessionVariable().setCboCTERuseRatio(100000);
         String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
@@ -133,6 +159,12 @@ public class PlanTestNoneDBBase {
 
     public static void assertNotContains(String text, String pattern) {
         Assert.assertFalse(text, text.contains(pattern));
+    }
+
+    public static void assertNotContains(String text, String... pattern) {
+        for (String s : pattern) {
+            Assert.assertFalse(text, text.contains(s));
+        }
     }
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
@@ -207,13 +239,15 @@ public class PlanTestNoneDBBase {
         return sql;
     }
 
-    public void runFileUnitTest(String filename, boolean debug) {
+    public void runFileUnitTest(String sqlBase, String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
 
         String mode = "";
         String tempStr;
-        StringBuilder sql = new StringBuilder();
+        int nth = StringUtils.isBlank(sqlBase) ? 0 : -1;
+
+        StringBuilder sql = new StringBuilder(sqlBase);
         StringBuilder result = new StringBuilder();
         StringBuilder fragment = new StringBuilder();
         StringBuilder comment = new StringBuilder();
@@ -249,7 +283,6 @@ public class PlanTestNoneDBBase {
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            int nth = 0;
             while ((tempStr = reader.readLine()) != null) {
                 if (tempStr.startsWith("/*")) {
                     isComment = true;
@@ -291,6 +324,7 @@ public class PlanTestNoneDBBase {
                     case "[sql]":
                         sql = new StringBuilder();
                         mode = "sql";
+                        nth = 0;
                         continue;
                     case "[result]":
                         result = new StringBuilder();
@@ -322,83 +356,23 @@ public class PlanTestNoneDBBase {
                         mode = "scheduler";
                         continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair = null;
-                        try {
-                            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
-                        } catch (Exception ex) {
-                            if (!exceptString.toString().isEmpty()) {
-                                Assert.assertEquals(exceptString.toString(), ex.getMessage());
-                                continue;
-                            }
-                            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
-                        }
-
-                        try {
-                            String fra = null;
-                            String statistic = null;
-                            String dumpStr = null;
-                            String actualSchedulerPlan = null;
-
-                            if (hasResult && !debug) {
-                                checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
-                            }
-                            if (hasFragment) {
-                                fra = pair.second.getExplainString(TExplainLevel.NORMAL);
-                                if (!debug) {
-                                    fra = format(fra);
-                                    checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
-                                }
-                            }
-                            if (hasFragmentStatistics) {
-                                statistic = format(pair.second.getExplainString(TExplainLevel.COSTS));
-                                if (!debug) {
-                                    checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
-                                }
-                            }
-                            if (isDump) {
-                                dumpStr = Stream.of(toPrettyFormat(getDumpString(sql.toString())).split("\n"))
-                                        .filter(s -> !s.contains("\"session_variables\""))
-                                        .collect(Collectors.joining("\n"));
-                                if (!debug) {
-                                    Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
-                                }
-                            }
-                            if (hasScheduler) {
-                                try {
-                                    actualSchedulerPlan =
-                                            UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
-                                } catch (Exception ex) {
-                                    if (!exceptString.toString().isEmpty()) {
-                                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
-                                        continue;
-                                    }
-                                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
-                                }
-
-                                if (!debug) {
-                                    checkSchedulerPlan(schedulerString.toString(), actualSchedulerPlan);
-                                }
-                            }
-                            if (isDebug) {
-                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, hasScheduler, nth,
-                                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString(),
-                                        actualSchedulerPlan);
-                            }
-                            if (isEnumerate) {
-                                Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
-                                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
-                                connectContext.getSessionVariable().setUseNthExecPlan(0);
-                            }
-                        } catch (Error error) {
-                            collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
+                        if (executeSqlByMode(sql, nth, comment, exceptString,
+                                hasResult, result,
+                                hasFragment, fragment,
+                                hasFragmentStatistics, fragmentStatistics,
+                                isDump, dumpInfoString,
+                                hasScheduler, schedulerString,
+                                isEnumerate, planCount, planEnumerate,
+                                isDebug, writer)) {
+                            continue;
                         }
 
                         hasResult = false;
                         hasFragment = false;
                         hasFragmentStatistics = false;
                         isDump = false;
-                        comment = new StringBuilder();
                         hasScheduler = false;
+                        comment = new StringBuilder();
                         continue;
                 }
 
@@ -439,9 +413,100 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    public void runFileUnitTest(String filename, boolean debug) {
+        runFileUnitTest("", filename, debug);
+    }
+
     public void runFileUnitTest(String filename) {
         runFileUnitTest(filename, false);
     }
+
+    public void runFileUnitTest(String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile, false);
+    }
+
+    private boolean executeSqlByMode(StringBuilder sql, int nth, StringBuilder comment,
+                                     StringBuilder exceptString,
+                                     boolean hasResult, StringBuilder result,
+                                     boolean hasFragment, StringBuilder fragment,
+                                     boolean hasFragmentStatistics, StringBuilder fragmentStatistics,
+                                     boolean isDump, StringBuilder dumpInfoString,
+                                     boolean hasScheduler, StringBuilder schedulerString,
+                                     boolean isEnumerate, int planCount, StringBuilder planEnumerate,
+                                     boolean isDebug, BufferedWriter debugWriter) throws Exception {
+        Pair<String, ExecPlan> pair = null;
+        try {
+            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+        } catch (Exception ex) {
+            if (!exceptString.toString().isEmpty()) {
+                Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                return true;
+            }
+            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+        }
+
+        try {
+            String fra = null;
+            String statistic = null;
+            String dumpStr = null;
+            String actualSchedulerPlan = null;
+
+            if (hasResult && !isDebug) {
+                checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
+            }
+            if (hasFragment) {
+                fra = pair.second.getExplainString(TExplainLevel.NORMAL);
+                if (!isDebug) {
+                    fra = format(fra);
+                    checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
+                }
+            }
+            if (hasFragmentStatistics) {
+                statistic = format(pair.second.getExplainString(TExplainLevel.COSTS));
+                if (!isDebug) {
+                    checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
+                }
+            }
+            if (isDump) {
+                dumpStr = Stream.of(toPrettyFormat(getDumpString(sql.toString())).split("\n"))
+                        .filter(s -> !s.contains("\"session_variables\""))
+                        .collect(Collectors.joining("\n"));
+                if (!isDebug) {
+                    Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
+                }
+            }
+            if (hasScheduler) {
+                try {
+                    actualSchedulerPlan =
+                            UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
+                } catch (Exception ex) {
+                    if (!exceptString.toString().isEmpty()) {
+                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                        return true;
+                    }
+                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
+                }
+
+                if (!isDebug) {
+                    checkSchedulerPlan(schedulerString.toString(), actualSchedulerPlan);
+                }
+            }
+            if (isDebug) {
+                debugSQL(debugWriter, hasResult, hasFragment, isDump, hasFragmentStatistics, hasScheduler, nth,
+                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString(),
+                        actualSchedulerPlan);
+            }
+            if (isEnumerate) {
+                Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
+                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
+                connectContext.getSessionVariable().setUseNthExecPlan(0);
+            }
+        } catch (Error error) {
+            collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
+        }
+        return false;
+    }
+
 
     public static String format(String result) {
         StringBuilder sb = new StringBuilder();
@@ -459,7 +524,7 @@ public class PlanTestNoneDBBase {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
             }
-            if (nthPlan <= 1) {
+            if (nthPlan == 0) {
                 writer.append("[sql]\n");
                 writer.append(sql.trim());
             }

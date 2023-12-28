@@ -93,7 +93,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -1802,7 +1802,8 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
-            List<Type> actualTypes = params.stream()
+
+            List<Type> actualTypes = node.getChildren().stream()
                     .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();
@@ -1852,7 +1853,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitDictionaryExpr(DictionaryExpr node, Scope context) {
+        public Void visitDictionaryGetExpr(DictionaryGetExpr node, Scope context) {
             List<Expr> params = node.getChildren();
             if (params.size() < 2) {
                 throw new SemanticException("dictionary_get function get illegal param list");

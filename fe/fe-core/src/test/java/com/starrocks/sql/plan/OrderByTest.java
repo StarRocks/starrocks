@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SessionVariable;
@@ -257,7 +256,6 @@ public class OrderByTest extends PlanTestBase {
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: 2: v2, 3: v3");
 
-
         sql = "select abs(t0.v1), abs(t1.v1) from t0, t0_not_null t1 order by t1.v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "5:SORT\n" +
@@ -387,7 +385,8 @@ public class OrderByTest extends PlanTestBase {
                 "  |  functions: [, sum(4: v1), ]\n" +
                 "  |  partition by: 7: expr");
 
-        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by avg(v1) over(partition by v1 + 1)";
+        sql =
+                "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by avg(v1) over(partition by v1 + 1)";
         plan = getFragmentPlan(sql);
         assertContains(plan, "5:SORT\n" +
                 "  |  order by: <slot 9> 9: avg(4: v1) ASC\n" +
@@ -600,5 +599,24 @@ public class OrderByTest extends PlanTestBase {
                 "  |  order by: [1, VARCHAR, false] ASC\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+    }
+
+    @Test
+    public void testTopNRuntimeFilterWithFilter() throws Exception {
+        String sql = "select * from t0 where v1 > 1 order by v1 limit 10";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: v1)");
+
+        String sql1 = "select * from t0 where v1 is not null order by v1 limit 10";
+        String plan1 = getVerboseExplain(sql1);
+
+        assertContains(plan1, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: v1)");
+
+        String sql2 = "select * from t0 where v1 is null order by v1 limit 10";
+        String plan2 = getVerboseExplain(sql2);
+        assertNotContains(plan2, " runtime filters");
     }
 }

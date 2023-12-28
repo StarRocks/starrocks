@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -47,6 +48,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -244,7 +246,7 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
-                if (listTableNames(catalogName, dbName).contains(tableName)) {
+                if (tableExists(catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
                         return false;
@@ -254,6 +256,27 @@ public class MetadataMgr {
                 }
             }
             return connectorMetadata.get().createTable(stmt);
+        } else {
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (getDb(catalogName, dbName) == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            if (!tableExists(catalogName, dbName, tableName)) {
+                throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+            }
+
+            connectorMetadata.get().alterTable(stmt);
         } else {
             throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
@@ -294,6 +317,11 @@ public class MetadataMgr {
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
         return connectorTable;
+    }
+
+    public boolean tableExists(String catalogName, String dbName, String tblName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {

@@ -765,8 +765,6 @@ TEST_F(LakeServiceTest, test_abort) {
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
     // TxnLog`s and segments should have been deleted
@@ -815,6 +813,50 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     ASSERT_EQ(0, response.failed_tablets_size());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_delete_txn_log) {
+    // missing tablet_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+
+    // missing txn_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+    }
+
+    // test normal
+    {
+        std::vector<lake::TxnLog> logs;
+
+        // TxnLog with 2 segments
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(logs.back().txn_id());
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -1416,11 +1458,18 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     auto* info = request.add_tablet_infos();
     info->set_tablet_id(_tablet_id);
     info->set_version(1);
+
+    // Prune metadata cache before getting tablet stats
+    _tablet_mgr->metacache()->prune();
+
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(1, response.tablet_stats_size());
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+    // get_tablet_stats() should not fill metadata cache
+    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
