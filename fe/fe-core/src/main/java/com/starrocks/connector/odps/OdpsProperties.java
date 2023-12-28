@@ -28,6 +28,8 @@ public class OdpsProperties {
     public static final String PROJECT = "odps.project";
     public static final String TUNNEL_ENDPOINT = "odps.tunnel.endpoint";
     public static final String TUNNEL_QUOTA = "odps.tunnel.quota";
+    public static final String SPLIT_POLICY = "odps.split.policy";
+    public static final String SPLIT_ROW_COUNT = "odps.split.row.count";
 
     public static final String ENABLE_TABLE_CACHE = "odps.cache.table.enable";
     public static final String TABLE_CACHE_EXPIRE_TIME = "odps.cache.table.expire";
@@ -39,6 +41,9 @@ public class OdpsProperties {
     public static final String TABLE_NAME_CACHE_EXPIRE_TIME = "odps.cache.table-name.expire";
     public static final String PROJECT_CACHE_SIZE = "odps.cache.table-name.size";
 
+    public static final String ROW_OFFSET = "row_offset";
+    public static final String SIZE = "size";
+    private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024L;
     private final Map<String, String> properties;
     private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
     private static final Set<String> REQUIRED_PROPERTIES = new HashSet<>();
@@ -48,6 +53,8 @@ public class OdpsProperties {
         newProperty(ACCESS_KEY).isRequired();
         newProperty(ENDPOINT).isRequired();
         newProperty(PROJECT).isRequired();
+        newProperty(SPLIT_POLICY).withDefaultValue(SIZE);
+        newProperty(SPLIT_ROW_COUNT).withDefaultValue(String.valueOf(DEFAULT_SPLIT_ROW_COUNT));
         newProperty(TUNNEL_ENDPOINT).noDefaultValue();
         newProperty(TUNNEL_QUOTA).noDefaultValue();
 

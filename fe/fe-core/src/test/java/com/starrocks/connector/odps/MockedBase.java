@@ -40,6 +40,8 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
@@ -58,6 +60,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -91,6 +94,7 @@ public class MockedBase {
     static CatalogMgr catalogMgr = Mockito.mock(CatalogMgr.class);
     static ConnectorMgr connectorMgr = Mockito.mock(ConnectorMgr.class);
     static MetadataMgr metadataMgr = Mockito.mock(MetadataMgr.class);
+    static OdpsSplitsInfo odpsSplitsInfo = Mockito.mock(OdpsSplitsInfo.class);
 
     public static void initMock() throws OdpsException, IOException {
         Map<String, String> properties = new HashMap<>();
@@ -176,5 +180,13 @@ public class MockedBase {
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
         when(connectorMgr.getConnector(anyString())).thenReturn(
                 new CatalogConnector(odpsConnector, new InformationSchemaConnector("catalog")));
+        when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
+
+        RemoteFileInfo fileInfo = new RemoteFileInfo();
+        fileInfo.setFiles(ImmutableList.of(RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
+        when(metadataMgr.getRemoteFileInfos(any(), any(), any(), anyLong(), any(), any(), anyLong())).thenReturn(
+                ImmutableList.of(fileInfo));
+        when(odpsMetadata.getRemoteFileInfos(any(), any(), anyLong(), any(), any(), anyLong(), any())).thenReturn(
+                ImmutableList.of(fileInfo));
     }
 }

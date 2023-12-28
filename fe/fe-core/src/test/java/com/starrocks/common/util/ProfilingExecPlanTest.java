@@ -73,7 +73,7 @@ public class ProfilingExecPlanTest {
                         "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
-                        "META_SCAN", "OLAP_SCAN");
+                        "META_SCAN", "OLAP_SCAN", "ODPS_SCAN");
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);

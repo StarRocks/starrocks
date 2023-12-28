@@ -19,11 +19,15 @@ import com.aliyun.odps.TableSchema;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TTableDescriptor;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -142,6 +146,18 @@ public class OdpsMetadataTest extends MockedBase {
         odpsMetadata.refreshTable("project", odpsTable, null, false);
         Table refreshTable = odpsMetadata.getTable("project", "tableName");
         Assert.assertTrue(refreshTable.getColumns().size() == 0);
+    }
+
+    @Test
+    public void testGetRemoteFileInfos() throws AnalysisException, IOException {
+        Table odpsTable = odpsMetadata.getTable("project", "tableName");
+        PartitionKey partitionKey =
+                PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
+                        odpsTable.getPartitionColumns());
+        List<RemoteFileInfo> remoteFileInfos =
+                odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), -1, null,
+                        odpsTable.getPartitionColumnNames(), -1, mockTableReadSessionBuilder);
+        Assert.assertEquals(1, remoteFileInfos.size());
     }
 
     @Test
