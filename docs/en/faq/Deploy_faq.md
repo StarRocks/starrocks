@@ -75,7 +75,7 @@ Yes. Perform the following steps to modify the configurations of FE and BE param
   ```plaintext
   CREATE USER 'test'@'%' IDENTIFIED BY '123456';
 
-  GRANT SELECT ON . TO 'test'@'%';
+  GRANT SELECT_PRIV ON . TO 'test'@'%';
   ```
 
 ## What do I do if the error "Failed to get scan range, no queryable replica found in tablet:xxxxx" occurs after I extend the BE disk space?
