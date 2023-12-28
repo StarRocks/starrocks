@@ -72,6 +72,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -172,6 +173,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
+
+    public static final String PROPERTIES_WAREHOUSE = "warehouse";
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
@@ -1134,5 +1138,25 @@ public class PropertyAnalyzer {
             throw new AnalysisException(ex.getMessage());
         }
         return periodDuration;
+    }
+
+    /**
+     * Generate a string representation of properties like ('a'='1', 'b'='2')
+     */
+    public static String stringifyProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        boolean first = true;
+        for (var entry : properties.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 }
