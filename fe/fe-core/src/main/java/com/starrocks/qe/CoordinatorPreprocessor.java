@@ -658,7 +658,7 @@ public class CoordinatorPreprocessor {
                 final Set<TNetworkAddress> childHosts = Sets.newHashSet();
                 // don't use all nodes in shared_data running mode to avoid heavy exchange cost
                 if (connectContext.getSessionVariable().isPreferComputeNode() && hasComputeNode) {
-                    Map<Long, ComputeNode> candidates = getAliveNodes(idToComputeNode);
+                    Map<Long, ComputeNode> candidates = getAliveNodes(ImmutableMap.of(), idToComputeNode);
                     candidates.values().stream().forEach(e -> childHosts.add(e.getAddress()));
                     // make olapScan maxParallelism equals prefer compute node number
                     List<Pair<Long, TNetworkAddress>> chosenNodes = adaptiveChooseNodes(fragment, candidates, childHosts);
@@ -684,7 +684,7 @@ public class CoordinatorPreprocessor {
                             childHosts.add(execParams.host);
                         }
                         List<Pair<Long, TNetworkAddress>> chosenNodes = adaptiveChooseNodes(fragment,
-                                getAliveNodes(idToBackend), childHosts);
+                                getAliveNodes(idToBackend, idToComputeNode), childHosts);
 
                         chosenNodes.stream().forEach(e -> {
                             hostSet.add(e.second);
@@ -1526,15 +1526,24 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private Map<Long, ComputeNode> getAliveNodes(ImmutableMap<Long, ComputeNode> nodeMap) {
+    private Map<Long, ComputeNode> getAliveNodes(Map<Long, ComputeNode> idToBackend, Map<Long, ComputeNode> idToComputeNode) {
         Map<Long, ComputeNode> candidates = Maps.newHashMap();
-        for (Map.Entry<Long, ComputeNode> entry : nodeMap.entrySet()) {
+        for (Map.Entry<Long, ComputeNode> entry : idToBackend.entrySet()) {
             ComputeNode computeNode = entry.getValue();
             if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
                 continue;
             }
             candidates.put(entry.getKey(), entry.getValue());
         }
+
+        for (Map.Entry<Long, ComputeNode> entry : idToComputeNode.entrySet()) {
+            ComputeNode computeNode = entry.getValue();
+            if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
+                continue;
+            }
+            candidates.put(entry.getKey(), entry.getValue());
+        }
+
         return candidates;
     }
 
