@@ -44,7 +44,7 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 | Session Variable | big_query_profile_second_threshold | Integer | 0 | If the execution time of a big query excceds this value, Query Profile is automatically enbaled for this query. Setting this item to `0` indicates this feature is disabled. Unit: second. |
 | FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
 
-## Obtain Query Profile via Web UI
+### Obtain Query Profile via Web UI
 
 Follow these steps to obtain Query Profile:
 
@@ -62,7 +62,7 @@ You will be redirected to the detailed page of the selected Query Profile.
 
 The following example shows how to obtain Query Profile via the function get_query_profile:
 
-```
+```Plain
 -- Enable the profiling feature.
 set enable_profile = true;
 -- Run a simple query.
