@@ -304,6 +304,9 @@ public class OlapTable extends Table {
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
+        olapTable.indexes = indexes == null ? null : indexes.shallowCopy();
+        olapTable.bfColumns = bfColumns == null ? null : Sets.newHashSet(bfColumns);
+
         olapTable.keysType = this.keysType;
         if (this.relatedMaterializedViews != null) {
             olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);

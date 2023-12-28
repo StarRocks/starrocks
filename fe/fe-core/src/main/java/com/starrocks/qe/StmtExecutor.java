@@ -47,8 +47,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+=======
+import com.starrocks.catalog.InternalCatalog;
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -75,8 +79,13 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+=======
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpResultSender;
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -91,7 +100,11 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.planner.HdfsScanNode;
+=======
+import com.starrocks.planner.HiveTableSink;
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -101,8 +114,12 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
+<<<<<<< HEAD
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
+=======
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
@@ -515,8 +532,11 @@ public class StmtExecutor {
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
 
                 int retryTime = Config.max_query_retry_time;
+                ExecuteExceptionHandler.RetryContext retryContext =
+                        new ExecuteExceptionHandler.RetryContext(0, execPlan, context, parsedStmt);
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
+                    retryContext.setRetryTime(i);
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -528,9 +548,9 @@ public class StmtExecutor {
                         }
 
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
-
-                        handleQueryStmt(execPlan);
+                        handleQueryStmt(retryContext.getExecPlan());
                         break;
+<<<<<<< HEAD
                     } catch (RemoteFileNotFoundException e) {
                         // If modifications are made to the partition files of a Hive table by user,
                         // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
@@ -587,9 +607,13 @@ public class StmtExecutor {
                                     execPlan.getExplainString(TExplainLevel.COSTS),
                                     e);
                         }
+=======
+                    } catch (Exception e) {
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
                         if (i == retryTime - 1) {
                             throw e;
                         }
+                        ExecuteExceptionHandler.handle(e, retryContext);
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {

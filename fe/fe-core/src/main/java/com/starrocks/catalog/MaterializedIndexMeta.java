@@ -79,6 +79,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
 
+    private MaterializedIndexMeta() {
+
+    }
+
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
@@ -198,6 +202,36 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return Long.hashCode(indexId);
     }
 
+<<<<<<< HEAD
+=======
+    public void setSchema(List<Column> newSchema) {
+        this.schema = newSchema;
+    }
+
+    public void setSchemaVersion(int newSchemaVersion) {
+        this.schemaVersion = newSchemaVersion;
+    }
+
+    public MaterializedIndexMeta shallowCopy() {
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
+        indexMeta.indexId = this.indexId;
+        indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
+        indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
+        indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
+        indexMeta.schemaVersion = this.schemaVersion;
+        indexMeta.schemaHash = this.schemaHash;
+        indexMeta.shortKeyColumnCount = this.shortKeyColumnCount;
+        indexMeta.storageType = this.storageType;
+        indexMeta.keysType = this.keysType;
+        indexMeta.defineStmt = this.defineStmt;
+        indexMeta.dbId = this.dbId;
+        indexMeta.viewDefineSql = this.viewDefineSql;
+        indexMeta.isColocateMVIndex = this.isColocateMVIndex;
+        indexMeta.whereClause = this.whereClause;
+        return indexMeta;
+    }
+
+>>>>>>> 872c44234c ([BugFix] shallow copy indexIdToMeta when copy olapTable (#37780))
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MaterializedIndexMeta)) {
