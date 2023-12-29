@@ -1,0 +1,405 @@
+-- name: test_low_array
+CREATE TABLE `s2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int NULL,
+  `a1` array<varchar(65533)> NULL COMMENT "",
+  `a2` array<varchar(65533)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `s1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `a1` array<varchar(65533)> NULL COMMENT "",
+  `a2` array<varchar(65533)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into s2 values
+(28222, 724, ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
+(28231, 607, ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
+(28316, 275, ['Anhui', 'Yunnan', 'Hainan', 'Heilongjiang', 'Hunan'], ['CQ', 'TW']),
+(28352, 371, ['Jiangsu', 'Guangdong', 'Taiwan', 'Zhejiang', 'Jilin'], ['XZ', 'QH', 'NX']),
+(28221, 241, ['Hong Kong', 'Zhejiang', 'Heilongjiang', 'Henan'], ['XZ', 'HLJ', 'AH', 'MO']),
+(28257, 447, ['Fujian', 'Jiangsu', 'Macao', 'Ningxia'], ['JS', 'GD', 'QH']),
+(28244, 834, ['Qinghai', 'Heilongjiang'], ['TJ', 'AH', 'HI']),
+(28350, 930, ['Shaanxi', 'Guangdong'], ['XJ', 'HUB', 'TW', 'HUN']),
+(28328, 495, ['Qinghai', 'Inner Mongolia'], ['GD', 'ZJ', 'JL', 'GS']),
+(28401, 307, ['Shandong', 'Guangxi', 'Xinjiang', 'Anhui', 'Ningxia'], ['NMG', 'ZJ', 'TW', 'HUN', 'HEN']),
+(28329, 729, ['Fujian', 'Henan', 'Chongqing', 'Zhejiang'], ['AH', 'SN', 'YN', 'CQ', 'HLJ']),
+(28342, 788, ['Qinghai', 'Jilin', 'Zhejiang'], ['HUB', 'HUB', 'HUB', 'JL']),
+(28341, 985, ['Sichuan', 'Heilongjiang', 'Shanghai', 'Tianjin'], ['XJ', 'HEN', 'XZ', 'TJ', 'AH']),
+(28389, 447, ['Hubei', 'Shandong', 'Macao', 'Liaoning', 'Guangdong'], ['JX', 'ZJ', 'SX', 'SC']),
+(28348, 349, ['Hebei', 'Hong Kong', 'Macao', 'Guangxi'], ['JX', 'XZ', 'ZJ']),
+(28220, 848, ['Sichuan', 'Tianjin', 'Sichuan', 'Beijing', 'Xinjiang'], ['GD', 'CQ', 'HUN', 'HK', 'AH']),
+(28415, 286, ['Taiwan', 'Hong Kong', 'Fujian'], ['XZ', 'LN']),
+(28201, 171, ['Macao', 'Hubei', 'Liaoning', 'Shanghai'], ['HK', 'SN', 'HEN', 'GX', 'TW']),
+(28256, 501, ['Xinjiang', 'Hong Kong', 'Jilin'], ['ZJ', 'HUN', 'HUN', 'JX', 'SC']),
+(28250, 318, ['Heilongjiang', 'Macao', 'Hubei', 'Inner Mongolia', 'Tianjin'], ['HLJ', 'HEN']),
+(28204, 737, ['Taiwan', 'Hainan'], ['SC', 'QH', 'SH']),
+(28307, 246, ['Beijing', 'Jiangxi', 'Guizhou', 'Shaanxi'], ['SX', 'HEB', 'TW']),
+(28401, 774, ['Yunnan', 'Taiwan', 'Hunan', 'Inner Mongolia', 'Jiangsu'], ['SN', 'JS']),
+(28293, 964, ['Qinghai', 'Hubei', 'Hubei'], ['GX', 'HLJ', 'GD', 'AH', 'HK']),
+(28200, 302, ['Henan', 'Chongqing', 'Ningxia', 'Tibet', 'Yunnan'], ['JL', 'BJ']),
+(28212, 307, ['Jiangxi', 'Shanxi', 'Liaoning', 'Hunan'], ['TW', 'SH']),
+(28403, 874, ['Sichuan', 'Shanghai', 'Hubei', 'Chongqing'], ['MO', 'HLJ', 'SN', 'LN']),
+(28377, 723, ['Inner Mongolia', 'Gansu', 'Jiangsu'], ['YN', 'YN', 'ZJ']),
+(28320, 201, ['Shanghai', 'Shanghai', 'Guangxi'], ['JS', 'YN', 'TW', 'GZ', 'ZJ']),
+(28338, 692, ['Hainan', 'Zhejiang', 'Shanghai', 'Xinjiang', 'Henan'], ['SC', 'GS', 'SX', 'GZ', 'GD']),
+(28288, 909, ['Fujian', 'Shandong', 'Shanxi', 'Qinghai', 'Tianjin'], ['GZ', 'HEB', 'XJ']),
+(28413, 665, ['Tianjin', 'Hunan', 'Taiwan'], ['HK', 'CQ', 'SD']),
+(28200, 947, ['Hunan', 'Henan'], ['FJ', 'MO', 'HEB', 'JL']),
+(28351, 414, ['Sichuan', 'Guangdong'], ['XZ', 'ZJ', 'ZJ', 'GS', 'SD']),
+(28278, 865, ['Shaanxi', 'Shandong', 'Gansu'], ['GZ', 'NX', 'HLJ']),
+(28424, 944, ['Liaoning', 'Chongqing', 'Jiangsu'], ['GS', 'GX', 'SH', 'GX']),
+(28329, 371, ['Inner Mongolia', 'Shandong'], ['XJ', 'NX']),
+(28388, 901, ['Gansu', 'Hong Kong', 'Chongqing', 'Beijing'], ['SH', 'JS']),
+(28233, 472, ['Chongqing', 'Guangdong', 'Hebei', 'Hebei'], ['XJ', 'YN', 'HEB', 'SD']),
+(28411, 373, ['Hong Kong', 'Jiangsu', 'Tibet', 'Yunnan', 'Fujian'], ['JX', 'FJ', 'FJ', 'HK', 'JL']),
+(28353, 693, ['Sichuan', 'Fujian', 'Tibet', 'Taiwan', 'Zhejiang'], ['CQ', 'SH', 'AH', 'YN']),
+(28222, 655, ['Guangxi', 'Taiwan', 'Macao', 'Tibet', 'Ningxia'], ['YN', 'HUB', 'CQ', 'SD', 'SX']),
+(28377, 233, ['Jilin', 'Guizhou', 'Taiwan', 'Macao', 'Yunnan'], ['SC', 'CQ', 'SD', 'SH', 'JL']),
+(28404, 666, ['Guizhou', 'Shandong', 'Fujian'], ['SX', 'HEB']),
+(28391, 140, ['Taiwan', 'Macao', 'Taiwan', 'Shanghai', 'Inner Mongolia'], ['AH', 'FJ', 'HEN', 'SN', 'HK']),
+(28347, 495, ['Qinghai', 'Gansu', 'Gansu', 'Guangdong'], ['HUB', 'HUN', 'LN', 'TJ']),
+(28327, 269, ['Hainan', 'Guangdong', 'Jilin'], ['SC', 'GD', 'SD', 'ZJ', 'ZJ']),
+(28263, 864, ['Yunnan', 'Jiangxi', 'Fujian'], ['SC', 'HI', 'HUB', 'SN', 'SX']),
+(28235, 711, ['Hainan', 'Hainan', 'Yunnan', 'Liaoning', 'Anhui'], ['HUN', 'SD']),
+(28290, 311, ['Macao', 'Sichuan', 'Ningxia'], ['GX', 'BJ', 'BJ', 'SC', 'SX']),
+(28359, 596, ['Sichuan', 'Hebei'], ['LN', 'HLJ', 'GS', 'JX']),
+(28383, 382, ['Hunan', 'Guangxi'], ['NX', 'ZJ', 'LN', 'HI']),
+(28351, 552, ['Henan', 'Hainan'], ['NX', 'YN', 'GS', 'SX', 'SH']),
+(28378, 175, ['Chongqing', 'Hebei', 'Yunnan', 'Jiangxi', 'Guangxi'], ['GD', 'SN', 'MO', 'JL', 'HK']),
+(28331, 508, ['Zhejiang', 'Macao', 'Inner Mongolia', 'Xinjiang'], ['GS', 'HI', 'HEN', 'XZ', 'SX']),
+(28207, 796, ['Shanghai', 'Taiwan', 'Macao'], ['GD', 'NMG', 'CQ', 'GS', 'SC']),
+(28377, 952, ['Heilongjiang', 'Jiangsu', 'Tianjin', 'Xinjiang', 'Ningxia'], ['SD', 'GS', 'NX', 'ZJ', 'JL']),
+(28214, 792, ['Fujian', 'Hubei'], ['CQ', 'SN', 'QH']),
+(28339, 426, ['Sichuan', 'Beijing', 'Shandong', 'Guangdong'], ['TJ', 'HUB']),
+(28367, 494, ['Fujian', 'Ningxia', 'Henan', 'Shandong'], ['NX', 'HK']),
+(28319, 789, ['Shandong', 'Hubei', 'Tianjin'], ['XJ', 'HUN', 'JX', 'HUB', 'NMG']),
+(28339, 285, ['Tibet', 'Gansu'], ['SC', 'MO']),
+(28224, 465, ['Sichuan', 'Hubei', 'Taiwan', 'Guizhou'], ['TW', 'BJ', 'ZJ']),
+(28417, 598, ['Sichuan', 'Fujian', 'Xinjiang', 'Hainan'], ['HUN', 'GS', 'NX', 'LN', 'CQ']),
+(28237, 824, ['Guangxi', 'Beijing', 'Xinjiang', 'Heilongjiang'], ['QH', 'TJ']),
+(28359, 885, ['Tianjin', 'Jiangsu', 'Macao', 'Taiwan', 'Inner Mongolia'], ['BJ', 'GS', 'JX', 'CQ', 'JL']),
+(28419, 964, ['Hubei', 'Jilin', 'Tibet'], ['XJ', 'GD']),
+(28346, 208, ['Jilin', 'Hong Kong', 'Henan', 'Inner Mongolia', 'Beijing'], ['SN', 'AH', 'HUN']),
+(28326, 699, ['Zhejiang', 'Zhejiang', 'Hong Kong', 'Gansu'], ['NX', 'FJ']),
+(28204, 564, ['Gansu', 'Shandong', 'Hong Kong'], ['HEB', 'AH']),
+(28255, 878, ['Hubei', 'Shanxi'], ['SN', 'HI', 'BJ']),
+(28227, 185, ['Hainan', 'Inner Mongolia', 'Hainan', 'Taiwan', 'Yunnan'], ['JS', 'LN']),
+(28363, 414, ['Qinghai', 'Hubei'], ['HEB', 'TJ', 'XZ', 'GX', 'GS']),
+(28383, 392, ['Beijing', 'Hong Kong', 'Hunan', 'Guangdong'], ['MO', 'SD', 'GZ', 'SH']),
+(28373, 748, ['Guangxi', 'Shanghai'], ['AH', 'HI', 'GX', 'HEB']),
+(28425, 709, ['Shanghai', 'Zhejiang', 'Shaanxi', 'Hong Kong', 'Shaanxi'], ['BJ', 'SH', 'SH']),
+(28274, 266, ['Hebei', 'Sichuan', 'Hong Kong'], ['SX', 'HEN', 'BJ']),
+(28306, 312, ['Qinghai', 'Tianjin', 'Hubei'], ['GZ', 'FJ']),
+(28286, 898, ['Henan', 'Zhejiang', 'Inner Mongolia'], ['SX', 'JS', 'CQ', 'TW']),
+(28253, 814, ['Hunan', 'Yunnan', 'Zhejiang', 'Tianjin'], ['HK', 'NMG', 'SD']),
+(28299, 112, ['Anhui', 'Jiangsu'], ['SX', 'ZJ', 'GZ']),
+(28403, 955, ['Macao', 'Hainan'], ['NMG', 'HEB', 'HUB']),
+(28357, 646, ['Zhejiang', 'Qinghai'], ['HUN', 'HEB']),
+(28301, 139, ['Shanghai', 'Qinghai'], ['HEN', 'SD', 'HUB', 'HI']),
+(28359, 873, ['Chongqing', 'Shanxi', 'Inner Mongolia', 'Jiangsu', 'Yunnan'], ['GX', 'GX', 'GZ', 'GX', 'XZ']),
+(28421, 815, ['Jilin', 'Heilongjiang', 'Gansu', 'Anhui'], ['YN', 'GS']),
+(28380, 640, ['Zhejiang', 'Chongqing', 'Shanxi', 'Liaoning'], ['HUB', 'NMG', 'GS', 'QH', 'SX']),
+(28271, 294, ['Shanghai', 'Hebei', 'Heilongjiang', 'Hubei', 'Hubei'], ['AH', 'XZ', 'TW', 'GD', 'HUN']),
+(28330, 533, ['Jilin', 'Guangdong', 'Tianjin', 'Sichuan', 'Tianjin'], ['HI', 'MO']),
+(28279, 690, ['Shaanxi', 'Gansu'], ['HI', 'GZ', 'AH']),
+(28220, 359, ['Shanxi', 'Shanghai', 'Qinghai'], ['HK', 'ZJ', 'SC']),
+(28275, 998, ['Macao', 'Gansu'], ['FJ', 'HI']),
+(28267, 652, ['Shaanxi', 'Guangdong'], ['SD', 'GX', 'YN']),
+(28296, 457, ['Anhui', 'Xinjiang', 'Jiangsu', 'Yunnan', 'Guangdong'], ['JL', 'JL']),
+(28230, 734, ['Xinjiang', 'Hong Kong', 'Tibet', 'Jiangxi'], ['QH', 'TW', 'CQ', 'SN']),
+(28352, 516, ['Shanxi', 'Chongqing', 'Guangxi', 'Shanxi'], ['MO', 'HEN', 'GD', 'SH', 'FJ']),
+(28286, 607, ['Yunnan', 'Jiangsu'], ['LN', 'HEN', 'MO']),
+(28295, 287, ['Jiangsu', 'Shanghai', 'Zhejiang'], ['MO', 'BJ', 'GS', 'HEN']),
+(28211, 894, ['Guangxi', 'Sichuan', 'Qinghai'], ['QH', 'BJ']),
+(28320, 841, ['Xinjiang', 'Jiangsu', 'Guizhou'], ['XZ', 'TJ', 'AH', 'SN']),
+(28377, 496, ['Chongqing', 'Zhejiang', 'Hebei'], ['JL', 'SC', 'HK']),
+(28392, 854, ['Gansu', 'Jiangxi'], ['HUB', 'GZ', 'FJ']),
+(28338, 466, ['Shanxi', 'Shandong', 'Jiangsu'], ['GZ', 'QH', 'FJ', 'HEN', 'NX']),
+(28236, 894, ['Hong Kong', 'Ningxia', 'Heilongjiang', 'Shanghai', 'Taiwan'], ['SD', 'HEB', 'GX', 'SN', 'ZJ']),
+(28386, 405, ['Shaanxi', 'Hebei', 'Sichuan', 'Guangxi', 'Hainan'], ['SX', 'GX', 'GS']),
+(28253, 441, ['Anhui', 'Hebei', 'Henan', 'Shanxi', 'Shandong'], ['CQ', 'YN', 'SD']),
+(28298, 795, ['Xinjiang', 'Liaoning', 'Taiwan'], ['SC', 'SX', 'BJ']),
+(28365, 391, ['Shanxi', 'Guizhou'], ['HEB', 'AH', 'FJ']),
+(28312, 106, ['Ningxia', 'Yunnan'], ['TJ', 'SX']),
+(28376, 138, ['Liaoning', 'Fujian', 'Hunan', 'Henan'], ['HEN', 'LN']),
+(28294, 191, ['Fujian', 'Hubei'], ['JL', 'TW', 'TW', 'XJ']),
+(28408, 389, ['Xinjiang', 'Jiangsu', 'Beijing'], ['HK', 'GZ', 'HLJ', 'HLJ']),
+(28337, 879, ['Jiangsu', 'Xinjiang', 'Jiangxi', 'Hong Kong', 'Taiwan'], ['HEN', 'FJ', 'QH', 'CQ']),
+(28390, 897, ['Macao', 'Heilongjiang'], ['GD', 'TJ', 'HEN', 'HLJ']),
+(28262, 940, ['Guangdong', 'Shandong'], ['GZ', 'BJ', 'HEB', 'HEB']),
+(28207, 621, ['Xinjiang', 'Gansu', 'Ningxia', 'Shaanxi'], ['NMG', 'YN']),
+(28253, 239, ['Qinghai', 'Hainan'], ['HUB', 'SC']),
+(28409, 273, ['Inner Mongolia', 'Ningxia', 'Zhejiang', 'Hong Kong', 'Heilongjiang'], ['YN', 'MO', 'XZ', 'HUB']),
+(28377, 687, ['Henan', 'Taiwan', 'Hebei'], ['BJ', 'CQ']),
+(28416, 676, ['Xinjiang', 'Hainan', 'Fujian', 'Heilongjiang', 'Hunan'], ['SH', 'HEN', 'SX', 'QH', 'XJ']),
+(28221, 740, ['Jilin', 'Liaoning', 'Heilongjiang'], ['HEN', 'SN']),
+(28298, 946, ['Shanxi', 'Guizhou'], ['GD', 'ZJ', 'HLJ', 'JS']),
+(28231, 243, ['Jiangxi', 'Yunnan', 'Jilin'], ['JX', 'SH', 'GD', 'GZ', 'HK']),
+(28372, 967, ['Shaanxi', 'Sichuan', 'Hainan', 'Shanxi', 'Guizhou'], ['HK', 'GS', 'FJ']),
+(28407, 256, ['Ningxia', 'Gansu', 'Sichuan', 'Inner Mongolia', 'Yunnan'], ['HUN', 'SD', 'XZ']),
+(28339, 393, ['Shanxi', 'Heilongjiang', 'Guizhou'], ['TW', 'GD']),
+(28293, 277, ['Jilin', 'Jiangsu', 'Hebei'], ['GS', 'MO', 'HUB', 'SN']),
+(28261, 551, ['Shanxi', 'Heilongjiang', 'Jiangxi', 'Xinjiang', 'Hunan'], ['CQ', 'HUN', 'SX', 'GZ', 'FJ']),
+(28208, 499, ['Gansu', 'Liaoning'], ['BJ', 'FJ']),
+(28309, 837, ['Shandong', 'Ningxia', 'Shanghai'], ['SX', 'XZ', 'JX', 'SX', 'BJ']),
+(28346, 371, ['Henan', 'Henan', 'Shanghai', 'Taiwan', 'Yunnan'], ['JS', 'SH']),
+(28250, 524, ['Hong Kong', 'Guangdong'], ['TJ', 'LN', 'SC']),
+(28379, 560, ['Shanghai', 'Sichuan'], ['QH', 'MO', 'QH', 'TW']),
+(28260, 295, ['Hong Kong', 'Inner Mongolia', 'Jiangsu', 'Jiangsu'], ['CQ', 'HK', 'HEN', 'SN', 'GS']),
+(28353, 511, ['Yunnan', 'Hunan', 'Tianjin'], ['LN', 'LN', 'AH']),
+(28317, 202, ['Guangdong', 'Shanxi', 'Shandong'], ['JX', 'ZJ', 'HI', 'HUN', 'SD']),
+(28270, 384, ['Inner Mongolia', 'Gansu', 'Taiwan', 'Xinjiang', 'Beijing'], ['HEN', 'SX']),
+(28376, 704, ['Guangxi', 'Fujian', 'Shanghai'], ['GZ', 'TW']),
+(28373, 518, ['Qinghai', 'Henan'], ['HK', 'LN', 'HUB', 'HLJ']),
+(28345, 169, ['Qinghai', 'Hebei', 'Liaoning', 'Beijing'], ['HEB', 'XJ', 'TJ', 'GX', 'TJ']),
+(28284, 781, ['Jilin', 'Gansu', 'Jiangsu'], ['SD', 'MO', 'TJ', 'GD', 'ZJ']),
+(28402, 238, ['Shaanxi', 'Yunnan', 'Shaanxi', 'Shanxi'], ['QH', 'SN', 'NMG', 'JX']),
+(28329, 863, ['Jiangxi', 'Ningxia', 'Heilongjiang'], ['JL', 'SN', 'XJ', 'AH', 'TJ']),
+(28406, 671, ['Shanxi', 'Fujian'], ['XZ', 'HEB']),
+(28425, 465, ['Jiangsu', 'Fujian', 'Taiwan'], ['FJ', 'JS', 'HK', 'JX']),
+(28267, 217, ['Chongqing', 'Taiwan', 'Shandong', 'Macao', 'Zhejiang'], ['JL', 'SX', 'HEN', 'HI']),
+(28362, 838, ['Xinjiang', 'Sichuan', 'Tibet', 'Heilongjiang', 'Chongqing'], ['JS', 'SX', 'LN']),
+(28353, 588, ['Tianjin', 'Ningxia'], ['XJ', 'SN', 'MO', 'GZ', 'HUN']),
+(28212, 890, ['Liaoning', 'Jiangxi', 'Xinjiang'], ['LN', 'XJ', 'HK', 'NMG', 'NMG']),
+(28304, 285, ['Guizhou', 'Jilin', 'Fujian', 'Jilin', 'Inner Mongolia'], ['FJ', 'TJ', 'SN', 'MO']),
+(28371, 579, ['Guizhou', 'Hong Kong', 'Hong Kong'], ['SN', 'SH', 'QH']),
+(28280, 555, ['Hubei', 'Shandong', 'Sichuan', 'Macao', 'Inner Mongolia'], ['SX', 'HUN']),
+(28273, 190, ['Shaanxi', 'Jiangxi', 'Henan', 'Taiwan'], ['SX', 'SC', 'CQ']),
+(28362, 677, ['Shandong', 'Hong Kong', 'Anhui', 'Chongqing'], ['GX', 'CQ']),
+(28307, 409, ['Heilongjiang', 'Hainan', 'Gansu', 'Shanghai'], ['HLJ', 'CQ']),
+(28346, 421, ['Ningxia', 'Fujian', 'Beijing', 'Jilin', 'Heilongjiang'], ['JL', 'JL']),
+(28422, 782, ['Tianjin', 'Hunan', 'Jilin', 'Guangxi'], ['SD', 'QH', 'HEB', 'AH', 'TW']),
+(28253, 572, ['Guangxi', 'Hong Kong'], ['LN', 'XZ', 'GZ', 'HLJ', 'XZ']),
+(28251, 638, ['Chongqing', 'Liaoning', 'Jilin', 'Guangdong', 'Liaoning'], ['JX', 'XJ', 'HI']),
+(28423, 957, ['Anhui', 'Beijing'], ['NX', 'HEB', 'YN', 'HEN']),
+(28409, 711, ['Anhui', 'Hubei'], ['SH', 'HEN', 'LN', 'SN']),
+(28330, 788, ['Liaoning', 'Henan', 'Liaoning'], ['AH', 'SX', 'GX']),
+(28383, 521, ['Inner Mongolia', 'Jilin', 'Liaoning', 'Ningxia'], ['SH', 'TJ']),
+(28256, 591, ['Jiangxi', 'Gansu', 'Hong Kong'], ['SN', 'QH', 'HK', 'SD', 'MO']),
+(28281, 368, ['Hebei', 'Guangdong', 'Shaanxi', 'Shanghai', 'Hunan'], ['FJ', 'NMG', 'NMG', 'XJ', 'HLJ']),
+(28287, 140, ['Ningxia', 'Hunan', 'Ningxia', 'Inner Mongolia'], ['MO', 'HEB', 'HUB']),
+(28413, 360, ['Hainan', 'Fujian', 'Henan', 'Zhejiang'], ['GD', 'HEB', 'JL']),
+(28362, 465, ['Guangdong', 'Shaanxi', 'Gansu', 'Shanghai', 'Hong Kong'], ['HEN', 'NMG', 'NX']),
+(28343, 424, ['Jiangsu', 'Xinjiang'], ['HI', 'LN', 'TW', 'HUN', 'GX']),
+(28259, 770, ['Taiwan', 'Hainan'], ['HEB', 'JX']),
+(28363, 914, ['Guizhou', 'Macao', 'Hunan', 'Anhui', 'Gansu'], ['SD', 'TJ', 'FJ', 'XJ', 'JL']),
+(28361, 358, ['Tibet', 'Jiangxi', 'Shandong', 'Anhui'], ['HEN', 'GZ']),
+(28324, 572, ['Hainan', 'Guizhou'], ['FJ', 'GD', 'JS', 'SC', 'GD']),
+(28402, 729, ['Shandong', 'Guangdong', 'Yunnan', 'Tianjin'], ['SN', 'GS', 'YN', 'TJ', 'JL']),
+(28292, 971, ['Zhejiang', 'Ningxia'], ['AH', 'JL', 'YN', 'HUB']),
+(28241, 211, ['Hainan', 'Jiangsu', 'Guangdong', 'Jiangxi'], ['NX', 'ZJ', 'JX', 'SC', 'XJ']),
+(28363, 989, ['Shanxi', 'Ningxia', 'Tibet'], ['FJ', 'GZ', 'JL', 'QH']),
+(28335, 740, ['Hunan', 'Guangdong', 'Guizhou'], ['SN', 'QH', 'FJ', 'FJ']),
+(28309, 960, ['Jiangxi', 'Ningxia', 'Yunnan', 'Hong Kong', 'Hebei'], ['NX', 'SN', 'HLJ', 'SC']),
+(28233, 399, ['Guangxi', 'Ningxia', 'Henan', 'Jiangxi', 'Jiangxi'], ['CQ', 'MO', 'NX', 'HEB', 'TJ']),
+(28344, 513, ['Jilin', 'Hebei', 'Guizhou'], ['ZJ', 'LN']),
+(28408, 846, ['Hong Kong', 'Qinghai'], ['BJ', 'SX', 'MO']),
+(28238, 744, ['Guangxi', 'Shaanxi', 'Yunnan', 'Hainan', 'Heilongjiang'], ['NX', 'SD', 'HK', 'LN', 'HI']),
+(28386, 811, ['Macao', 'Jiangsu', 'Heilongjiang', 'Shanxi', 'Chongqing'], ['MO', 'XZ']),
+(28213, 797, ['Liaoning', 'Hebei', 'Anhui', 'Taiwan'], ['HUB', 'GS']),
+(28355, 237, ['Hubei', 'Jilin', 'Anhui', 'Anhui'], ['TJ', 'HUN', 'SD', 'TJ']),
+(28313, 656, ['Chongqing', 'Anhui', 'Yunnan', 'Liaoning', 'Henan'], ['NX', 'SH', 'SH', 'MO']),
+(28206, 605, ['Ningxia', 'Guangdong'], ['HLJ', 'HLJ']),
+(28249, 830, ['Shanxi', 'Fujian'], ['FJ', 'SX', 'SX', 'SX']),
+(28220, 952, ['Sichuan', 'Zhejiang', 'Jiangxi', 'Hebei', 'Henan'], ['SX', 'HUN', 'JX', 'SN', 'GZ']),
+(28259, 719, ['Henan', 'Ningxia', 'Shaanxi', 'Shanghai', 'Guangdong'], ['HUB', 'GD', 'NMG', 'HI', 'JS']),
+(28235, 438, ['Anhui', 'Zhejiang', 'Guizhou', 'Ningxia', 'Chongqing'], ['HI', 'JL']),
+(28274, 181, ['Qinghai', 'Yunnan', 'Tibet'], ['SH', 'JX', 'JL', 'XZ']),
+(28332, 304, ['Gansu', 'Shandong', 'Hunan', 'Hong Kong', 'Sichuan'], ['HEN', 'FJ']),
+(28424, 433, ['Ningxia', 'Ningxia', 'Jiangsu', 'Jiangxi', 'Sichuan'], ['GZ', 'AH', 'GZ', 'MO', 'NX']),
+(28252, 260, ['Liaoning', 'Hebei', 'Fujian'], ['SD', 'SC', 'SC']),
+(28228, 978, ['Gansu', 'Fujian', 'Guangdong', 'Jiangxi'], ['HUN', 'FJ', 'HUB', 'TJ', 'GS']),
+(28406, 381, ['Qinghai', 'Guangxi', 'Macao', 'Tianjin', 'Beijing'], ['XZ', 'GX', 'GS', 'QH']),
+(28222, 349, ['Hebei', 'Liaoning', 'Tianjin', 'Beijing', 'Anhui'], ['FJ', 'SD', 'HUB', 'GD', 'ZJ']),
+(28307, 854, ['Hainan', 'Macao', 'Shaanxi'], ['CQ', 'BJ', 'BJ']);
+-- result:
+-- !result
+insert into s1 values
+(28222, 724, ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
+(28231, 607, ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
+(28316, 275, ['Anhui', 'Yunnan', 'Hainan', 'Heilongjiang', 'Hunan'], ['CQ', 'TW']),
+(28352, 371, ['Jiangsu', 'Guangdong', 'Taiwan', 'Zhejiang', 'Jilin'], ['XZ', 'QH', 'NX']),
+(28221, 241, ['Hong Kong', 'Zhejiang', 'Heilongjiang', 'Henan'], ['XZ', 'HLJ', 'AH', 'MO']),
+(28257, 447, ['Fujian', 'Jiangsu', 'Macao', 'Ningxia'], ['JS', 'GD', 'QH']),
+(28244, 834, ['Qinghai', 'Heilongjiang'], ['TJ', 'AH', 'HI']),
+(28350, 930, ['Shaanxi', 'Guangdong'], ['XJ', 'HUB', 'TW', 'HUN']),
+(28328, 495, ['Qinghai', 'Inner Mongolia'], ['GD', 'ZJ', 'JL', 'GS']),
+(28401, 307, ['Shandong', 'Guangxi', 'Xinjiang', 'Anhui', 'Ningxia'], ['NMG', 'ZJ', 'TW', 'HUN', 'HEN']),
+(28329, 729, ['Fujian', 'Henan', 'Chongqing', 'Zhejiang'], ['AH', 'SN', 'YN', 'CQ', 'HLJ']),
+(28342, 788, ['Qinghai', 'Jilin', 'Zhejiang'], ['HUB', 'HUB', 'HUB', 'JL']),
+(28341, 985, ['Sichuan', 'Heilongjiang', 'Shanghai', 'Tianjin'], ['XJ', 'HEN', 'XZ', 'TJ', 'AH']),
+(28389, 447, ['Hubei', 'Shandong', 'Macao', 'Liaoning', 'Guangdong'], ['JX', 'ZJ', 'SX', 'SC']),
+(28348, 349, ['Hebei', 'Hong Kong', 'Macao', 'Guangxi'], ['JX', 'XZ', 'ZJ']),
+(28220, 848, ['Sichuan', 'Tianjin', 'Sichuan', 'Beijing', 'Xinjiang'], ['GD', 'CQ', 'HUN', 'HK', 'AH']),
+(28415, 286, ['Taiwan', 'Hong Kong', 'Fujian'], ['XZ', 'LN']),
+(28201, 171, ['Macao', 'Hubei', 'Liaoning', 'Shanghai'], ['HK', 'SN', 'HEN', 'GX', 'TW']),
+(28256, 501, ['Xinjiang', 'Hong Kong', 'Jilin'], ['ZJ', 'HUN', 'HUN', 'JX', 'SC']),
+(28250, 318, ['Heilongjiang', 'Macao', 'Hubei', 'Inner Mongolia', 'Tianjin'], ['HLJ', 'HEN']),
+(28204, 737, ['Taiwan', 'Hainan'], ['SC', 'QH', 'SH']),
+(28307, 246, ['Beijing', 'Jiangxi', 'Guizhou', 'Shaanxi'], ['SX', 'HEB', 'TW']),
+(28401, 774, ['Yunnan', 'Taiwan', 'Hunan', 'Inner Mongolia', 'Jiangsu'], ['SN', 'JS']),
+(28293, 964, ['Qinghai', 'Hubei', 'Hubei'], ['GX', 'HLJ', 'GD', 'AH', 'HK']),
+(28200, 302, ['Henan', 'Chongqing', 'Ningxia', 'Tibet', 'Yunnan'], ['JL', 'BJ']),
+(28212, 307, ['Jiangxi', 'Shanxi', 'Liaoning', 'Hunan'], ['TW', 'SH']),
+(28403, 874, ['Sichuan', 'Shanghai', 'Hubei', 'Chongqing'], ['MO', 'HLJ', 'SN', 'LN']),
+(28377, 723, ['Inner Mongolia', 'Gansu', 'Jiangsu'], ['YN', 'YN', 'ZJ']),
+(28320, 201, ['Shanghai', 'Shanghai', 'Guangxi'], ['JS', 'YN', 'TW', 'GZ', 'ZJ']),
+(28338, 692, ['Hainan', 'Zhejiang', 'Shanghai', 'Xinjiang', 'Henan'], ['SC', 'GS', 'SX', 'GZ', 'GD']),
+(28288, 909, ['Fujian', 'Shandong', 'Shanxi', 'Qinghai', 'Tianjin'], ['GZ', 'HEB', 'XJ']),
+(28413, 665, ['Tianjin', 'Hunan', 'Taiwan'], ['HK', 'CQ', 'SD']),
+(28200, 947, ['Hunan', 'Henan'], ['FJ', 'MO', 'HEB', 'JL']),
+(28351, 414, ['Sichuan', 'Guangdong'], ['XZ', 'ZJ', 'ZJ', 'GS', 'SD']),
+(28278, 865, ['Shaanxi', 'Shandong', 'Gansu'], ['GZ', 'NX', 'HLJ']),
+(28424, 944, ['Liaoning', 'Chongqing', 'Jiangsu'], ['GS', 'GX', 'SH', 'GX']),
+(28329, 371, ['Inner Mongolia', 'Shandong'], ['XJ', 'NX']),
+(28388, 901, ['Gansu', 'Hong Kong', 'Chongqing', 'Beijing'], ['SH', 'JS']),
+(28233, 472, ['Chongqing', 'Guangdong', 'Hebei', 'Hebei'], ['XJ', 'YN', 'HEB', 'SD']),
+(28411, 373, ['Hong Kong', 'Jiangsu', 'Tibet', 'Yunnan', 'Fujian'], ['JX', 'FJ', 'FJ', 'HK', 'JL']),
+(28353, 693, ['Sichuan', 'Fujian', 'Tibet', 'Taiwan', 'Zhejiang'], ['CQ', 'SH', 'AH', 'YN']),
+(28222, 655, ['Guangxi', 'Taiwan', 'Macao', 'Tibet', 'Ningxia'], ['YN', 'HUB', 'CQ', 'SD', 'SX']),
+(28377, 233, ['Jilin', 'Guizhou', 'Taiwan', 'Macao', 'Yunnan'], ['SC', 'CQ', 'SD', 'SH', 'JL']),
+(28404, 666, ['Guizhou', 'Shandong', 'Fujian'], ['SX', 'HEB']),
+(28391, 140, ['Taiwan', 'Macao', 'Taiwan', 'Shanghai', 'Inner Mongolia'], ['AH', 'FJ', 'HEN', 'SN', 'HK']),
+(28347, 495, ['Qinghai', 'Gansu', 'Gansu', 'Guangdong'], ['HUB', 'HUN', 'LN', 'TJ']),
+(28327, 269, ['Hainan', 'Guangdong', 'Jilin'], ['SC', 'GD', 'SD', 'ZJ', 'ZJ']),
+(28263, 864, ['Yunnan', 'Jiangxi', 'Fujian'], ['SC', 'HI', 'HUB', 'SN', 'SX']),
+(28235, 711, ['Hainan', 'Hainan', 'Yunnan', 'Liaoning', 'Anhui'], ['HUN', 'SD']);
+-- result:
+-- !result
+insert into s2 select * from s2;
+-- result:
+-- !result
+insert into s2 select * from s2;
+-- result:
+-- !result
+insert into s2 select * from s2;
+-- result:
+-- !result
+insert into s2 select * from s2;
+-- result:
+-- !result
+insert into s2 select * from s2;
+-- result:
+-- !result
+[UC] analyze full table s1;
+-- result:
+test_db_d0bcea9a9d5011eeb1ca00163e04d4c2.s1	analyze	status	OK
+-- !result
+[UC] analyze full table s2;
+-- result:
+test_db_d0bcea9a9d5011eeb1ca00163e04d4c2.s2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('a1', 's1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('a2', 's1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('a1', 's2')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('a2', 's2')
+-- result:
+
+-- !result
+select * from s1 order by v1 limit 2;
+-- result:
+28200	947	["Hunan","Henan"]	["FJ","MO","HEB","JL"]
+28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+-- !result
+select * from s2 order by v1 limit 2;
+-- result:
+28200	947	["Hunan","Henan"]	["FJ","MO","HEB","JL"]
+28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+-- !result
+select * from s2 where a1[1] = 'Jiangsu' order by v1 limit 2;
+-- result:
+28295	287	["Jiangsu","Shanghai","Zhejiang"]	["MO","BJ","GS","HEN"]
+28295	287	["Jiangsu","Shanghai","Zhejiang"]	["MO","BJ","GS","HEN"]
+-- !result
+select * from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;
+-- result:
+-- !result
+select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;
+-- result:
+-- !result
+select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s2 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
+-- result:
+4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
+4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
+-- !result
+select array_length(array_distinct(a1)), array_min(reverse(array_sort(a1))), a1, array_max(array_slice(a2, 2, 5))
+from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;
+-- result:
+-- !result
+select lower(upper(array_min(reverse(array_sort(a1)))))
+from s2 where a2[2] = 'GD' order by v1 limit 2;
+-- result:
+fujian
+fujian
+-- !result
+select * from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
+-- result:
+28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]	28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+28200	947	["Hunan","Henan"]	["FJ","MO","HEB","JL"]	28200	302	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
+-- !result
+select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 order by s2.v1 limit 2;
+-- result:
+JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
+MO	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
+-- !result
+select * from 
+(select array_max(a1) x1 from s1) t1 join
+(select array_min(a1) x2 from s2) t2 on x1 = x2
+order by x1 limit 2;
+-- result:
+Hebei	Hebei
+Hebei	Hebei
+-- !result
+select MAX(upper(a1[1])) from s1 group by a2[1] order by a2[1] limit 2;
+-- result:
+TAIWAN
+SICHUAN
+-- !result
+select lower(MAX(upper(a1[1]))) from s1 group by a2[1] order by a2[1] limit 2;
+-- result:
+taiwan
+sichuan
+-- !result
+select lower(x1), upper(MIN(HEX(x2))) from (select a1[1] x1, array_max(a2) x2 from s1) y group by x1 order by x1 limit 2;
+-- result:
+anhui	5457
+beijing	5457
+-- !result

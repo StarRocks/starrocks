@@ -94,7 +94,7 @@ public:
 
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
-    int dict_size();
+    int dict_size() override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);

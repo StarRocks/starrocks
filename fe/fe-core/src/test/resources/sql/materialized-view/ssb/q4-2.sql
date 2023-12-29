@@ -36,6 +36,6 @@ Decode
             AGGREGATE ([GLOBAL] aggregate [{60: sum=sum(60: sum)}] group by [[5: d_year, 116: S_NATION, 119: P_CATEGORY]] having [null]
                 EXCHANGE SHUFFLE[5, 116, 119]
                     AGGREGATE ([LOCAL] aggregate [{60: sum=sum(59: expr)}] group by [[5: d_year, 116: S_NATION, 119: P_CATEGORY]] having [null]
-                        SCAN (mv[lineorder_flat_mv] columns[115: C_REGION, 116: S_NATION, 117: S_REGION, 102: d_year, 118: P_MFGR, 119: P_CATEGORY, 73: LO_REVENUE, 74: LO_SUPPLYCOST] predicate[DictMapping(115: C_REGION{82: C_REGION = AMERICA}) AND DictMapping(117: S_REGION{89: S_REGION = AMERICA}) AND DictMapping(118: P_MFGR{92: P_MFGR IN (MFGR#1, MFGR#2)}) AND 102: d_year IN (1997, 1998)])
+                        SCAN (mv[lineorder_flat_mv] columns[115: C_REGION, 116: S_NATION, 117: S_REGION, 102: d_year, 118: P_MFGR, 119: P_CATEGORY, 73: LO_REVENUE, 74: LO_SUPPLYCOST] predicate[DictMapping(115: C_REGION, 82: C_REGION = AMERICA) AND DictMapping(117: S_REGION, 89: S_REGION = AMERICA) AND DictMapping(118: P_MFGR, 92: P_MFGR IN (MFGR#1, MFGR#2)) AND 102: d_year IN (1997, 1998)])
 [end]
 

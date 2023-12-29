@@ -166,12 +166,7 @@ public:
     void set_uid(ColumnUID uid) { _uid = uid; }
     const ColumnUID& uid() const { return _uid; }
 
-    static FieldPtr convert_to_dict_field(const Field& field) {
-        DCHECK(field.type()->type() == TYPE_VARCHAR);
-        FieldPtr res = std::make_shared<Field>(field);
-        res->_type = get_type_info(TYPE_INT);
-        return res;
-    }
+    static FieldPtr convert_to_dict_field(const Field& field);
 
 private:
     constexpr static int kIsKeyShift = 0;

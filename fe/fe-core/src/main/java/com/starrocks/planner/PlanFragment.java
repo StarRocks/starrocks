@@ -419,6 +419,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setQuery_global_dicts(dictToThrift(queryGlobalDicts));
         }
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
+            Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
             Map<Integer, TExpr> exprs = Maps.newHashMap();
             queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, v.treeToThrift()));
             result.setQuery_global_dict_exprs(exprs);

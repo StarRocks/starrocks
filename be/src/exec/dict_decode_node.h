@@ -15,6 +15,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include "column/chunk.h"
 #include "common/global_types.h"
@@ -22,6 +23,7 @@
 #include "exec/olap_common.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 
@@ -56,6 +58,7 @@ private:
     std::shared_ptr<Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
+    std::vector<TypeDescriptor*> _decode_column_types;
     std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;

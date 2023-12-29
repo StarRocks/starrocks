@@ -122,6 +122,10 @@ public:
         return Status::NotSupported("Not Support dict.");
     }
 
+    // only work when all_page_dict_encoded was true.
+    // used to acquire load local dict
+    virtual int dict_size() { return 0; }
+
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.

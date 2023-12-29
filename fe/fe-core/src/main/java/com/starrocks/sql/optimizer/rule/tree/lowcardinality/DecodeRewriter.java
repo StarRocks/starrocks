@@ -216,6 +216,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             } else {
                 // compute expressions depend-on dict
                 for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
+
                     if (context.stringRefToDicts.containsKey(useRefs.getId())) {
                         dictMap.put(context.stringRefToDictRefMap.get(useRefs).getId(),
                                 context.stringRefToDicts.get(useRefs.getId()));

@@ -59,7 +59,7 @@ public:
     }
 
     SlotId slot_id() {
-        DCHECK_EQ(children().size(), 2);
+        DCHECK_GE(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
 

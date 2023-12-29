@@ -27,6 +27,6 @@ Decode
             AGGREGATE ([GLOBAL] aggregate [{51: sum=sum(51: sum)}] group by [[22: d_year, 108: P_BRAND]] having [null]
                 EXCHANGE SHUFFLE[22, 108]
                     AGGREGATE ([LOCAL] aggregate [{51: sum=sum(13: lo_revenue)}] group by [[22: d_year, 108: P_BRAND]] having [null]
-                        SCAN (mv[lineorder_flat_mv] columns[107: S_REGION, 108: P_BRAND, 93: d_year, 64: LO_REVENUE] predicate[DictMapping(108: P_BRAND{85: P_BRAND = MFGR#2221}) AND DictMapping(107: S_REGION{80: S_REGION = EUROPE})])
+                        SCAN (mv[lineorder_flat_mv] columns[107: S_REGION, 108: P_BRAND, 93: d_year, 64: LO_REVENUE] predicate[DictMapping(108: P_BRAND, 85: P_BRAND = MFGR#2221) AND DictMapping(107: S_REGION, 80: S_REGION = EUROPE)])
 [end]
 
