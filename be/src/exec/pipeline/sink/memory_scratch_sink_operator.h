@@ -76,6 +76,8 @@ private:
     mutable std::shared_ptr<arrow::RecordBatch> _pending_result;
     bool _is_finished = false;
     bool _has_put_sentinel = false;
+
+    bool _is_audit_report_done = true;
 };
 
 class MemoryScratchSinkOperatorFactory final : public OperatorFactory {
