@@ -63,4 +63,20 @@ public class IcebergGlueCatalogTest {
                 "glue_native_catalog", new Configuration(), icebergProperties);
         Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
     }
+
+    @Test
+    public void testRenameTable(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        icebergGlueCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergGlueCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
 }

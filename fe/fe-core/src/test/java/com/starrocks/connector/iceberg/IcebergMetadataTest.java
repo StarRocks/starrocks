@@ -112,6 +112,7 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
@@ -1163,5 +1164,14 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(modifyTablePropertiesClause);
         clauses.add(alterTableCommentClause);
         metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify unsupported properties
+        clauses.clear();
+        Map<String, String> invalidProperties = new HashMap<>();
+        invalidProperties.put(FILE_FORMAT, "parquet");
+        invalidProperties.put(COMPRESSION_CODEC, "zzz");
+        ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
+        clauses.add(invalidCompressionClause);
+        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }
