@@ -571,6 +571,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+
+>>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1166,6 +1176,50 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 128;
 
+<<<<<<< HEAD
+=======
+    // binary, json, compact,
+    @VarAttr(name = THRIFT_PLAN_PROTOCOL)
+    private String thriftPlanProtocol = "binary";
+
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = true;
+
+    public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
+        return enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
+        this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
+    public String getThriftPlanProtocol() {
+        return thriftPlanProtocol;
+    }
+
+    public void setTraceLogMode(String traceLogMode) {
+        this.traceLogMode = traceLogMode;
+    }
+
+    public String getTraceLogMode() {
+        return traceLogMode;
+    }
+
+>>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }

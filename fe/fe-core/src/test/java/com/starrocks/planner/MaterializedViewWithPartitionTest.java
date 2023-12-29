@@ -174,14 +174,16 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     PREDICATES: 9: c2 >= 2000\n" +
                         "     partitions=5/5");
 
-        setTracLogModule("MV");
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
                 .contains("partial_mv_6")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
                         "     partitions=5/5");
+<<<<<<< HEAD
 
+=======
+>>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
